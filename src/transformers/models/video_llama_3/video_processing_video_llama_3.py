@@ -379,16 +379,18 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
-        size = videos_kwargs.get("size", None) or self.size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        size = videos_kwargs["size"]
         size = {
             "shortest_edge": size["shortest_edge"],
             "longest_edge": size["longest_edge"] // num_frames,
         }  # diff from Qwen!
         videos_kwargs = {**videos_kwargs, "size": size}
-        size = videos_kwargs.get("size") or self.size
-        patch_size = videos_kwargs.get("patch_size") or self.patch_size
-        merge_size = videos_kwargs.get("merge_size") or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size") or self.temporal_patch_size
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        size = videos_kwargs["size"]
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(

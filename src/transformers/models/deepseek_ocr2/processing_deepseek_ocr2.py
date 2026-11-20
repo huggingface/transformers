@@ -18,7 +18,7 @@ Processor class for DeepSeek-OCR-2.
 import math
 
 from ...image_utils import make_flat_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_attr
@@ -70,8 +70,12 @@ class DeepseekOcr2Processor(ProcessorMixin):
             raise ValueError("You have to specify text.")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> TextInput:
-        size = kwargs.get("size") or self.image_processor.size
-        tile_size = kwargs.get("tile_size") or self.image_processor.tile_size
+        num_tokens = self._get_num_image_tokens(image_inputs["num_local_patches"][image_idx], **kwargs)
+        return self.image_token * num_tokens
+
+    def _get_num_image_tokens(self, num_crops: int, size=None, tile_size=None, **kwargs) -> int:
+        size = size or self.image_processor.size
+        tile_size = tile_size or self.image_processor.tile_size
 
         num_queries_global = math.ceil(size["height"] / self.patch_size / self.downsample_ratio)
         global_tokens = num_queries_global * num_queries_global
@@ -79,9 +83,32 @@ class DeepseekOcr2Processor(ProcessorMixin):
         num_queries_local = math.ceil(tile_size / self.patch_size / self.downsample_ratio)
         local_tokens = num_queries_local * num_queries_local
 
-        num_crops = image_inputs["num_local_patches"][image_idx]
-        num_tokens = global_tokens + local_tokens * num_crops + 1
-        return self.image_token * num_tokens
+        return global_tokens + local_tokens * num_crops + 1
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+
+            num_image_tokens = []
+            for image_size in image_sizes:
+                # Only the global view goes in `pixel_values`, the crops go in `pixel_values_local`
+                num_crops = self.image_processor.get_number_of_image_patches(*image_size, images_kwargs) - 1
+                num_image_tokens.append(self._get_num_image_tokens(num_crops, **images_kwargs))
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
 
 __getattr__ = deprecate_attr(__name__, rename={"DeepseekOcr2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})

@@ -134,9 +134,11 @@ class LlavaNextProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
 
-            size = images_kwargs.get("size", None) or self.image_processor.size
+            size = images_kwargs["size"]
             if isinstance(size, SizeDict):
                 size = (
                     (size.shortest_edge, size.shortest_edge)

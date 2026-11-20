@@ -172,11 +172,11 @@ class Kimi_K25VideoProcessor(BaseVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
-        videos_kwargs = videos_kwargs or {}
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
         max_size_per_side = videos_kwargs["size"]["max_height"] if "size" in videos_kwargs else self.size["max_height"]
-        patch_size = videos_kwargs.get("patch_size", self.patch_size)
-        merge_size = videos_kwargs.get("merge_size", self.merge_size)
-        max_patches = videos_kwargs.get("max_patches", self.max_patches)
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        max_patches = videos_kwargs["max_patches"]
 
         (resized_height, resized_width), (pad_height, pad_width) = navit_resize(
             height,

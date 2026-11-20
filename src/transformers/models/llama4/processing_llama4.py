@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-from transformers.processing_utils import ProcessingKwargs, ProcessorMixin
+from transformers.processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 
 from ...image_utils import make_flat_list_of_images
 from ...utils import auto_docstring
@@ -130,6 +130,38 @@ class Llama4Processor(ProcessorMixin):
             (image_height // self.patch_size) * (image_width // self.patch_size) // self.downsample_ratio
         )
         return self._prompt_split_image(image_inputs["aspect_ratios"][image_idx], num_patches_per_chunk)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            size = images_kwargs["size"]
+            num_patches_per_chunk = (
+                (size["height"] // self.patch_size) * (size["width"] // self.patch_size) // self.downsample_ratio
+            )
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [num_patches_per_chunk * num_patches for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     @property
     def unused_input_names(self) -> list[str]:

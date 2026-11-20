@@ -221,10 +221,10 @@ class AriaImageProcessorPil(PilBackend):
         Returns:
             `int`: Number of patches per image.
         """
-        images_kwargs = images_kwargs or {}
-        split_image = images_kwargs.get("split_image", self.split_image)
-        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
-        split_resolutions = images_kwargs.get("split_resolutions", self.split_resolutions)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        split_image = images_kwargs["split_image"]
+        max_image_size = images_kwargs["max_image_size"]
+        split_resolutions = images_kwargs["split_resolutions"]
 
         resized_height, resized_width = select_best_resolution((height, width), split_resolutions)
         num_patches = (

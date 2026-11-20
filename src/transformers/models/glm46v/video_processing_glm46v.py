@@ -234,11 +234,12 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
         videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        size = videos_kwargs.get("size", None) or self.size
-        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
-        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
-        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        size = videos_kwargs["size"]
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
+        temporal_patch_size = videos_kwargs["temporal_patch_size"]
 
         resized_height, resized_width = smart_resize(
             num_frames,

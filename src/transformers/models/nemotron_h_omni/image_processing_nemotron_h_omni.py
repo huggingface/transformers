@@ -82,6 +82,19 @@ def get_patch_grid_size(
     return grid_height, grid_width
 
 
+def get_num_patches_budget(
+    num_images: int, merge_size: int, min_num_patches: int, max_num_patches: int, max_model_len: int
+) -> int:
+    """
+    Every image of a call gets the same patch budget: the context length (in pre-pixel-shuffle patches),
+    clamped to `[min_num_patches, max_num_patches]`.
+    """
+    num_patches = max((max_model_len - 4) * merge_size**2, min_num_patches * num_images)
+    if max_num_patches:
+        num_patches = min(num_patches, max_num_patches)
+    return max(num_patches, min_num_patches)
+
+
 def convert_image_to_patches(images: "torch.Tensor", patch_size: int) -> "torch.Tensor":
     """
     Splits `(batch_size, num_channels, height, width)` images into `(batch_size, num_patches, patch_dim)` patches in
@@ -142,12 +155,7 @@ class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
         **kwargs,
     ) -> BatchFeature:
         merge_size = round(1 / downsample_ratio)
-        # every image of the call gets the same budget: the context length (in pre-pixel-shuffle patches),
-        # clamped to `[min_num_patches, max_num_patches]`
-        num_patches = max((max_model_len - 4) * merge_size**2, min_num_patches * len(images))
-        if max_num_patches:
-            num_patches = min(num_patches, max_num_patches)
-        num_patches = max(num_patches, min_num_patches)
+        num_patches = get_num_patches_budget(len(images), merge_size, min_num_patches, max_num_patches, max_model_len)
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         processed_images_grouped = {}
@@ -180,6 +188,40 @@ class NemotronH_Omni_Reasoning_V3ImageProcessor(TorchvisionBackend):
             },
             tensor_type=return_tensors,
         )
+
+    def get_number_of_image_patches(
+        self, height: int, width: int, images_kwargs: dict | None = None, num_images: int = 1
+    ) -> int:
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*):
+                Any kwargs to override defaults of the image processor.
+            num_images (`int`, *optional*, defaults to 1):
+                Number of images processed in the same call, which can affect the per-image patch budget.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        patch_size = images_kwargs["patch_size"]
+        merge_size = round(1 / images_kwargs["downsample_ratio"])
+        min_num_patches = images_kwargs["min_num_patches"]
+        num_patches = get_num_patches_budget(
+            num_images,
+            merge_size,
+            min_num_patches,
+            images_kwargs["max_num_patches"],
+            images_kwargs["max_model_len"],
+        )
+        grid_height, grid_width = get_patch_grid_size(
+            height, width, patch_size, merge_size, min_num_patches, num_patches
+        )
+        return grid_height * grid_width
 
 
 __all__ = ["NemotronH_Omni_Reasoning_V3ImageProcessor"]

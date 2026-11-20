@@ -76,9 +76,11 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
                     best_ratio = ratio
         return best_ratio
 
-    def dynamic_preprocess(self, image, image_size, patch_size, mask_size, max_num=36, min_num=1):
-        orig_height, orig_width = image.shape[-2:]
-
+    def _get_crop_layout(self, orig_height, orig_width, image_size, max_num=36, min_num=1):
+        """
+        Returns the `(num_w_crops, num_h_crops)` crop grid of an image, the `(width, height)` it is resized to and
+        the `(padding_width, padding_height)` that pads it to the grid.
+        """
         w_crop_num = math.ceil(orig_width / float(image_size))
         h_crop_num = math.ceil(orig_height / float(image_size))
         if w_crop_num * h_crop_num > max_num:
@@ -119,17 +121,60 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
             padding_width = target_width - int(orig_width * ratio_height)
             padding_height = 0
 
+        if min(new_size[1], target_height) < 10 or min(new_size[0], target_width) < 10:
+            raise ValueError(f"the aspect ratio is very extreme {new_size}")
+
+        return target_aspect_ratio, new_size, (padding_width, padding_height)
+
+    def _get_crop_attention_mask(self, target_aspect_ratio, padding, patch_size, mask_size, device=None):
+        padding_width, padding_height = padding
         attention_mask = torch.ones(
             (int(mask_size * target_aspect_ratio[1]), int(mask_size * target_aspect_ratio[0])),
-            device=image.device,
+            device=device,
         )
         if padding_width >= patch_size:
             attention_mask[:, -math.floor(padding_width / patch_size) :] = 0
         if padding_height >= patch_size:
             attention_mask[-math.floor(padding_height / patch_size) :, :] = 0
+        return attention_mask
 
-        if min(new_size[1], target_height) < 10 or min(new_size[0], target_width) < 10:
-            raise ValueError(f"the aspect ratio is very extreme {new_size}")
+    def _get_num_image_tokens(self, attention_mask, mask_size) -> int:
+        mask_height, mask_width = attention_mask.shape[-2:]
+        attention_mask_reshape = attention_mask.reshape(
+            mask_height // mask_size, mask_size, mask_width // mask_size, mask_size
+        )
+        attention_mask_reshape = attention_mask_reshape.transpose(1, 2)
+        attention_mask_reshape = attention_mask_reshape.reshape(-1, mask_size, mask_size).contiguous()
+
+        downsample_attention_mask = attention_mask_reshape[:, 0::2, 0::2]
+        downsample_attention_mask = downsample_attention_mask.reshape(
+            mask_height // mask_size,
+            mask_width // mask_size,
+            mask_size // 2 + mask_size % 2,
+            mask_size // 2 + mask_size % 2,
+        )
+        downsample_attention_mask = downsample_attention_mask.transpose(1, 2)
+        downsample_attention_mask = downsample_attention_mask.reshape(
+            downsample_attention_mask.size(0) * downsample_attention_mask.size(1),
+            downsample_attention_mask.size(2) * downsample_attention_mask.size(3),
+        )
+
+        return (
+            256
+            + 1
+            + int(downsample_attention_mask.sum().item())
+            + int(downsample_attention_mask[:, 0].sum().item())
+            + 16
+        )
+
+    def dynamic_preprocess(self, image, image_size, patch_size, mask_size, max_num=36, min_num=1):
+        orig_height, orig_width = image.shape[-2:]
+        target_aspect_ratio, new_size, (padding_width, padding_height) = self._get_crop_layout(
+            orig_height, orig_width, image_size, max_num=max_num, min_num=min_num
+        )
+        attention_mask = self._get_crop_attention_mask(
+            target_aspect_ratio, (padding_width, padding_height), patch_size, mask_size, device=image.device
+        )
 
         image = tvF.resize(image, [new_size[1], new_size[0]])
         resized_img = tvF.pad(image, [0, 0, padding_width, padding_height], fill=[255, 255, 255])
@@ -200,26 +245,7 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
             attention_mask_reshape = attention_mask_reshape.transpose(1, 2)
             attention_mask_reshape = attention_mask_reshape.reshape(-1, mask_size, mask_size).contiguous()
 
-            downsample_attention_mask = attention_mask_reshape[:, 0::2, 0::2]
-            downsample_attention_mask = downsample_attention_mask.reshape(
-                mask_height // mask_size,
-                mask_width // mask_size,
-                mask_size // 2 + mask_size % 2,
-                mask_size // 2 + mask_size % 2,
-            )
-            downsample_attention_mask = downsample_attention_mask.transpose(1, 2)
-            downsample_attention_mask = downsample_attention_mask.reshape(
-                downsample_attention_mask.size(0) * downsample_attention_mask.size(1),
-                downsample_attention_mask.size(2) * downsample_attention_mask.size(3),
-            )
-
-            num_img_tokens = (
-                256
-                + 1
-                + int(downsample_attention_mask.sum().item())
-                + int(downsample_attention_mask[:, 0].sum().item())
-                + 16
-            )
+            num_img_tokens = self._get_num_image_tokens(attention_mask, mask_size)
 
             hd_image_reshape = torch.cat([global_image.unsqueeze(0), hd_image_reshape], dim=0)
             hd_attention_mask_reshape = torch.cat([global_attention_mask, attention_mask_reshape], dim=0)
@@ -244,6 +270,31 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
         }
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def get_number_of_image_tokens(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns number of image placeholder tokens for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image placeholder tokens per image.
+        """
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        size = images_kwargs["size"]
+        patch_size = images_kwargs["patch_size"]
+        dynamic_hd = images_kwargs["dynamic_hd"]
+
+        image_size = size["height"]
+        mask_size = image_size // patch_size
+        target_aspect_ratio, _, padding = self._get_crop_layout(height, width, image_size, max_num=dynamic_hd)
+        attention_mask = self._get_crop_attention_mask(target_aspect_ratio, padding, patch_size, mask_size)
+        return self._get_num_image_tokens(attention_mask, mask_size)
 
 
 __all__ = ["Phi4MultimodalImageProcessor"]

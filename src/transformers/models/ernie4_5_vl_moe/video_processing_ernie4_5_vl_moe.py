@@ -470,10 +470,10 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         Returns:
             `int`: Number of video patches per video.
         """
-        videos_kwargs = videos_kwargs or {}
-        size = videos_kwargs.get("size", self.size)
-        patch_size = videos_kwargs.get("patch_size", self.patch_size)
-        merge_size = videos_kwargs.get("merge_size", self.merge_size)
+        videos_kwargs = self._merge_and_standardize_kwargs(**(videos_kwargs or {}))
+        size = videos_kwargs["size"]
+        patch_size = videos_kwargs["patch_size"]
+        merge_size = videos_kwargs["merge_size"]
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
             height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
@@ -586,10 +586,7 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
         # Perform type validation on received kwargs
         validate_typed_dict(self.valid_kwargs, kwargs)
 
-        # Set default kwargs from self. This ensures that if a kwarg is not provided
-        # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
-            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+        kwargs = self._merge_and_standardize_kwargs(**kwargs)
 
         input_data_format = kwargs.pop("input_data_format")
         do_sample_frames = kwargs.pop("do_sample_frames")
@@ -612,7 +609,6 @@ class Ernie4_5_VLMoeVideoProcessor(BaseVideoProcessor):
             draw_on_frames=draw_on_frames,
         )
 
-        kwargs = self._standardize_kwargs(**kwargs)
         self._validate_preprocess_kwargs(**kwargs)
 
         # Pop kwargs that are not needed in _preprocess

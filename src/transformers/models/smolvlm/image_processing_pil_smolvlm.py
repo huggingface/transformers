@@ -452,10 +452,10 @@ class SmolVLMImageProcessorPil(PilBackend):
         Returns:
             `tuple[int, int, int]`: Number of patches per image, and the number of rows and columns they form.
         """
-        images_kwargs = images_kwargs or {}
-        do_image_splitting = images_kwargs.get("do_image_splitting", self.do_image_splitting)
-        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
-        size = images_kwargs.get("size", self.size)
+        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
+        do_image_splitting = images_kwargs["do_image_splitting"]
+        max_image_size = images_kwargs["max_image_size"]
+        size = images_kwargs["size"]
 
         num_patches = num_rows = num_cols = 0
         if do_image_splitting:

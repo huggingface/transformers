@@ -110,6 +110,37 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return [[video_input]]
         return [[video_input]] * batch_size
 
+    # Override as SmolVLM needs images to be an explicitly nested batch
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+        image_inputs = [np.random.randint(255, size=(h, w, 3), dtype=np.uint8) for h, w in image_sizes]
+
+        processor = self.get_processor()
+        for do_image_splitting in [False, True]:
+            with self.subTest(do_image_splitting=do_image_splitting):
+                processor.image_processor.do_image_splitting = do_image_splitting
+
+                text = [f"This is an image {self.image_token}"] * len(image_inputs)
+                images = [[image] for image in image_inputs]
+                inputs = processor(
+                    text=text, images=images, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+                )
+                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+                self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+                text = [f"These are two images {self.image_token}{self.image_token}"] * len(image_inputs)
+                images = [[image, image] for image in image_inputs]
+                inputs = processor(
+                    text=text, images=images, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+                )
+                num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+                num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes * 2)
+                self.assertEqual(
+                    sum(num_image_tokens_from_call), sum(num_image_tokens_from_helper["num_image_tokens"])
+                )
+
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
         for n_h in range(image_rows):
