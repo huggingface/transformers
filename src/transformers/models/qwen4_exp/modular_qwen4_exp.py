@@ -370,6 +370,14 @@ def apply_rotary_pos_emb(q, k=None, cos=None, sin=None, unsqueeze_dim=1):
         return q_rotated
 
 
+def _is_plain_causal_mask(visible_token_indices: torch.Tensor) -> bool:
+    query_length, kv_length = visible_token_indices.shape[-2:]
+    key_positions = torch.arange(kv_length, device=visible_token_indices.device)
+    first_visible = torch.arange(kv_length - query_length, kv_length, device=visible_token_indices.device)
+    causal = key_positions.unsqueeze(0) <= first_visible.unsqueeze(1)
+    return bool((visible_token_indices == causal).all())
+
+
 def qsa_select_tokens(
     q: torch.Tensor,
     raw_keys: torch.Tensor,
@@ -385,22 +393,28 @@ def qsa_select_tokens(
     """Select the keys each query attends to, as a bool mask of shape `(batch_size, 1, query_length, kv_length)`.
 
     A query pools the keys it sees into blocks of `compress_ratio` consecutive tokens, keeps the `block_topk` blocks
-    with the highest scores, and adds the keys after its last complete block.
+    with the highest scores, and adds the keys after its last complete block. Plain causal masks use
+    `_qsa_select_tokens_causal`, any other mask `_qsa_select_tokens_loop`.
     """
     # The mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip. It is always
     # 4D with either bool (sdpa) or float (eager), and already gives us the valid indices
     visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
-    selected_token_indices = _qsa_select_tokens_loop(
-        q,
-        raw_keys,
-        full_cos,
-        full_sin,
-        visible_token_indices,
-        k_layernorm,
-        block_topk,
-        compress_ratio,
-        token_budget,
-    )
+    if _is_plain_causal_mask(visible_token_indices):
+        selected_token_indices = _qsa_select_tokens_causal(
+            q, raw_keys, full_cos, full_sin, k_layernorm, block_topk, compress_ratio, token_budget
+        )
+    else:
+        selected_token_indices = _qsa_select_tokens_loop(
+            q,
+            raw_keys,
+            full_cos,
+            full_sin,
+            visible_token_indices,
+            k_layernorm,
+            block_topk,
+            compress_ratio,
+            token_budget,
+        )
 
     kv_length = attention_mask.shape[-1]
     selected_token_mask = torch.zeros(
@@ -409,6 +423,69 @@ def qsa_select_tokens(
     # We absorb all the -1 by scaterring them to the last index that we will drop
     scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
     return selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
+
+
+def _qsa_select_tokens_causal(
+    q: torch.Tensor,
+    raw_keys: torch.Tensor,
+    full_cos: torch.Tensor,
+    full_sin: torch.Tensor,
+    k_layernorm: nn.Module,
+    block_topk: int,
+    compress_ratio: int,
+    token_budget: int,
+) -> torch.Tensor:
+    batch_size, seq_length, num_heads, head_dim = q.shape
+    kv_length = raw_keys.shape[1]
+    num_blocks = kv_length // compress_ratio
+    num_selected_blocks = min(block_topk, num_blocks)
+    selected_token_indices = torch.full(
+        (batch_size, seq_length, token_budget + compress_ratio - 1), -1, dtype=torch.int32, device=q.device
+    )
+
+    # Under a causal mask every query sees a prefix of the keys, so all of them share the same blocks
+    pooled_keys = raw_keys[:, : num_blocks * compress_ratio].view(
+        batch_size, num_blocks, compress_ratio, raw_keys.shape[-1]
+    )
+    pooled_keys = k_layernorm(pooled_keys.float().mean(dim=2).to(raw_keys.dtype))
+    block_starts = torch.arange(num_blocks, device=q.device) * compress_ratio
+    block_key_states = apply_rotary_pos_emb(
+        pooled_keys.unsqueeze(2),
+        cos=full_cos.index_select(1, block_starts),
+        sin=full_sin.index_select(1, block_starts),
+        unsqueeze_dim=2,
+    ).squeeze(2)
+
+    num_visible = torch.arange(kv_length - seq_length + 1, kv_length + 1, device=q.device)
+    num_complete_blocks = torch.div(num_visible, compress_ratio, rounding_mode="floor")
+    block_offsets = torch.arange(compress_ratio, device=q.device)
+    tail_offsets = torch.arange(compress_ratio - 1, device=q.device)
+
+    # Bound the score tensor so that long rows do not materialise (queries x blocks x heads) at once
+    queries_per_chunk = max(1, 2**24 // (batch_size * max(num_blocks * num_heads, 1)))
+    for start in range(0, seq_length, queries_per_chunk):
+        stop = min(start + queries_per_chunk, seq_length)
+        complete = num_complete_blocks[start:stop]
+        tokens = q.new_zeros((batch_size, stop - start, 0), dtype=torch.int32)
+        if num_selected_blocks > 0:
+            scores = torch.einsum("bqhd,bgd->bqgh", q[:, start:stop].float(), block_key_states.float())
+            scores = scores.relu().sum(dim=-1) / math.sqrt(head_dim)
+            scores = scores.masked_fill(
+                torch.arange(num_blocks, device=q.device).unsqueeze(0) >= complete.unsqueeze(1), float("-inf")
+            )
+            selected_blocks = scores.topk(num_selected_blocks, dim=-1).indices
+            max_blocks = complete.clamp(max=block_topk).unsqueeze(-1)
+            kept = torch.arange(num_selected_blocks, device=q.device) < max_blocks
+            selected_blocks = torch.where(kept, selected_blocks, -1)
+            tokens = selected_blocks.unsqueeze(-1) * compress_ratio + block_offsets
+            tokens = torch.where(selected_blocks.unsqueeze(-1) >= 0, tokens, -1).flatten(-2).to(torch.int32)
+
+        tail_start = complete * compress_ratio
+        tail = tail_start.unsqueeze(-1) + tail_offsets
+        tail = torch.where(tail_offsets < (num_visible[start:stop] - tail_start).unsqueeze(-1), tail, -1)
+        selected = torch.cat([tokens, tail.expand(batch_size, -1, -1).to(torch.int32)], dim=-1)
+        selected_token_indices[:, start:stop, : selected.shape[-1]] = selected
+    return selected_token_indices
 
 
 def _qsa_select_tokens_loop(

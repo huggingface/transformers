@@ -48,6 +48,11 @@ if is_torch_available():
     from transformers.distributed.fsdp import ALL_FSDP_STYLES
     from transformers.integrations import FP8Embedding
     from transformers.models.qwen4_exp import modeling_qwen4_exp
+    from transformers.models.qwen4_exp.modeling_qwen4_exp import (
+        _qsa_select_tokens_causal,
+        _qsa_select_tokens_loop,
+        qsa_select_tokens,
+    )
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
@@ -164,6 +169,70 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             outputs = model(input_ids, attention_mask=attention_mask, output_attentions=True, use_cache=False)
 
         self.assertTrue(torch.isfinite(outputs.attentions[0]).all())
+
+    def _qsa_random_inputs(self, q_length, kv_length, batch_size=2):
+        torch.manual_seed(0)
+        num_heads, head_dim = 2, 8
+        q = torch.randn(batch_size, q_length, num_heads, head_dim)
+        raw_keys = torch.randn(batch_size, kv_length, head_dim)
+        full_cos = torch.randn(batch_size, kv_length, head_dim)
+        full_sin = torch.randn(batch_size, kv_length, head_dim)
+        key_positions = torch.arange(kv_length)
+        first_visible = torch.arange(kv_length - q_length, kv_length)
+        visible = key_positions.unsqueeze(0) <= first_visible.unsqueeze(1)
+        visible = visible.view(1, 1, q_length, kv_length).expand(batch_size, -1, -1, -1)
+        return q, raw_keys, full_cos, full_sin, visible, modeling_qwen4_exp.Qwen4ExpTextRMSNorm(head_dim)
+
+    def _qsa_mask_from_indices(self, selected_token_indices, kv_length):
+        batch_size, q_length = selected_token_indices.shape[:2]
+        mask = torch.zeros(batch_size, 1, q_length, kv_length, dtype=torch.bool)
+        for batch_idx in range(batch_size):
+            for query_idx in range(q_length):
+                tokens = [token for token in selected_token_indices[batch_idx, query_idx].tolist() if token >= 0]
+                if tokens:
+                    mask[batch_idx, 0, query_idx, tokens] = True
+        return mask
+
+    def _qsa_selection_args(self):
+        config = self.model_tester.get_config()
+        ratio, budget = config.indexer_compress_ratio, config.indexer_budget
+        return budget // ratio, ratio, budget
+
+    def test_qsa_causal_selection_matches_the_loop(self):
+        # Shorter than one block, a few blocks, and more complete blocks than `block_topk`, with and without cache
+        topk, ratio, budget = self._qsa_selection_args()
+        for q_length, kv_length in [(1, 1), (1, 7), (3, 3), (2, 9), (7, 7), (3, 16), (20, 20)]:
+            with self.subTest(q_length=q_length, kv_length=kv_length):
+                q, keys, cos, sin, visible, norm = self._qsa_random_inputs(q_length, kv_length)
+                loop_indices = _qsa_select_tokens_loop(q, keys, cos, sin, visible, norm, topk, ratio, budget)
+                causal_indices = _qsa_select_tokens_causal(q, keys, cos, sin, norm, topk, ratio, budget)
+                self.assertEqual(loop_indices.shape, causal_indices.shape)
+                for batch_idx in range(q.shape[0]):
+                    for query_idx in range(q_length):
+                        loop_tokens = set(loop_indices[batch_idx, query_idx].tolist())
+                        causal_tokens = set(causal_indices[batch_idx, query_idx].tolist())
+                        self.assertEqual(loop_tokens - {-1}, causal_tokens - {-1})
+
+                selection = qsa_select_tokens(q, keys, cos, sin, visible, norm, topk, ratio, budget)
+                expected = self._qsa_mask_from_indices(loop_indices, kv_length)
+                self.assertTrue(torch.equal(selection, expected))
+
+    def test_qsa_padded_mask_uses_the_loop(self):
+        topk, ratio, budget = self._qsa_selection_args()
+        q, keys, cos, sin, visible, norm = self._qsa_random_inputs(6, 6)
+        padding = torch.tensor([0, 0, 1, 1, 1, 1], dtype=torch.bool).view(1, 1, 1, -1)
+        visible = visible & padding
+        float_visible = torch.zeros(visible.shape).masked_fill(~visible, torch.finfo(torch.float32).min)
+
+        loop_indices = _qsa_select_tokens_loop(q, keys, cos, sin, visible, norm, topk, ratio, budget)
+        loop_name = "_qsa_select_tokens_loop"
+        with mock.patch.object(modeling_qwen4_exp, loop_name, wraps=_qsa_select_tokens_loop) as loop:
+            selection = qsa_select_tokens(q, keys, cos, sin, visible, norm, topk, ratio, budget)
+            selection_from_float = qsa_select_tokens(q, keys, cos, sin, float_visible, norm, topk, ratio, budget)
+
+        self.assertEqual(loop.call_count, 2)
+        self.assertTrue(torch.equal(selection, self._qsa_mask_from_indices(loop_indices, visible.shape[-1])))
+        self.assertTrue(torch.equal(selection_from_float, selection))
 
     def test_extra_kwargs_reach_the_token_mixing_functions(self):
         config = self.model_tester.get_config()
