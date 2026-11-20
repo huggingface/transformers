@@ -381,7 +381,7 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         "Siglip2EncoderLayer",
         "Siglip2MultiheadAttentionPoolingHead",
     ]
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_sdpa = True
     # nn.MultiHeadAttention mask doesn't allow for non 4d mask
     _supports_flex_attn = False
@@ -663,24 +663,15 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
         probe = self.probe.repeat(batch_size, 1, 1)
 
         if attention_mask is not None:
+            # `nn.MultiheadAttention` needs a float (batch * num_heads, target_len, source_len) mask, whatever the
+            # attention implementation of the encoder
             target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=probe,
-                attention_mask=attention_mask,
-                encoder_hidden_states=hidden_state,
+            attention_mask = attention_mask[:, None, None, :].bool().expand(-1, self.num_heads, target_len, -1)
+            attention_mask = torch.where(
+                attention_mask.reshape(-1, target_len, source_len),
+                torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
+                torch.finfo(probe.dtype).min,
             )
-            if attention_mask is not None:
-                attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
-                attention_mask = attention_mask.reshape(-1, target_len, source_len)
-
-                # `nn.MultiheadAttention` cannot handle boolean masks (which SDPA can)
-                if attention_mask.dtype == torch.bool:
-                    attention_mask = torch.where(
-                        attention_mask,
-                        torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
-                        torch.finfo(probe.dtype).min,
-                    )
 
         hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
 
