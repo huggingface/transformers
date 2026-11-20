@@ -95,9 +95,12 @@ class CompressedTensorsDequantize(ConversionOps):
         quantization_scheme = self.scheme or get_experts_scheme(ct_quantization_config)
 
         weights_args = quantization_scheme.weights
+        format = quantization_scheme.format or ct_quantization_config.format
+        compressor = BaseCompressor.get_value_from_registry(format)
         if weights_args.type == "float" and weights_args.num_bits == 8:
-            # FP8 experts are plain (fp8 weight, scale) pairs — nothing is packed. Fold the
-            # scale into each per-expert weight so the downstream merge sees dense tensors.
+            # FP8 experts are plain (fp8 weight, scale) pairs — nothing is packed. Decompress each per-expert
+            # weight like a dense module (per-channel or per-group scales, e.g. MXFP8's ue8m0 per 32) so the
+            # downstream merge sees dense tensors.
             processed_out = {}
             for key, value in input_dict.items():
                 if "weight_scale" in key:
@@ -112,7 +115,8 @@ class CompressedTensorsDequantize(ConversionOps):
                 scales = scales if isinstance(scales, list) else [scales]
                 output = None
                 for i, (quant, scale) in enumerate(zip(quantized, scales)):
-                    dense = (quant.to(torch.float32) * scale.to(torch.float32)).to(dtype)
+                    dense = compressor.decompress({"weight": quant, "weight_scale": scale}, quantization_scheme)
+                    dense = dense["weight"].to(dtype)
                     if output is None:
                         # Pre-allocate the stacked buffer (see the packed path below).
                         output = torch.empty((len(quantized), *dense.shape), dtype=dense.dtype, device=dense.device)
@@ -121,9 +125,6 @@ class CompressedTensorsDequantize(ConversionOps):
                 if output is not None:
                     processed_out[key] = output
             return processed_out
-
-        format = quantization_scheme.format or ct_quantization_config.format
-        compressor = BaseCompressor.get_value_from_registry(format)
 
         class DummyModule(nn.Module):
             def __init__(self, weight, scale, shape):
