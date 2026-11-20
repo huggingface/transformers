@@ -1030,6 +1030,40 @@ class ModelTesterMixin(ExportTesterMixin):
                         else:
                             self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT be")
 
+    def test_keep_in_fp32_modules_strict_also_hardcode_fp32(self):
+        """
+        Test that models using `_keep_in_fp32_modules_strict` actually hardcode the `dtype=torch.float32` in the parameter/buffer
+        creation, as otherwise the dtype is lost when instantiating a model from `__init__` or `from_config`.
+        """
+        from transformers.core_model_loading import build_glob_alternation
+        from transformers.modeling_utils import local_torch_dtype
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # Init an empty model in fp16 to check if the params inside _keep_in_fp32_modules_strict are correctly
+                # kept in fp32
+                with local_torch_dtype(torch.float16, model_class.__name__):
+                    model = model_class(config).to(torch_device)
+                    model.eval()
+
+                if len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest("No `_keep_in_fp32_modules_strict` defined")
+
+                dtype_policy_alt, _, _ = build_glob_alternation(list(model._keep_in_fp32_modules_strict))
+
+                missing = []
+                for k, v in model.state_dict().items():
+                    # Check is_floating_point as well, as some params (e.g. norm's `num_batches_tracked` buffers) can be int
+                    if dtype_policy_alt.search(k) is not None and v.dtype != torch.float32 and v.is_floating_point():
+                        missing.append(k)
+
+                self.assertTrue(
+                    len(missing) == 0,
+                    f"The following parameters/buffers are part of `_keep_in_fp32_modules_strict` but do not hardcode their dtype in the __init__: {(*missing,)}",
+                )
+
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

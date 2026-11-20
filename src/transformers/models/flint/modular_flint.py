@@ -117,6 +117,10 @@ class FlintMLP(Qwen3MoeMLP):
 
 
 class FlintTopKRouter(Qwen3MoeTopKRouter):
+    def __init__(self, config):
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
+
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         # `device.type` is a proxy under FX tracing, which vLLM uses to fuse this router
@@ -178,7 +182,7 @@ class FlintAttention(Qwen3MoeAttention):
     def __init__(self, config: FlintConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads, dtype=torch.float32))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
