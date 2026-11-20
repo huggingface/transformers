@@ -1534,6 +1534,66 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "lfm3_omni": [
+            # the released checkpoint names the modules as the LFM3-Audio port did: the speech encoder as an LFM2 stack,
+            # the depth decoder under the base model with per-codebook embeddings
+            WeightRenaming(r"^(model\.audio_encoder\.lfm\.layers\.\d+\.self_attn)\.out_proj\.", r"\1.o_proj."),
+            WeightRenaming(r"^(model\.audio_encoder\.lfm\.layers\.\d+\.self_attn\.[qk])_layernorm\.", r"\1_norm."),
+            WeightRenaming(r"\.self_attn\.gate_proj\.", ".self_attn.g_proj."),
+            WeightRenaming(r"^model\.audio_encoder\.lfm\.", "model.audio_model."),
+            WeightRenaming(
+                r"^model\.audio_encoder\.downsample\.conv_in\.bias", "model.audio_model.subsampling.conv_in.bias"
+            ),
+            WeightRenaming(
+                r"^model\.audio_encoder\.downsample\.conv_mid\.bias",
+                "model.audio_model.subsampling.layers.0.depthwise_conv.bias",
+            ),
+            WeightRenaming(
+                r"^model\.audio_encoder\.downsample\.conv_end\.bias",
+                "model.audio_model.subsampling.layers.1.depthwise_conv.bias",
+            ),
+            WeightRenaming(
+                r"^model\.audio_encoder\.downsample\.lin_mid\.",
+                "model.audio_model.subsampling.layers.0.pointwise_conv.",
+            ),
+            WeightRenaming(
+                r"^model\.audio_encoder\.downsample\.lin_end\.",
+                "model.audio_model.subsampling.layers.1.pointwise_conv.",
+            ),
+            WeightRenaming(r"^model\.audio_encoder\.downsample\.lin_out\.", "model.audio_model.subsampling.conv_out."),
+            WeightConverter(
+                source_patterns="audio_encoder.downsample.conv_in.weight",
+                target_patterns="audio_model.subsampling.conv_in.weight",
+                operations=[Transpose(dim0=2, dim1=3)],
+            ),
+            WeightConverter(
+                source_patterns="audio_encoder.downsample.conv_mid.weight",
+                target_patterns="audio_model.subsampling.layers.0.depthwise_conv.weight",
+                operations=[Transpose(dim0=2, dim1=3)],
+            ),
+            WeightConverter(
+                source_patterns="audio_encoder.downsample.conv_end.weight",
+                target_patterns="audio_model.subsampling.layers.1.depthwise_conv.weight",
+                operations=[Transpose(dim0=2, dim1=3)],
+            ),
+            WeightRenaming(r"^model\.codebook_embedding\.", "model.embed_audio_tokens.embed_audio_tokens."),
+            WeightRenaming(r"^model\.depth_decoder\.model\.", "depth_decoder.model."),
+            WeightRenaming(r"^model\.depth_decoder\.depth_linear\.", "depth_decoder.model.backbone_projector."),
+            WeightRenaming(
+                r"^model\.depth_decoder\.mask_embedding", "depth_decoder.model.embed_tokens.mask_embedding"
+            ),
+            WeightRenaming(r"^model\.depth_decoder\.depth_embeddings\.", "depth_decoder.depth_embeddings."),
+            WeightConverter(
+                source_patterns="depth_decoder.depth_embeddings.*.embedding.weight",
+                target_patterns="depth_decoder.model.embed_tokens.weight",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="depth_decoder.depth_embeddings.*.embedding_norm.weight",
+                target_patterns="depth_decoder.head.norm.weight",
+                operations=[MergeModulelist(dim=0)],
+            ),
+        ],
         "lfm3_vl_vision": [
             WeightRenaming(source_patterns="patchifier", target_patterns="patch_embed"),
             WeightRenaming(source_patterns="q_layernorm", target_patterns="q_norm"),
