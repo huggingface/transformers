@@ -571,8 +571,11 @@ class _RowReader:
     """Rows of a table the checkpoint stores as slices concatenated on dim 0 (one slice, or e.g. 128 shards)."""
 
     def __init__(self, reads: dict[str, list], device):
-        ((_, slices),) = reads.items()
-        self.slices = list(slices)
+        # The sources in collection order (e.g. `shard_0..shard_127`, maybe under several patterns), concatenated on rows
+        self.slices = [entry for slices in reads.values() for entry in slices]
+        widths = {tuple(slice_.get_shape()[1:]) for slice_, *_ in self.slices}
+        if len(widths) != 1:
+            raise ValueError(f"Cannot stream rows of {list(reads)}: their sources differ in row shape {widths}")
         self.offsets = [0]
         for slice_, *_ in self.slices:
             self.offsets.append(self.offsets[-1] + slice_.get_shape()[0])
