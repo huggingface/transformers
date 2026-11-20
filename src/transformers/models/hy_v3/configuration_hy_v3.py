@@ -46,7 +46,6 @@ class HYV3Config(PreTrainedConfig):
 
     model_type = "hy_v3"
     default_theta = 11_158_840.0
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "num_experts",
     }
@@ -73,10 +72,9 @@ class HYV3Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 120832

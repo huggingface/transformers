@@ -246,7 +246,6 @@ pipeline(
 
 - Questa libreria non è un toolbox modulare di blocchi costitutivi per reti neurali. Il codice nei file dei modelli non è stato rifattorizzato con ulteriori astrazioni di proposito, in modo che i ricercatori possano iterare rapidamente su ciascuno dei modelli senza dover approfondire ulteriori astrazioni/file.
 - L'API di addestramento è ottimizzata per funzionare con i modelli PyTorch forniti da Transformers. Per i loop generici di machine learning, è necessario utilizzare un'altra libreria come [Accelerate](https://huggingface.co/docs/accelerate).
-- Gli [script di esempio](https://github.com/huggingface/transformers/tree/main/examples) sono solo *esempi*. Potrebbero non funzionare immediatamente nel vostro caso specifico e potrebbe essere necessario adattare il codice affinché funzioni.
 
 ## 100 progetti che usano Transformers
 

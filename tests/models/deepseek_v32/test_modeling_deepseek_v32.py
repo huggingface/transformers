@@ -110,29 +110,17 @@ class DeepseekV32ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV32Model
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-        first_k_dense_replace=1,
-        n_group=1,
-        topk_group=1,
-        index_topk=8,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.first_k_dense_replace = first_k_dense_replace
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.index_topk = index_topk
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+        "first_k_dense_replace": 1,
+        "n_group": 1,
+        "topk_group": 1,
+        "index_topk": 8,
+    }
 
 
 @require_torch
@@ -145,14 +133,21 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_torchscript = False
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV32ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = DeepseekV32ForCausalLM if is_torch_available() else None
+
+    def setUp(self):
+        super().setUp()
+        # Collect garbage right before every CUDA graph capture. Otherwise, Triton kernels left over from earlier
+        # compilations (unreachable, in reference cycles) can be finalized by an automatic GC pass *inside* the capture:
+        # `CompiledKernel.__del__` -> `cuModuleUnload` is not allowed during a capture and invalidates it
+        # ("operation failed due to a previous error during capture"). torch >= 2.15 no longer collects by default.
+        if hasattr(torch.compiler.config, "force_cudagraph_gc"):
+            self.enterContext(torch.compiler.config.patch(force_cudagraph_gc=True))
 
     @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
     def test_model_rope_scaling_frequencies(self):

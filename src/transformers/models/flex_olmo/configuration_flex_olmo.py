@@ -46,7 +46,6 @@ class FlexOlmoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "flex_olmo"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_local_experts": "num_experts"}
     default_theta = 500000.0
     base_model_tp_plan = {
@@ -64,10 +63,9 @@ class FlexOlmoConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 100352

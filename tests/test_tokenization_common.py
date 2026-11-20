@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import dataclasses
 import functools
 import inspect
 import itertools
@@ -1086,6 +1087,69 @@ Hey how are you doing"""  # noqa: W293
         tokenizer.apply_chat_template(
             dummy_conversations, chat_template=dummy_template, tokenize=True
         )  # Check that no error raised
+
+    @require_jinja
+    def test_chat_template_none_values(self):
+        """Regression test: a None value (e.g. `content=None` or `tool_calls=None` from OpenAI) should be treated the
+        same as a missing key."""
+        dummy_template = (
+            "{% for message in messages %}"
+            "{{ message['role'] }}"
+            "{% if message.content is defined %}: {{ message['content'] }}{% endif %}"
+            "{% if message.tool_calls is defined %} ({{ message.tool_calls | length }} tool calls){% endif %}"
+            "\n"
+            "{% endfor %}"
+        )
+        messages_with_none = [
+            {"role": "user", "content": "What is the weather?", "tool_calls": None},
+            {"role": "assistant", "content": None},
+        ]
+        messages_without_content = [
+            {"role": "user", "content": "What is the weather?"},
+            {"role": "assistant"},
+        ]
+        tokenizer = self.get_tokenizer()
+        output_none = tokenizer.apply_chat_template(
+            messages_with_none, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        output_missing = tokenizer.apply_chat_template(
+            messages_without_content, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        self.assertEqual(output_none, output_missing)
+
+    @require_jinja
+    def test_chat_template_message_objects(self):
+        """Regression test for #50773: message objects (e.g. the pydantic messages returned by the OpenAI SDK) should
+        render like the equivalent dicts, with their None fields dropped."""
+
+        @dataclasses.dataclass
+        class DataclassMessage:
+            role: str
+            content: str | None = None
+            tool_calls: list | None = None
+
+        class PydanticLikeMessage:
+            def model_dump(self):
+                return {"role": "assistant", "content": None, "tool_calls": None}
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{{ message['role'] }}"
+            "{% if message.content is defined %}: {{ message['content'] }}{% endif %}"
+            "{% if message.tool_calls is defined %} ({{ message.tool_calls | length }} tool calls){% endif %}"
+            "\n"
+            "{% endfor %}"
+        )
+        message_objects = [DataclassMessage("user", "What is the weather?"), PydanticLikeMessage()]
+        message_dicts = [{"role": "user", "content": "What is the weather?"}, {"role": "assistant"}]
+        tokenizer = self.get_tokenizer()
+        output_objects = tokenizer.apply_chat_template(
+            message_objects, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        output_dicts = tokenizer.apply_chat_template(
+            message_dicts, chat_template=dummy_template, tokenize=False, return_dict=False
+        )
+        self.assertEqual(output_objects, output_dicts)
 
     @require_jinja
     def test_jinja_loopcontrols(self):
@@ -2753,24 +2817,20 @@ Hey how are you doing"""  # noqa: W293
         from transformers import AutoTokenizer
 
         pretrained_list = getattr(self, "from_pretrained_id", []) or []
+        if isinstance(pretrained_list, str):
+            pretrained_list = [pretrained_list]
+        kwargs = getattr(self, "from_pretrained_kwargs", None) or {}
         for pretrained_name in pretrained_list:
             with self.subTest(f"AutoTokenizer ({pretrained_name})"):
                 # First cache the tokenizer files
-                try:
-                    tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name)
+                tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
-                    # Now load with local_files_only=True
-                    tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True)
+                # Now load with local_files_only=True
+                tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True, **kwargs)
 
-                    # Check that the two tokenizers are identical
-                    self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
-                    self.assertEqual(
-                        tokenizer_cached.all_special_tokens_extended,
-                        tokenizer_local.all_special_tokens_extended,
-                    )
-                except Exception as e:
-                    # if the pretrained model is not loadable how could it pass locally :)
-                    print(f"Could not load pretrained tokenizer {pretrained_name}: {e}")
+                # Check that the two tokenizers are identical
+                self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
+                self.assertEqual(tokenizer_cached.all_special_tokens, tokenizer_local.all_special_tokens)
 
 
 @require_tokenizers
@@ -2868,21 +2928,17 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
         from transformers import AutoTokenizer
 
         pretrained_list = getattr(self, "from_pretrained_id", []) or []
+        if isinstance(pretrained_list, str):
+            pretrained_list = [pretrained_list]
+        kwargs = getattr(self, "from_pretrained_kwargs", None) or {}
         for pretrained_name in pretrained_list:
             with self.subTest(f"AutoTokenizer ({pretrained_name})"):
                 # First cache the tokenizer files
-                try:
-                    tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name)
+                tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
-                    # Now load with local_files_only=True
-                    tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True)
+                # Now load with local_files_only=True
+                tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True, **kwargs)
 
-                    # Check that the two tokenizers are identical
-                    self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
-                    self.assertEqual(
-                        tokenizer_cached.all_special_tokens_extended,
-                        tokenizer_local.all_special_tokens_extended,
-                    )
-                except Exception as e:
-                    # if the pretrained model is not loadable how could it pass locally :)
-                    print(f"Could not load pretrained tokenizer: {e}")
+                # Check that the two tokenizers are identical
+                self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
+                self.assertEqual(tokenizer_cached.all_special_tokens, tokenizer_local.all_special_tokens)

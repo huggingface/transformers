@@ -29,9 +29,12 @@ jobs:
 
     if: ${{ contains(github.event.head_commit.message, '[build-ci-image]') || contains(github.event.head_commit.message, '[push-ci-image]') && '!cancelled()' || github.event_name == 'schedule' }}
 
+    # `enforcement: audit` on the Wiz scan below, and on the two GPU images in
+    # build-docker-images.yml: these carry the CVEs of a base we do not choose, and the
+    # clusters only require that a scan exists, not that it passed.
     strategy:
       matrix:
-        file: ["quality", "consistency", "custom-tokenizers", "torch-light", "exotic-models", "examples-torch"]
+        file: ["quality", "consistency", "custom-tokenizers", "torch-light", "exotic-models"]
     continue-on-error: true
 
     steps:
@@ -41,11 +44,8 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
               if echo "$COMMIT_MESSAGE" | grep -q '\[build-ci-image\]'; then
-                  echo "TAG=huggingface/transformers-${{ matrix.file }}:dev" >> "$GITHUB_ENV"
+                  echo "TAG_SUFFIX=:dev" >> "$GITHUB_ENV"
                   echo "setting it to DEV!"
-              else
-                  echo "TAG=huggingface/transformers-${{ matrix.file }}" >> "$GITHUB_ENV"
-
               fi
       -
         name: Set up Docker Buildx
@@ -61,16 +61,39 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      # `--load` rather than `--push`: the Wiz CLI reads the local image store and never
+      # pulls, so the image is scanned here and pushed by the step after the scan.
       -
+        # `docker/docker-bake.hcl` builds `ci-base.dockerfile` first, on the Python from `.python-version`
         name: Build ${{ matrix.file }}.dockerfile
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        env:
+          REF: ${{ github.sha }}
+          TARGET: ${{ matrix.file }}
+        run: |
+              PYTHON_VERSION="$(cat .python-version)"
+              export PYTHON_VERSION
+              docker buildx bake -f docker/docker-bake.hcl --load "$TARGET"
+      -
+        name: Scan ${{ matrix.file }}.dockerfile
+        uses: huggingface/wiz-image-action/scan@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
         with:
-          context: ./docker
-          build-args: |
-            REF=${{ github.sha }}
-          file: "./docker/${{ matrix.file }}.dockerfile"
-          push: ${{ contains(github.event.head_commit.message, 'ci-image]') ||  github.event_name == 'schedule' }}
-          tags: ${{ env.TAG }}
+          image: huggingface/transformers-${{ matrix.file }}${{ env.TAG_SUFFIX }}
+          dockerfile: docker/${{ matrix.file }}.dockerfile
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
+          enforcement: audit
+      -
+        name: Push ${{ matrix.file }}.dockerfile
+        env:
+          IMAGE: huggingface/transformers-${{ matrix.file }}${{ env.TAG_SUFFIX }}
+        run: docker push "$IMAGE"
+      -
+        name: Register ${{ matrix.file }}.dockerfile with Wiz
+        uses: huggingface/wiz-image-action/register@53a5b4af184193adf1773753f29b3f903445e31b # v1.3.0
+        with:
+          image: huggingface/transformers-${{ matrix.file }}${{ env.TAG_SUFFIX }}
+          clientId: ${{ vars.WIZ_CLI_CLIENT_ID }}
+          clientSecret: ${{ secrets.WIZ_CLI_CLIENT_SECRET }}
 
   notify:
     permissions: {}

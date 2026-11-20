@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -37,10 +37,11 @@ from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.deprecation import deprecate_kwarg
+from ..auto import AutoConfig
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -59,7 +60,6 @@ from ..paligemma.modeling_paligemma import (
     PaliGemmaModel,
     PaligemmaModelOutputWithPast,
 )
-from ..siglip import SiglipVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -204,34 +204,19 @@ class Gemma3Config(PreTrainedConfig):
         "boi_token_id": "boi_token_index",
         "eoi_token_id": "eoi_token_index",
     }
-    sub_configs = {
+    sub_configs_defaults = {
         "text_config": Gemma3TextConfig,
-        "vision_config": SiglipVisionConfig,
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
     }
 
-    text_config: Gemma3TextConfig | dict[str, Any] | None = None
-    vision_config: SiglipVisionConfig | dict[str, Any] | None = None
+    text_config: PreTrainedConfig | dict[str, Any] | None = None
+    vision_config: PreTrainedConfig | dict[str, Any] | None = None
     mm_tokens_per_image: int | None = 256
     boi_token_index: int | None = 255_999
     eoi_token_index: int | None = 256_000
     image_token_index: int | None = 262_144
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma3TextConfig()
-            logger.info("text_config is None, using default Gemma3TextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma3TextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = SiglipVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = SiglipVisionConfig()
-            logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
@@ -313,24 +298,15 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        inv_freq_expanded = (
-            inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * attention_scaling
-            sin = emb.sin() * attention_scaling
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * attention_scaling
+        sin = emb.sin() * attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -346,12 +322,13 @@ class Gemma3Attention(Gemma2Attention):
         self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
@@ -367,8 +344,8 @@ class Gemma3Attention(Gemma2Attention):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -404,15 +381,16 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -422,7 +400,7 @@ class Gemma3DecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -444,8 +422,8 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
+    _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
@@ -490,13 +468,14 @@ class Gemma3TextModel(Gemma2Model):
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -506,11 +485,11 @@ class Gemma3TextModel(Gemma2Model):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -521,7 +500,7 @@ class Gemma3TextModel(Gemma2Model):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             sliding_mask_kwargs = mask_kwargs.copy()
@@ -548,7 +527,7 @@ class Gemma3TextModel(Gemma2Model):
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -556,7 +535,7 @@ class Gemma3TextModel(Gemma2Model):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -619,7 +598,7 @@ def create_masks_for_vision_model(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None,
     block_sequence_ids: torch.Tensor,
 ) -> dict:
@@ -632,7 +611,7 @@ def create_masks_for_vision_model(
         "config": config,
         "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
-        "past_key_values": past_key_values,
+        "cache": cache,
         "position_ids": position_ids,
     }
 
@@ -641,8 +620,8 @@ def create_masks_for_vision_model(
 
     # The sliding mask must be sized against a `sliding_attention` layer, but layer 0 may not be one
     # and `create_causal_mask` defaults to the first `full_attention` layer, which has a different kv_length.
-    if getattr(past_key_values, "is_sliding", None) and True in past_key_values.is_sliding:
-        sliding_layer_idx = past_key_values.is_sliding.index(True)
+    if getattr(cache, "is_sliding", None) and True in cache.is_sliding:
+        sliding_layer_idx = cache.is_sliding.index(True)
     else:
         sliding_layer_idx = 0
 
@@ -679,6 +658,8 @@ class Gemma3Model(PaliGemmaModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         del self.text_config_dtype
@@ -686,7 +667,7 @@ class Gemma3Model(PaliGemmaModel):
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
@@ -696,15 +677,16 @@ class Gemma3Model(PaliGemmaModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -745,7 +727,7 @@ class Gemma3Model(PaliGemmaModel):
                 "config": self.config.get_text_config(),
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
 
@@ -761,34 +743,31 @@ class Gemma3Model(PaliGemmaModel):
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
         )
 
-        return Gemma3ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Gemma3ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -846,7 +825,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             token_type_ids=token_type_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
@@ -856,9 +835,8 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -869,30 +847,35 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         return Gemma3CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
     def _update_model_kwargs_for_generation(self, **super_kwargs):
         raise AttributeError("PaliGemma's token_type_ids mark its prefix, Gemma3's mark image spans!")
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs
         )
-        if not (is_first_iteration or not use_cache):
+        if is_first_iteration or not use_cache:
+            # The bidirectional mask reads them by position, so a prefill chunk needs them from the start of the sequence
+            model_inputs["token_type_ids"] = kwargs.get("token_type_ids")
+        else:
             # Don't pass to not apply bidirectional mask on top
             model_inputs["token_type_ids"] = None
 
         return model_inputs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         position_ids: torch.Tensor | None,
         token_type_ids: torch.Tensor | None = None,
         is_first_iteration: bool | None = False,
@@ -902,7 +885,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             "config": config.get_text_config(),
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "position_ids": position_ids,
         }
 
@@ -927,15 +910,16 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
 
 
 class Gemma3ForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
@@ -943,7 +927,7 @@ class Gemma3ForSequenceClassification(GenericForSequenceClassification, Gemma3Pr
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             token_type_ids=token_type_ids,

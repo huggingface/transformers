@@ -40,8 +40,10 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...models.bamba.test_modeling_bamba import BambaModelTester
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -56,17 +58,12 @@ class GraniteMoeHybridModelTester(BambaModelTester):
         model_class = GraniteMoeHybridModel
         for_causal_lm_class = GraniteMoeHybridForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        use_cache=False,
-        shared_intermediate_size=174,
-        layer_types=None,
-    ):
-        super().__init__(parent)
-        self.shared_intermediate_size = shared_intermediate_size
-        self.layer_types = layer_types
-        self.use_cache = use_cache
+    defaults = {**BambaModelTester.defaults, **BambaModelTester.small_config_overrides}
+    small_config_overrides = {
+        "use_cache": False,
+        "shared_intermediate_size": 174,
+        "layer_types": None,
+    }
 
     def _update_layer_configs(self):
         super()._update_layer_configs()
@@ -83,7 +80,14 @@ class GraniteMoeHybridModelTester(BambaModelTester):
 
 
 @require_torch
-class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GraniteMoeHybridModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
     model_tester_class = GraniteMoeHybridModelTester
     all_model_classes = (
         (

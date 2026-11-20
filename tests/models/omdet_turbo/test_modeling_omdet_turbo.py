@@ -23,6 +23,7 @@ import requests
 from transformers import OmDetTurboConfig, is_torch_available, is_vision_available
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import (
+    is_flaky,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -336,6 +337,11 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
 
     # Overwrite as `init_reference_points` is not batch dependent and contains `inf` values
+    @is_flaky(
+        description="The decoder queries are selected with `torch.topk` over the encoder class scores. With random "
+        "weights, these scores are packed so closely that the float noise between the batched and single-row forwards "
+        "(~1e-6) can change which queries are selected, or their order, so `decoder_coord_logits` differ (~2.6% of runs on an A10G)."
+    )
     def test_batching_equivalence(self):
         """
         Tests that the model supports batching and that the output is nearly the same for the same input in

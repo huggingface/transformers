@@ -24,8 +24,7 @@ from ...utils import auto_docstring
 class CodeGenConfig(PreTrainedConfig):
     r"""
     n_ctx (`int`, *optional*, defaults to 2048):
-        This attribute is used in `CodeGenModel.__init__` without any real effect.
-        The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        Unused. Kept for backward compatibility with existing checkpoints.
     rotary_dim (`int`, *optional*, defaults to 64):
         Number of dimensions in the embedding that Rotary Position Embedding is applied to.
     n_inner (`int`, *optional*):
@@ -52,6 +51,19 @@ class CodeGenConfig(PreTrainedConfig):
         "hidden_size": "n_embd",
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer",
+    }
+    base_model_tp_plan = {
+        "wte": "embedding_rowwise",
+        "h.*.attn.qkv_proj": "colwise",
+        "h.*.attn.out_proj": "rowwise",
+        "h.*.mlp.fc_in": "colwise",
+        "h.*.mlp.fc_out": "rowwise",
+    }
+    base_model_pp_plan = {
+        "wte": (["input_ids"], ["inputs_embeds"]),
+        "drop": (["inputs_embeds"], ["hidden_states"]),
+        "h": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "ln_f": (["hidden_states"], ["hidden_states"]),
     }
 
     vocab_size: int = 50400

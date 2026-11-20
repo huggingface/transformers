@@ -174,10 +174,7 @@ class CircleCIJob:
             f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}"
             for key, value in all_options.items()
         ]
-        pytest_flags.append(
-            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
-        )
-        # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
+        pytest_flags.append(f"--make-reports=tests_{self.name}")
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
@@ -189,14 +186,6 @@ class CircleCIJob:
             {"attach_workspace": {"at": "test_preparation"}},
             {"run": "apt-get update && apt-get install -y curl"},
             {"run": " && ".join(self.install_steps)},
-            {
-                "run": {
-                    "name": "Download NLTK files",
-                    "command": """python -c "import nltk; nltk.download('punkt', quiet=True)" """,
-                }
-                if "example" in self.name
-                else "echo Skipping"
-            },
             {
                 "run": {
                     "name": "Show installed libraries and their size",
@@ -310,18 +299,14 @@ class CircleCIJob:
 
     @property
     def job_name(self):
-        return (
-            self.name
-            if ("examples" in self.name or "pipeline" in self.name or "pr_documentation" in self.name)
-            else f"tests_{self.name}"
-        )
+        return self.name if ("pipeline" in self.name or "pr_documentation" in self.name) else f"tests_{self.name}"
 
 
 # JOBS
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    marker="not (generate or is_training_test or is_tensor_parallel_test or is_fsdp_test)",
+    marker="not (generate or is_training_test or is_tensor_parallel_test or is_expert_parallel_test or is_fsdp_test)",
     parallelism=6,
 )
 
@@ -359,16 +344,6 @@ custom_tokenizers_job = CircleCIJob(
     "custom_tokenizers",
     additional_env={"RUN_CUSTOM_TOKENIZERS": True},
     docker_image=[{"image": "huggingface/transformers-custom-tokenizers"}],
-)
-
-examples_torch_job = CircleCIJob(
-    "examples_torch",
-    disabled=True,  # examples-torch docker image is too large for the large runner
-    additional_env={"OMP_NUM_THREADS": 8},
-    docker_image=[{"image": "huggingface/transformers-examples-torch"}],
-    # TODO @ArthurZucker remove this once docker is easier to build
-    install_steps=["uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
-    pytest_num_workers=4,
 )
 
 exotic_models_job = CircleCIJob(
@@ -413,6 +388,15 @@ tensor_parallel_ci_job = CircleCIJob(
     parallelism=6,
 )
 
+expert_parallel_ci_job = CircleCIJob(
+    "expert_parallel_ci",
+    additional_env={"RUN_EXPERT_PARALLEL_TESTS": True},
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    install_steps=["uv pip install ."],
+    marker="is_expert_parallel_test",
+    parallelism=6,
+)
+
 fsdp_ci_job = CircleCIJob(
     "fsdp_ci",
     additional_env={"RUN_FSDP_TESTS": True},
@@ -454,15 +438,15 @@ peft_integration_job = CircleCIJob(
 )
 
 REGULAR_TESTS = [torch_job, tokenization_job, processor_job, generate_job, non_model_job]  # fmt: skip
-EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 TRAINING_CI_TESTS = [training_ci_job]
 TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
+EXPERT_PARALLEL_CI_TESTS = [expert_parallel_ci_job]
 FSDP_CI_TESTS = [fsdp_ci_job]
 PEFT_INTEGRATION_TESTS = [peft_integration_job]
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
+ALL_TESTS = REGULAR_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + EXPERT_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):

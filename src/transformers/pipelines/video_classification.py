@@ -92,8 +92,6 @@ class VideoClassificationPipeline(Pipeline):
                     "Valid options are ['softmax', 'sigmoid', 'none']"
                 )
             postprocess_params["function_to_apply"] = function_to_apply
-        else:
-            postprocess_params["function_to_apply"] = "softmax"
         return preprocess_params, {}, postprocess_params
 
     @overload
@@ -124,11 +122,11 @@ class VideoClassificationPipeline(Pipeline):
             frame_sampling_rate (`int`, *optional*, defaults to 1):
                 The sampling rate used to select frames from the video. If not provided, will default to 1, i.e. every
                 frame will be used.
-            function_to_apply(`str`, *optional*, defaults to "softmax"):
-                The function to apply to the model output. By default, the pipeline will apply the softmax function to
-                the output of the model. Valid options: ["softmax", "sigmoid", "none"]. Note that passing Python's
-                built-in `None` will default to "softmax", so you need to pass the string "none" to disable any
-                post-processing.
+            function_to_apply (`str`, *optional*):
+                The function to apply to the model output. Defaults to "none" for regression, "sigmoid" for
+                multi-label classification, and "softmax" otherwise. Valid options: ["softmax", "sigmoid", "none"].
+                Explicit values supplied at initialization or call time override these defaults.
+                Pass the string "none" to disable post-processing.
 
         Return:
             A list of dictionaries or a list of list of dictionaries containing result. If the input is a single video,
@@ -170,7 +168,15 @@ class VideoClassificationPipeline(Pipeline):
         model_outputs = self.model(**model_inputs)
         return model_outputs
 
-    def postprocess(self, model_outputs, top_k=5, function_to_apply="softmax"):
+    def postprocess(self, model_outputs, top_k=5, function_to_apply=None):
+        if function_to_apply is None:
+            if self.model.config.problem_type == "regression":
+                function_to_apply = "none"
+            elif self.model.config.problem_type == "multi_label_classification":
+                function_to_apply = "sigmoid"
+            else:
+                function_to_apply = "softmax"
+
         if top_k > self.model.config.num_labels:
             top_k = self.model.config.num_labels
 

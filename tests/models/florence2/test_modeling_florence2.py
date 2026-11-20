@@ -21,7 +21,6 @@ from transformers import (
     Florence2ForConditionalGeneration,
     Florence2Model,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -33,6 +32,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -42,87 +42,61 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
 
+class Florence2VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-class Florence2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        num_channels=3,
-        image_size=8,
-        seq_length=13,
-        encoder_seq_length=18,
-        is_training=True,
-        vocab_size=99,
-        max_position_embeddings=64,
-        encoder_layers=1,
-        encoder_ffn_dim=16,
-        decoder_layers=1,
-        decoder_ffn_dim=16,
-        num_attention_heads=1,
-        d_model=16,
-        activation_function="gelu",
-        dropout=0.1,
-        eos_token_id=2,
-        bos_token_id=0,
-        pad_token_id=1,
-        image_token_id=4,
-        depths=[1],
-        patch_size=[7],
-        patch_stride=[4],
-        patch_padding=[3],
-        patch_prenorm=[False],
-        embed_dim=[16],
-        num_heads=[1],
-        num_groups=[1],
-        window_size=12,
-        drop_path_rate=0.1,
-        projection_dim=16,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.num_hidden_layers = decoder_layers
-        self.hidden_size = d_model
-
+    small_config_overrides = {
+        "batch_size": 13,
+        "num_channels": 3,
+        "image_size": 8,
+        "seq_length": 13,
+        "encoder_seq_length": 18,
+        "is_training": True,
         # Language model configs
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_attention_heads = num_attention_heads
-        self.d_model = d_model
-        self.activation_function = activation_function
-        self.dropout = dropout
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.image_token_id = image_token_id
-
+        "vocab_size": 99,
+        "max_position_embeddings": 64,
+        "encoder_layers": 1,
+        "encoder_ffn_dim": 16,
+        "decoder_layers": 1,
+        "decoder_ffn_dim": 16,
+        "num_attention_heads": 1,
+        "d_model": 16,
+        "activation_function": "gelu",
+        "dropout": 0.1,
+        "eos_token_id": 2,
+        "bos_token_id": 0,
+        "pad_token_id": 1,
+        "image_token_id": 4,
         # Vision model configs
-        self.drop_path_rate = drop_path_rate
-        self.patch_size = patch_size
-        self.depths = depths
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.patch_prenorm = patch_prenorm
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.num_groups = num_groups
-        self.window_size = window_size
-        self.projection_dim = projection_dim
+        "depths": [1],
+        "patch_size": [7],
+        "patch_stride": [4],
+        "patch_padding": [3],
+        "patch_prenorm": [False],
+        "embed_dim": [16],
+        "num_heads": [1],
+        "num_groups": [1],
+        "window_size": 12,
+        "drop_path_rate": 0.1,
+        "projection_dim": 16,
+    }
 
-        self.num_channels = 3
-        self.num_image_tokens = 5
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = encoder_seq_length
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_hidden_layers"] = values["decoder_layers"]
+        values["hidden_size"] = values["d_model"]
+        values["num_channels"] = 3
+        values["num_image_tokens"] = 5
+        # `seq_length` is the text length; the tester's sequence also holds the image tokens
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
 
     def get_config(self):
         text_config = {
@@ -228,6 +202,8 @@ class Florence2ForConditionalGenerationModelTest(
     """
     Model tester for `Florence2ForConditionalGeneration`.
     """
+
+    model_tester_class = Florence2VisionText2TextModelTester
 
     all_model_classes = (Florence2Model, Florence2ForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -442,18 +418,34 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs.to(device=torch_device)
         predictions = model.generate(**inputs, do_sample=False, max_new_tokens=100)
 
-        EXPECTED_PREDICTION_IDS = [
-            [2, 0, 47643, 47240, 6382, 47643, 7405, 495, 211, 2571, 4014, 5733, 36714, 11582, 11582, 36714, 18164, 9357, 36714, 6248, 3602, 37127, 27969, 7471, 44636, 23171, 41907, 27, 16948, 45895, 11582, 45262, 18537, 530, 791, 384, 229, 791, 5733, 565, 3048, 673, 10932, 5733, 565, 27291, 2],
-            [2, 0, 5901, 50322, 50602, 51202, 51043, 11219, 3679, 50694, 50772, 50743, 50784, 13630, 50978, 50845, 51134, 51041, 50419, 50853, 50578, 51042, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        ]  # fmt: skip
+        EXPECTED_PREDICTION_IDS = Expectations(
+            {
+                (None, None): [
+                    [2, 0, 47643, 47240, 6382, 47643, 7405, 495, 211, 2571, 4014, 5733, 36714, 11582, 11582, 36714, 18164, 9357, 36714, 6248, 3602, 37127, 27969, 7471, 44636, 23171, 41907, 27, 16948, 45895, 11582, 45262, 18537, 530, 791, 384, 229, 791, 5733, 565, 3048, 673, 10932, 5733, 565, 27291, 2],
+                    [2, 0, 5901, 50322, 50602, 51202, 51043, 11219, 3679, 50694, 50772, 50743, 50784, 13630, 50978, 50845, 51134, 51041, 50419, 50853, 50578, 51042, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+                ("cuda", (8, 6)): [
+                    [2, 0, 47643, 47240, 6382, 47643, 7405, 495, 211, 2571, 4014, 5733, 36714, 11582, 11582, 36714, 18164, 9357, 36714, 6248, 3602, 37127, 27969, 7471, 44636, 23171, 41907, 27, 16948, 45895, 11582, 45262, 18537, 530, 791, 384, 229, 791, 5733, 565, 3048, 673, 10932, 5733, 565, 11120, 673, 2],
+                    [2, 0, 5901, 50322, 50602, 51202, 51043, 11219, 3679, 50694, 50772, 50743, 50784, 13630, 50978, 50845, 51134, 51041, 50419, 50853, 50578, 51042, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(predictions.tolist(), EXPECTED_PREDICTION_IDS)
 
         generated_texts = processor.batch_decode(predictions, skip_special_tokens=False)
 
-        EXPECTED_GENERATED_TEXTS = [
-            "</s><s>中文中BBD DATSTOP第福科技有限公司KU O KUOPTUSOyesOPTUSE</s>",
-            "</s><s>car<loc_53><loc_333><loc_933><loc_774>door handle<loc_425><loc_503><loc_474><loc_515>wheel<loc_709><loc_576><loc_865><loc_772><loc_150><loc_584><loc_309><loc_773></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
-        ]  # fmt: skip
+        EXPECTED_GENERATED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "</s><s>中文中BBD DATSTOP第福科技有限公司KU O KUOPTUSOyesOPTUSE</s>",
+                    "</s><s>car<loc_53><loc_333><loc_933><loc_774>door handle<loc_425><loc_503><loc_474><loc_515>wheel<loc_709><loc_576><loc_865><loc_772><loc_150><loc_584><loc_309><loc_773></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+                ("cuda", (8, 6)): [
+                    "</s><s>中文中BBD DATSTOP第福科技有限公司KU O KUOPTUSOyesOPTUSTO</s>",
+                    "</s><s>car<loc_53><loc_333><loc_933><loc_774>door handle<loc_425><loc_503><loc_474><loc_515>wheel<loc_709><loc_576><loc_865><loc_772><loc_150><loc_584><loc_309><loc_773></s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
 
         parsed_answer = processor.post_process_generation(
@@ -483,6 +475,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_PREDICTION_IDS = Expectations(
             {
                 (None, None): [[2, 0, 133, 2274, 924, 10, 912, 1203, 2828, 15, 5, 526, 9, 10, 2014, 11, 35910, 6, 764, 2659, 4, 345, 16, 10, 512, 1428, 15, 5, 921, 11, 760, 9, 5, 912, 1203, 6, 8, 11, 5, 3618, 89, 32, 3413, 6, 3980, 6, 8, 82, 3051, 15, 5, 2767, 22609, 4, 2]],
+                ("cuda", (8, 6)): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 1104, 19638, 6, 3980, 6, 8, 10, 699, 2440, 6360, 4, 2]],
                 ("xpu", 5): [[2, 0, 133, 2274, 924, 10, 909, 512, 1428, 159, 10, 2014, 9321, 19, 6764, 3413, 4, 96, 5, 39299, 6, 89, 16, 10, 1275, 912, 1203, 2828, 15, 5, 526, 9, 5, 921, 6, 8, 11, 5, 3618, 6, 89, 32, 3980, 6, 82, 3051, 15, 5, 2767, 22609, 6, 8, 41, 9599, 19, 766, 6904, 4, 2]],
             }
         ).get_expectation()  # fmt: skip
@@ -493,6 +486,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_GENERATED_TEXT = Expectations(
             {
                 (None, None): "The image shows a stop sign sitting on the side of a street in Chinatown, San Francisco. There is a car driving on the road in front of the stop sign, and in the background there are buildings, trees, and people walking on the footpath.",
+                ("cuda", (8, 6)): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are white statues, trees, and a clear blue sky.",
                 ("xpu", 5): "The image shows a black car driving down a street lined with tall buildings. In the foreground, there is a red stop sign sitting on the side of the road, and in the background, there are trees, people walking on the footpath, and an arch with name boards.",
             }
         ).get_expectation()  # fmt: skip
@@ -652,6 +646,10 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     [2, 0, 0, 0, 47643, 47240, 7487, 47643, 50802, 50337, 50922, 50337, 50922, 50397, 50802, 50397, 4652, 50270, 50372, 50288, 50372, 50288, 50394, 50270, 50394, 495, 2571, 50401, 50455, 50446, 50457, 50446, 50483, 50401, 50482, 4014, 5733, 50446, 50495, 50614, 50493, 50614, 50596, 50446, 50600, 530, 791, 673, 51230, 50640, 51261, 50640, 51261, 50666, 51230, 50666, 5733, 565, 3048, 50389, 50682, 50461, 50684, 50461, 50719, 50389, 50717, 7111, 230, 5061, 33893, 50707, 50668, 50755, 50668, 50755, 50682, 50707, 50682, 10932, 50290, 50708, 50333, 50706, 50334, 50751, 50290, 50753, 4652, 51128, 50704, 51149, 50704, 51149, 50729, 51128, 50729, 2],
                     [2, 0, 0, 102, 2272, 13103, 2258, 42099, 41556, 9181, 11, 760, 9, 10, 5718, 745, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 ],
+                ("cuda", (8, 6)): [
+                    [2, 0, 0, 0, 47643, 47240, 7487, 47643, 50802, 50337, 50922, 50337, 50922, 50397, 50802, 50397, 4652, 50270, 50372, 50288, 50372, 50288, 50394, 50270, 50394, 495, 2571, 50401, 50455, 50446, 50457, 50446, 50483, 50401, 50482, 4014, 5733, 50446, 50495, 50614, 50493, 50614, 50596, 50446, 50600, 530, 791, 673, 51230, 50640, 51261, 50640, 51261, 50666, 51230, 50666, 5733, 565, 3048, 50389, 50683, 50461, 50684, 50461, 50719, 50389, 50717, 7111, 230, 5061, 33893, 50707, 50668, 50755, 50668, 50755, 50682, 50707, 50682, 10932, 50290, 50708, 50333, 50706, 50334, 50751, 50290, 50753, 4652, 51128, 50704, 51149, 50704, 51149, 50729, 51128, 50729, 2],
+                    [2, 0, 102, 2272, 512, 9181, 11, 760, 9, 10, 5718, 745, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                ],
                 ("xpu", 5): [
                     [2, 0, 0, 0, 47643, 47240, 7487, 47643, 50802, 50337, 50922, 50337, 50922, 50397, 50802, 50397, 4652, 50270, 50372, 50288, 50372, 50288, 50394, 50270, 50394, 495, 2571, 50401, 50455, 50446, 50457, 50446, 50483, 50401, 50482, 4014, 5733, 50446, 50495, 50614, 50493, 50614, 50596, 50446, 50600, 530, 791, 673, 51230, 50640, 51261, 50640, 51261, 50666, 51230, 50666, 5733, 565, 3048, 50389, 50683, 50461, 50684, 50461, 50719, 50389, 50717, 7111, 230, 5061, 33893, 50707, 50668, 50755, 50668, 50755, 50682, 50707, 50682, 10932, 50290, 50708, 50333, 50706, 50334, 50751, 50290, 50753, 4652, 51128, 50704, 51149, 50704, 51149, 50729, 51128, 50729, 2],
                     [2, 0, 102, 2272, 512, 9181, 11, 760, 9, 10, 5718, 745, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
@@ -668,6 +666,10 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_177><loc_188><loc_177><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_413><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
                     "</s><s><s>a green volkswagen beetle parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
                 ],
+                ("cuda", (8, 6)): [
+                    "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_177><loc_188><loc_177><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_414><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
+                    "</s><s>a green car parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
+                ],
                 ("xpu", 5): [
                     "</s><s><s><s>中新中<loc_533><loc_68><loc_653><loc_68><loc_653><loc_128><loc_533><loc_128>88<loc_1><loc_103><loc_19><loc_103><loc_19><loc_125><loc_1><loc_125>DAT<loc_132><loc_186><loc_177><loc_188><loc_177><loc_214><loc_132><loc_213>STOP<loc_177><loc_226><loc_345><loc_224><loc_345><loc_327><loc_177><loc_331>KUO<loc_961><loc_371><loc_992><loc_371><loc_992><loc_397><loc_961><loc_397>OPTUS<loc_120><loc_414><loc_192><loc_415><loc_192><loc_450><loc_120><loc_448>OD COUKT<loc_438><loc_399><loc_486><loc_399><loc_486><loc_413><loc_438><loc_413>yes<loc_21><loc_439><loc_64><loc_437><loc_65><loc_482><loc_21><loc_484>88<loc_859><loc_435><loc_880><loc_435><loc_880><loc_460><loc_859><loc_460></s>",
                     "</s><s>a green car parked in front of a yellow building</s><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad><pad>",
@@ -682,6 +684,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_PARSED_ANSWER = Expectations(
             {
                 (None, None): {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 230, 165, 230, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 362, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}},
+                ("cuda", (8, 6)): {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 230, 165, 230, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 363, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}},
                 ("xpu", 5): {'<OCR_WITH_REGION>': {'quad_boxes': [[693, 60, 849, 60, 849, 112, 693, 112], [1, 90, 25, 90, 25, 109, 1, 109], [172, 163, 230, 165, 230, 187, 172, 187], [230, 198, 449, 196, 449, 286, 230, 290], [1249, 325, 1290, 325, 1290, 348, 1249, 348], [156, 363, 250, 363, 250, 394, 156, 392], [570, 349, 632, 349, 632, 362, 570, 362], [27, 385, 83, 383, 85, 422, 27, 424], [1117, 381, 1144, 381, 1144, 403, 1117, 403]], 'labels': ['中新中', '88', 'DAT', 'STOP', 'KUO', 'OPTUS', 'OD COUKT', 'yes', '88']}},
             }
         ).get_expectation()  # fmt: skip

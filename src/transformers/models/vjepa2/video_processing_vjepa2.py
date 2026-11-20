@@ -15,9 +15,11 @@
 
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 from ...processing_utils import Unpack, VideosKwargs
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 
 
+@auto_docstring
 class VJEPA2VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

@@ -23,14 +23,10 @@ if TYPE_CHECKING:
 from ..utils import (
     is_accelerate_available,
     is_optimum_quanto_available,
-    is_torch_available,
     logging,
 )
 from ..utils.quantization_config import QuantoConfig
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -43,15 +39,9 @@ class QuantoHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "QuantoConfig"
 
-    def __init__(self, quantization_config: QuantoConfig, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-        map_to_param_size = {
-            "int8": 1,
-            "float8": 1,
-            "int4": 0.5,
-            "int2": 0.25,
-        }
-        self.quantized_param_size = map_to_param_size.get(self.quantization_config.weights)
+    @property
+    def quantized_element_size(self) -> float | None:
+        return {"int8": 1, "float8": 1, "int4": 0.5, "int2": 0.25}.get(self.quantization_config.weights)
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_quanto_available():
@@ -90,13 +80,6 @@ class QuantoHfQuantizer(HfQuantizer):
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
-
-    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name) and self.quantized_param_size is not None:
-            return self.quantized_param_size
-
-        return super().param_element_size(model, param_name, param)
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_with_quanto_layers

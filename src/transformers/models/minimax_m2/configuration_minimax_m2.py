@@ -46,7 +46,6 @@ class MiniMaxM2Config(PreTrainedConfig):
     ```"""
 
     model_type = "minimax_m2"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise_gather_output",
         "layers.*.self_attn.k_proj": "colwise_gather_output",
@@ -62,10 +61,9 @@ class MiniMaxM2Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {

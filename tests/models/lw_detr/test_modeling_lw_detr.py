@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import unittest
 from functools import cached_property
 
@@ -29,6 +30,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -51,42 +53,29 @@ CHECKPOINT = {
 }
 
 
-class LwDetrVitModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_labels=3,
-        num_channels=3,
-        use_labels=True,
-        is_training=True,
-        image_size=256,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        window_block_indices=[1],
-        out_indices=[0],
-        num_windows=16,
-        dropout_prob=0.0,
-        attn_implementation="eager",
-    ):
+class LwDetrVitModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "num_labels": 3,
+        "num_channels": 3,
+        "use_labels": True,
+        "image_size": 256,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "window_block_indices": [1],
+        "out_indices": [0],
+        "num_windows": 16,
+        "dropout_prob": 0.0,
+        "attn_implementation": "eager",
+        "is_training": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_labels = num_labels
-        self.num_channels = num_channels
-        self.use_labels = use_labels
-        self.image_size = image_size
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.window_block_indices = window_block_indices
-        self.out_indices = out_indices
-        self.num_windows = num_windows
-        self.dropout_prob = dropout_prob
-        self.attn_implementation = attn_implementation
-
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -161,6 +150,8 @@ class LwDetrVitModelTester:
 
 @require_torch
 class LwDetrViTBackboneTest(ModelTesterMixin, BackboneTesterMixin, unittest.TestCase):
+    model_tester_class = LwDetrVitModelTester
+
     all_model_classes = (LwDetrViTBackbone,) if is_torch_available() else ()
     config_class = LwDetrViTConfig
     test_resize_embeddings = False
@@ -302,61 +293,42 @@ def prepare_img():
     return image
 
 
-class LwDetrModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        is_training=True,
-        image_size=256,
-        num_labels=5,
-        n_targets=4,
-        use_labels=True,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
+class LwDetrModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "is_training": True,
+        "num_channels": 3,
+        "image_size": 256,
+        "num_labels": 5,
+        "n_targets": 4,
+        "use_labels": True,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-5,
+        "batch_norm_eps": 1e-5,
         # backbone
-        backbone_config=None,
+        "backbone_config": None,
         # projector
-        projector_scale_factors=[0.5, 2.0],
+        "projector_scale_factors": [0.5, 2.0],
         # decoder
-        d_model=32,
-        decoder_ffn_dim=32,
-        decoder_layers=2,
-        decoder_self_attention_heads=2,
-        decoder_cross_attention_heads=4,
+        "d_model": 32,
+        "decoder_ffn_dim": 32,
+        "decoder_layers": 2,
+        "decoder_self_attention_heads": 2,
+        "decoder_cross_attention_heads": 4,
         # model
-        num_queries=10,
-        group_detr=2,
-        dropout=0.0,
-        activation_dropout=0.0,
-        attention_dropout=0.0,
-        attn_implementation="eager",
-    ):
+        "num_queries": 10,
+        "group_detr": 2,
+        "dropout": 0.0,
+        "activation_dropout": 0.0,
+        "attention_dropout": 0.0,
+        "attn_implementation": "eager",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.num_channels = 3
-        self.image_size = image_size
-        self.num_labels = num_labels
-        self.n_targets = n_targets
-        self.use_labels = use_labels
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
-        self.backbone_config = backbone_config
-        self.projector_scale_factors = projector_scale_factors
-        self.d_model = d_model
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_self_attention_heads = decoder_self_attention_heads
-        self.decoder_cross_attention_heads = decoder_cross_attention_heads
-        self.num_queries = num_queries
-        self.group_detr = group_detr
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.attention_dropout = attention_dropout
-        self.attn_implementation = attn_implementation
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -440,6 +412,8 @@ class LwDetrModelTester:
 
 @require_torch
 class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = LwDetrModelTester
+
     all_model_classes = (LwDetrModel, LwDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": LwDetrModel, "object-detection": LwDetrForObjectDetection}
@@ -650,6 +624,18 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsNotNone(outputs.auxiliary_outputs)
             self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.decoder_layers - 1)
 
+    def test_encoder_heads_init_like_detection_heads(self):
+        # The original deep-copies the initialized `class_embed` / `bbox_embed` into the encoder heads
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = LwDetrForObjectDetection(config)
+        bias_value = -math.log((1 - 0.01) / 0.01)
+        torch.testing.assert_close(model.class_embed.bias, torch.full_like(model.class_embed.bias, bias_value))
+        for class_head in model.model.enc_out_class_embed:
+            torch.testing.assert_close(class_head.bias, model.class_embed.bias)
+        for bbox_head in model.model.enc_out_bbox_embed:
+            self.assertTrue(torch.all(bbox_head.layers[-1].weight == 0))
+            self.assertTrue(torch.all(bbox_head.layers[-1].bias == 0))
+
 
 @require_torch
 @require_vision
@@ -683,6 +669,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [-7.7648, -4.1330, -2.9003, -4.0559, -2.9635],
+                ("cuda", (8, 6)): [-7.7693, -4.1270, -2.9018, -4.0605, -2.9575],
                 ("xpu", (3, 0)): [-7.7693, -4.1270, -2.9018, -4.0605, -2.9575],
             }
         )
@@ -695,6 +682,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.1694, 0.1979, 0.2121, 0.0912, 0.2537],
+                ("cuda", (8, 6)): [0.1694, 0.1979, 0.2121, 0.0912, 0.2537],
                 ("xpu", (3, 0)): [0.1694, 0.1979, 0.2121, 0.0912, 0.2537],
             }
         )
@@ -709,6 +697,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.8684, 0.7492, 0.7146, 0.4362],
+                ("cuda", (8, 6)): [0.8676, 0.7527, 0.7177, 0.4391],
                 ("xpu", (3, 0)): [0.8676, 0.7527, 0.7177, 0.4391],
             }
         )
@@ -723,6 +712,12 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
                     [40.5547, 73.0968, 176.2951, 116.8605],
                     [340.3403, 25.1044, 640.2798, 368.7382],
                     [334.2971, 77.0087, 371.2877, 189.8089],
+                ],
+                ("cuda", (8, 6)): [
+                    [4.8948, 56.5549, 319.8077, 474.7937],
+                    [40.5620, 73.1059, 176.2996, 116.8567],
+                    [340.3327, 25.1026, 640.3193, 368.6754],
+                    [334.2945, 76.9876, 371.2914, 189.8221],
                 ],
                 ("xpu", (3, 0)): [
                     [4.8948, 56.5549, 319.8077, 474.7937],
@@ -758,6 +753,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [-11.9394, -4.3419, -4.4172, -5.0299, -6.9282],
+                ("cuda", (8, 6)): [-11.9292, -4.3307, -4.4075, -5.0207, -6.9211],
                 ("xpu", (3, 0)): [-11.9292, -4.3307, -4.4075, -5.0207, -6.9211],
             }
         )
@@ -771,6 +767,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.7689, 0.4107, 0.4617, 0.7244, 0.2526],
+                ("cuda", (8, 6)): [0.7688, 0.4106, 0.4618, 0.7245, 0.2526],
                 ("xpu", (3, 0)): [0.7688, 0.4106, 0.4618, 0.7245, 0.2526],
             }
         )
@@ -785,6 +782,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 ("cuda", (8, 0)): [0.9746, 0.9717, 0.9344, 0.8182],
+                ("cuda", (8, 6)): [0.9745, 0.9715, 0.9339, 0.8163],
                 ("xpu", (3, 0)): [0.9745, 0.9715, 0.9339, 0.8163],
             }
         )
@@ -799,6 +797,12 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
                     [344.3325, 23.2591, 639.7999, 370.9900],
                     [40.4797, 73.3092, 175.6086, 116.9654],
                     [333.9930, 77.1547, 370.4000, 186.1230],
+                ],
+                ("cuda", (8, 6)): [
+                    [7.4487, 54.2931, 315.8945, 474.8726],
+                    [344.2597, 23.2305, 639.8082, 370.9894],
+                    [40.4780, 73.3095, 175.6083, 116.9673],
+                    [333.9890, 77.1453, 370.4069, 186.1300],
                 ],
                 ("xpu", (3, 0)): [
                     [7.4487, 54.2931, 315.8945, 474.8726],

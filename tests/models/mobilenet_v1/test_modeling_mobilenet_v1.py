@@ -20,6 +20,7 @@ from transformers import MobileNetV1Config
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -44,42 +45,36 @@ class MobileNetV1ConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "depth_multiplier"))
 
 
-class MobileNetV1ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        num_channels=3,
-        image_size=32,
-        depth_multiplier=0.25,
-        min_depth=8,
-        tf_padding=True,
-        last_hidden_size=1024,
-        output_stride=32,
-        hidden_act="relu6",
-        classifier_dropout_prob=0.1,
-        initializer_range=0.02,
-        is_training=True,
-        use_labels=True,
-        num_labels=10,
-        scope=None,
-    ):
+class MobileNetV1ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "num_channels": 3,
+        "image_size": 32,
+        "depth_multiplier": 0.25,
+        "min_depth": 8,
+        "tf_padding": True,
+        "last_hidden_size": 1024,
+        "output_stride": 32,
+        "hidden_act": "relu6",
+        "classifier_dropout_prob": 0.1,
+        "initializer_range": 0.02,
+        "is_training": True,
+        "use_labels": True,
+        "num_labels": 10,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["last_hidden_size"] = int(values["last_hidden_size"] * values["depth_multiplier"])
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.depth_multiplier = depth_multiplier
-        self.min_depth = min_depth
-        self.tf_padding = tf_padding
-        self.last_hidden_size = int(last_hidden_size * depth_multiplier)
-        self.output_stride = output_stride
-        self.hidden_act = hidden_act
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.use_labels = use_labels
-        self.is_training = is_training
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -142,6 +137,8 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     Here we also overwrite some of the tests of test_modeling_common.py, as MobileNetV1 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = MobileNetV1ModelTester
 
     all_model_classes = (MobileNetV1Model, MobileNetV1ForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (

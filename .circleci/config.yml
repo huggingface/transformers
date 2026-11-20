@@ -44,7 +44,7 @@ jobs:
     # Ensure running with CircleCI/huggingface
     check_circleci_user:
         docker:
-            - image: python:3.10-slim
+            - image: cimg/base:stable
         resource_class: small
         parallelism: 1
         steps:

@@ -64,7 +64,13 @@ from .utils import (
 )
 from .utils.chat_parsing import ResponseParser
 from .utils.chat_parsing import parse_response as _template_parse_response
-from .utils.chat_template_utils import render_jinja_template
+from .utils.chat_template_utils import (
+    _get_control_token_patterns,
+    _get_template_literal_text,
+    _normalize_chat_messages,
+    mark_control_tokens,
+    render_jinja_template,
+)
 
 
 if TYPE_CHECKING:
@@ -89,6 +95,15 @@ def flatten(arr: list):
             else:
                 res.append(sub_arr)
     return res
+
+
+def _is_empty(arr: list) -> bool:
+    """True if arr contains no leaf elements (nested empty lists/tuples)."""
+    if len(arr) == 0:
+        return True
+    if not isinstance(arr[0], (list, tuple)):
+        return False
+    return all(_is_empty(sub_arr) for sub_arr in arr)
 
 
 if is_tokenizers_available() or TYPE_CHECKING:
@@ -688,7 +703,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             def as_tensor(value, dtype=None):
                 if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     return torch.from_numpy(np.array(value))
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = torch.int64
                 return torch.tensor(value, dtype=dtype)
 
@@ -700,7 +715,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             import mlx.core as mx
 
             def as_tensor(value, dtype=None):
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = mx.int32
                 return mx.array(value, dtype=dtype)
 
@@ -718,7 +733,7 @@ class BatchEncoding(UserDict, Generic[_V]):
                     if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty(value) and dtype is None:
                     dtype = np.int64
                 return np.asarray(value, dtype=dtype)
 
@@ -1062,7 +1077,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 f"Truncation side should be selected between 'right' and 'left', current value: {self.truncation_side}"
             )
 
-        self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
+        self.model_input_names = list(kwargs.pop("model_input_names", self.model_input_names))
 
         # By default, do not clean up tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
@@ -1083,6 +1098,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         self.response_template = kwargs.pop("response_template", None)
         kwargs.pop("response_schema", None)  # Silently drop the legacy response parser if present
+
+        # We use a heuristic for sanitizing control tokens in chats, an explicit list can override it
+        self.chat_control_tokens = kwargs.pop("chat_control_tokens", None)
+        if self.chat_control_tokens is not None and not isinstance(self.chat_control_tokens, (list, tuple)):
+            raise TypeError(f"`chat_control_tokens` should be a list of strings, got {self.chat_control_tokens!r}")
 
         model_specific_tokens = {**auto_model_specific_tokens, **explicit_model_specific_tokens}
         if model_specific_tokens:
@@ -1225,6 +1245,24 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         Returns:
             `int`: Number of tokens added to the vocabulary.
+
+        <Tip>
+
+        Fast tokenizers with a `Metaspace` pre-tokenizer using `prepend_scheme="always"` (e.g. NLLB) prepend `"▁"` to the
+        text that follows an added token. After `tokenizer.add_tokens(["abcd"])`, `"abcdgym"` is tokenized as
+        `["abcd", "▁gym"]` and decodes to `"abcd gym"`. If added tokens can appear inside words, switch the pre-tokenizer
+        to `prepend_scheme="first"` so only the start of the input is prefixed:
+
+        ```python
+        from tokenizers import pre_tokenizers
+
+        pre_tokenizer = tokenizer.backend_tokenizer.pre_tokenizer
+        tokenizer.backend_tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+            replacement=pre_tokenizer.replacement, prepend_scheme="first", split=pre_tokenizer.split
+        )
+        ```
+
+        </Tip>
 
         Examples:
 
@@ -2062,6 +2100,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if getattr(self, "response_template", None) is not None:
             tokenizer_config["response_template"] = self.response_template
+        if getattr(self, "chat_control_tokens", None) is not None:
+            tokenizer_config["chat_control_tokens"] = list(self.chat_control_tokens)
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
@@ -2926,6 +2966,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Returns:
             `list[str]`: The list of decoded sentences.
         """
+        sequences = to_py_obj(sequences)
+        # An empty batch has no sequences to decode, `decode` would read it as a single empty sequence
+        if len(sequences) == 0:
+            return []
+
         # Forward to decode() which now handles batched input natively
         result = self.decode(
             token_ids=sequences,
@@ -2935,6 +2980,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         )
         # Ensure we always return a list for backwards compatibility
         if isinstance(result, str):
+            # See #41872: `batch_decode` expects a batch, single sequences belong to `decode`
+            logger.warning_once(
+                "Passing a single sequence to `batch_decode` is deprecated and will be removed in a future version, "
+                "use `decode` instead."
+            )
             return [result]
         return result
 
@@ -2996,6 +3046,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool | str = False,
         tokenize: bool = True,
+        sanitize_control_tokens: bool = False,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
@@ -3039,6 +3090,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
+            sanitize_control_tokens (`bool`, defaults to `False`):
+                If set, control tokens that appear in messages, tools, documents or the template variables passed as
+                `**kwargs` are encoded as ordinary text, so only the control tokens written by the chat template itself
+                are encoded as tokens. Control tokens are
+                the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
+                variable is not set, control tokens are inferred from the added tokens that appear in the chat
+                template's text and string literals. Only whole control tokens are sanitized, so if the template joins
+                strings from the input into control tokens (like `'<|' + message['role'] + '|>'`), those strings must
+                be validated separately. Dict keys aren't sanitized either.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -3097,6 +3157,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
+        # Normalize: convert message objects to dicts and drop the keys whose value is None
+        conversations = [_normalize_chat_messages(conversation) for conversation in conversations]
+
         if continue_final_message:
             if add_generation_prompt:
                 raise ValueError(
@@ -3104,6 +3167,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 )
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if sanitize_control_tokens:
+            conversations, tools, documents, kwargs = self._mark_chat_inputs(
+                chat_template, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
+            )
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3128,8 +3196,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 max_length=max_length,
                 add_special_tokens=False,
                 return_tensors=return_tensors,
+                sanitize_control_tokens=sanitize_control_tokens,
                 **tokenizer_kwargs,
             )
+
+        if tokenize:
             if return_dict:
                 if return_assistant_tokens_mask:
                     assistant_masks = []
@@ -3139,13 +3210,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         input_ids = [out["input_ids"]]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
-                            if start_token is None:
-                                # start_token is out of bounds maybe due to truncation.
+                        # Mask every token overlapping a span, so a span cut by left or right truncation keeps
+                        # its remaining tokens (same approach as `ProcessorMixin`). Spans and token offsets are
+                        # both in order, so a single pass over the tokens is enough.
+                        spans = generation_indices[i]
+                        span_idx = 0
+                        for token_id, (token_start, token_end) in enumerate(out.encodings[i].offsets):
+                            while span_idx < len(spans) and token_start >= spans[span_idx][1]:
+                                span_idx += 1
+                            if span_idx == len(spans):
                                 break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                            if token_end > spans[span_idx][0]:
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
 
@@ -3162,6 +3237,44 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 return out["input_ids"]
         else:
             return rendered_chat
+
+    def _mark_chat_inputs(
+        self, chat_template: str, conversations, tools, documents, template_kwargs: dict, tokenize, assistant_mask
+    ):
+        """Wrap the control tokens that appear in the user's strings with private markers, see `mark_control_tokens`."""
+        if not tokenize or assistant_mask:
+            raise ValueError(
+                "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                "`return_assistant_tokens_mask=True`."
+            )
+        control_tokens_re, _ = _get_control_token_patterns(self._get_control_tokens(chat_template))
+        conversations = [
+            mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
+        ]
+        tools = mark_control_tokens(tools, control_tokens_re)
+        documents = mark_control_tokens(documents, control_tokens_re)
+        return conversations, tools, documents, mark_control_tokens(template_kwargs, control_tokens_re)
+
+    def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
+        """The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input."""
+        added_tokens = self.added_tokens_decoder.values()
+        if self.chat_control_tokens is not None:
+            chat_control_tokens = set(self.chat_control_tokens)
+            return tuple(
+                token.content for token in added_tokens if token.special or token.content in chat_control_tokens
+            )
+        # Default to the added tokens the template contains, except whitespace tokens (like Gemma's "\n"), which
+        # templates contain as ordinary text
+        template_text = _get_template_literal_text(chat_template)
+        return tuple(
+            token.content
+            for token in added_tokens
+            if token.special or (token.content in template_text and not token.content.isspace())
+        )
+
+    def _encode_without_added_tokens(self, text: str) -> list[int]:
+        """Encode `text` as plain text, without matching any added tokens, special or not."""
+        return self.encode(text, add_special_tokens=False, split_special_tokens=True)
 
     def encode_message_with_chat_template(
         self,

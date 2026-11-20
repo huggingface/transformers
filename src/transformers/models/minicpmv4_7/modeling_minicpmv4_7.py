@@ -34,13 +34,14 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
@@ -50,6 +51,67 @@ from .configuration_minicpmv4_7 import MiniCPMV4_7Config, MiniCPMV4_7VisionConfi
 
 
 logger = logging.get_logger(__name__)
+
+
+class MiniCPMV4_7VisionEmbeddings(nn.Module):
+    """
+    This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
+    resolution.
+
+    The modifications are adapted from [Patch n' Pack: NaViT, a Vision Transformer for any Aspect Ratio and Resolution](https://huggingface.co/papers/2307.06304)
+    which allows treating images in their native aspect ratio and without the need to resize them to the same
+    fixed size. In particular, we start from the original pre-trained SigLIP model
+    (which uses images of fixed-size square images) and adapt it by training on images of variable resolutions.
+    """
+
+    def __init__(self, config: MiniCPMV4_7VisionConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches_per_side = self.image_size // self.patch_size
+        self.num_patches = self.num_patches_per_side**2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        target_sizes: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        patch_embeds = self.patch_embedding(pixel_values)
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+
+        pos_ids = get_vision_nearest_position_ids(target_sizes, self.num_patches_per_side, kwargs=kwargs)
+        pos_ids = pos_ids.to(self.position_embedding.weight.device)
+        position_embeddings = self.position_embedding(pos_ids).unsqueeze(0)
+        embeddings = embeddings + position_embeddings
+        return embeddings
+
+
+class MiniCPMV4_7VisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -178,6 +240,68 @@ class MiniCPMV4_7VisionAttention(nn.Module):
         return attn_output, None
 
 
+class MiniCPMV4_7VisionEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: MiniCPMV4_7VisionConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn = MiniCPMV4_7VisionAttention(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = MiniCPMV4_7VisionMLP(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+class MiniCPMV4_7VisionEncoder(nn.Module):
+    """Transformer encoder consisting of `config.num_hidden_layers` [`MiniCPMV4_7VisionEncoderLayer`] layers."""
+
+    def __init__(self, config: MiniCPMV4_7VisionConfig):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([MiniCPMV4_7VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    # Ignore copy
+    @auto_docstring
+    def forward(
+        self,
+        inputs_embeds,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask,
+                **kwargs,
+            )
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
     def __init__(self, config: MiniCPMV4_7VisionConfig):
         super().__init__()
@@ -275,131 +399,8 @@ class MiniCPMV4_7ViTWindowAttentionMerger(nn.Module):
         return hidden_state
 
 
-class MiniCPMV4_7VisionEmbeddings(nn.Module):
-    """
-    This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
-    resolution.
-
-    The modifications are adapted from [Patch n' Pack: NaViT, a Vision Transformer for any Aspect Ratio and Resolution](https://huggingface.co/papers/2307.06304)
-    which allows treating images in their native aspect ratio and without the need to resize them to the same
-    fixed size. In particular, we start from the original pre-trained SigLIP model
-    (which uses images of fixed-size square images) and adapt it by training on images of variable resolutions.
-    """
-
-    def __init__(self, config: MiniCPMV4_7VisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            padding="valid",
-        )
-
-        self.num_patches_per_side = self.image_size // self.patch_size
-        self.num_patches = self.num_patches_per_side**2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        target_sizes: torch.IntTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        patch_embeds = self.patch_embedding(pixel_values)
-        embeddings = patch_embeds.flatten(2).transpose(1, 2)
-
-        pos_ids = get_vision_nearest_position_ids(target_sizes, self.num_patches_per_side, kwargs=kwargs)
-        pos_ids = pos_ids.to(self.position_embedding.weight.device)
-        position_embeddings = self.position_embedding(pos_ids).unsqueeze(0)
-        embeddings = embeddings + position_embeddings
-        return embeddings
-
-
-class MiniCPMV4_7VisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class MiniCPMV4_7VisionEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MiniCPMV4_7VisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.self_attn = MiniCPMV4_7VisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = MiniCPMV4_7VisionMLP(config)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
-class MiniCPMV4_7VisionEncoder(nn.Module):
-    """Transformer encoder consisting of `config.num_hidden_layers` [`MiniCPMV4_7VisionEncoderLayer`] layers."""
-
-    def __init__(self, config: MiniCPMV4_7VisionConfig):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([MiniCPMV4_7VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    # Ignore copy
-    @auto_docstring
-    def forward(
-        self,
-        inputs_embeds,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask,
-                **kwargs,
-            )
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
-
 class MiniCPMV4_7VisionPreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_7VisionConfig
+    config: MiniCPMV4_7VisionConfig
     main_input_name = "pixel_values"
     _input_embed_layer = "patch_embedding"
     supports_gradient_checkpointing = True
@@ -576,7 +577,7 @@ class MiniCPMV4_7Merger(nn.Module):
 
 
 class MiniCPMV4_7PreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_7Config
+    config: MiniCPMV4_7Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
@@ -609,7 +610,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         target_sizes: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -640,8 +641,8 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        features: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
+        features: torch.Tensor,
         token_id: int,
     ):
         """
@@ -667,29 +668,30 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         target_sizes: torch.IntTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
         target_sizes (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each image.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
@@ -742,7 +744,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
                 input_ids=input_ids,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 target_sizes=target_sizes,
                 target_sizes_videos=target_sizes_videos,
                 mm_token_type_ids=mm_token_type_ids,
@@ -752,12 +754,14 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         output = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
-        return output
+        return MultimodalBaseModelOutputWithPast(
+            **output, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
     @can_return_tuple
     @auto_docstring(
@@ -765,13 +769,13 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
     )
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(1, channels, patch_size, seq_len)`):
+        pixel_values_videos (`torch.Tensor` of shape `(1, channels, patch_size, seq_len)`):
             NaViT-packed pixel patches for all video frames. The video processor concatenates
             every frame's patches along the last dimension into a single sequence with dim-0 = 1,
             identical to the image packing format.
@@ -1149,12 +1153,13 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         rope_deltas = position_ids.amax(dim=(0, 2)).unsqueeze(1) + 1 - seq_lens.unsqueeze(1)
         return position_ids, rope_deltas.long()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
         inputs_embeds: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         target_sizes: torch.LongTensor | None = None,
         target_sizes_videos: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
@@ -1165,7 +1170,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         Generation prepends the text channel in ``_prepare_position_ids_for_generation``; the text
         model reads that fourth row only when it is there.
         """
-        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        cache_length = 0 if cache is None else cache.get_seq_length()
         has_multimodal = target_sizes is not None or target_sizes_videos is not None
         if has_multimodal and mm_token_type_ids is None and input_ids is not None:
             raise ValueError(
@@ -1175,7 +1180,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             )
         can_compute_mrope = input_ids is not None and mm_token_type_ids is not None and has_multimodal
 
-        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+        if can_compute_mrope and (self.rope_deltas is None or cache_length == 0):
             mrope_position_ids, rope_deltas = self.get_rope_index(
                 input_ids,
                 attention_mask=attention_mask,
@@ -1186,14 +1191,14 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
             )
             self.rope_deltas = rope_deltas
             return mrope_position_ids
-        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+        elif self.rope_deltas is not None and (cache_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
                 position_ids = position_ids.masked_fill(attention_mask == 0, 0)
                 position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
             else:
-                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
+                position_ids = torch.arange(cache_length, cache_length + seq_length)
                 position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
             delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
             position_ids = position_ids + delta.to(device=inputs_embeds.device)
@@ -1212,6 +1217,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
 @auto_docstring
 class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: MiniCPMV4_7Config):
         super().__init__(config)
@@ -1222,17 +1228,18 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         target_sizes: torch.IntTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
         target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.FloatTensor] | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: list[torch.Tensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         downsample_mode: str | None = None,
@@ -1240,13 +1247,13 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor`, *optional*):
+        pixel_values (`torch.Tensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
         target_sizes (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each image.
-        pixel_values_videos (`torch.FloatTensor`, *optional*):
+        pixel_values_videos (`torch.Tensor`, *optional*):
             Pixel value patches for video frames, NaViT-packed.
         target_sizes_videos (`torch.IntTensor`, *optional*):
             Height and width (in patches) for each video frame.
@@ -1261,7 +1268,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
             target_sizes_videos=target_sizes_videos,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             downsample_mode=downsample_mode,
@@ -1273,8 +1280,8 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         hidden_states = outputs[0]
 
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1282,12 +1289,14 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
@@ -1300,10 +1309,11 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
     def get_video_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
         return self.model.get_video_features(*args, **kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
+        cache=None,
         attention_mask=None,
         inputs_embeds=None,
         pixel_values=None,
@@ -1316,7 +1326,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
     ):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             is_first_iteration=is_first_iteration,
@@ -1335,7 +1345,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
         past_length = 0
-        if (cache := model_kwargs.get("past_key_values")) is not None:
+        if (cache := model_kwargs.get("cache")) is not None:
             past_length = cache.get_seq_length()
 
         if past_length != 0 and self.model.rope_deltas is not None:

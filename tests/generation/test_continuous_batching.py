@@ -15,6 +15,7 @@
 import copy
 import functools
 import gc
+import io
 import itertools
 import math
 import os
@@ -28,9 +29,11 @@ from unittest.mock import patch
 import torch
 from parameterized import parameterized
 
+import transformers.modeling_flash_attention_utils as fa_utils
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
@@ -61,10 +64,13 @@ from transformers.generation.continuous_batching.requests import (
     GenerationOutput,
     RequestState,
     RequestStatus,
+)
+from transformers.generation.continuous_batching.utils import (
+    DEVICE_TYPE_TO_GRAPH_NAME,
+    _get_allowed_numa_nodes,
+    _get_numa_nodes_memory,
     get_device_and_memory_breakdown,
 )
-from transformers.integrations.eager_paged import eager_paged_attention_forward
-from transformers.integrations.sdpa_paged import sdpa_attention_paged_forward
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
@@ -86,14 +92,14 @@ from transformers.utils import (
 )
 from transformers.utils.generic import is_flash_attention_requested
 
-from ..test_tensor_parallel_mixin import _init_distributed
+from ..distributed_testing_utils import run_distributed
 
 
 # Constants for tests
 _DEFAULT_USER_MESSAGES = [
     "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
-    "Josh decides to try flipping a house. He buys a house for $80,000 and then puts in $50,000 in repairs. This increased the value of the house by 150%. How much profit did he make?",
-    "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
+    "Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for $2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?",
+    "Toulouse has twice as many sheep as Charleston. Charleston has 4 times as many sheep as Seattle. How many sheep do Toulouse, Charleston, and Seattle have together if Seattle has 20 sheep?",
 ]  # fmt: skip
 
 
@@ -289,20 +295,6 @@ def _make_allocator(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
-    @parameterized.expand(
-        [("paged|eager", eager_paged_attention_forward), ("paged|sdpa", sdpa_attention_paged_forward)]
-    )
-    def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
-        # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
-        # written for the packed inputs and the 4D mask continuous batching prepares, so they would silently attend
-        # bidirectionally instead of causally: refuse the call rather than return a wrong result.
-        module = torch.nn.Module()
-        module.layer_idx = 0
-        module.num_key_value_groups = 1
-        q = k = v = torch.zeros(1, 1, 4, 8)
-        with self.assertRaisesRegex(ValueError, attn_implementation.replace("|", r"\|")):
-            attention_forward(module, q, k, v, None, scaling=1.0)
-
     def test_generation_outputs_are_snapshots(self):
         state = RequestState(
             request_id="r", initial_tokens=[10, 11], max_new_tokens=3, streaming=True, record_timestamps=True
@@ -832,11 +824,43 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     slot_to_token[idx] = past_length + offset
             past_length += query_length
 
-    @slow
+    def test_generate_batch_under_inference_mode(self) -> None:
+        """The background generation thread runs in the caller's `torch.inference_mode()`."""
+        tokenizer, model = get_tokenizer_and_model(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", "sdpa", torch_device, dtype=torch.float32
+        )
+        input_ids = get_generation_inputs(["Where is Paris?"], tokenizer, for_continuous_batching=True)
+        generation_config = GenerationConfig(do_sample=False, max_new_tokens=5, eos_token_id=-1)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False,
+            use_async_batching=False,
+            auto_switch_to_flash=False,
+            num_blocks=16,
+            max_batch_tokens=256,
+        )
+
+        expected = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+        )
+        forward_in_inference_mode = []
+        model.register_forward_pre_hook(lambda *_: forward_in_inference_mode.append(torch.is_inference_mode_enabled()))
+        with torch.inference_mode():
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=generation_config,
+                continuous_batching_config=continuous_batching_config,
+            )
+        self.assertTrue(forward_in_inference_mode)
+        self.assertTrue(all(forward_in_inference_mode))
+        self.assertEqual(len(outputs["req_0"].generated_tokens), 5)
+        self.assertEqual(outputs["req_0"].generated_tokens, expected["req_0"].generated_tokens)
+
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
-        environment by mocking all acceleratoravailability checks to return False"""
-        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        environment by mocking all accelerator availability checks to return False"""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         # Accelerator availability are cached, so we clear the cache before mocking to ensure the CPU-only
         cached_availability_checks = [is_torch_cuda_available, is_torch_mps_available, is_torch_xpu_available]
         for check in cached_availability_checks:
@@ -854,14 +878,21 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 self.assertFalse(is_torch_xpu_available())
                 self.assertFalse(torch.backends.mps.is_available())
 
-                tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", "cpu")
-                user_messages = _DEFAULT_USER_MESSAGES[:1]
+                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu", dtype=torch.float32)
+                user_messages = ["Where is Paris?"]
                 input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
+                num_input_tokens = len(input_ids[0])
 
                 model.generation_config.max_new_tokens = 10
                 model.generation_config.do_sample = False
 
-                continuous_batching_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+                continuous_batching_config = ContinuousBatchingConfig(
+                    use_cuda_graph=False,
+                    use_async_batching=False,
+                    auto_switch_to_flash=False,
+                    num_blocks=16,
+                    max_batch_tokens=256,
+                )
 
                 # This should not crash even with all accelerators unavailable
                 outputs = model.generate_batch(
@@ -869,12 +900,20 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     generation_config=model.generation_config,
                     continuous_batching_config=continuous_batching_config,
                 )
+                cb_output_tokens = outputs["req_0"].generated_tokens
 
                 # Verify we got outputs
                 self.assertEqual(len(outputs), len(input_ids))
                 for output in outputs.values():
                     self.assertIsNotNone(output.generated_tokens)
                     self.assertGreater(len(output.generated_tokens), 0)
+
+                # Run regular generation to compare
+                inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
+                generate_outputs = model.generate(**inputs, generation_config=model.generation_config)
+                generate_output_tokens = generate_outputs[0, num_input_tokens:].tolist()
+
+                self.assertEqual(cb_output_tokens, generate_output_tokens)
         finally:
             # Clear the caches again so the mocked availabilities do not leak into subsequent tests.
             for check in cached_availability_checks:
@@ -928,6 +967,21 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         reduce_tensor = torch.tensor([7, 3], dtype=torch.int64)
         self.assertIs(helper.tp_all_reduce_min(reduce_tensor), reduce_tensor)
         self.assertTrue(torch.equal(reduce_tensor, torch.tensor([7, 3], dtype=torch.int64)))
+
+    @parameterized.expand(
+        [
+            (AutoModelForCausalLM, "hf-tiny-v2/tiny-random-Qwen3ForCausalLM"),
+            (AutoModelForImageTextToText, "hf-tiny-v2/tiny-random-Gemma3ForConditionalGeneration"),
+        ]
+    )
+    def test_distributed_helper_finds_the_sharded_kv_heads(self, auto_class: type, model_id: str) -> None:
+        """The cache splits the key/value heads across ranks when the model's TP plan shards the key and value
+        projections, whatever the path to the decoder layers: `model.language_model.layers` in a vision-language
+        model."""
+        with torch.device("meta"):
+            model = auto_class.from_config(AutoConfig.from_pretrained(model_id))
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan=model.tp_plan)
+        self.assertTrue(helper.are_kv_heads_tp_ed())
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""
@@ -1226,9 +1280,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Skip the test if Flash Attention 2 or 3 is required but not available.
         flexible_flash_skip(self, attn_implementation)
-        # Skip the test if cuda graph is on but the device is not CUDA
-        if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
-            self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
+        # Skip the test if cuda graph is on but the device does not support graph capture
+        device_type = torch_device.type if isinstance(torch_device, torch.device) else torch_device
+        if any(continuous_batching_config.cuda_graph_booleans) and device_type not in DEVICE_TYPE_TO_GRAPH_NAME:
+            supported = list(DEVICE_TYPE_TO_GRAPH_NAME.keys())
+            self.skipTest(f"CUDA graph is only supported on {supported}, but {device_type = }. Skipping test.")
 
         # If the config turns on compile, change the generation config to use the default mode instead of
         # max-autotune-no-cudagraphs which can change the kernels between generate_batch and generate
@@ -1241,9 +1297,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # continuous batching but not in generate
         is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
         dtype = "auto" if is_fa else torch.float32
+        # Disable auto-switch to flash: if requested by the test, we keep SDPA or eager
+        continuous_batching_config.auto_switch_to_flash = False
 
-        # Prepare inputs (add paged| prefix so that eager or sdpa is not overridden by flash)
-        paged_attn_implem = ("paged|" if "paged|" not in attn_implementation else "") + attn_implementation
+        # Prepare inputs
+        paged_attn_implem = "paged|eager" if attn_implementation == "eager" else attn_implementation
         tokenizer, model = get_tokenizer_and_model(model_id, paged_attn_implem, torch_device, dtype, upcast_lm_head)
         if (
             attn_implementation == "flash_attention_2"
@@ -1275,21 +1333,22 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             flush_memory(flush_compile=True)
 
         # Generation without continuous batching (reload model to avoid any state contamination)
-        non_paged_attn_implem = attn_implementation.replace("paged|", "")
-        _, model = get_tokenizer_and_model(model_id, non_paged_attn_implem, torch_device, dtype, upcast_lm_head)
+        _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype, upcast_lm_head)
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
 
-        model.generation_config.use_cuda_graph = continuous_batching_config.use_cuda_graph
+        model.generation_config.use_cuda_graph = (
+            any(continuous_batching_config.cuda_graph_booleans) and device_type in DEVICE_TYPE_TO_GRAPH_NAME
+        )
         model.generation_config.compile_config = continuous_batching_config.varlen_compile_config
         # Create a static cache if compile_config is set, because regular generate requires a compileable cache
-        past_key_values = None
+        cache = None
         if model.generation_config.compile_config is not None:
             max_cache_len = num_input_tokens + max_new_tokens
-            past_key_values = StaticCache(config=model.config, max_cache_len=max_cache_len)
+            cache = StaticCache(config=model.config, max_cache_len=max_cache_len)
 
         generate_outputs = model.generate(
-            **inputs.to(torch_device), generation_config=model.generation_config, past_key_values=past_key_values
+            **inputs.to(torch_device), generation_config=model.generation_config, cache=cache
         )
 
         for i, user_message in enumerate(user_messages):
@@ -1368,40 +1427,40 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            # (loaded_attn_implementation, supports_flash_attn, expect_flash_after_switch)
-            ("sdpa", True, True),  # flash-capable model on a non-flash impl -> auto-switched to a paged flash impl
-            ("paged|sdpa", True, False),  # an explicit paged request is respected: no flash upgrade
-            ("sdpa", False, False),  # _supports_flash_attn=False opts out: stays on paged|sdpa
+            (False, False),  # _supports_flash_attn=False: stays on sdpa
+            (False, True),  # same, even with auto switch on: stay on SDPA
+            (True, False),  # flash-capable model on a non-flash impl, but auto switch off: stay on SDPA
+            (True, True),  # flash-capable model on a non-flash impl, with auto switch on: switch to flash
         ]
     )
     @slow
-    def test_switch_to_cb_friendly_attn(
-        self, attn_implementation: str, supports_flash_attn: bool, expect_flash_after_switch: bool
-    ) -> None:
+    def test_switch_to_cb_friendly_attn(self, supports_flash_attn: bool, auto_switch_to_flash: bool) -> None:
         """Continuous batching switches to a paged (ideally flash) attention and restores the original on stop."""
+
         flash_available = is_flash_attn_2_available(kernels_fallback_ok=True)
         flash_available |= is_flash_attn_3_available(kernels_fallback_ok=True)
-
-        if expect_flash_after_switch and not flash_available:
+        if not flash_available:
             self.skipTest("Flash attention is unavailable, cannot test the auto-switch to flash.")
 
+        # Retrieve the model
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        _, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, torch.bfloat16)
+        _, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.bfloat16)
+
         model._supports_flash_attn = supports_flash_attn
         original_attn_impl = model.config._attn_implementation
-
         # Creating the manager switches the model to a CB-friendly attention implementation
-        manager = model.init_continuous_batching(
-            continuous_batching_config=ContinuousBatchingConfig(num_blocks=8, block_size=32, use_cuda_graph=False)
+        cb_config = ContinuousBatchingConfig(
+            num_blocks=8, block_size=32, use_cuda_graph=False, auto_switch_to_flash=auto_switch_to_flash
         )
-        switched_attn_impl = model.config._attn_implementation
-        self.assertTrue(switched_attn_impl.startswith("paged|"), f"Expected a paged impl, got {switched_attn_impl}")
-        is_flash = is_flash_attention_requested(requested_attention_implementation=switched_attn_impl)
-        self.assertEqual(is_flash, expect_flash_after_switch)
-        if not expect_flash_after_switch:
-            self.assertEqual(switched_attn_impl, "paged|sdpa")
+        manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+        final_attn_impl = model.config._attn_implementation
 
-        # Starting then stopping the manager restores the original attention implementation
+        if supports_flash_attn and auto_switch_to_flash:
+            self.assertTrue(is_flash_attention_requested(requested_attention_implementation=final_attn_impl))
+        else:
+            self.assertEqual(final_attn_impl, "sdpa")
+
+        # Stopping the manager restores the original attention implementation
         manager.start()
         manager.stop(block=True)
         self.assertEqual(model.config._attn_implementation, original_attn_impl)
@@ -1462,12 +1521,15 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             references.append(out[0, len(ids) :].tolist())
 
         # Continuous batching, all prompts at once
-        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, dtype=torch.float32)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
         gen_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False, eos_token_id=None)
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=False, use_async_batching=False, auto_switch_to_flash=False
+        )
         results = model.generate_batch(
             inputs=prompts,
             generation_config=gen_config,
-            continuous_batching_config=ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False),
+            continuous_batching_config=cb_config,
             progress_bar=False,
         )
         ordered_keys = sorted(results.keys(), key=lambda x: int(x.split("_")[1]))
@@ -1521,12 +1583,15 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         max_memory_percent = 0.5
         tolerance = 0.05
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, torch.float16)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float16)
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
         model.generation_config.max_new_tokens = 20
         model.generation_config.do_sample = False
         cb_config = ContinuousBatchingConfig(
-            max_memory_percent=max_memory_percent, use_cuda_graph=False, use_async_batching=False
+            max_memory_percent=max_memory_percent,
+            use_cuda_graph=False,
+            use_async_batching=False,
+            auto_switch_to_flash=False,
         )
 
         # Budget = max_memory_percent of the free device memory, computed exactly as the memory handler does
@@ -1579,10 +1644,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # The whole point of the test is that the model does NOT live on device 0, where the background thread starts
         device = f"{torch_device}:1"
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", device, torch.bfloat16)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", device, torch.bfloat16)
 
         gen_config = GenerationConfig(max_new_tokens=5, do_sample=False, eos_token_id=tokenizer.eos_token_id)
-        cb_config = ContinuousBatchingConfig(use_cuda_graph=True, use_async_batching=False, max_memory_percent=0.2)
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=True, use_async_batching=False, max_memory_percent=0.2, auto_switch_to_flash=False
+        )
 
         manager = model.init_continuous_batching(generation_config=gen_config, continuous_batching_config=cb_config)
         manager.start()
@@ -1606,7 +1673,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
         # Retrieve tokenizer, model and eos_token_id (required otherwise logits will be misaligned)
-        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, torch.float32)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
         eos_token_id = model.config.eos_token_id  # type: ignore[attr-defined]
 
         # Run CB generation
@@ -1617,6 +1684,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             use_cuda_graph=use_cuda_graph,
             use_async_batching=use_async_batching,
             return_logprobs=True,
+            auto_switch_to_flash=False,
         )
         cb_outputs = model.generate_batch(
             inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
@@ -1690,8 +1758,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device)
-        manager = model.init_continuous_batching()
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+        cb_config = ContinuousBatchingConfig(auto_switch_to_flash=False)
+        manager = model.init_continuous_batching(continuous_batching_config=cb_config)
         manager.logit_processor.clear()
         manager.start()
 
@@ -1738,8 +1807,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         max_new_tokens = 3
 
-        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device)
-        manager = model.init_continuous_batching()
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+        cb_config = ContinuousBatchingConfig(auto_switch_to_flash=False)
+        manager = model.init_continuous_batching(continuous_batching_config=cb_config)
         manager.logit_processor.clear()
         manager.start()
 
@@ -1858,9 +1928,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     def _started_manager_with_requests(self, max_new_tokens: int = 200):
         """Returns a started manager with a few requests in flight, along with the model and the number of requests."""
-        tokenizer, model = get_tokenizer_and_model("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "paged|sdpa", torch_device)
+        tokenizer, model = get_tokenizer_and_model("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "sdpa", torch_device)
         input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
-        cb_config = ContinuousBatchingConfig(use_cuda_graph=False, use_async_batching=False)
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=False, use_async_batching=False, auto_switch_to_flash=False
+        )
         manager = model.init_continuous_batching(continuous_batching_config=cb_config)
         manager.logit_processor.clear()
         manager.warmup()  # so that no graph capture happens on the loop thread during the test
@@ -2096,15 +2168,26 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Generate with flash_attn_with_kvcache path for decode
         continuous_batching_config.max_blocks_per_request = 16
-        # This context manager ensures that the varlen path is used
-        og_get_block_table_key = PagedAttentionCache.get_block_table_key
-        with patch.object(
-            PagedAttentionCache, "get_block_table_key", autospec=True, side_effect=og_get_block_table_key
-        ) as mock_get_block_table_key:
+        # Wrap the kvcache function to check the block table path is actually used
+        og_kvcache_fn = fa_utils._flash_with_kvcache_fn
+        called = [False]
+
+        @functools.wraps(og_kvcache_fn)
+        def spy_kvcache_fn(*args, **kwargs):
+            called[0] = True
+            return og_kvcache_fn(*args, **kwargs)
+
+        fa_utils._flash_with_kvcache_fn = spy_kvcache_fn
+        try:
             outputs_kvcache = model.generate_batch(
                 inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
             )
-            self.assertTrue(mock_get_block_table_key.called, "get_block_table_key method was not called.")
+            # Check the global was not swapped back
+            self.assertIs(fa_utils._flash_with_kvcache_fn, spy_kvcache_fn)
+        finally:
+            fa_utils._flash_with_kvcache_fn = og_kvcache_fn
+
+        self.assertTrue(called[0], "flash_attn_with_kvcache decode path was not used.")
 
         self.assertEqual(len(outputs_varlen), len(outputs_kvcache))
         for (_, out_varlen), (_, out_kvcache) in zip(outputs_varlen.items(), outputs_kvcache.items()):
@@ -2123,7 +2206,6 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         tokenizer, model = get_tokenizer_and_model(
             model_id, "flash_attention_2", torch_device, torch.bfloat16, upcast_lm_head=True
         )
-        # Skip the "Josh" prompt: its 5th token is an exact tie in bf16, which the fp32 lm_head breaks differently
         user_messages = [_DEFAULT_USER_MESSAGES[0], _DEFAULT_USER_MESSAGES[2]]
         input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
 
@@ -2138,9 +2220,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Generated with a regular generate in bf16, without CB nor upcast lm_head
         expected_texts = Expectations(
             {
-                ("cuda", (10, 0)): ["The robe takes 2 bolts", "The basket contains 25 oranges"],
+                ("cuda", (10, 0)): ["The robe takes 2 bolts", "If Seattle has 20 sheep,"],
                 # Default expectation was not tested but needs to be there to avoid crashes. Feel free to change.
-                (None, None): ["The robe takes 2 bolts", "The basket contains 25 oranges"],
+                (None, None): ["The robe takes 2 bolts", "If Seattle has 20 sheep,"],
             }
         ).get_expectation()
         self.assertEqual(len(outputs), len(expected_texts))
@@ -2190,7 +2272,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         top_ps = [0.9, 0.99]
 
         # Run in fp32: in bf16, CB and regular generate logprobs differ by ~1e-3, far above the tolerance used below
-        tokenizer, model = get_tokenizer_and_model(model_id, "paged|sdpa", torch_device, torch.float32)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
         eos_token_id = model.config.eos_token_id  # type: ignore[attr-defined]
 
         # Same prompt for both requests
@@ -2212,6 +2294,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             per_request_processors=True,
             return_logprobs=True,
             q_padding_interval_size=16,  # allows for exact comparison between CB and regular generation
+            auto_switch_to_flash=False,
         )
         manager = model.init_continuous_batching(
             generation_config=generation_config,
@@ -2371,9 +2454,57 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
 
 
-@require_torch_accelerator
+class ContinuousBatchingMemoryTests(unittest.TestCase):
+    """Tests the detection of the CPU memory available to the process, with the /proc and /sys files faked."""
+
+    STATUS = "/proc/self/status"
+    NUMA_MAPS = "/proc/self/numa_maps"
+
+    @staticmethod
+    def fake_files(files: dict[str, str]):
+        """Patches `open` in the CB utils so it reads from `files` (path -> content) instead of the filesystem."""
+
+        def _open(path, *args, **kwargs):
+            if path not in files:
+                raise FileNotFoundError(path)
+            return io.StringIO(files[path])
+
+        return patch("transformers.generation.continuous_batching.utils.open", _open, create=True)
+
+    def test_allowed_numa_nodes(self):
+        cases = [
+            # (Mems_allowed_list, first numa_maps line, expected)
+            ("0-1", "00400000 default file=/usr/bin/python3", {0, 1}),  # unrestricted
+            ("0-1", "00400000 bind:0 file=/usr/bin/python3", {0}),  # numactl --membind=0
+            ("0", "00400000 bind:0-1 file=/usr/bin/python3", {0}),  # cpuset narrower than policy
+            ("0-1", "00400000 bind=static:1 file=/usr/bin/python3", {1}),  # policy flags
+            ("0-1", "00400000 prefer:1 file=/usr/bin/python3", {0, 1}),  # not a hard limit
+            (None, "00400000 bind:1 file=/usr/bin/python3", {1}),  # no cpuset line
+            (None, None, set()),  # not Linux
+        ]
+        for mems_allowed, first_mapping, expected in cases:
+            files = {}
+            if mems_allowed is not None:
+                files[self.STATUS] = f"Name:\tpython\nMems_allowed_list:\t{mems_allowed}\n"
+            if first_mapping is not None:
+                files[self.NUMA_MAPS] = first_mapping + "\n"
+            with self.subTest(mems_allowed=mems_allowed, first_mapping=first_mapping), self.fake_files(files):
+                self.assertEqual(_get_allowed_numa_nodes(), expected)
+
+    def test_numa_nodes_memory(self):
+        meminfo = "/sys/devices/system/node/node{}/meminfo"
+        files = {
+            meminfo.format(0): "Node 0 MemTotal:       1024 kB\nNode 0 MemFree: ...\n",
+            meminfo.format(1): "Node 1 MemTotal:       2048 kB\n",
+        }
+        with self.fake_files(files):
+            self.assertEqual(_get_numa_nodes_memory({0, 1}), 3072 * 1024)
+            self.assertIsNone(_get_numa_nodes_memory({0, 2}))  # node 2 unreadable
+
+
 class TestMemoryHandlerPrediction(unittest.TestCase):
-    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
+    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches theoretical concerns or even real
+    accelerator memory usage.
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
     dtypes, no alignment padding) and compare the CUDA memory delta to the handler's prediction. The handler reserves
@@ -2396,7 +2527,49 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
     ]
     # fmt: on
 
+    def test_memory_prediction_under_tensor_parallelism(self) -> None:
+        """A rank holding 1 / tp_size of the heads predicts the footprint of a model with that many heads."""
+        head_dim, num_kv_heads, num_attention_heads, tp_size = 64, 4, 8, 2
+        dtype = torch.float16
+
+        def make_handler(kv_heads: int, attention_heads: int, tp: int) -> PagedAttentionMemoryHandler:
+            config = SimpleNamespace(
+                head_dim=head_dim,
+                num_key_value_heads=kv_heads,
+                num_attention_heads=attention_heads,
+                hidden_size=512,
+                vocab_size=32000,
+                _attn_implementation="sdpa",
+            )
+            cb_config = ContinuousBatchingConfig(page_size=32, num_blocks=self.NUM_BLOCKS, max_memory_percent=0.9)
+            # The cache geometry is built from the per-rank KV heads, as PagedAttentionCache does under TP
+            bytes_per_token = 2 * (kv_heads // tp) * head_dim * dtype.itemsize
+            bytes_per_block = bytes_per_token * 32 * 22
+            bytes_per_sector = math.lcm(bytes_per_block, 128)
+            return PagedAttentionMemoryHandler(
+                config=config,
+                cb_config=cb_config,
+                dtype=dtype,
+                bytes_per_sector=bytes_per_sector,
+                tokens_per_sector=bytes_per_sector // bytes_per_block * 32,
+                bytes_per_block=bytes_per_block,
+                attn_types=["full_attention"],
+                kv_tp_size=tp,
+            )
+
+        sharded = make_handler(num_kv_heads, num_attention_heads, tp_size)
+        reference = make_handler(num_kv_heads // tp_size, num_attention_heads // tp_size, 1)
+        unsharded = make_handler(num_kv_heads, num_attention_heads, 1)
+        M, num_sectors = self.MAX_BATCH_TOKENS, 4
+        self.assertEqual(
+            sharded.compute_memory_footprint(M, num_sectors), reference.compute_memory_footprint(M, num_sectors)
+        )
+        self.assertLess(
+            sharded.compute_memory_footprint(M, num_sectors), unsharded.compute_memory_footprint(M, num_sectors)
+        )
+
     @parameterized.expand(CONFIGS)
+    @require_torch_accelerator
     def test_memory_prediction(
         self,
         block_size: int,
@@ -2541,7 +2714,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         )
 
 
-# Worker functions for the TP continuous batching tests, spawned through `_init_distributed`.
+# Worker functions for the TP continuous batching tests, spawned through `run_distributed`.
 def _tp_continuous_batching_worker(
     rank: int,
     model_id: str,
@@ -2831,7 +3004,7 @@ def _tp_pause_generation_worker(
 @require_torch_multi_accelerator
 class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     """Integration tests for continuous batching with tensor parallelism. Each test spawns a TP-sized process group
-    via `_init_distributed` (see `tests/test_tensor_parallel_mixin.py`) with the NCCL backend."""
+    via `run_distributed` (see `tests/test_tensor_parallel_mixin.py`) with the NCCL backend."""
 
     @property
     def tp_size(self) -> int:
@@ -2850,7 +3023,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
         }
         defaults.update(worker_kwargs)
         flexible_flash_skip(self, defaults["attn_implementation"])
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
+        run_distributed(world_size=self.tp_size, backend="nccl")(_tp_continuous_batching_worker)(**defaults)
 
     def test_continuous_batching_tp_fast(self) -> None:
         """Test that continuous batching with `DistributedConfig(tp_size=...)` produces non-empty, reproducible greedy outputs and
@@ -2861,7 +3034,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def test_continuous_batching_tp_pause(self) -> None:
         """Test that `pause` keeps the TP ranks in the same pause window even when they request it at different
         iterations, and that pausing repeatedly mid-generation loses no request and does not make the ranks diverge."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_pause_generation_worker)(
+        run_distributed(world_size=self.tp_size, backend="nccl")(_tp_pause_generation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="flash_attention_2",
             max_new_tokens=20,
@@ -2899,7 +3072,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def test_continuous_batching_tp_cancellation(self) -> None:
         """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
+        run_distributed(world_size=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="flash_attention_2",
         )
@@ -2909,7 +3082,7 @@ class ContinuousBatchingTensorParallelTest(unittest.TestCase):
     def test_continuous_batching_tp_cancellation_realistic(self) -> None:
         """Test that `cancel_request` propagates across the TP group: the driver enqueues the cancellation, broadcasts
         it to non-driver ranks via `tp_broadcast_object`, and generation stops well before `max_new_tokens`."""
-        _init_distributed(tp=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
+        run_distributed(world_size=self.tp_size, backend="nccl")(_tp_cancellation_worker)(
             model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             attn_implementation="flash_attention_2",
             use_async_batching=True,
