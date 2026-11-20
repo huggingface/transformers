@@ -47,7 +47,6 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
-from ..modeling_multimodal_utils import MultimodalMixin
 from ..modeling_outputs import BaseModelOutputWithPooling
 from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
@@ -745,9 +744,14 @@ class GenerationMixin(ContinuousMixin):
                 is_first_iteration=is_first_iteration,
             )
             if isinstance(attention_mask, dict):
-                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
+                # Only tensors have a memory layout: flex attention returns a `BlockMask`, which is passed through
+                attention_mask = {
+                    k: v.contiguous() if isinstance(v, torch.Tensor) else v for k, v in attention_mask.items()
+                }
             else:
-                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
+                attention_mask = (
+                    attention_mask.contiguous() if isinstance(attention_mask, torch.Tensor) else attention_mask
+                )
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
@@ -974,6 +978,10 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: we need a single entrypoint for multimodal/text encoder-decoder models because some VLMs need to pass
         `mm_encoder_output` to the text encoder backbone, before feeding it to text-decoder (e.g. Florence2)
         """
+        # A dict of our own: the decoding loop clears it after the prefill to free the encoder outputs, and a dict
+        # passed by the user is left as it is
+        if model_kwargs.get("mm_encoder_outputs") is not None:
+            model_kwargs["mm_encoder_outputs"] = dict(model_kwargs["mm_encoder_outputs"])
         if self.config.is_encoder_decoder and model_kwargs.get("encoder_outputs") is None:
             return self._prepare_text_encoder_decoder_kwargs_for_generation(
                 inputs_tensor=inputs_tensor,
@@ -1147,8 +1155,12 @@ class GenerationMixin(ContinuousMixin):
             modalily_outputs = mm_encoder_output.get(modality)
             if modalily_outputs is None:
                 continue
-            is_flat = getattr(modalily_outputs, "split_sizes", None) is not None
-            if not is_flat and getattr(modalily_outputs, "pooler_output", None) is None:
+            pooler_output = getattr(modalily_outputs, "pooler_output", None)
+            deepstack_features = getattr(modalily_outputs, "deepstack_features", None)
+            # Granite 4 Vision has only deepstack features
+            features = pooler_output if pooler_output is not None else (deepstack_features or [None])[0]
+            is_flat = isinstance(features, torch.Tensor) and getattr(modalily_outputs, "split_sizes", None) is not None
+            if not is_flat and pooler_output is None:
                 continue
 
             # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
@@ -1168,6 +1180,14 @@ class GenerationMixin(ContinuousMixin):
                 )
                 continue
 
+            # Per-item outputs: GLM-Image's feature maps, and `get_*_features` outputs passed by users (generate itself
+            # encodes flat), only kept for backward compatibility
+            if getattr(modalily_outputs, "split_sizes", None) is not None:
+                logger.warning_once(
+                    "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) to "
+                    "`generate` is deprecated and will be removed: pass the flat outputs of `get_image_embeddings` / "
+                    "`get_video_embeddings`."
+                )
             num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
             num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
             num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
@@ -1189,12 +1209,8 @@ class GenerationMixin(ContinuousMixin):
             if not is_split_images:
                 modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
 
-            # 4. If there are deepstack features, expand them as well. Most models have deeptack features
-            # per layer where each feature is a `list[torch.Tensor]`. GraniteVision has each feature as a
-            # `tuple(layer_idx, list[torch.Tensor])` and we skip it here. FIXME: we need a uniform deepstack layout
-            if getattr(modalily_outputs, "deepstack_features", None) is not None and isinstance(
-                modalily_outputs.deepstack_features[0][0], torch.Tensor
-            ):
+            # 4. If there are deepstack features, expand them as well: per layer, each feature is a `list[torch.Tensor]`
+            if getattr(modalily_outputs, "deepstack_features", None) is not None:
                 # Each deepstack feat is `(total_image_len, dim)` tensor
                 modalily_outputs.deepstack_features = [
                     [
@@ -1222,12 +1238,6 @@ class GenerationMixin(ContinuousMixin):
 
         # IMPORTANT - expand before input ids because the helper counts placeholders within encoded text!
         if (mm_encoder_output := model_kwargs.get("mm_encoder_outputs")) is not None:
-            # Per-item outputs with `split_sizes` (from `get_*_features`) are expanded flat as well
-            merge = getattr(self.base_model, "merge_modality_outputs", MultimodalMixin.merge_modality_outputs)
-            mm_encoder_output = {
-                modality: merge(outputs) if getattr(outputs, "split_sizes", None) is not None else outputs
-                for modality, outputs in mm_encoder_output.items()
-            }
             model_kwargs["mm_encoder_outputs"] = self._expand_multimodal_outputs(
                 input_ids,
                 mm_encoder_output,
@@ -3027,10 +3037,6 @@ class GenerationMixin(ContinuousMixin):
 
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
-        # A dict of our own, which the decoding loop's copy of the kwargs shares: clearing it after the prefill frees
-        # the encoder outputs, while a dict passed by the user is left as it is
-        if model_kwargs.get("mm_encoder_outputs") is not None:
-            model_kwargs["mm_encoder_outputs"] = dict(model_kwargs["mm_encoder_outputs"])
 
         # 9. Call generation mode
         result = decoding_method(
@@ -4002,23 +4008,14 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        # The cache must be dynamic for assisted generation, and the check must happen AFTER preparing cache
-        if not model_kwargs["use_cache"]:
-            raise ValueError("assisted generate requires `use_cache=True`")
-        if (
-            generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]
-            or type(model_kwargs.get("cache")) is StaticCache
-        ):
-            raise ValueError("assisted generate is not supported with Static cache classes`")
-
-        # Same tensor the stopping criteria are built from
-        eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
-
         # Make sure we can record past on the cache
         cache = model_kwargs.get("cache")
         if cache is None:
-            raise RuntimeError("assisted decoding requires a cache")
+            raise RuntimeError("Assisted decoding requires a cache")
         cache.activate_past_recording()
+
+        # Same tensor the stopping criteria are built from
+        eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
 
         # Get the candidate generator, given the parameterization
         candidate_generator = self._get_candidate_generator(
@@ -4063,6 +4060,13 @@ class GenerationMixin(ContinuousMixin):
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
         outputs = None
         n_matches = 0
+
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
+
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
@@ -4112,8 +4116,21 @@ class GenerationMixin(ContinuousMixin):
             if candidate_generator.requires_model_outputs:
                 model_inputs |= candidate_generator.model_kwargs_overrides
 
-            # 2.2. Run a forward pass on the candidate sequence
-            outputs = self(**model_inputs)
+            # 2.2. Run a forward pass on the candidate sequence.
+            # Note that the 1st iteration, i.e. prefill, is exempt of both compilation and expert implementation swap, as it
+            # would be counter-productive
+            if is_first_iteration:
+                outputs = self(**model_inputs)
+            else:
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs)
+
+            # Some layers (e.g. linear attention, which cannot roll back a recurrent state), only know whether they can `crop` after they
+            # have been properly initialized, so check it only now after prefill and before first `crop`
+            if is_first_iteration and not outputs.cache.is_croppable:
+                raise ValueError(
+                    "Assisted decoding requires a cache that can be cropped to restore the states after draft verification"
+                )
 
             # 2.3. Process the new logits
             # .float() is needed to retain precision for later logits manipulations
@@ -4448,15 +4465,10 @@ def _repeat_flat_outputs(
     outputs: BaseModelOutputWithPooling, rows_per_sample: torch.LongTensor, repeats: int
 ) -> BaseModelOutputWithPooling:
     """Repeats each sample's rows of flat `get_*_embeddings` outputs, as `input_ids.repeat_interleave` does its row."""
-    pooler_output, split_sizes = outputs.pooler_output, outputs.split_sizes
+    pooler_output = outputs.pooler_output
     deepstack_features = getattr(outputs, "deepstack_features", None)
-    if split_sizes is None:
-        return outputs
-    # Granite 4 Vision has no pooler output, and `(layer, features)` deepstack pairs
-    if isinstance(pooler_output, torch.Tensor):
-        reference = pooler_output
-    else:
-        reference = deepstack_features[0][1] if isinstance(deepstack_features[0], tuple) else deepstack_features[0]
+    # Granite 4 Vision has only deepstack features
+    reference = pooler_output if isinstance(pooler_output, torch.Tensor) else deepstack_features[0]
     rows = _repeat_index(rows_per_sample.to(reference.device), repeats, reference.shape[0])
 
     def repeat(features: torch.Tensor) -> torch.Tensor:
@@ -4466,15 +4478,9 @@ def _repeat_flat_outputs(
     if isinstance(pooler_output, torch.Tensor):
         expanded["pooler_output"] = repeat(pooler_output)
     if deepstack_features is not None:
-        expanded["deepstack_features"] = [
-            (feature[0], repeat(feature[1])) if isinstance(feature, tuple) else repeat(feature)
-            for feature in deepstack_features
-        ]
-    # Each item belongs to the sample its last row falls in
-    rows_end = rows_per_sample.to(split_sizes.device).cumsum(0)
-    item_sample = torch.searchsorted(rows_end, split_sizes.cumsum(0) - 1, right=True)
-    items_per_sample = torch.zeros_like(rows_end).index_add_(0, item_sample, torch.ones_like(item_sample))
-    expanded["split_sizes"] = split_sizes[_repeat_index(items_per_sample, repeats, len(split_sizes))]
+        expanded["deepstack_features"] = [repeat(features) for features in deepstack_features]
+    # Nothing reads the item boundaries of the expanded rows
+    expanded["split_sizes"] = None
     # A copy, as the outputs may be the user's (some getters set `split_sizes` on a vision tower's output class)
     outputs = copy.copy(outputs)
     for key, value in expanded.items():

@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -38,11 +37,16 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs, select_hidden_states
@@ -50,51 +54,53 @@ from ..auto import AutoModel
 from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionTextConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
-    """
+logger = logging.get_logger(__name__)
 
-    image_hidden_states: torch.Tensor | None = None
+
+@auto_docstring
+@dataclass
+class Granite4VisionModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    r"""
+    deepstack_features (`list[torch.Tensor]`, *optional*):
+        The features the deepstack and spatial projectors add to the decoder layers: one
+        `(num_image_tokens, hidden_size)` tensor per layer, for the language model layers of
+        `config.deepstack_layer_map` then `config.spatial_target_layers`.
+    """
 
     deepstack_features: list | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Granite4Vision causal language model (or autoregressive) outputs.
-    """
-)
+
+@auto_docstring
 @dataclass
-class Granite4VisionCausalLMOutputWithPast(ModelOutput):
+class Granite4VisionCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
     logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    deepstack_features (`list[torch.Tensor]`, *optional*):
+        The features the deepstack and spatial projectors add to the decoder layers: one
+        `(num_image_tokens, hidden_size)` tensor per layer, for the language model layers of
+        `config.deepstack_layer_map` then `config.spatial_target_layers`.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-
     deepstack_features: list | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(
@@ -105,10 +111,10 @@ class Granite4VisionCausalLMOutputWithPast(ModelOutput):
 @dataclass
 class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPooling):
     r"""
-    deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
-        List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
-        and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
-        is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    deepstack_features (`list[torch.Tensor]`, *optional*):
+        The features the deepstack and spatial projectors add to the decoder layers: one
+        `(num_image_tokens, hidden_size)` tensor per layer, for the language model layers of
+        `config.deepstack_layer_map` then `config.spatial_target_layers`.
     """
 
     deepstack_features: list | None = None
@@ -873,7 +879,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
         all_features = []
-        for projection_idx, (vision_layer, llm_layer) in enumerate(self.config.deepstack_layer_map):
+        for projection_idx, (vision_layer, _) in enumerate(self.config.deepstack_layer_map):
             selected_feature = vision_outputs.hidden_states[vision_layer]
 
             if vision_feature_select_strategy == "default":
@@ -888,7 +894,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-            all_features.append((llm_layer, torch.cat(packed_features, dim=0)))
+            all_features.append(torch.cat(packed_features, dim=0))
 
         # Spatial features: extract 4 offset groups from a single vision layer
         spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
@@ -896,7 +902,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
         if vision_feature_select_strategy == "default":
             spatial_feature = spatial_feature[:, 1:]
 
-        for group_idx, llm_layer in enumerate(self.config.spatial_target_layers):
+        for group_idx in range(len(self.config.spatial_target_layers)):
             projected_group = self.spatial_projectors[group_idx](spatial_feature)
             projected_group_split = torch.split(projected_group, image_num_patches, dim=0)
 
@@ -906,7 +912,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_newline=self.image_newline,
             )
-            all_features.append((llm_layer, torch.cat(packed_group, dim=0)))
+            all_features.append(torch.cat(packed_group, dim=0))
 
         return Granite4VisionImageFeaturesOutput(
             deepstack_features=all_features,
@@ -987,7 +993,12 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
         # Build deepstack injection map and scatter initial image embeddings
         if mm_encoder_outputs.get("image") is not None:
             deepstack_features = {}
-            for idx, (llm_layer_idx, packed_features) in enumerate(mm_encoder_outputs["image"].deepstack_features):
+            llm_layers = [layer for _, layer in self.config.deepstack_layer_map] + list(
+                self.config.spatial_target_layers
+            )
+            for idx, (llm_layer_idx, packed_features) in enumerate(
+                zip(llm_layers, mm_encoder_outputs["image"].deepstack_features)
+            ):
                 packed_features = packed_features.to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
                     vision_mask = self.get_placeholder_mask(
@@ -1018,24 +1029,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel, MultimodalMixin):
             if mm_encoder_outputs.get("image") is not None
             else None,
         )
-
-    @staticmethod
-    def split_modality_outputs(outputs):
-        """Splits each `(layer, features)` deepstack pair per image by `split_sizes`."""
-        split_sizes = outputs.split_sizes.tolist()
-        outputs.deepstack_features = [
-            (layer, torch.split(features, split_sizes)) for layer, features in outputs.deepstack_features
-        ]
-        return outputs
-
-    @staticmethod
-    def merge_modality_outputs(outputs):
-        """Concatenates each `(layer, features)` deepstack pair back into one tensor."""
-        if isinstance(outputs.deepstack_features[0][1], torch.Tensor):
-            return outputs
-        merged = copy.copy(outputs)
-        merged.deepstack_features = [(layer, torch.cat(features)) for layer, features in outputs.deepstack_features]
-        return merged
 
 
 @auto_docstring(

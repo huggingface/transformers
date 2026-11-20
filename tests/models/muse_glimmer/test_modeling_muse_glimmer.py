@@ -46,22 +46,27 @@ class MuseGlimmerVision2TextModelTester(VLMModelTester):
 
     conditional_generation_class = MuseGlimmerForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("patch_temporal", 2)
-        kwargs.setdefault("merge_size", 1)
-        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
-        kwargs.setdefault("vision_layer_types", ["window_attention", "full_attention"])
-        kwargs.setdefault("pos_emb_height", 4)
-        kwargs.setdefault("pos_emb_width", 4)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("projector_hidden_size", 32)
-        super().__init__(parent, **kwargs)
-        self.image_grid_thw = (1, 2, 2)
-        self.out_hidden_size = self.hidden_size * self.merge_size**2
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "num_image_tokens": 4,
+        "patch_size": 2,
+        "patch_temporal": 2,
+        "merge_size": 1,
+        "layer_types": ["full_attention", "sliding_attention"],
+        "vision_layer_types": ["window_attention", "full_attention"],
+        "pos_emb_height": 4,
+        "pos_emb_width": 4,
+        "intermediate_size": 37,
+        "projector_hidden_size": 32,
+        "image_grid_thw": (1, 2, 2),
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["out_hidden_size"] = values["hidden_size"] * values["merge_size"] ** 2
+        return values
 
     @property
     def _special_token_ids(self):

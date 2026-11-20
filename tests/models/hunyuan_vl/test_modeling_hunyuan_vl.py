@@ -57,45 +57,49 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = HunYuanVLForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("seq_length", 32)
-        kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 128)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 4)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 128)
-        kwargs.setdefault("pad_token_id", 0)
-        kwargs.setdefault("bos_token_id", 1)
-        kwargs.setdefault("eos_token_id", 2)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("rope_theta", 10000.0)
-        kwargs.setdefault(
-            "rope_parameters", {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [2, 2, 2, 2]}
-        )
-        kwargs.setdefault("tie_word_embeddings", False)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("temporal_patch_size", 1)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("image_size", 64)
-        kwargs.setdefault("image_token_id", 5)
-        kwargs.setdefault("out_hidden_size", kwargs["hidden_size"])
-        kwargs.setdefault("text_hidden_size", kwargs["hidden_size"])
-        kwargs.setdefault("max_image_size", kwargs["image_size"])
-        kwargs.setdefault("min_image_size", kwargs["image_size"])
-        kwargs.setdefault("anyres_vit_max_image_size", kwargs["image_size"])
-        grid_hw = kwargs["image_size"] // kwargs["patch_size"]
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 32,
+        "vocab_size": 256,
+        "hidden_size": 64,
+        "intermediate_size": 128,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 4,
+        "hidden_act": "silu",
+        "max_position_embeddings": 128,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "head_dim": 16,
+        "rope_theta": 10000.0,
+        "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [2, 2, 2, 2]},
+        "tie_word_embeddings": False,
+        "num_channels": 3,
+        "patch_size": 16,
+        "temporal_patch_size": 1,
+        "spatial_merge_size": 1,
+        "image_size": 64,
+        "image_token_id": 5,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        merged = {**cls.small_config_overrides, **kwargs}
+        kwargs.setdefault("out_hidden_size", merged["hidden_size"])
+        kwargs.setdefault("text_hidden_size", merged["hidden_size"])
+        kwargs.setdefault("max_image_size", merged["image_size"])
+        kwargs.setdefault("min_image_size", merged["image_size"])
+        kwargs.setdefault("anyres_vit_max_image_size", merged["image_size"])
+        grid_hw = merged["image_size"] // merged["patch_size"]
         # HunYuanVL inserts an extra column per row (newline) and 2 begin/end tokens.
         kwargs.setdefault("num_image_tokens", grid_hw * (grid_hw + 1) + 2)
         kwargs.setdefault("max_vit_seq_len", grid_hw**2)
-        super().__init__(parent, **kwargs)
-        self.device = torch_device
-        self.grid_hw = self.image_size // self.patch_size
-        self.num_image_patches = self.grid_hw**2
+        values = super().get_small_config_defaults(**kwargs)
+        values["device"] = torch_device
+        values["grid_hw"] = values["image_size"] // values["patch_size"]
+        values["num_image_patches"] = values["grid_hw"] ** 2
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
