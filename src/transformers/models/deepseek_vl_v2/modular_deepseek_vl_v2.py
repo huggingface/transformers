@@ -290,7 +290,7 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features,
+            image_outputs=mm_encoder_outputs.get("image"),
         )
 
 
@@ -389,7 +389,7 @@ class DeepseekVLV2ForConditionalGeneration(DeepseekVLV2PreTrainedModel, Generati
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
     def prepare_inputs_for_generation(
