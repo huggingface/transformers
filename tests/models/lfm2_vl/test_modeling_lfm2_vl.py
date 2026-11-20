@@ -49,13 +49,11 @@ class Lfm2VlModelTester(CausalLMModelTester):
         base_model_class = Lfm2VlModel
         causal_lm_class = Lfm2VlForConditionalGeneration
 
-    def __init__(
-        self,
-        parent,
-        is_training=True,
-        batch_size=2,
-        scale_factor=2,
-        vision_config={
+    small_config_overrides = {
+        "is_training": True,
+        "batch_size": 2,
+        "scale_factor": 2,
+        "vision_config": {
             "hidden_size": 32,
             "intermediate_size": 37,
             "num_hidden_layers": 2,
@@ -67,7 +65,7 @@ class Lfm2VlModelTester(CausalLMModelTester):
             "layer_norm_eps": 1e-6,
             "attention_dropout": 0.0,
         },
-        text_config={
+        "text_config": {
             "vocab_size": 100,
             "hidden_size": 32,
             "intermediate_size": 37,
@@ -85,20 +83,11 @@ class Lfm2VlModelTester(CausalLMModelTester):
             "block_multiple_of": 2,
             "full_attn_idxs": [0],
         },
-        image_token_id=4,
-        downsample_factor=4,
-        projector_hidden_size=32,
-    ):
-        super().__init__(parent)
-        self.vision_config = vision_config
-        self.text_config = text_config
-        self.image_token_id = image_token_id
-        self.is_training = is_training
-        self.batch_size = batch_size
-        self.scale_factor = scale_factor
-        self.downsample_factor = downsample_factor
-        self.projector_hidden_size = projector_hidden_size
-        self.image_seq_length = 4
+        "image_token_id": 4,
+        "downsample_factor": 4,
+        "projector_hidden_size": 32,
+        "image_seq_length": 4,
+    }
 
     def get_config(self):
         return Lfm2VlConfig(

@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -73,44 +74,32 @@ def prepare_bart_inputs_dict(
     }
 
 
-class BartModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_labels=False,
-        vocab_size=99,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=50,
-        eos_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
-    ):
+class BartModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_labels": False,
+        "vocab_size": 99,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 4,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 50,
+        "eos_token_id": 2,
+        "pad_token_id": 1,
+        "bos_token_id": 0,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -391,6 +380,8 @@ class BartHeadTests(unittest.TestCase):
 
 @require_torch
 class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = BartModelTester
+
     all_model_classes = (
         (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
         if is_torch_available()
@@ -1254,61 +1245,49 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertEqual(generated_sentence, expected_sentence)
 
 
-class BartStandaloneDecoderModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        d_model=16,
-        decoder_seq_length=7,
-        is_training=True,
-        is_decoder=True,
-        use_attention_mask=True,
-        use_cache=False,
-        use_labels=True,
-        decoder_start_token_id=2,
-        decoder_ffn_dim=32,
-        decoder_layers=2,
-        encoder_attention_heads=4,
-        decoder_attention_heads=4,
-        max_position_embeddings=50,
-        is_encoder_decoder=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        scope=None,
-    ):
+class BartStandaloneDecoderModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "d_model": 16,
+        "decoder_seq_length": 7,
+        "is_training": False,
+        "use_attention_mask": True,
+        "use_cache": False,
+        "use_labels": True,
+        "decoder_start_token_id": 2,
+        "decoder_ffn_dim": 32,
+        "decoder_layers": 2,
+        "encoder_attention_heads": 4,
+        "decoder_attention_heads": 4,
+        "max_position_embeddings": 50,
+        "is_encoder_decoder": False,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.decoder_seq_length = decoder_seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.hidden_size = d_model
-        self.num_hidden_layers = decoder_layers
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_attention_heads = decoder_attention_heads
-        self.num_attention_heads = decoder_attention_heads
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.use_cache = use_cache
-        self.max_position_embeddings = max_position_embeddings
-        self.is_encoder_decoder = is_encoder_decoder
-
-        self.scope = None
-        self.decoder_key_length = decoder_seq_length
-        self.base_model_out_len = 2
-        self.decoder_attention_idx = 1
+        values["seq_length"] = values["decoder_seq_length"]
+        values["hidden_size"] = values["d_model"]
+        values["num_hidden_layers"] = values["decoder_layers"]
+        values["num_attention_heads"] = values["decoder_attention_heads"]
+        values["scope"] = None
+        values["decoder_key_length"] = values["decoder_seq_length"]
+        values["base_model_out_len"] = 2
+        values["decoder_attention_idx"] = 1
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -1467,6 +1446,8 @@ class BartStandaloneDecoderModelTester:
 
 @require_torch
 class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = BartStandaloneDecoderModelTester
+
     all_model_classes = (BartDecoder, BartForCausalLM) if is_torch_available() else ()
     is_encoder_decoder = False
     test_missing_keys = False
@@ -1474,7 +1455,7 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     def setUp(
         self,
     ):
-        self.model_tester = BartStandaloneDecoderModelTester(self, is_training=False)
+        self.model_tester = BartStandaloneDecoderModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
