@@ -268,11 +268,16 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         quantization_config = FineGrainedFP8Config(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        # Dequantizing rewrites every weight, so shards `device_map="auto"` offloads to
+        # "disk" must be re-saved and need a folder.
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
             config=config,
             dtype="auto",
             device_map="auto",
+            offload_folder=offload_dir.name,
             attn_implementation="eager",
             quantization_config=quantization_config,
         )
@@ -386,11 +391,16 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
         quantization_config = FineGrainedFP8Config(dequantize=True)
         config = AutoConfig.from_pretrained(self.model_id)
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        # Dequantizing rewrites every weight, so shards `device_map="auto"` offloads to
+        # "disk" must be re-saved and need a folder.
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
             config=config,
             dtype="auto",
             device_map="auto",
+            offload_folder=offload_dir.name,
             attn_implementation="eager",
             quantization_config=quantization_config,
         )
