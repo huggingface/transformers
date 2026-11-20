@@ -3462,6 +3462,34 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_encoder_repetition_penalty_ignores_left_padding(self):
+        torch.manual_seed(6)
+        config = LlamaConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            pad_token_id=0,
+            eos_token_id=31,
+        )
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        padded = torch.tensor([[5, 6, 7, 8, 9], [0, 0, 0, 11, 12]], device=torch_device)
+        mask = torch.tensor([[1, 1, 1, 1, 1], [0, 0, 0, 1, 1]], device=torch_device)
+        short = torch.tensor([[11, 12]], device=torch_device)
+        for num_beams in (1, 2):
+            with self.subTest(num_beams=num_beams):
+                kwargs = {
+                    "max_new_tokens": 6,
+                    "min_new_tokens": 6,
+                    "do_sample": False,
+                    "num_beams": num_beams,
+                    "encoder_repetition_penalty": 10.0,
+                }
+                expected = model.generate(input_ids=short, attention_mask=torch.ones_like(short), **kwargs)
+                batched = model.generate(input_ids=padded, attention_mask=mask, **kwargs)
+                self.assertListEqual(batched[1, 5:].tolist(), expected[0, 2:].tolist())
+
     def test_prefix_constraints_with_multiple_sampled_returns(self):
         config = AutoConfig.for_model(
             "gpt2",
