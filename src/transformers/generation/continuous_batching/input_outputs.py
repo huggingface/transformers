@@ -191,8 +191,9 @@ class ContinuousBatchingIOs:
         num_output_rows = 2 if self.return_logprobs else 1
         self.mtp_mode = _CB_MTP
         if self.mtp_mode:
-            # rows: first token, its logprob, bonus token, its logprob, draft accepted, next draft
-            num_output_rows = 6
+            # rows: first token, its logprob, bonus token, its logprob, draft accepted, next draft, then two
+            # measurement rows: target logprob of the previous step's draft, drafter logprob of the next draft
+            num_output_rows = 8
             # per query token: the token that follows it when it is already known (prompt tokens), and where to take
             # it from among the tokens sampled in the step otherwise (-1: use `mtp_shift_ids`)
             mtp_kwargs = {"dtype": torch.int32, "device": self.device, "pin_memory": pin_memory}
@@ -200,6 +201,8 @@ class ContinuousBatchingIOs:
             self.mtp_src = torch.full((max_batch_tokens,), -1, **mtp_kwargs)
             # per logits row: 1 when the request's last query token is a draft to verify
             self.mtp_has_draft = torch.zeros(max_requests_per_batch, **mtp_kwargs)
+            # per logits row: the draft made for this position by the previous step ("shadow" measurement only)
+            self.mtp_prev_draft = torch.zeros(max_requests_per_batch, **mtp_kwargs)
         # output_ids are sized to the input_ids to perform carry over, + 1 to have a static 0 at the end for carry over
         self.output_ids = torch.empty(
             (num_output_rows, max_batch_tokens + 1), dtype=torch.int32, device=self.device, pin_memory=pin_memory
@@ -300,6 +303,7 @@ class ContinuousBatchingIOs:
             self.mtp_shift_ids[:q_len].zero_()
             self.mtp_src[:q_len].fill_(-1)
             self.mtp_has_draft[:b_size].zero_()
+            self.mtp_prev_draft[:b_size].zero_()
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
@@ -408,7 +412,7 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(num_attn_types)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(num_attn_types)]
-        mtp_shift_ids, mtp_src, mtp_has_draft = [], [], []
+        mtp_shift_ids, mtp_src, mtp_has_draft, mtp_prev_draft = [], [], [], []
         mtp_num_rows = self._get_num_sequences(use_padding=use_padding)  # logits rows of the step, padding included
 
         # Go through all the requests in the batch
@@ -456,6 +460,7 @@ class ContinuousBatchingIOs:
                     else:
                         src[-1] = row
                     mtp_has_draft.append(int(has_draft))
+                    mtp_prev_draft.append(state.mtp_draft if state.mtp_draft is not None else 0)
                     future_state.mtp_has_draft = has_draft
                 mtp_src.extend(src)
 
@@ -516,6 +521,7 @@ class ContinuousBatchingIOs:
             self.mtp_shift_ids[: len(mtp_shift_ids)] = to_tensor(mtp_shift_ids)
             self.mtp_src[: len(mtp_src)] = to_tensor(mtp_src)
             self.mtp_has_draft[: len(mtp_has_draft)] = to_tensor(mtp_has_draft)
+            self.mtp_prev_draft[: len(mtp_prev_draft)] = to_tensor(mtp_prev_draft)
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
         for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
@@ -535,9 +541,10 @@ class ContinuousBatchingIOs:
                     self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
                     self.true_read_sizes[i] = len(group_read_indices)
 
-    def prepare_mtp_batch_update(self) -> tuple[list[int], list[float], list[int], list[float], list[int], list[int]]:
+    def prepare_mtp_batch_update(self) -> tuple[list, ...]:
         """gap2-mtp prototype: per logits row, the first token and its logprob, the bonus token and its logprob,
-        whether the draft was accepted, and the draft for the next step."""
+        whether the draft was accepted, the draft for the next step, the target logprob of the previous step's draft
+        and the drafter's logprob of the next draft."""
         out = self.output_ids[:, : self.num_request_in_batch].cpu()
         return (
             out[0].tolist(),
@@ -546,6 +553,8 @@ class ContinuousBatchingIOs:
             out[3].contiguous().view(torch.float32).tolist(),
             out[4].tolist(),
             out[5].tolist(),
+            out[6].contiguous().view(torch.float32).tolist(),
+            out[7].contiguous().view(torch.float32).tolist(),
         )
 
     def _get_num_sequences(self, use_padding: bool) -> int:
@@ -589,6 +598,7 @@ class ContinuousBatchingIOs:
                 "shift_ids": self.mtp_shift_ids[:q_size],
                 "src": self.mtp_src[:q_size],
                 "has_draft": self.mtp_has_draft[:num_sequences],
+                "prev_draft": self.mtp_prev_draft[:num_sequences],
             }
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)

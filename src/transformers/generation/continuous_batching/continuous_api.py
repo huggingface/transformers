@@ -14,6 +14,7 @@
 # limitations under the License.
 import asyncio
 import gc
+import math
 import os
 import queue
 import threading
@@ -569,7 +570,8 @@ class ContinuousBatchProcessor:
         A request emits one token, or two when its draft was accepted. The cache row of a rejected draft is given back
         by not counting it in the request's length: the next step writes that position again."""
         io = self.inputs_and_outputs
-        first_tokens, first_logprobs, bonus_tokens, bonus_logprobs, accepted, next_drafts = io.prepare_mtp_batch_update()
+        (first_tokens, first_logprobs, bonus_tokens, bonus_logprobs, accepted, next_drafts, prev_draft_logprobs,
+         next_draft_logprobs) = io.prepare_mtp_batch_update()
         stats = self.mtp_stats
         stats["steps"] += 1
         self.mtp_step_times.append(perf_counter())
@@ -607,6 +609,11 @@ class ContinuousBatchProcessor:
             elif self.mtp_mode == "shadow" and state.mtp_draft is not None:
                 stats["drafted"] += 1
                 stats["accepted"] += token == state.mtp_draft
+                if self.do_sample:
+                    # probability that the ratio test accepts the draft: min(1, p(draft) / q(draft)), q = 1 for an
+                    # argmax draft. Its mean is the acceptance rate, without the noise of the match count
+                    ratio = math.exp(min(0.0, prev_draft_logprobs[row] - state.mtp_draft_logprob))
+                    stats["accept_prob"] = stats.get("accept_prob", 0.0) + ratio
             logprob = first_logprobs[row] if self.return_logprobs else None
             is_finished = state.update_and_check_completion(token, logprob)
             stats["emitted"] += 1
@@ -637,6 +644,7 @@ class ContinuousBatchProcessor:
                     state.mtp_has_draft = True
                 else:
                     state.mtp_draft = draft
+                    state.mtp_draft_logprob = next_draft_logprobs[row]  # 0 for an argmax draft
             if state.streaming or state.status == RequestStatus.FINISHED:
                 pending_outputs.append(state.to_generation_output())
             row += 1

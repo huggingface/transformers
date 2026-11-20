@@ -149,6 +149,7 @@ class RequestState:
     # gap2-mtp prototype: `tokens_to_process` ends with a drafted token ("spec"); the last draft ("shadow")
     mtp_has_draft: bool = False
     mtp_draft: int | None = None
+    mtp_draft_logprob: float = 0.0
 
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached

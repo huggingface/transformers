@@ -38,6 +38,9 @@ import os as _glue_os
 
 _GLUE_SAMPLE = _glue_os.environ.get("GLUE_SAMPLE", "0") == "1"
 _CB_MTP = _glue_os.environ.get("CB_MTP", "")  # gap2-mtp prototype, see input_outputs.py
+# "shadow" measurement: draft sampled from the MTP distribution instead of its argmax (the acceptance of a sampled
+# draft under the probability ratio test is sum(min(p, q)), estimated on the host from log p(draft) and log q(draft))
+_CB_MTP_DRAFT_SAMPLE = _glue_os.environ.get("CB_MTP_DRAFT", "greedy") == "sample"
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -271,6 +274,9 @@ class ModelRunner:
             if self.return_logprobs:
                 logprobs_first = logprobs_a.gather(1, first_tokens[:, None]).squeeze(1)
                 logprobs_bonus = nn.functional.log_softmax(logits_b, dim=-1).gather(1, bonus_tokens[:, None]).squeeze(1)
+            # measurement: the target's logprob of the draft the previous step made for this position
+            prev_draft_logprob = logprobs_a.gather(1, mtp["prev_draft"].long()[:, None]).squeeze(1)
+            output_ids[6, :num_rows].copy_(prev_draft_logprob.view(dtype=torch.int32))
         elif self.return_logprobs:
             # same operations as `_sample`, so the tokens and logprobs compare bit for bit with the non-speculative path
             probs = nn.functional.softmax(logits, dim=-1)
@@ -292,7 +298,14 @@ class ModelRunner:
         mtp_kwargs = {k: v for k, v in model_kwargs.items() if k != "input_ids"}
         mtp_hidden_states = model.mtp_forward(hidden_states, mtp_input_ids[None], **mtp_kwargs)
         draft_rows = torch.where(accepted, row_b, row_a)
-        next_draft = torch.argmax(model.lm_head(mtp_hidden_states[:, draft_rows])[0], dim=-1)
+        draft_logits = model.lm_head(mtp_hidden_states[:, draft_rows])[0]
+        if _CB_MTP_DRAFT_SAMPLE and self.do_sample:
+            draft_logprobs = nn.functional.log_softmax(draft_logits.float(), dim=-1)
+            next_draft = torch.argmax(draft_logprobs - torch.empty_like(draft_logprobs).exponential_().log_(), dim=-1)
+            next_draft_logprob = draft_logprobs.gather(1, next_draft[:, None]).squeeze(1)
+            output_ids[7, :num_rows].copy_(next_draft_logprob.view(dtype=torch.int32))
+        else:
+            next_draft = torch.argmax(draft_logits, dim=-1)
 
         output_ids[0, :num_rows].copy_(first_tokens)
         output_ids[2, :num_rows].copy_(bonus_tokens)
