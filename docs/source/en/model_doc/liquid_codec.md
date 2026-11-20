@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Liquid Codec is the speech codec of LFM3-Audio by [Liquid AI](https://liquid.ai/). It turns 24 kHz audio
+Liquid Codec is the speech codec of [LFM3-Audio](./lfm3_audio) by [Liquid AI](https://liquid.ai/). It turns 24 kHz audio
 into 12 parallel codebooks of 2016 codes at 12.5 frames per second and back: a causal [LFM3](./lfm3) encoder over
 the spectrogram of [`LiquidCodecFeatureExtractor`], finite scalar quantization, and a causal LFM3 decoder followed by an
 inverse STFT. The decoder is causal, so audio can be synthesized frame by frame as the codes arrive.
@@ -28,8 +28,8 @@ inverse STFT. The decoder is causal, so audio can be synthesized frame by frame 
 ## Usage
 
 [`LiquidCodecFeatureExtractor`] computes the spectrogram the codec encodes, [`~LiquidCodecModel.encode`] turns it into
-audio codes, and [`~LiquidCodecModel.decode`] turns the codes back into audio. The LFM3-Audio processor loads the
-codec as `processor.audio_tokenizer`.
+audio codes, and [`~LiquidCodecModel.decode`] turns the codes back into audio. The [LFM3-Audio](./lfm3_audio)
+processor loads the codec as `processor.audio_tokenizer`.
 
 ```python
 from transformers import AutoFeatureExtractor, AutoModel

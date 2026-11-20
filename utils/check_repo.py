@@ -445,6 +445,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "CsmDepthDecoderModel",  # Building part of a bigger model
         "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
         "CsmForConditionalGeneration",  # Building part of a bigger model
+        "Lfm3AudioDepthDecoderForMaskedLM",  # Building part of a bigger model
         "BltPatcher",  # Building part of a bigger model, tested implicitly through BltForCausalLM
         "Florence2VisionBackbone",  # Building part of a bigger model
         "HiggsAudioV2Model",  # Building part of a bigger model
