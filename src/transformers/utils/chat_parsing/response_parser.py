@@ -160,7 +160,6 @@ class ResponseParser:
         self._body: str = ""
         self._opened: bool = False
         self._finalized: bool = False
-        # By region, the delimiters it watches as one pattern (see `_delimiters_pattern`)
         self._delimiters_patterns: dict[str | None, Any] = {}
         self.initial_events: list[dict] = []
         if prefix:
@@ -264,7 +263,7 @@ class ResponseParser:
         if pattern is None or self._pos == len(self._buffer):
             return False
         match = pattern.search(self._buffer, self._pos, partial=True)
-        return match is None or match.start() == len(self._buffer)  # `regex` gives no match as an empty one at the end
+        return match is None or match.start() == len(self._buffer)
 
     def _delimiters_pattern(self) -> Any:
         """The delimiters of `_watchlist` as one pattern, made once per region. `None` when they can't be joined: with
