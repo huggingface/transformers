@@ -220,6 +220,14 @@ class ContinuousBatchingIOs:
         )
         # For read index, the +T is because there are sentinel indices for seqlen_q when model uses a sliding window
 
+    def bytes_per_cache_token(self) -> int:
+        """The bytes taken by the static tensors that grow with the number of tokens the cache can hold: the read
+        indices and the attention masks, which have one column per cache token."""
+        num_bytes = self.read_index_storage.size(0) * self.read_index_storage.element_size()
+        if self.attention_mask is not None:
+            num_bytes += sum(mask.size(-2) * mask.element_size() for mask in self.attention_mask.values())
+        return num_bytes
+
     def _transfer_inputs(
         self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream, non_blocking: bool = False
     ) -> None:
@@ -712,6 +720,11 @@ class ContinuousBatchingAsyncIOs:
         self.io_pairs[1].device_io.compute_stream = None
         # Used in carry over ids computation
         self.max_batch_tokens = cache.max_batch_tokens
+
+    def bytes_per_cache_token(self) -> int:
+        """The bytes taken on the device by the static tensors that grow with the number of tokens the cache can hold,
+        summed over both IO pairs. The host-side tensors live in pinned CPU memory and are not counted."""
+        return sum(io_pair.device_io.bytes_per_cache_token() for io_pair in self.io_pairs)
 
     # These methods are simple wrapper dispatching to the current IO pair
     def get_cumulative_seqlens(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:

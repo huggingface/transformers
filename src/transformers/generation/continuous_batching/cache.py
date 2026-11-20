@@ -20,7 +20,6 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
-from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
     SLIDING_ATTENTION,
@@ -30,9 +29,8 @@ from .cache_allocators import (
     MLACacheAllocator,
     SlidingAttentionCacheAllocator,
 )
-from .distributed import DistributedHelper
 from .requests import RequestState, RequestStatus
-from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memory_breakdown, logger
+from .utils import logger
 
 
 if TYPE_CHECKING:
@@ -125,29 +123,30 @@ class PagedAttentionCache:
         config: PreTrainedConfig,
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device | str,
-        distributed_helper: DistributedHelper,
         cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
         dtype: torch.dtype = torch.float16,
-        model_supports_logits_to_keep: bool = False,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
 
         Args:
             config: Model configuration
-            continuous_batching_config: Continuous batching configuration containing cache parameters
+            continuous_batching_config: Continuous batching configuration containing cache parameters. The parameter
+            `max_batch_tokens` needs to be resolved, and so does `num_blocks` if `num_sectors` is not set, or the
+            initialization will fail.
             device: Device for the cache tensors
-            distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
             cache_tensor_meta: Shape, dtype and device of the tensors each layer passes to `update`, as recorded by
                 `hook_cache_tensor_meta`. Formatted as layer_idx -> [(shape, dtype, device), ...]
-            dtype: Data type of the activation and the cache (for now, these are the same)
-            model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
-                per batch token, since the model slices hidden states before the LM head
+            dtype: Data type of the cache
         """
+        self.max_batch_tokens = continuous_batching_config.max_batch_tokens
         self.config = config
         self.dtype = dtype
         self.device = device
         self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0  # if not resolved, off
+
+        if self.max_batch_tokens is None:
+            raise ValueError(f"The continuous batching config must have a resolved {self.max_batch_tokens = }."))
 
         # Construct the necessary cache allocator for each attention type
         self.cache_allocators: dict[str, CacheAllocator] = {}
@@ -168,28 +167,25 @@ class PagedAttentionCache:
         self.tokens_per_sector = max(
             (self.bytes_per_sector // ca.bytes_per_block) * ca.tokens_per_page for ca in self.cache_allocators.values()
         )
-        # Bytes of one cache block (page_size tokens of KV for every layer of the model), used to convert the num_blocks
-        # config attribute to and from bytes
-        bytes_per_block = sum(ca.bytes_per_block for ca in self.cache_allocators.values())
 
-        max_batch_tokens, num_sectors = PagedAttentionMemoryHandler(
-            config=config,
-            cb_config=continuous_batching_config,
-            dtype=self.dtype,
-            bytes_per_sector=self.bytes_per_sector,
-            tokens_per_sector=self.tokens_per_sector,
-            bytes_per_block=bytes_per_block,
-            attn_types=list(self.cache_allocators.keys()),
-            model_supports_logits_to_keep=model_supports_logits_to_keep,
-        ).infer_max_batch_tokens_and_num_sectors()
+        # If num_sectors isn't set, it's computed from num_blocks so that all allocators can hold num_blocks blocks at
+        # the same time
+        num_sectors = continuous_batching_config.num_sectors
+        if num_sectors is None:
+            num_blocks = continuous_batching_config.num_blocks
+            if num_blocks is None or num_blocks <= 0:
+                raise ValueError(
+                    f"Without `num_sectors`, the cache needs a positive number of blocks, got {num_blocks = }"
+                )
+            num_sectors = 0
+            for ca in self.cache_allocators.values():
+                sectors_per_block = ca.bytes_per_block / self.bytes_per_sector
+                num_sectors += ceil(num_blocks * sectors_per_block)
+        # Check that the number of sectors is positive
+        if num_sectors <= 0:
+            raise ValueError(f"The cache needs a positive number of sectors, got {num_sectors = }.")
+        self.num_sectors = num_sectors
 
-        # For TP, align max_batch_tokens and num_blocks to the minimal value across the TP group
-        if distributed_helper.tp_size > 1:
-            sync = torch.tensor([max_batch_tokens, num_sectors], device=self.device, dtype=torch.int64)
-            distributed_helper.tp_all_reduce_min(sync)
-            max_batch_tokens, num_sectors = int(sync[0].item()), int(sync[1].item())
-        # Add the inferred attributes to the class
-        self.max_batch_tokens, self.num_sectors = max_batch_tokens, num_sectors
         mb_per_sector = self.bytes_per_sector // 1024**2
         logger.info(f"Paged cache initialized: {self.max_batch_tokens = }, {self.num_sectors = }, {mb_per_sector = }")
 
@@ -209,8 +205,6 @@ class PagedAttentionCache:
         allocators_can_share = all(ca.use_block_sharing for ca in self.cache_allocators.values())
         self.use_prefix_sharing = allocators_can_share and self.allow_block_sharing
 
-        # Helper attribute: the cache capacity expressed in whole-model blocks
-        self.num_blocks = non_trash_bytes // bytes_per_block
         # Helper attributes for the scheduler
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
@@ -545,198 +539,6 @@ class PagedAttentionCache:
 
 
 # TODO: can we get rid of this class?
-class PagedAttentionMemoryHandler:
-    """Determines the max batch tokens (M) and number of cache sectors (S) for the paged attention cache, given the
-    available GPU memory.
-
-    M is fixed upfront by the resolved config. Every input tensor (IO buffers and activation
-    peaks) scales linearly with M, so the memory they occupy is then known, and the rest of the available memory is
-    turned into cache sectors. Each sector costs its cache bytes plus the linear per-cache-token tensors it entails
-    (cache reads and read indices). The attention masks, which depend on both M and S, are planned for last: once S
-    is decided, we remove as many sectors as needed to pay for them.
-    """
-
-    def __init__(
-        self,
-        config: PreTrainedConfig,
-        cb_config: ContinuousBatchingConfig,
-        dtype: torch.dtype,
-        bytes_per_sector: int,
-        tokens_per_sector: int,
-        bytes_per_block: int,
-        attn_types: list[str],
-        model_supports_logits_to_keep: bool = False,
-    ) -> None:
-        """Initialize the memory handler with the model configuration, the continuous batching configuration, the data
-        type of the activation and the cache, and the sector geometry computed by the PagedAttentionCache."""
-        self.config = config
-        self.cb_config = cb_config
-        self.cache_dtype = dtype
-        self.activation_dtype = dtype
-        self.model_supports_logits_to_keep = model_supports_logits_to_keep
-
-        self.bytes_per_sector = bytes_per_sector
-        self.tokens_per_sector = tokens_per_sector
-        self.bytes_per_block = bytes_per_block
-        self.trash_bytes = 2 * bytes_per_sector  # the two trash sectors at the start of the cache tensor
-        self.num_groups = len(attn_types)
-
-        # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
-        # Flash reads GQA heads natively, but eager/sdpa repeat KV heads to num_attention_heads while V is in VRAM
-        num_key_value_heads = find_num_key_value_heads(self.config)
-        if is_flash_attention_requested(self.config):
-            self.num_attention_masks = 0
-            self.kv_heads_at_peak = 2 * num_key_value_heads
-        else:
-            self.num_attention_masks = 2 if SLIDING_ATTENTION in attn_types else 1
-            self.kv_heads_at_peak = 2 * self.config.num_attention_heads + num_key_value_heads  # repeated KV + V
-
-        if cb_config.max_blocks_per_request is None:
-            self.max_blocks_per_request = cb_config.fallback_max_blocks_per_request
-        else:
-            self.max_blocks_per_request = cb_config.max_blocks_per_request
-
-        # This is the number of output rows for the output_ids tensor
-        self.num_output_rows = 2 if cb_config.return_logprobs else 1
-        # This account for the set of 2 IOs if async batching is used
-        self.io_multiplier = 2 if cb_config.use_async_batching else 1
-        self.available_memory = self.get_available_memory()
-
-    @property
-    def kv_numel_at_peak(self) -> int:
-        """The number of elements one token takes in the key and value states at the attention peak."""
-        config = self.config
-        if getattr(config, "kv_lora_rank", None) is None:
-            return self.kv_heads_at_peak * find_head_dim(config)
-        # MLA layers read two latents back from the cache and expand them to heads: the projected keys and values,
-        # the keys completed with their rotated part and, for flash, the values padded to the key head dimension
-        qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
-        expanded_dim = config.qk_nope_head_dim + config.v_head_dim + qk_head_dim
-        if is_flash_attention_requested(config) and config.v_head_dim != qk_head_dim:
-            expanded_dim += qk_head_dim
-        return config.kv_lora_rank + config.qk_rope_head_dim + config.num_attention_heads * expanded_dim
-
-    @property
-    def bytes_per_batch_token(self) -> int:
-        """The memory cost of one batch token: its share of the IO tensors plus the largest activation peak, which is
-        either the LM head peak (hidden states turned into fp32 logits) or the attention peak (hidden states, query
-        projection and new key / value states)."""
-        i = torch.int32.itemsize
-        a = self.activation_dtype.itemsize
-        head_dim = find_head_dim(self.config)
-
-        # Only one activation peak is live at a time, so we reserve for the largest
-        if self.model_supports_logits_to_keep:  # turns the memory cost constant thanks to slicing
-            lm_head_peak = 0
-        else:
-            lm_head_peak = self.config.hidden_size * a + self.config.vocab_size * torch.float32.itemsize
-        attention_peak = a * (
-            self.config.hidden_size  # hidden states, shape [M, hidden_size]
-            + self.config.num_attention_heads * head_dim  # query projection, shape [M, num_heads * head_dim]
-            + 2 * find_num_key_value_heads(self.config) * head_dim  # new K and V states
-            + self.kv_numel_at_peak  # their copy in the K and V read back from the cache # TODO: optimize
-        )
-        io_bytes = self.io_multiplier * (
-            7 * i  # bulk_input: [7, M] int32, packed as 7 rows
-            + self.num_output_rows * i  # output_ids: [num_output_rows, M] int32
-            + self.num_groups * self.max_blocks_per_request * i  # block_table (zero when fast-decode is off)
-            + self.num_groups * 8  # write_index: [num_groups, M] int64
-            + self.num_groups * 8  # read_index: [num_groups, N + M] (M part, int64)
-        )
-        return max(lm_head_peak, attention_peak) + io_bytes
-
-    @property
-    def bytes_per_cache_token(self) -> int:
-        """The memory cost of one readable cache token beside the cache itself: the old key and value states read from
-        the cache at the attention peak, plus its share of the read indices."""
-        kv_read_bytes = self.kv_numel_at_peak * self.activation_dtype.itemsize
-        read_index_bytes = self.io_multiplier * self.num_groups * 8  # read_index: [num_groups, N + M] (N part, int64)
-        return kv_read_bytes + read_index_bytes
-
-    @property
-    def bytes_per_cache_sector(self) -> int:
-        """The total memory cost of one cache sector: the sector itself plus the per-cache-token tensors it entails."""
-        return self.bytes_per_sector + self.tokens_per_sector * self.bytes_per_cache_token
-
-    @property
-    def fixed_overhead_bytes(self) -> int:
-        """Reservations that scale with neither batch tokens nor cache size: the trash sectors and, when the model
-        slices hidden states with logits_to_keep, the LM head peak of the per-request logit rows."""
-        overhead = self.trash_bytes
-        if self.model_supports_logits_to_keep:
-            a = self.activation_dtype.itemsize
-            # 1024 mirrors FALLBACK_DEFAULTS["max_requests_per_batch"] in initialization.py (import would be circular)
-            max_logit_rows = self.cb_config.max_requests_per_batch or 1024
-            lm_head_row = self.config.hidden_size * a + self.config.vocab_size * torch.float32.itemsize
-            overhead += max_logit_rows * lm_head_row
-        return overhead
-
-    def attention_mask_bytes(self, max_batch_tokens: int, num_sectors: int) -> int:
-        """The memory cost of the attention masks, of shape [1, 1, M, N + M], for given M and number of sectors."""
-        num_readable_tokens = num_sectors * self.tokens_per_sector
-        mask_numel = max_batch_tokens * (num_readable_tokens + max_batch_tokens)
-        return self.io_multiplier * self.num_attention_masks * self.activation_dtype.itemsize * mask_numel
-
-    def get_available_memory(self) -> int:
-        """Calculate available GPU memory for cache allocation in bytes, accounting for the maximum memory percent limit
-        fixed by the continuous batching config."""
-        _, total, reserved, allocated = get_device_and_memory_breakdown()
-        available_memory = total - max(allocated, reserved)
-        available_memory = int(available_memory * self.cb_config.max_memory_percent)  # type: ignore
-        logger.info(f"Memory available for cache allocation: {available_memory // 1024**2} MB")
-        return available_memory
-
-    def num_sectors_from_config(self) -> int | None:
-        """Converts the `num_blocks` config attribute into a number of sectors. `num_blocks` is a capacity target:
-        the number of whole-model blocks of `page_size` tokens the cache should be able to hold."""
-        if self.cb_config.num_blocks is None:
-            return None
-        target_bytes = self.cb_config.num_blocks * self.bytes_per_block
-        return max(1, ceil(target_bytes / self.bytes_per_sector))
-
-    def infer_max_batch_tokens_and_num_sectors(self) -> tuple[int, int]:
-        """Infers max_batch_tokens and num_sectors based on the available memory. Max batch tokens comes from the
-        resolved config. Unless the number of sectors is also fixed by the config, the memory left once
-        the M-proportional tensors are paid for becomes cache sectors, minus the sectors removed to pay for the
-        attention masks."""
-        max_batch_tokens = self.cb_config.max_batch_tokens
-
-        num_sectors = self.num_sectors_from_config()
-        if num_sectors is None:
-            # Memory left for the cache once the M-proportional tensors and the fixed overhead are paid for
-            cache_memory = self.available_memory - self.fixed_overhead_bytes
-            cache_memory -= max_batch_tokens * self.bytes_per_batch_token
-            num_sectors = cache_memory // self.bytes_per_cache_sector
-            # Plan for the attention masks by removing sectors: each removed sector frees its own cost and also
-            # shrinks the masks, so the removal denominator includes both and the sizing stays one-shot.
-            mask_bytes = self.attention_mask_bytes(max_batch_tokens, num_sectors)
-            mask_bytes_per_sector = self.attention_mask_bytes(max_batch_tokens, num_sectors + 1) - mask_bytes
-            num_sectors -= ceil(mask_bytes / (self.bytes_per_cache_sector + mask_bytes_per_sector))
-
-        return self._check_footprint(max_batch_tokens, num_sectors)
-
-    def _check_footprint(self, max_batch_tokens: int, num_sectors: int) -> tuple[int, int]:
-        """Checks if the footprint of the cache is within the available memory."""
-        memory_footprint = self.compute_memory_footprint(max_batch_tokens, num_sectors)
-        if memory_footprint > self.available_memory:
-            raise MemoryError(
-                f"Memory footprint {memory_footprint} is more than available memory {self.available_memory}"
-            )
-        if max_batch_tokens <= 0 or num_sectors <= 0:
-            raise ValueError(f"Invalid values: {max_batch_tokens = }, {num_sectors = }")
-        return max_batch_tokens, num_sectors
-
-    def compute_memory_footprint(self, max_batch_tokens: int, num_sectors: int) -> int:
-        """Computes the memory footprint of the cache and every tensor that scales with it, as the exact inverse of
-        the sizing performed in infer_max_batch_tokens_and_num_sectors."""
-        return (
-            self.fixed_overhead_bytes
-            + max_batch_tokens * self.bytes_per_batch_token
-            + num_sectors * self.bytes_per_cache_sector
-            + self.attention_mask_bytes(max_batch_tokens, num_sectors)
-        )
-
-
 class HookedDummyCache:
     def __init__(self) -> None:
         self.hooked = {}

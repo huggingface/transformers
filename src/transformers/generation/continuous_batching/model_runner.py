@@ -347,3 +347,17 @@ class ModelRunner:
             for fs in future_states:
                 self.cache.free_blocks(fs.state.request_id)
         return duration
+
+
+    @classmethod
+    def infer_probe_num_blocks(cls, cb_config: ContinuousBatchingConfig) -> int:
+        """Infers the number of cache blocks the probe needs to run `measure_batch_activations`. Since the probe
+        forwards run one by one and free their blocks, the probe cache only needs to fit the largest forward."""
+        max_batch_tokens, page_size = cb_config.max_batch_tokens, cb_config.page_size
+        probed_rows = min(cb_config.max_requests_per_batch, cls._probe_max_rows)
+        read_tokens = max(max_batch_tokens, cls._probe_read_tokens)
+        return max(
+            ceil(max_batch_tokens / page_size),  # one request with all the batch tokens
+            probed_rows * ceil((max_batch_tokens // probed_rows) / page_size),  # the batch tokens split in requests
+            ceil((read_tokens + max(cls._probe_query_tokens)) / page_size),  # few query tokens reading a long context
+        )
