@@ -54,6 +54,28 @@ RENAMES = [
     (r"^language\.lm_head\.", "lm_head."),
     (r"^language\.model\.", "model.language_model."),
 ]
+# The original "deepseek" conversation style: optional system prompt + "\n\n", then "<|User|>: ...\n\n" and
+# "<|Assistant|>: ...<｜end▁of▁sentence｜>" turns; an image is "<image>\n" in front of its text.
+CHAT_TEMPLATE = (
+    "{{ bos_token }}"
+    "{%- if messages[0]['role'] == 'system' -%}"
+    "{%- set system = messages[0]['content'] if messages[0]['content'] is string "
+    "else messages[0]['content'] | selectattr('type', 'equalto', 'text') | map(attribute='text') | join('') -%}"
+    "{%- if system %}{{ system }}\n\n{% endif -%}"
+    "{%- set messages = messages[1:] -%}"
+    "{%- endif -%}"
+    "{%- for message in messages -%}"
+    "{%- if message['role'] == 'user' %}<|User|>: {% else %}<|Assistant|>: {% endif -%}"
+    "{%- if message['content'] is string %}{{ message['content'] }}"
+    "{%- else %}{%- for item in message['content'] -%}"
+    "{%- if item['type'] == 'image' %}<image>\n{% elif item['type'] == 'text' %}{{ item['text'] }}{% endif -%}"
+    "{%- endfor %}{%- endif -%}"
+    # Emitted as an expression: trim_blocks would eat the first newline written straight after a block tag.
+    "{%- if message['role'] == 'user' %}{{ '\\n\\n' }}{% else %}{{ eos_token }}{% endif -%}"
+    "{%- endfor -%}"
+    "{%- if add_generation_prompt %}<|Assistant|>:{% endif -%}"
+)
+
 QKV = re.compile(r"^vision\.blocks\.(\d+)\.attn\.qkv\.(weight|bias)$")
 EXPERT = re.compile(r"^language\.model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.(gate_proj|up_proj|down_proj)\.weight$")
 
@@ -171,6 +193,7 @@ def convert(input_dir: str, output_dir: str, push_to_hub: str | None = None):
     processor = DeepseekVLV2Processor(
         image_processor=DeepseekVLV2ImageProcessor(candidate_resolutions=candidate_resolutions),
         tokenizer=tokenizer,
+        chat_template=CHAT_TEMPLATE,
     )
     processor.save_pretrained(output_dir)
     print(f"Saved {len(state_dict)} tensors, config and processor to {output_dir}")
