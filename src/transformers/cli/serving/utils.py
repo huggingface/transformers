@@ -41,6 +41,7 @@ from transformers.utils.import_utils import is_serve_available
 
 if is_serve_available():
     from starlette.datastructures import Headers, MutableHeaders
+    from starlette.responses import StreamingResponse
 
 
 if TYPE_CHECKING:
@@ -222,6 +223,63 @@ class RequestIdMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_request_id)
+
+
+class CancelOnDisconnect:
+    """
+    Cancels the handling of a request when its client leaves before the answer is complete: nobody is there to read
+    it. Generation stops with it (see `EngineClient._send_request`).
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        handling = asyncio.current_task()
+        messages: asyncio.Queue = asyncio.Queue()
+        answered = False
+
+        async def send_and_note_the_end(message) -> None:
+            nonlocal answered
+            await send(message)
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                answered = True
+
+        async def pass_messages_on() -> None:
+            while True:
+                message = await receive()
+                messages.put_nowait(message)
+                if message["type"] == "http.disconnect":
+                    if not answered:
+                        handling.cancel()
+                    return
+
+        watcher = asyncio.create_task(pass_messages_on())
+        try:
+            await self.app(scope, messages.get, send_and_note_the_end)
+        except asyncio.CancelledError:
+            if not watcher.done():  # the server stopping, not the client leaving
+                raise
+            handling.uncancel()
+        finally:
+            watcher.cancel()
+
+
+if is_serve_available():
+
+    class EventStream(StreamingResponse):
+        """A `StreamingResponse` without the task group Starlette uses before ASGI 2.4 to notice the client leaving:
+        `CancelOnDisconnect` does it."""
+
+        async def __call__(self, scope, receive, send) -> None:
+            spec_version = tuple(map(int, scope.get("asgi", {}).get("spec_version", "2.0").split(".")))
+            if spec_version >= (2, 4):  # Starlette streams without the task group then
+                return await super().__call__(scope, receive, send)
+            await self.stream_response(send)
+            if self.background is not None:
+                await self.background()
 
 
 # Errors

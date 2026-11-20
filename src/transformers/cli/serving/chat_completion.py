@@ -47,6 +47,7 @@ if is_serve_available():
 
 from .utils import (
     BaseHandler,
+    EventStream,
     ReasoningText,
     ToolCall,
     _StreamError,
@@ -229,7 +230,7 @@ class ChatCompletionHandler(BaseHandler):
                 streamer.cancel()
                 raise
 
-        return StreamingResponse(sse_gen(), media_type="text/event-stream")
+        return EventStream(sse_gen(), media_type="text/event-stream")
 
     # ----- non-streaming -----
 

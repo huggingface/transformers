@@ -58,6 +58,7 @@ if is_serve_available():
 
 from .utils import (
     BaseHandler,
+    EventStream,
     ReasoningText,
     ToolCall,
     _StreamError,
@@ -595,7 +596,7 @@ class ResponseHandler(BaseHandler):
                 streamer.cancel()
                 raise
 
-        return StreamingResponse(event_stream(), media_type="text/event-stream")
+        return EventStream(event_stream(), media_type="text/event-stream")
 
     # ----- non-streaming -----
 

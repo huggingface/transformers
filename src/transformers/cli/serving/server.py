@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .transcription import TranscriptionHandler
 
 from .model_manager import ModelManager
-from .utils import EngineDeadError, ModelNotServedError, RequestIdMiddleware
+from .utils import CancelOnDisconnect, EngineDeadError, ModelNotServedError, RequestIdMiddleware
 
 
 logger = logging.get_logger(__name__)
@@ -91,6 +91,7 @@ def build_server(
     # ---- Middleware ----
 
     app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(CancelOnDisconnect)
 
     # ---- Routes ----
 

@@ -36,7 +36,7 @@ if is_serve_available():
     from openai.types.completion_create_params import CompletionCreateParamsBase
 
 
-from .utils import BaseHandler, _StreamError
+from .utils import BaseHandler, EventStream, _StreamError
 
 
 if TYPE_CHECKING:
@@ -168,7 +168,7 @@ class CompletionHandler(BaseHandler):
                 streamer.cancel()
                 raise
 
-        return StreamingResponse(sse_gen(), media_type="text/event-stream")
+        return EventStream(sse_gen(), media_type="text/event-stream")
 
     # ----- non-streaming -----
 
