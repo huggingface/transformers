@@ -1595,8 +1595,11 @@ if __name__ == "__main__":
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )
 
-    # Files under the HF cache (`/mnt/cache`) opened by the tests (traced with `strace` in the test jobs)
-    hf_cache_usage_dirs = [d for d in os.listdir() if os.path.isfile(os.path.join(d, "hf_cache_usage.txt"))]
+    # Files under the HF cache (`/mnt/cache`) opened by the tests (traced with `strace` in the test jobs). All the
+    # artifacts of the workflow run are downloaded (including other CI jobs, e.g. kernels), so keep only this job's ones.
+    hf_cache_usage_dirs = [
+        d for d in os.listdir() if f"_{job_name}_" in d and os.path.isfile(os.path.join(d, "hf_cache_usage.txt"))
+    ]
     if hf_cache_usage_dirs:
         hf_cache_usage = aggregate_hf_cache_usage(hf_cache_usage_dirs)
         print(
