@@ -90,6 +90,10 @@ def _proto_build_attention_mask_on_device(
     block.masked_fill_(allowed, 0)
 
 
+# WP prefill (bench only): smallest key-length bucket of prefill batches under CUDA graphs (0: the default 1024)
+_PROTO_PREFILL_MIN_LEN_K = int(os.environ.get("CB_PROTO_PREFILL_MIN_LEN_K", "0"))
+
+
 class PagedAttentionArgs(TypedDict):
     """The keyword arguments for a forward pass using paged attention, passed directly as model forward kwargs.
 
@@ -780,14 +784,18 @@ class ContinuousBatchingIOs:
             is_causal=self.attention_mask is None,  # False for SDPA and eager, True for flash
         )
 
+        is_prefill_batch = any(fs.query_length > 1 for fs in self.requests_in_batch)
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:  # TODO: add per-path padding
             self.max_length_q = q_size  # keep max_length_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q
             # Additionally, if there are CUDA graphs, we need to pad max_length_k so graph capture will work regardless
             # of the future Q / KV lengths of the next batches
             if not self.use_block_table and self.use_cuda_graph_varlen:
+                # WP prefill (bench only), off by default: batches that hold a prefill (some request brings more than
+                # one token) get a finer key-length bucket, so short prompts do not attend through 1024-wide lists
+                min_length_k = _PROTO_PREFILL_MIN_LEN_K if is_prefill_batch and _PROTO_PREFILL_MIN_LEN_K else 1024
                 self.max_length_k = {
-                    layer_type: pad_to_pow2(self.max_length_k[layer_type], self.cache.max_tokens_read, 1024)
+                    layer_type: pad_to_pow2(self.max_length_k[layer_type], self.cache.max_tokens_read, min_length_k)
                     for layer_type in self.max_length_k.keys()
                 }
 
