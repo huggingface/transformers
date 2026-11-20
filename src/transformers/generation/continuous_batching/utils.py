@@ -325,6 +325,34 @@ def memory_pool_context(mem_pool: Any) -> AbstractContextManager:
     return torch.get_device_module().use_mem_pool(mem_pool)
 
 
+def pop_peak_memory(device: torch.device) -> tuple[int, int] | None:
+    """Returns the memory allocated on the device and its peak since the previous call, then restarts the peak tracking.
+    Returns None if the peak is not tracked, eg. on CPU or on MPS before torch 2.13."""
+    if device.type == "cpu":
+        return None
+    required = ("memory_allocated", "max_memory_allocated", "reset_peak_memory_stats")
+    module = torch.get_device_module(device)
+    accelerator = getattr(torch, "accelerator", None)
+
+    # Try the accelerator API first
+    if accelerator is not None and all(hasattr(accelerator, name) for name in (*required, "memory_stats")):
+        # The accelerator API exists for all devices, but raises if the device allocator does not track memory stats
+        try:
+            accelerator.memory_stats(device)
+            module = accelerator
+        except RuntimeError:
+            pass
+
+    # Module is now the device module or the accelerator module, exit if it does not track the peak
+    if not all(hasattr(module, name) for name in required):
+        return None
+
+    # Counters are updated on the host at each allocation and free, so there is no need to synchronize
+    allocated, peak = module.memory_allocated(device), module.max_memory_allocated(device)
+    module.reset_peak_memory_stats(device)
+    return allocated, peak
+
+
 # --------------------------------------------------- MEMORY UTILS --------------------------------------------------- #
 
 

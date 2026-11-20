@@ -1160,7 +1160,7 @@ class ContinuousBatchingManager:
             batch_processor.reset()
             return batch_processor
 
-        # Run a forward pass to get the model's dimensions
+        # Run a forward pass to get the shapes of the tensors each layer caches
         cache_tensor_meta = hook_cache_tensor_meta(self.model, num_tokens=16)
 
         # Create the PagedAttentionCache

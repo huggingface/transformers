@@ -322,7 +322,7 @@ def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, device: torc
 
 def update_cb_config_after_cache_creation(cb_config: ContinuousBatchingConfig, num_blocks: int) -> None:
     """Updates the continuous batching config with the concrete values inferred during the creation of the cache."""
-    # Memoize concrete values
+    # Memoize the size of the cache, so a re-created cache skips the sizing
     cb_config.num_blocks = num_blocks
     # TODO: add a cap based on the cache size to the number of concurrent requests if it's usefull
 
