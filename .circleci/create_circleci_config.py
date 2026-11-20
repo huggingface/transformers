@@ -379,30 +379,12 @@ training_ci_job = CircleCIJob(
     parallelism=6,
 )
 
-tensor_parallel_ci_job = CircleCIJob(
-    "tensor_parallel_ci",
-    additional_env={"RUN_TENSOR_PARALLEL_TESTS": True},
+distributed_ci_job = CircleCIJob(
+    "distributed_ci",
+    additional_env={"RUN_TENSOR_PARALLEL_TESTS": True, "RUN_EXPERT_PARALLEL_TESTS": True, "RUN_FSDP_TESTS": True},
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     install_steps=["uv pip install .", "uv pip install torchao"],
-    marker="is_tensor_parallel_test",
-    parallelism=6,
-)
-
-expert_parallel_ci_job = CircleCIJob(
-    "expert_parallel_ci",
-    additional_env={"RUN_EXPERT_PARALLEL_TESTS": True},
-    docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv pip install ."],
-    marker="is_expert_parallel_test",
-    parallelism=6,
-)
-
-fsdp_ci_job = CircleCIJob(
-    "fsdp_ci",
-    additional_env={"RUN_FSDP_TESTS": True},
-    docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=["uv pip install ."],
-    marker="is_fsdp_test",
+    marker="is_tensor_parallel_test or is_expert_parallel_test or is_fsdp_test",
     parallelism=6,
 )
 
@@ -442,11 +424,9 @@ PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 TRAINING_CI_TESTS = [training_ci_job]
-TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
-EXPERT_PARALLEL_CI_TESTS = [expert_parallel_ci_job]
-FSDP_CI_TESTS = [fsdp_ci_job]
+DISTRIBUTED_CI_TESTS = [distributed_ci_job]
 PEFT_INTEGRATION_TESTS = [peft_integration_job]
-ALL_TESTS = REGULAR_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + EXPERT_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
+ALL_TESTS = REGULAR_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + DISTRIBUTED_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):

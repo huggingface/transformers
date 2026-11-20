@@ -145,8 +145,7 @@ Tests are split across parallel CI jobs, and each job picks up files by path pat
 - `tests_generate`: generation tests
 - `pipelines_torch`: pipeline tests
 - `tests_training_ci`: training loop tests
-- `tests_tensor_parallel_ci`: tensor parallel tests
-- `tests_fsdp_ci`: FSDP tests
+- `tests_distributed_ci`: tensor parallel, expert parallel and FSDP tests
 
 ### Slow tests
 
