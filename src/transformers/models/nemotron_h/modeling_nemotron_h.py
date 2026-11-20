@@ -762,12 +762,12 @@ class NemotronHTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
         self.norm_topk_prob = config.norm_topk_prob
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -1009,9 +1009,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         "attentions": NemotronHAttention,
         "router_logits": OutputRecorder(NemotronHTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = [
-        "e_score_correction_bias",
-    ]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     def _init_weights(self, module):

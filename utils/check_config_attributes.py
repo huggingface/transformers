@@ -52,6 +52,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm5NextTextConfig": ["head_dim"],
     # Kept as a config field, the ViT-style attention has no output dropout
     "RadioConfig": ["hidden_dropout_prob"],
+    # Kept for BC, the old `rotary_dim` clamp it fed was a no-op for every published checkpoint
+    "CodeGenConfig": ["n_ctx"],
     # EP related refactor that also relies on correct naming for FP8/4 conventions
     "DeepseekV3Config": ["n_routed_experts"],
     "Glm4MoeConfig": ["n_routed_experts"],
@@ -339,6 +341,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
     # Use the DeepseekV3 implementation, which the auto mappings point to
     "SarvamMLAConfig": True,
+    # Use the GLM-4-MoE implementation, which the auto mappings point to
+    "SarvamMoEConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
