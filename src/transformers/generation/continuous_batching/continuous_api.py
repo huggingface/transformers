@@ -1168,14 +1168,8 @@ class ContinuousBatchingManager:
             return batch_processor
 
         # Create the PagedAttentionCache
-        supports_logits_to_keep = getattr(self.model, "_supports_logits_to_keep", None)
         paged_attention_cache = PagedAttentionCache(
-            config=self.model.config.get_text_config(),
-            continuous_batching_config=self.continuous_batching_config,
-            device=self.model.device,
-            distributed_helper=self.distributed_helper,
-            dtype=self.model.dtype,
-            model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep(),
+            self.model, self.continuous_batching_config, self.distributed_helper,
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing

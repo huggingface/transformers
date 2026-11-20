@@ -14,7 +14,7 @@
 import inspect
 import warnings
 from math import ceil, lcm
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -32,6 +32,10 @@ from .cache_allocators import (
 from .distributed import DistributedHelper
 from .requests import RequestState, RequestStatus
 from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memory_breakdown, logger
+
+
+if TYPE_CHECKING:
+    from ...modeling_utils import PreTrainedModel
 
 
 # Maps each attention type to the allocator class handling its cache
@@ -117,33 +121,35 @@ class PagedAttentionCache:
 
     def __init__(
         self,
-        config: PreTrainedConfig,
+        model: "PreTrainedModel",
         continuous_batching_config: ContinuousBatchingConfig,
-        device: torch.device | str,
         distributed_helper: DistributedHelper,
-        dtype: torch.dtype = torch.float16,
-        model_supports_logits_to_keep: bool = False,
+        **kwargs,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
 
         Args:
-            config: Model configuration
+            model: Model to cache for
             continuous_batching_config: Continuous batching configuration containing cache parameters
-            device: Device for the cache tensors
             distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
-            dtype: Data type of the activation and the cache (for now, these are the same)
-            model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
-                per batch token, since the model slices hidden states before the LM head
         """
-        self.config = config
-        self.dtype = dtype
-        self.device = device
+        for key in ["config", "device", "dtype", "model_supports_logits_to_keep"]:
+            if key in kwargs:
+                warnings.warn(
+                    f"Passing {key} as a keyword argument is ignored, deprecated and will be removed in v5.28.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
+
+        self.config = model.config.get_text_config()
+        self.dtype = model.dtype
+        self.device = model.device
         self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0  # if not resolved, off
 
         # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
         # per GPU is simply divided by the TP size. We need to solve this before we can construct the cache allocators.
-        num_key_value_heads = find_num_key_value_heads(config)
+        num_key_value_heads = find_num_key_value_heads(self.config)
         if distributed_helper.tp_size > 1 and distributed_helper.are_kv_heads_tp_ed():
             if num_key_value_heads % distributed_helper.tp_size != 0:
                 raise ValueError(
@@ -155,14 +161,14 @@ class PagedAttentionCache:
         # Construct the necessary cache allocator for each attention type
         ca_kwargs = {
             "num_key_value_heads": num_key_value_heads,
-            "config": config,
+            "config": self.config,
             "cache_dtype": self.dtype,
             "page_size": continuous_batching_config.page_size,
             "allow_block_sharing": continuous_batching_config.allow_block_sharing,
         }
         self.cache_allocators: dict[str, CacheAllocator] = {}
         self.layer_to_allocator: dict[int, CacheAllocator] = {}
-        for index, (attn_type, layer_indices) in enumerate(group_layers_by_attn_type(config).items()):
+        for index, (attn_type, layer_indices) in enumerate(group_layers_by_attn_type(self.config).items()):
             # Create the allocator and register it by name and indices
             allocator = ATTN_TYPE_TO_ALLOCATOR[attn_type](index=index, layer_indices=layer_indices, **ca_kwargs)
             self.cache_allocators[attn_type] = allocator
@@ -178,12 +184,14 @@ class PagedAttentionCache:
         )
         # Bytes of one cache block (page_size tokens of KV for every layer of the model), used to convert the num_blocks
         # config attribute to and from bytes
-        bytes_per_block = config.num_hidden_layers * FullAttentionCacheAllocator.get_bytes_per_page(
-            num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.page_size
+        bytes_per_block = self.config.num_hidden_layers * FullAttentionCacheAllocator.get_bytes_per_page(
+            num_key_value_heads, find_head_dim(self.config), self.dtype, continuous_batching_config.page_size
         )
 
+        supports_logits_to_keep = getattr(model, "_supports_logits_to_keep", None)
+        model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep()
         max_batch_tokens, num_sectors = PagedAttentionMemoryHandler(
-            config=config,
+            config=self.config,
             cb_config=continuous_batching_config,
             dtype=self.dtype,
             bytes_per_sector=self.bytes_per_sector,
