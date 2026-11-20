@@ -76,6 +76,7 @@ else:
             ("altclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("aya_vision", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
             ("blip-2", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
+            ("cellpose_dino", {"torchvision": "CellposeImageProcessor"}),
             ("clipseg", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("colpali", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("colqwen2", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
