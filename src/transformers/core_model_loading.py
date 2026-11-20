@@ -853,6 +853,32 @@ class Inkling2LoopMergeMessageQueries(ConversionOps):
         return Inkling2LoopMergeMessageQueries(inverse=not self.inverse)
 
 
+class Inkling2UnpadVocab(ConversionOps):
+    r"""
+    Drops the padded rows of the Inkling2 unembedding, which checkpoints store padded to `vocab_size`, keeping the first
+    `unpadded_vocab_size` rows. With `inverse=True`, appends zero rows to pad it back to `vocab_size`.
+    """
+
+    def __init__(self, inverse: bool = False):
+        self.inverse = inverse
+
+    @torch.no_grad
+    def convert(self, input_dict, source_patterns, target_patterns, config=None, **kwargs):
+        tensor = next(iter(input_dict.values()))
+        tensor = tensor[0] if isinstance(tensor, list) else tensor
+        text_config = config.get_text_config()
+        if self.inverse:
+            padding = tensor.new_zeros(text_config.vocab_size - tensor.shape[0], *tensor.shape[1:])
+            tensor = torch.cat([tensor, padding], dim=0)
+        else:
+            tensor = tensor[: text_config.unpadded_vocab_size].contiguous()
+        return {target_patterns[0]: tensor}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Inkling2UnpadVocab(inverse=not self.inverse)
+
+
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).

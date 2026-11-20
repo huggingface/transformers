@@ -76,7 +76,8 @@ from ..video_llama_3.modeling_video_llama_3 import VideoLlama3VisionAttention
 class Inkling2TextConfig(InklingTextConfig):
     r"""
     unpadded_vocab_size (`int`, *optional*, defaults to 200058):
-        Number of rows of the unembedding matrix that hold real tokens. Logits beyond it are dropped.
+        Output size of the language modeling head. The checkpoint unembedding is padded to `vocab_size`, the padded
+        rows are dropped on load and restored as zeros on save.
     swa_num_attention_heads (`int`, *optional*, defaults to 48):
         Number of attention heads in the sliding-window layers.
     swa_num_key_value_heads (`int`, *optional*, defaults to 8):
@@ -1233,6 +1234,7 @@ class Inkling2TextModel(InklingTextModel):
 class Inkling2ForCausalLM(InklingForCausalLM):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.unpadded_vocab_size, bias=False)
         self.logit_softcap = Inkling2Softcap(config.final_logit_softcapping)
 
     @can_return_tuple
@@ -1288,7 +1290,6 @@ class Inkling2ForCausalLM(InklingForCausalLM):
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
         logits = self.logit_softcap(logits)
-        logits = logits[..., : self.config.unpadded_vocab_size]
 
         loss = None
         if labels is not None:
@@ -1500,6 +1501,7 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
 
     def __init__(self, config: Inkling2Config):
         super().__init__(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.unpadded_vocab_size, bias=False)
         self.logit_softcap = Inkling2Softcap(config.text_config.final_logit_softcapping)
 
     @auto_docstring
@@ -1580,11 +1582,9 @@ class Inkling2ForConditionalGeneration(InklingForConditionalGeneration):
             **kwargs,
         )
 
-        text_config = self.config.text_config
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
         logits = self.logit_softcap(logits)
-        logits = logits[..., : text_config.unpadded_vocab_size]
 
         loss = None
         if labels is not None:

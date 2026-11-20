@@ -26,6 +26,7 @@ from .core_model_loading import (
     Inkling2IndexOffsetWeightRename,
     Inkling2LoopDequantizeExperts,
     Inkling2LoopMergeMessageQueries,
+    Inkling2UnpadVocab,
     Interleave,
     MergeModulelist,
     PermuteForRope,
@@ -290,6 +291,11 @@ def _build_checkpoint_conversion_mapping():
         ],
         "inkling2": [
             WeightRenaming(source_patterns=r"model\.llm\.unembed\.", target_patterns=r"lm_head."),
+            WeightConverter(
+                source_patterns=r"lm_head\.weight",
+                target_patterns=r"lm_head.weight",
+                operations=[Inkling2UnpadVocab()],
+            ),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model.language_model."),
             WeightRenaming(source_patterns=r"model\.visual\.", target_patterns=r"model.vision_tower."),
             WeightRenaming(
@@ -337,6 +343,11 @@ def _build_checkpoint_conversion_mapping():
         ],
         "inkling2_text": [
             WeightRenaming(source_patterns=r"model\.llm\.unembed\.", target_patterns=r"lm_head."),
+            WeightConverter(
+                source_patterns=r"lm_head\.weight",
+                target_patterns=r"lm_head.weight",
+                operations=[Inkling2UnpadVocab()],
+            ),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model."),
             WeightRenaming(source_patterns=r"embed\.weight", target_patterns=r"embed_tokens.weight"),
             WeightRenaming(source_patterns=r"embed_norm\.", target_patterns=r"embed_tokens.embed_norm."),

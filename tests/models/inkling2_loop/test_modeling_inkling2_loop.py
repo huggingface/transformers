@@ -101,6 +101,7 @@ class Inkling2LoopTextModelTester(CausalLMModelTester):
         self.swa_num_key_value_heads = self.num_key_value_heads
         self.swa_head_dim = self.head_dim
         self.n_routed_experts = 8
+        self.unpadded_vocab_size = self.vocab_size
 
 
 @require_torch
@@ -183,6 +184,7 @@ class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("swa_head_dim", 16)
         super().__init__(parent, **kwargs)
         self.text_hidden_size = self.hidden_size
+        self.unpadded_vocab_size = self.vocab_size
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

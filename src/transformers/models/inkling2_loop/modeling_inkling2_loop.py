@@ -1448,7 +1448,7 @@ class Inkling2LoopForCausalLM(Inkling2LoopPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = Inkling2LoopTextModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.unpadded_vocab_size, bias=False)
         self.logit_softcap = Inkling2LoopSoftcap(config.final_logit_softcapping)
 
         # Initialize weights and apply final processing
@@ -1507,7 +1507,6 @@ class Inkling2LoopForCausalLM(Inkling2LoopPreTrainedModel, GenerationMixin):
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
         logits = self.logit_softcap(logits)
-        logits = logits[..., : self.config.unpadded_vocab_size]
 
         loss = None
         if labels is not None:
@@ -1706,9 +1705,7 @@ class Inkling2LoopForConditionalGeneration(Inkling2LoopPreTrainedModel, Generati
     def __init__(self, config: Inkling2LoopConfig):
         super().__init__(config)
         self.model = Inkling2LoopModel(config)
-        # checkpoints store `unembed` padded to vocab_size; logits are sliced to
-        # unpadded_vocab_size in forward, like sglang
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.unpadded_vocab_size, bias=False)
         self.logit_softcap = Inkling2LoopSoftcap(config.text_config.final_logit_softcapping)
         self.post_init()
 
@@ -1790,11 +1787,9 @@ class Inkling2LoopForConditionalGeneration(Inkling2LoopPreTrainedModel, Generati
             **kwargs,
         )
 
-        text_config = self.config.text_config
         hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
         logits = self.lm_head(hidden_states).float()
         logits = self.logit_softcap(logits)
-        logits = logits[..., : text_config.unpadded_vocab_size]
 
         loss = None
         if labels is not None:
