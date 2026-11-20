@@ -106,6 +106,24 @@ if is_torch_distributed_available():
     # created by the first eligible call outside a graph capture and never reallocated: CUDA graphs record its
     # pointers. A call that does not fit it (rows, dtype, layout) takes NCCL, on every rank alike.
     _TP_ALL_REDUCE = os.environ.get("HF_TP_ALL_REDUCE", "nccl")
+    if _TP_ALL_REDUCE == "flashinfer_fused":
+        # Hard guard. Before flashinfer 0.7.3 the fused kernel could die with Xid 13 ("CTA Not Present") on Blackwell
+        # under CUDA graphs when other streams were busy, which is what continuous batching does
+        # (vllm-project/vllm#64327, fixed by flashinfer-ai/flashinfer#7782). The prebuilt kernels must be as recent.
+        import importlib.metadata
+
+        from packaging import version
+
+        for _dist_name in ("flashinfer-python", "flashinfer-jit-cache"):
+            try:
+                _installed = version.parse(importlib.metadata.version(_dist_name))
+            except importlib.metadata.PackageNotFoundError:
+                continue
+            if _installed < version.parse("0.7.3"):
+                raise RuntimeError(
+                    f"HF_TP_ALL_REDUCE=flashinfer_fused needs flashinfer >= 0.7.3, found {_dist_name} {_installed}: "
+                    "older fused all-reduce + RMSNorm kernels can fault the GPU."
+                )
     _TP_GROUP = None  # the TP process group, recorded by `apply_tensor_parallelism`
     # Programmatic dependent launch, as vLLM launches these kernels. "0" is the configuration that was clean before
     # flashinfer-ai/flashinfer#7782 fixed the fused kernel's cluster barrier (shipped in flashinfer 0.7.3).
