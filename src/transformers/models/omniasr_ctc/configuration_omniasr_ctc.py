@@ -23,6 +23,8 @@ from ..auto import AutoConfig
 @strict
 class OmniASRCTCConfig(PreTrainedConfig):
     r"""
+    blank_token_id (`int`, *optional*, defaults to 0):
+        The token ID of the blank symbol used by the CTC loss.
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
         Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
         instance of [`OmniASRForCTC`].
@@ -55,6 +57,7 @@ class OmniASRCTCConfig(PreTrainedConfig):
     }
 
     vocab_size: int = 10288
+    blank_token_id: int = 0
     ctc_loss_reduction: str = "mean"
     ctc_zero_infinity: bool = False
     initializer_range: float = 0.02
