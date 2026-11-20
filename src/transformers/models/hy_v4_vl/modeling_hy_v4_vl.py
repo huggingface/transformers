@@ -35,10 +35,11 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -1437,6 +1438,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
         merge_size = self.config.vision_config.spatial_merge_size
         frames, height, width = image_grid_thw.unbind(-1)
+        # Each merged row carries one extra newline token
         vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
         return vision_outputs
 
@@ -1586,7 +1588,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
@@ -1607,16 +1609,14 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1642,7 +1642,9 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
             use_cache=use_cache,
             **kwargs,
         )
-        return outputs
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring
@@ -1743,13 +1745,15 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, MultimodalMixin, Gen
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

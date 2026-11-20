@@ -2271,6 +2271,68 @@ class ModelTesterMixin(ExportTesterMixin):
             self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    def test_multimodal_outputs_are_returned(self):
+        """
+        Tests that we can return multimodal encoded outputs from a VLM. Currently only
+        images and video are supported while 'audio' is not consistent, so we don't test
+        audio models.
+
+        FIXME raushan/eustlib - add video and audio to this test when they are supported!
+        """
+
+        def check_multimodal_output(inputs_dict, config, model_class):
+            # force eager attention to support output attentions
+            model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # most testers have no video pixels in inputs dict so we can't expect
+            # video outputs to be present, it is pure lottery :(s
+            self.assertTrue(hasattr(outputs, "image_outputs"))
+            self.assertTrue(hasattr(outputs.image_outputs, "attentions"))
+            self.assertTrue(hasattr(outputs.image_outputs, "hidden_states"))
+            # Some models do not return pooler output, e.g. Mllama
+            if hasattr(outputs.image_outputs, "pooler_output"):
+                # Flat outputs hold all images' rows in one tensor, and `split_sizes` has one entry per image
+                split_sizes = getattr(outputs.image_outputs, "split_sizes", None)
+                pooler_output = outputs.image_outputs.pooler_output
+                num_images = len(split_sizes) if split_sizes is not None else len(pooler_output)
+                self.assertEqual(num_images, self.model_tester.batch_size)
+
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            # DO NOT modify this list and fix your model or override if needed!
+            if any(
+                config.model_type == old_model
+                for old_model in ["blip-2", "instructblip", "instructblipvideo", "imagegpt", "phi4_multimodal", "git"]
+            ):
+                continue
+
+            # Skip if model has no vision-config, i.e. Audio/TextModelTester
+            if getattr(config, "vision_config", None) is None:
+                continue
+
+            # No standard model output for seq2seq VLMs yet as they aren't popular
+            if config.is_encoder_decoder or config.get_text_config(decoder=True).is_encoder_decoder:
+                continue
+
+            inputs_dict["output_hidden_states"] = True
+            inputs_dict["output_attentions"] = True
+            check_multimodal_output(inputs_dict, config, model_class)
+
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
+            self._set_subconfig_attributes(config, "output_attentions", True)
+            check_multimodal_output(inputs_dict, config, model_class)
+
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
         self._set_subconfig_attributes(config, "output_hidden_states", True)
@@ -5589,10 +5651,10 @@ class ModelTesterMixin(ExportTesterMixin):
                     return
 
                 last_hidden_state_shape = outputs.last_hidden_state.shape
-                batch_size = (
-                    inputs_dict["pixel_values"].shape[0]
-                    if "pixel_values" in inputs_dict
-                    else inputs_dict["pixel_values_images"].shape[0]
+                batch_size = next(
+                    inputs_dict[key].shape[0]
+                    for key in ("pixel_values", "pixel_values_images", "flattened_patches")
+                    if key in inputs_dict
                 )
                 self.assertEqual(
                     last_hidden_state_shape[0],

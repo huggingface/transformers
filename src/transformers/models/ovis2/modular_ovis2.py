@@ -21,7 +21,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -288,10 +288,7 @@ class Ovis2Model(LlavaModel):
         image_outputs.pooler_output = image_features
         image_outputs.visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
     @can_return_tuple
@@ -357,13 +354,7 @@ class Ovis2Model(LlavaModel):
             **kwargs,
         )
 
-        return Ovis2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Ovis2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -441,7 +432,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

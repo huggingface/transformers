@@ -32,10 +32,11 @@ from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
     ModelOutput,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1868,7 +1869,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         video_second_per_grid: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -1955,12 +1956,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
             **kwargs,
         )
 
-        return BaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Qwen2_5OmniThinkerForConditionalGeneration(
@@ -2024,7 +2020,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
         video_second_per_grid: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -2068,7 +2064,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
 
         >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         ```"""
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MultimodalBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             input_features=input_features,
             pixel_values=pixel_values,
@@ -2097,12 +2093,13 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
                 logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

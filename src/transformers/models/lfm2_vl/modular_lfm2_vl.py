@@ -141,9 +141,8 @@ class Lfm2VlModel(LlavaModel):
         patch_index = patch_index.flatten(0, 1).permute(1, 0, 2).reshape(factor, -1)
         patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
         image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
-        image_features = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
         image_outputs.split_sizes = (spatial_shapes // factor).prod(-1)
-        image_outputs.pooler_output = image_features
         return image_outputs
 
     def get_placeholder_mask(
@@ -232,13 +231,7 @@ class Lfm2VlModel(LlavaModel):
             **kwargs,
         )
 
-        return Lfm2VlModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Lfm2VlModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
@@ -347,7 +340,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

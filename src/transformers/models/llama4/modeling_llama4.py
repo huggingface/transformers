@@ -29,13 +29,13 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
@@ -646,37 +646,23 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class Llama4CausalLMOutputWithPast(ModelOutput):
+class Llama4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-    router_logits: tuple[torch.Tensor] | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class Llama4VisionMLP2(torch.nn.Module):
@@ -1193,11 +1179,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
-        image_features = image_outputs.last_hidden_state
-        image_outputs.pooler_output = self.multi_modal_projector(image_features.flatten(0, 1))
-        image_outputs.split_sizes = image_features.new_full(
-            image_features.shape[:1], image_features.shape[1], dtype=torch.long
-        )
+        image_features, image_outputs.split_sizes = flatten_items(image_outputs.last_hidden_state)
+        image_outputs.pooler_output = self.multi_modal_projector(image_features)
         return image_outputs
 
     def get_placeholder_mask(
@@ -1297,10 +1280,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
 
         if mm_encoder_outputs.get("image") is not None:
             projected_vision_flat = mm_encoder_outputs["image"].pooler_output
-            if projected_vision_flat is None:
-                # The vision model's outputs, before the projector
-                image_features = mm_encoder_outputs["image"].last_hidden_state
-                projected_vision_flat = self.multi_modal_projector(image_features.view(-1, image_features.size(-1)))
             projected_vision_flat = projected_vision_flat.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=projected_vision_flat
@@ -1338,7 +1317,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

@@ -552,8 +552,8 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
 
         # Test 4:
-        # decode empty list
-        self.assertEqual(self.tokenizer.batch_decode([], skip_special_tokens=True), [""])
+        # an empty batch has nothing to decode, an empty sequence inside a batch decodes to an empty string
+        self.assertEqual(self.tokenizer.batch_decode([], skip_special_tokens=True), [])
         self.assertEqual(
             self.tokenizer.batch_decode([batch_tokens_ids[0], []], skip_special_tokens=True), [string, ""]
         )
