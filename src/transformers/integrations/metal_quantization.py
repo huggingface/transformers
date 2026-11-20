@@ -158,13 +158,12 @@ class MetalExperts(nn.Module):
             groups = columns // group_size
             if dtype == torch.uint32:
                 weight = torch.zeros(num_experts, rows, columns * bits // 32, dtype=torch.uint32)
-                scales_dtype = torch.float32
             else:  # quantized on the fly: the float bank is loaded first
                 weight = torch.zeros(num_experts, rows, columns, dtype=dtype)
-                scales_dtype = None
             self.register_parameter(name, nn.Parameter(weight, requires_grad=False))
             for suffix in ("scales", "qbiases"):
-                tensor = torch.zeros(num_experts, rows, groups, dtype=scales_dtype)
+                # The activations' dtype (the model's default): the kernel takes them as they are, no cast per call
+                tensor = torch.zeros(num_experts, rows, groups)
                 self.register_parameter(f"{name}_{suffix}", nn.Parameter(tensor, requires_grad=False))
 
     def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
