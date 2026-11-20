@@ -296,6 +296,126 @@ def yarn_apply_mscale(rope_parameters, scaling):
     return scaling
 
 
+
+# --- PROTOTYPE (bench only, not for upstream): absorbed sparse MLA straight on CB's latent cache rows -------------------
+import os as _os
+
+_PROTO_SPARSE_MLA = _os.environ.get("PROTO_SPARSE_MLA", "1") == "1"  # on by default in this scratch tree
+_flash_mla = None
+
+
+def _proto_kv_b_dequantized(module):
+    """kv_b_proj as bf16 [heads, nope + v, kv_lora], dequantized once (fp8 block scales or plain weight)."""
+    w = getattr(module, "_proto_w_kv_b", None)
+    if w is None:
+        lin = module.kv_b_proj
+        weight = lin.weight.to_local() if hasattr(lin.weight, "to_local") else lin.weight
+        if weight.element_size() == 1:
+            s = lin.weight_scale_inv
+            s = s.to_local() if hasattr(s, "to_local") else s
+            bn, bk = lin.block_size
+            s = s.float().repeat_interleave(bn, 0)[: weight.shape[0]].repeat_interleave(bk, 1)[:, : weight.shape[1]]
+            weight = weight.float() * s
+        w = weight.to(torch.bfloat16).view(-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+        module._proto_w_kv_b = w
+    return w
+
+
+_PROTO_PER_QUERY_INDEXER = _os.environ.get("PROTO_PER_QUERY_INDEXER", "0") == "1"
+
+
+def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k):
+    """The indexer's scores, but each query only scores the keys of its own request it can see (causal), gathered
+    into [M, max_k] instead of scoring the whole packed batch. Returns top-k packed positions and their validity."""
+    batch_size, seq_len, _ = hidden_states.shape
+    cos, sin = position_embeddings
+    q = indexer.wq_b(q_resid).view(batch_size, seq_len, indexer.n_heads, indexer.head_dim)
+    q_rot, q_pass = torch.split(q, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
+    k = indexer.k_norm(indexer.wk(hidden_states)).unsqueeze(2)
+    k_rot, k_pass = torch.split(k, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
+    q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+    q = torch.cat([q_rot, q_pass], dim=-1)[0]  # [M, H, D]
+    k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [1, M, D]
+    keys = cache.update_indexer(k, indexer.layer_idx)[0]  # [N, D], the packed context (past + new)
+
+    num_tokens, device = q.shape[0], q.device
+    tok = torch.arange(num_tokens, device=device)
+    num_req = cu_q.shape[0] - 1
+    req = torch.searchsorted(cu_q[1:].contiguous(), tok, right=True)
+    real = req < num_req  # padded query tokens belong to no request
+    req = req.clamp(max=num_req - 1)
+    q_start, k_start = cu_q[req], cu_k[req]
+    past = (cu_k[req + 1] - k_start) - (cu_q[req + 1] - q_start)
+    n_visible = torch.where(real, past + (tok - q_start) + 1, 0)
+    offs = torch.arange(max_k, device=device)
+    pos = (k_start[:, None] + offs[None]).clamp(max=keys.shape[0] - 1)  # [M, max_k]
+    visible = offs[None] < n_visible[:, None]
+    scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys[pos].float()) * indexer.softmax_scale)
+    weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
+    index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
+    index_scores = index_scores.masked_fill(~visible, float("-inf"))
+    top = index_scores.topk(min(indexer.index_topk, max_k), dim=-1).indices
+    return pos.gather(-1, top), visible.gather(-1, top)
+
+
+def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
+                                attention_mask, position_ids, cache, prev_topk_indices, kwargs):
+    """Writes the new latents to CB's cache without reading the context back, selects top-k tokens (the indexer is
+    unchanged), maps them to physical cache rows through the read index, and attends to those rows with FlashMLA's
+    sparse kernel, queries absorbing kv_b_proj's key half and outputs its value half."""
+    global _flash_mla
+    if _flash_mla is None:
+        from vllm.third_party.flashmla import flash_mla_interface as _fm
+
+        _flash_mla = _fm
+    allocator = cache.layer_to_allocator[module.layer_idx]
+    read_index = kwargs["read_index"][allocator.index]  # [N] physical rows of the packed context (past + new)
+    write_index = kwargs["write_index"][allocator.index]  # [M]
+    kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
+    kv_latent_cache.index_copy_(0, write_index, k_pass.reshape(-1, module.kv_lora_rank))
+    rotated_key_cache.index_copy_(0, write_index, k_rot.reshape(-1, module.qk_rope_head_dim))
+    allocator._last_indices[module.layer_idx] = (read_index, write_index)
+    if read_index.numel() == 0:  # CB skips the read-back when the batch has no past: the context is the new tokens
+        read_index = write_index
+
+    batch_size, num_heads, seq_length, _ = q_pass.shape  # batch_size is 1 under CB
+    if module.indexer is not None:
+        if _PROTO_PER_QUERY_INDEXER and seq_length <= 512:
+            cu_q = kwargs["cu_seq_lens_q"]
+            cu_k = kwargs["cu_seq_lens_k"][allocator.layer_type]
+            max_k = kwargs["max_length_k"][allocator.layer_type]
+            topk_indices = _proto_indexer_per_query(
+                module.indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k
+            )  # (positions [M, topk] in the packed context, validity [M, topk])
+        else:
+            positions = module.indexer(
+                hidden_states, q_resid, position_embeddings, attention_mask[:, 0, :, :], position_ids, cache=cache
+            )[0].long()  # [M, topk] positions in the packed context
+            allowed = attention_mask[0, 0].gather(-1, positions)  # the packed mask keeps each query to its request
+            topk_indices = (positions, allowed if allowed.dtype == torch.bool else allowed == 0)
+    else:
+        topk_indices = prev_topk_indices
+    positions, allowed = topk_indices
+    rows = torch.where(allowed, read_index[positions], -1).to(torch.int32)  # [M, topk]
+    if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
+        rows = F.pad(rows, (0, 128 - rows.shape[-1] % 128), value=-1)
+
+    w = _proto_kv_b_dequantized(module)
+    w_uk, w_uv = w[:, : module.qk_nope_head_dim], w[:, module.qk_nope_head_dim :]
+    h_pad = num_heads if torch.cuda.get_device_capability()[0] == 9 else max(64, num_heads)
+    q_abs = q_pass.new_zeros(seq_length, h_pad, module.kv_lora_rank + module.qk_rope_head_dim)
+    q_abs[:, :num_heads, : module.kv_lora_rank] = torch.einsum("hsn,hnc->shc", q_pass[0], w_uk)
+    q_abs[:, :num_heads, module.kv_lora_rank :] = q_rot[0].transpose(0, 1)
+    latent_rows = kv_latent_cache.as_strided(
+        (kv_latent_cache.shape[0], 1, module.kv_lora_rank + module.qk_rope_head_dim),
+        (kv_latent_cache.stride(0), 0, 1),
+    )
+    out_latent = _flash_mla.flash_mla_sparse_fwd(
+        q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank
+    )[0][:, :num_heads]  # [M, H, kv_lora]
+    attn_output = torch.einsum("shc,hvc->shv", out_latent, w_uv).reshape(batch_size, seq_length, -1)
+    return module.o_proj(attn_output), None, topk_indices
+
 class GlmMoeDsaAttention(nn.Module):
     """
     DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
@@ -394,6 +514,12 @@ class GlmMoeDsaAttention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+
+        if _PROTO_SPARSE_MLA and cache is not None and hasattr(cache, "layer_to_allocator"):
+            return _proto_sparse_mla_attention(
+                self, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings, attention_mask,
+                position_ids, cache, prev_topk_indices, kwargs,
+            )
 
         # Cache read / write is performed while latent KV is still compressed
         if cache is not None:
