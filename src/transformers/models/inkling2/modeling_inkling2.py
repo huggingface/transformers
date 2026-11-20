@@ -314,12 +314,15 @@ class Inkling2ShortConvolution(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        dynamic_input: torch.Tensor | None = None,
         cache: Cache | None = None,
         conv_mask: torch.Tensor | None = None,
         cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
+        dynamic_input (`torch.Tensor`, *optional*):
+            Ignored, accepted for interface compatibility with `Inkling2DynamicShortConvolution`.
         cache_offset (`int`, *optional*, defaults to 0):
             Offset added to `layer_idx` to get the cache layer holding the state of this call.
         """
@@ -419,44 +422,34 @@ class Inkling2DynamicShortConvolution(nn.Module):
         return hidden_states.to(input_dtype)
 
 
-class Inkling2SlidingKeyValueProjection(nn.Module):
-    """Key or value states of the sliding-attention layers: projection followed by a short convolution."""
+class Inkling2KeyValueProjection(nn.Module):
+    """
+    Key or value states of the attention layers: projection followed by a short convolution. With `dynamic=True` the
+    convolution is a dynamic short convolution whose weights are computed from the same input as the projection.
+    """
 
-    def __init__(self, config: Inkling2TextConfig, layer_idx: int, conv_idx: int):
-        super().__init__()
-        hidden_size = config.swa_num_key_value_heads * config.swa_head_dim
-        self.linear = nn.Linear(config.hidden_size, hidden_size, bias=False)
-        self.sconv = Inkling2ShortConvolution(hidden_size, config.sconv_kernel_size, layer_idx, conv_idx=conv_idx)
-
-    def forward(
+    def __init__(
         self,
-        hidden_states: torch.Tensor,
-        cache: Cache | None = None,
-        conv_mask: torch.Tensor | None = None,
-        cache_offset: int = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        states = self.linear(hidden_states)
-        return self.sconv(states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs)
-
-
-class Inkling2FullKeyValueProjection(nn.Module):
-    """
-    Key or value states of the full-attention layers: projection followed by a dynamic short convolution. The
-    convolution weights are computed from the same input as the projection.
-    """
-
-    def __init__(self, config: Inkling2TextConfig, layer_idx: int, conv_idx: int):
+        config: Inkling2TextConfig,
+        num_heads: int,
+        head_dim: int,
+        layer_idx: int,
+        conv_idx: int,
+        dynamic: bool = False,
+    ):
         super().__init__()
-        hidden_size = config.num_key_value_heads * config.head_dim
-        self.linear = nn.Linear(config.hidden_size, hidden_size, bias=False)
-        self.sconv = Inkling2DynamicShortConvolution(
-            hidden_size,
-            config.hidden_size,
-            config.num_key_value_heads,
-            config.sconv_kernel_size,
-            layer_idx,
-            conv_idx=conv_idx,
+        self.linear = nn.Linear(config.hidden_size, num_heads * head_dim, bias=False)
+        self.sconv = (
+            Inkling2DynamicShortConvolution(
+                num_heads * head_dim,
+                config.hidden_size,
+                num_heads,
+                config.sconv_kernel_size,
+                layer_idx,
+                conv_idx=conv_idx,
+            )
+            if dynamic
+            else Inkling2ShortConvolution(num_heads * head_dim, config.sconv_kernel_size, layer_idx, conv_idx=conv_idx)
         )
 
     def forward(
@@ -548,8 +541,12 @@ class Inkling2SlidingAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, conv_idx=0)
-        self.v_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, conv_idx=1)
+        self.k_proj = Inkling2KeyValueProjection(
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=0
+        )
+        self.v_proj = Inkling2KeyValueProjection(
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=1
+        )
         self.o_proj = Inkling2GatedOutputProjection(config, self.num_heads, self.head_dim)
         self.q_norm = Inkling2ScaledL2Clip(self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
@@ -646,8 +643,12 @@ class Inkling2FullAttention(nn.Module):
         self.is_causal = True
 
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = Inkling2FullKeyValueProjection(config, layer_idx, conv_idx=0)
-        self.v_proj = Inkling2FullKeyValueProjection(config, layer_idx, conv_idx=1)
+        self.k_proj = Inkling2KeyValueProjection(
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=0, dynamic=True
+        )
+        self.v_proj = Inkling2KeyValueProjection(
+            config, self.num_key_value_heads, self.head_dim, layer_idx, conv_idx=1, dynamic=True
+        )
         self.o_proj = Inkling2GatedOutputProjection(config, self.num_heads, self.head_dim)
         self.q_norm = Inkling2LogScaledL2Clip(config, self.num_heads, self.head_dim, config.qk_l2_clip_threshold)
         self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
