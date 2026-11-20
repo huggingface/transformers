@@ -4253,7 +4253,6 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname, dtype=dtype)
 
-                # The composite model itself counts too, e.g. it can turn off Flash Attention while its sub-models support it
                 supports_fa_all_modules = all(
                     module._supports_flash_attn for module in model.modules() if isinstance(module, PreTrainedModel)
                 )
