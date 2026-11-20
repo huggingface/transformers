@@ -1947,7 +1947,7 @@ class Cache:
         both linear and full attention states will return False by this function"""
         return [
             isinstance(layer, LinearAttentionCacheLayerMixin)
-            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            and not isinstance(layer, CacheLayerMixin)
             for layer in self.layers
         ]
 
