@@ -218,7 +218,11 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
             `torch.Tensor` of shape `(batch_size, max_feature_length, feature_size)`:
                 The log mel-scaled spectrogram of the batched waveforms.
         """
-        fft_window = torch.hamming_window(self.win_length, periodic=False, device=device, dtype=torch.float64)
+        # mps doesn't support float64
+        dtype = torch.float64 if device is None or torch.device(device).type != "mps" else torch.float32
+        fft_window = torch.hamming_window(self.win_length, periodic=False, device=device, dtype=dtype)
+        waveform = waveform.to(device)
+        audio_lengths = audio_lengths.to(device)
 
         # batched implementation
         batch_size = waveform.shape[0]
@@ -230,7 +234,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         if batch_size > 1:
             frames = frames.clone()
             # concerned batch indices
-            to_mask_batch_idxs = torch.arange(batch_size)[audio_lengths != audio_lengths.max()]
+            to_mask_batch_idxs = torch.arange(batch_size, device=device)[audio_lengths != audio_lengths.max()]
             if to_mask_batch_idxs.numel() > 0:
                 batch_idxs_down = (audio_lengths[to_mask_batch_idxs] - self.win_length) // self.hop_length + 1
                 batch_idxs_up = (audio_lengths[to_mask_batch_idxs] // self.hop_length) - 1

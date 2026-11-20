@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers import ParakeetFeatureExtractor
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, require_torch_accelerator, torch_device
 from transformers.utils import is_datasets_available, is_torch_available
 
 from ...test_processing_common import floats_list
@@ -99,6 +99,19 @@ class ParakeetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
+
+    @require_torch_accelerator
+    def test_feature_extraction_on_accelerator(self):
+        feature_extractor = ParakeetFeatureExtractor()
+        speech_inputs = [np.random.randn(n).astype(np.float32) for n in (4000, 9000, 16000)]
+
+        cpu_outputs = feature_extractor(speech_inputs, return_tensors="pt", device="cpu")
+        device_outputs = feature_extractor(speech_inputs, return_tensors="pt", device=torch_device)
+
+        torch.testing.assert_close(
+            device_outputs.input_features.cpu(), cpu_outputs.input_features, atol=1e-3, rtol=1e-3
+        )
+        torch.testing.assert_close(device_outputs.attention_mask.cpu(), cpu_outputs.attention_mask)
 
     @require_torch
     def test_torch_integration(self):

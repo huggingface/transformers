@@ -226,6 +226,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
 
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
         dtype = getattr(torch, self.mel_filters_dtype)
+        waveform = waveform.to(device)
         window = torch.hann_window(self.win_length, periodic=False, device=device).to(dtype).float()
         stft = torch.stft(
             waveform,
@@ -389,6 +390,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         else:
             # `center=False` does no padding: `floor((L - n_fft) / hop) + 1` frames.
             features_lengths = torch.floor_divide(audio_lengths - self.n_fft, self.hop_length) + 1
+        features_lengths = features_lengths.to(device)
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # NemotronAsrStreaming never normalizes the mel features
