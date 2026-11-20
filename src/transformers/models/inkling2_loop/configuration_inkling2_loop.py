@@ -193,7 +193,6 @@ class Inkling2LoopConfig(PreTrainedConfig):
     sub_configs_defaults = {
         "text_config": Inkling2LoopTextConfig,
         "vision_config": SubConfigSpec(
-            # TODO: text_hidden_size must be set in hub config to work when loading from hub
             config_class=AutoConfig,
             model_type="inkling2_vision",
             init_kwargs={"text_hidden_size": 2304},
@@ -211,12 +210,6 @@ class Inkling2LoopConfig(PreTrainedConfig):
                 f"`vision_config.text_hidden_size` ({self.vision_config.text_hidden_size}) must match "
                 f"`text_config.hidden_size` ({self.text_config.hidden_size})."
             )
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-        # TODO: remove before merge. Currently needed because vision_config.text_hidden_size is missing from
-        # the hub config.
-        self.vision_config.text_hidden_size = self.text_config.hidden_size
 
 
 __all__ = ["Inkling2LoopConfig", "Inkling2LoopTextConfig"]
