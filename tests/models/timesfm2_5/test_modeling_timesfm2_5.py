@@ -120,6 +120,58 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         results = model(**inputs_dict)
         assert results.mean_predictions is not None
 
+    def test_loss_ignores_point_forecast_channel(self):
+        # `num_quantiles = len(quantiles) + 1` and `_decode_and_project` builds all of them with the same
+        # layout: channel 0 is the point-forecast head from `output_projection_point`, channels `1..N-1`
+        # are the quantile levels in `config.quantiles` order. The training loss must therefore pair
+        # `config.quantiles` with channels `1..N-1`; selecting them with `i != decode_index` shifted the
+        # lower half down one level and trained the point head as `q=0.1` (#50612).
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = TimesFm2_5ModelForPrediction(config)
+        model.to(torch_device)
+        model.eval()
+
+        batch_size = inputs_dict["past_values"].shape[0]
+        rng = random.Random(42)
+        inputs_dict["future_values"] = floats_tensor([batch_size, config.horizon_length], rng=rng)
+
+        num_quantiles = len(config.quantiles) + 1
+        self.assertEqual(
+            model.output_projection_point.output_layer.out_features, config.horizon_length * num_quantiles
+        )
+
+        def loss_with_channel_scaled(channel):
+            # `output_projection_point` returns `(batch, num_patches, horizon_length * num_quantiles)`,
+            # so the values of `channel` sit at flat indices `channel::num_quantiles`.
+            def scale_channel(module, args, output):
+                scaled = output.clone()
+                scaled[..., channel::num_quantiles] *= 3
+                return scaled
+
+            handle = model.output_projection_point.register_forward_hook(scale_channel)
+            try:
+                with torch.no_grad():
+                    return model(**inputs_dict).loss
+            finally:
+                handle.remove()
+
+        with torch.no_grad():
+            baseline = model(**inputs_dict).loss
+        # The point-forecast channel is not a quantile level, so it must not reach the loss at all.
+        torch.testing.assert_close(
+            loss_with_channel_scaled(0),
+            baseline,
+            atol=1e-6,
+            rtol=1e-6,
+            msg="the loss must not depend on the point-forecast channel",
+        )
+        # ...while the quantile channels must, otherwise the assertion above would also pass on a loss
+        # that silently dropped the quantile term.
+        self.assertFalse(
+            torch.allclose(loss_with_channel_scaled(1), baseline, atol=1e-6, rtol=1e-6),
+            "the loss must depend on the quantile channels",
+        )
+
     @parameterized.expand(
         [
             (torch.float32, torch.float32),
