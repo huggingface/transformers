@@ -223,7 +223,8 @@ def _data_parallel_rank_and_group(model, distributed_config):
 
     group_size = dp_replicate_size * fsdp_size
     if distributed_config.sp_size > 1:
-        dims = ("dp_replicate", "sp") if dp_replicate_size > 1 else "sp"
+        fsdp_dim = "fsdp_sp" if fsdp_size > 1 else "sp"
+        dims = ("dp_replicate", fsdp_dim) if dp_replicate_size > 1 else fsdp_dim
         mesh = mesh_manager.get_mesh(dims)
         return dp_rank, [mesh.get_group(dim) for dim in mesh.mesh_dim_names], group_size * sp_size
 
@@ -428,7 +429,7 @@ def _test_save_load_distributed_checkpoint(rank, sp_size):
 @unittest.skipUnless(is_torch_greater_or_equal("2.9"), "Sequence parallelism requires torch>=2.9")
 class TestSequenceParallelConfig(unittest.TestCase):
     def test_refuses_other_parallelisms(self):
-        for other in ({"pp_size": 2}, {"fsdp_size": 2}, {"tp_size": 2}, {"ep_size": 2}):
+        for other in ({"pp_size": 2}, {"tp_size": 2}, {"ep_size": 2}):
             with self.subTest(**other), self.assertRaisesRegex(ValueError, "not supported yet with"):
                 DistributedConfig(sp_size=2, **other)
 
@@ -490,6 +491,10 @@ class TestSequenceParallelModel(unittest.TestCase):
         for packed in (False, True):
             with self.subTest(packed=packed):
                 run_distributed(world_size=2, backend="gloo")(_test_matches_unsharded)(2, 1, 1, packed)
+
+    @unittest.skipUnless(is_torch_greater_or_equal("2.10"), "Sequence parallelism with FSDP2 requires torch>=2.10")
+    def test_matches_unsharded_with_fsdp(self):
+        run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(2, 2, 1, False)
 
     def test_matches_unsharded_with_hsdp(self):
         run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded)(2, 1, 2, False)
