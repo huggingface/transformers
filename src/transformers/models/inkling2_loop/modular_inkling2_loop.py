@@ -41,6 +41,7 @@ from ..inkling2.modeling_inkling2 import (
     Inkling2TextModel,
     Inkling2TopKRouter,
     Inkling2UnweightedRMSNorm,
+    get_relative_distance,
 )
 
 
@@ -248,6 +249,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
         block_states: torch.Tensor,
         messages: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        relative_distance: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         cache_offset: int = 0,
@@ -278,6 +280,7 @@ class Inkling2LoopSlidingLoopDecoderLayer(Inkling2SlidingDecoderLayer):
             key_hidden_states=key_hidden_states.to(dtype),
             value_hidden_states=value_hidden_states.to(dtype),
             attention_mask=attention_mask,
+            relative_distance=relative_distance,
             conv_mask=conv_mask,
             cache=cache,
             cache_offset=cache_offset,
@@ -322,6 +325,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
         block_states: torch.Tensor,
         messages: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        relative_distance: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         cache_offset: int = 0,
@@ -350,6 +354,7 @@ class Inkling2LoopFullLoopDecoderLayer(Inkling2FullDecoderLayer):
             key_hidden_states=self.k_input_layernorm(key_hidden_states).to(dtype),
             value_hidden_states=self.v_input_layernorm(value_hidden_states).to(dtype),
             attention_mask=attention_mask,
+            relative_distance=relative_distance,
             conv_mask=conv_mask,
             cache=cache,
             cache_offset=cache_offset,
@@ -480,6 +485,10 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
+        relative_distance_mapping = {
+            "full_attention": get_relative_distance(inputs_embeds, cache, is_sliding=False),
+            "sliding_attention": get_relative_distance(inputs_embeds, cache, is_sliding=True),
+        }
 
         loop_start = self.config.loop_layer_index_start
         loop_end = self.config.loop_layer_index_end
@@ -494,6 +503,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                 hidden_states,
                 block_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                relative_distance=relative_distance_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
                 position_ids=position_ids,
@@ -512,6 +522,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                 hidden_states,
                 block_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                relative_distance=relative_distance_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
                 position_ids=position_ids,
@@ -536,6 +547,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                     block_states,
                     messages,
                     attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                    relative_distance=relative_distance_mapping[decoder_layer.attention_type],
                     conv_mask=causal_mask_mapping["linear_attention"],
                     cache=cache,
                     cache_offset=cache_offset,
@@ -554,6 +566,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
                 hidden_states,
                 block_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                relative_distance=relative_distance_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
                 position_ids=position_ids,

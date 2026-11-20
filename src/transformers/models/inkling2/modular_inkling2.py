@@ -30,7 +30,12 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, ImageType, SizeDict, get_image_type
 from ...integrations import use_experts_implementation, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
-from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
+from ...masking_utils import (
+    create_causal_mask,
+    create_recurrent_attention_mask,
+    create_sliding_window_causal_mask,
+    find_first_full_attention_index,
+)
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -287,7 +292,7 @@ class Inkling2ScaledL2Clip(nn.Module):
         self.threshold = threshold
         self.scale = nn.Parameter(torch.ones(num_heads, head_dim))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, position_ids: torch.Tensor | None = None) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float() * self.scale.float()
         norm = torch.linalg.vector_norm(hidden_states, dim=-1, keepdim=True)
@@ -327,49 +332,59 @@ class Inkling2LogScaledL2Clip(nn.Module):
         return self.log_scale(hidden_states, position_ids)
 
 
-class Inkling2RelativeLogits(nn.Module):
+def get_relative_distance(inputs_embeds: torch.Tensor, cache: Cache | None, is_sliding: bool) -> torch.Tensor:
+    """
+    Distance from each query position to each key position, of shape `(query_length, key_length)`, for the full or
+    sliding attention layers. The sizes and offsets come from the same cache layer as for the attention masks.
+    """
+    q_length = inputs_embeds.shape[1]
+    if cache is None:
+        kv_length, kv_offset, q_offset = q_length, 0, 0
+    else:
+        if not is_sliding:
+            layer_idx = find_first_full_attention_index(cache)
+        elif True in cache.is_sliding:
+            layer_idx = cache.is_sliding.index(True)
+        else:
+            layer_idx = 0
+        kv_length, kv_offset = cache.get_mask_sizes(q_length, layer_idx)
+        q_offset = cache.get_query_offset(layer_idx)
+    q_positions = torch.arange(q_length, device=inputs_embeds.device) + q_offset
+    kv_positions = torch.arange(kv_length, device=inputs_embeds.device) + kv_offset
+    return q_positions[:, None] - kv_positions[None, :]
+
+
+class Inkling2RelativePositionBias(nn.Module):
     """
     Hidden-states conditioned relative position bias. `linear` and `norm` give each token per-head `relative_states`
     that mix the trained bank of bias-vs-distance profiles in `proj` into one bias value per backward distance. The
-    bias is zero outside `0 <= distance < rel_extent`.
+    bias is zero outside `0 <= distance < rel_extent`. With `log_scaling`, the relative states are also scaled by
+    `Inkling2LogScale`.
     """
 
-    def __init__(self, config: Inkling2TextConfig, num_heads: int, rel_extent: int):
+    def __init__(self, config: Inkling2TextConfig, num_heads: int, rel_extent: int, log_scaling: bool):
         super().__init__()
         self.num_heads = num_heads
         self.rel_extent = rel_extent
         self.linear = nn.Linear(config.hidden_size, num_heads * config.d_rel, bias=False)
-        self.norm = Inkling2ScaledL2Clip(num_heads, config.d_rel, config.rel_l2_clip_threshold)
-        self.log_scale = Inkling2LogScale(config)
+        self.norm = (
+            Inkling2LogScaledL2Clip(config, num_heads, config.d_rel, config.rel_l2_clip_threshold)
+            if log_scaling
+            else Inkling2ScaledL2Clip(num_heads, config.d_rel, config.rel_l2_clip_threshold)
+        )
         self.proj = nn.Parameter(torch.empty(config.d_rel, rel_extent))
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cache: Cache | None = None,
-        layer_idx: int = 0,
-        position_ids: torch.Tensor | None = None,
+        self, hidden_states: torch.Tensor, relative_distance: torch.Tensor, position_ids: torch.Tensor
     ) -> torch.Tensor:
         relative_states = self.linear(hidden_states).view(*hidden_states.shape[:-1], self.num_heads, -1)
-        relative_states = self.norm(relative_states)
-        if position_ids is not None:
-            relative_states = self.log_scale(relative_states, position_ids)
-
-        q_length = hidden_states.shape[1]
-        if cache is None:
-            kv_length, kv_offset, q_offset = q_length, 0, 0
-        else:
-            kv_length, kv_offset = cache.get_mask_sizes(q_length, layer_idx)
-            q_offset = cache.get_query_offset(layer_idx)
-        q_positions = torch.arange(q_length, device=hidden_states.device) + q_offset
-        kv_positions = torch.arange(kv_length, device=hidden_states.device) + kv_offset
+        relative_states = self.norm(relative_states, position_ids)
 
         # relative_states: [batch, q_len, num_heads, d_rel] -> bias: [batch, num_heads, q_len, kv_len]
         rel_logits = (relative_states @ self.proj).transpose(1, 2)
-        distance = (q_positions[:, None] - kv_positions[None, :])[None, None, :, :]
-        gather_index = distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
+        gather_index = relative_distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
         position_bias = rel_logits.gather(-1, gather_index)
-        return position_bias.masked_fill((distance < 0) | (distance >= self.rel_extent), 0.0)
+        return position_bias.masked_fill((relative_distance < 0) | (relative_distance >= self.rel_extent), 0.0)
 
 
 @use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
@@ -595,8 +610,11 @@ class Inkling2SlidingAttention(InklingAttention):
         self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
         self.v_proj = Inkling2SlidingKeyValueProjection(config, layer_idx, conv_idx=1)
         self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
-        self.rel_logits_proj = Inkling2RelativeLogits(config, self.num_heads, self.rel_extent)
+        self.relative_position_bias = Inkling2RelativePositionBias(
+            config, self.num_heads, self.rel_extent, log_scaling=False
+        )
         del self.r_proj
+        del self.rel_logits_proj
         del self.k_sconv
         del self.v_sconv
 
@@ -605,6 +623,7 @@ class Inkling2SlidingAttention(InklingAttention):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
+        relative_distance: torch.Tensor,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         key_hidden_states: torch.Tensor | None = None,
@@ -613,6 +632,8 @@ class Inkling2SlidingAttention(InklingAttention):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         r"""
+        relative_distance (`torch.Tensor` of shape `(query_length, key_length)`):
+            Distance from each query position to each key position, see `get_relative_distance`.
         key_hidden_states (`torch.Tensor`, *optional*):
             Input of the key projection, `hidden_states` by default.
         value_hidden_states (`torch.Tensor`, *optional*):
@@ -639,8 +660,6 @@ class Inkling2SlidingAttention(InklingAttention):
         key_states = self.k_norm(key_states).transpose(1, 2)
         value_states = self.v_norm(value_states).transpose(1, 2)
 
-        position_bias = self.rel_logits_proj(hidden_states, cache=cache, layer_idx=cache_layer_idx)
-
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
 
@@ -648,6 +667,7 @@ class Inkling2SlidingAttention(InklingAttention):
             self.config._attn_implementation, eager_attention_forward
         )
 
+        position_bias = self.relative_position_bias(hidden_states, relative_distance, kwargs["position_ids"])
         sinks = self.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
         attn_output, attn_weights = attention_interface(
             self,
@@ -679,8 +699,11 @@ class Inkling2FullAttention(InklingAttention):
         self.k_norm = Inkling2L2Clip(config.qk_l2_clip_threshold)
         self.v_proj = Inkling2FullKeyValueProjection(config, layer_idx, conv_idx=1)
         self.v_norm = Inkling2UnweightedRMSNorm(eps=config.rms_norm_eps)
-        self.rel_logits_proj = Inkling2RelativeLogits(config, self.num_heads, self.rel_extent)
+        self.relative_position_bias = Inkling2RelativePositionBias(
+            config, self.num_heads, self.rel_extent, log_scaling=True
+        )
         del self.r_proj
+        del self.rel_logits_proj
         del self.k_sconv
         del self.v_sconv
 
@@ -691,12 +714,15 @@ class Inkling2FullAttention(InklingAttention):
         key_hidden_states: torch.Tensor,
         value_hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None,
+        relative_distance: torch.Tensor,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         r"""
+        relative_distance (`torch.Tensor` of shape `(query_length, key_length)`):
+            Distance from each query position to each key position, see `get_relative_distance`.
         key_hidden_states (`torch.Tensor`):
             Input of the key projection and of the key convolution weights.
         value_hidden_states (`torch.Tensor`):
@@ -720,9 +746,6 @@ class Inkling2FullAttention(InklingAttention):
         query_states = self.q_norm(query_states, kwargs["position_ids"]).transpose(1, 2)
         key_states = self.k_norm(key_states).transpose(1, 2)
         value_states = self.v_norm(value_states).transpose(1, 2)
-        position_bias = self.rel_logits_proj(
-            hidden_states, cache=cache, layer_idx=cache_layer_idx, position_ids=kwargs["position_ids"]
-        )
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, cache_layer_idx, kwargs=kwargs)
@@ -731,6 +754,7 @@ class Inkling2FullAttention(InklingAttention):
             self.config._attn_implementation, eager_attention_forward
         )
 
+        position_bias = self.relative_position_bias(hidden_states, relative_distance, kwargs["position_ids"])
         sinks = self.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
         attn_output, attn_weights = attention_interface(
             self,
@@ -864,6 +888,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         block_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        relative_distance: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -876,6 +901,7 @@ class Inkling2SlidingDecoderLayer(GradientCheckpointingLayer):
         hidden_states, _ = self.self_attn(
             hidden_states=self.input_layernorm(hidden_states).to(dtype),
             attention_mask=attention_mask,
+            relative_distance=relative_distance,
             conv_mask=conv_mask,
             cache=cache,
             **kwargs,
@@ -921,6 +947,7 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         block_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        relative_distance: torch.Tensor | None = None,
         conv_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -939,6 +966,7 @@ class Inkling2FullDecoderLayer(GradientCheckpointingLayer):
             key_hidden_states=self.k_input_layernorm(key_hidden_states).to(dtype),
             value_hidden_states=self.v_input_layernorm(value_hidden_states).to(dtype),
             attention_mask=attention_mask,
+            relative_distance=relative_distance,
             conv_mask=conv_mask,
             cache=cache,
             **kwargs,
@@ -1076,6 +1104,8 @@ class Inkling2VisionMerger(LlavaMultiModalProjector):
 class Inkling2PreTrainedModel(InklingPreTrainedModel):
     config: Inkling2Config
     _no_split_modules = ["Inkling2SlidingDecoderLayer", "Inkling2FullDecoderLayer", "Inkling2VisionEncoderLayer"]
+    # Disabled because of the per-token attention sinks
+    _supports_flash_attn = False
     _supports_sdpa = False
     _supports_flex_attn = False
     _can_record_outputs = {
@@ -1098,7 +1128,7 @@ class Inkling2PreTrainedModel(InklingPreTrainedModel):
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.get_text_config().initializer_range
-        if isinstance(module, Inkling2RelativeLogits):
+        if isinstance(module, Inkling2RelativePositionBias):
             init.normal_(module.proj, mean=0.0, std=std)
         elif isinstance(module, Inkling2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
@@ -1169,6 +1199,10 @@ class Inkling2TextModel(InklingTextModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
+        relative_distance_mapping = {
+            "full_attention": get_relative_distance(inputs_embeds, cache, is_sliding=False),
+            "sliding_attention": get_relative_distance(inputs_embeds, cache, is_sliding=True),
+        }
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
@@ -1177,6 +1211,7 @@ class Inkling2TextModel(InklingTextModel):
                 hidden_states,
                 block_states,
                 attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                relative_distance=relative_distance_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
                 position_ids=position_ids,
