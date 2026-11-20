@@ -45,6 +45,7 @@ class Rwkv7Config(PreTrainedConfig):
     ```"""
 
     model_type = "rwkv7"
+    base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     attribute_map = {"num_attention_heads": "num_heads"}
     # One cache slot per mixer: conv state = token shift, recurrent state = WKV matrix (attention slot only)
     number_of_conv_states = 2
