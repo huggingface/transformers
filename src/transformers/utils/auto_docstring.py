@@ -2233,23 +2233,16 @@ class ModelArgs:
         "shape": None,
     }
 
-    marks = {
-        "description": """
-    Positions recorded by the `<|mark|>` of a decision template: the number of tokens of the prompt before each of them.
-    """,
-        "shape": "of shape `(num_marks,)`",
-    }
-
     num_options = {
         "description": """
-    Number of options of each question of the prompt.
+    Number of options of each question of the batch, in order.
     """,
         "shape": "of shape `(num_questions,)`",
     }
 
     question_type_ids = {
         "description": """
-    Type of each question of the prompt, as its index in `Question.questions_types`.
+    Type of each question of the batch, as its index in `Question.questions_types`.
     """,
         "shape": "of shape `(num_questions,)`",
     }
