@@ -48,14 +48,6 @@ def split_sequence(tensor: torch.Tensor, dim: int, sp_mesh: DeviceMesh) -> torch
 
 
 class SequenceParallelLayer:
-    """
-    Base class of the sequence parallel styles, with the hooks of `TensorParallelLayer`: `install_forward` replaces
-    `module.forward` by one that runs `transform_inputs_pre_forward` first, then the original forward inside
-    `context_around_forward`, then `transform_output_post_forward`. The styles shard no parameter, so the parameter
-    hooks of the other parallelisms have no counterpart here. Not to be confused with the `"sequence_parallel"` style
-    of `tensor_parallel.py`, which shards activations between tensor parallel layers.
-    """
-
     def transform_inputs_pre_forward(self, module: nn.Module, args: tuple, kwargs: dict, sp_mesh: DeviceMesh):
         return args, kwargs
 
@@ -66,7 +58,6 @@ class SequenceParallelLayer:
         return contextlib.nullcontext()
 
     def install_forward(self, module: nn.Module, sp_mesh: DeviceMesh, **options):
-        """Replace `module.forward`; the keyword `options` go to `transform_inputs_pre_forward`."""
         original_forward = module.forward
 
         @wraps(original_forward)
@@ -270,7 +261,7 @@ class ModelSequenceParallel(SequenceParallelLayer):
         return output
 
 
-ALL_SP_STYLES: dict[str, SequenceParallelLayer] = {
+ALL_SP_STYLES = {
     "sp_model": ModelSequenceParallel(),
     "sp_split_sequence": SplitSequenceParallel(),
     "sp_ulysses": UlyssesAttention(),
@@ -286,8 +277,8 @@ def apply_sequence_parallelism(model: nn.Module, sp_mesh: DeviceMesh, sp_plan: d
             "disable sequence parallelism."
         )
 
-    layer_types = set(getattr(model.config.get_text_config(), "layer_types", None) or ())
-    if unsupported := layer_types - {"full_attention", "sliding_attention", "chunked_attention"}:
+    layer_types = getattr(model.config.get_text_config(), "layer_types", None) or []
+    if unsupported := set(layer_types) - {"full_attention", "sliding_attention", "chunked_attention"}:
         raise ValueError(
             f"Sequence parallelism does not support layer types {sorted(unsupported)} "
             f"in {model.__class__.__name__}. Use another model or disable sequence parallelism."
