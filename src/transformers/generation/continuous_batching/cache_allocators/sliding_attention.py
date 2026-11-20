@@ -33,7 +33,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         self,
         index: int,
         config: PreTrainedConfig,
-        num_key_value_heads: int,
+        cache_tensor_meta: dict[int, list[tuple[tuple[int, ...], torch.dtype, torch.device]]],
         cache_dtype: torch.dtype,
         page_size: int,
         layer_indices: list[int],
@@ -43,7 +43,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
         Args:
             - config: the configuration of the model, used to determine the number of bytes per token
-            - num_key_value_heads: the number of key value heads, accounting for TP if enabled
+            - cache_tensor_meta: the meta data of the cache tensors, formatted as layer_idx -> (shape, dtype, device)
             - cache_dtype: the dtype of the cache, also used to determine the number of bytes per token
             - page_size: the number of tokens per page
             - layer_indices: the indices of the layers which cache is handled by this allocator
@@ -57,7 +57,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         super().__init__(
             index=index,
             config=config,
-            num_key_value_heads=num_key_value_heads,
+            cache_tensor_meta=cache_tensor_meta,
             cache_dtype=cache_dtype,
             page_size=page_size,
             layer_indices=layer_indices,

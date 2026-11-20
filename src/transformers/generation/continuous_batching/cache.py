@@ -14,7 +14,7 @@
 import inspect
 import warnings
 from math import ceil, lcm
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -33,6 +33,10 @@ from .cache_allocators import (
 from .distributed import DistributedHelper
 from .requests import RequestState, RequestStatus
 from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memory_breakdown, logger
+
+
+if TYPE_CHECKING:
+    from transformers.modeling_utils import PreTrainedModel
 
 
 # Maps each attention type to the allocator class handling its cache
@@ -122,8 +126,9 @@ class PagedAttentionCache:
         continuous_batching_config: ContinuousBatchingConfig,
         device: torch.device | str,
         distributed_helper: DistributedHelper,
-        dtype: torch.dtype = torch.float16,
-        model_supports_logits_to_keep: bool = False,
+        dtype: torch.dtype,
+        model_supports_logits_to_keep: bool,
+        cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -142,24 +147,13 @@ class PagedAttentionCache:
         self.device = device
         self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0  # if not resolved, off
 
-        # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
-        # per GPU is simply divided by the TP size. We need to solve this before we can construct the cache allocators.
-        num_key_value_heads = find_num_key_value_heads(config)
-        if distributed_helper.tp_size > 1 and distributed_helper.are_kv_heads_tp_ed():
-            if num_key_value_heads % distributed_helper.tp_size != 0:
-                raise ValueError(
-                    f"Number of key value heads {num_key_value_heads} must be divisible by tensor parallel size"
-                    f"{distributed_helper.tp_size}."
-                )
-            num_key_value_heads //= distributed_helper.tp_size
-
         # Construct the necessary cache allocator for each attention type
         self.cache_allocators: dict[str, CacheAllocator] = {}
         self.layer_to_allocator: dict[int, CacheAllocator] = {}
         for index, (attn_type, layer_indices) in enumerate(group_layers_by_attn_type(config).items()):
             # Create the allocator and register it by name and layers indices
             allocator = self._create_allocator(
-                continuous_batching_config, attn_type, index, layer_indices, num_key_value_heads
+                continuous_batching_config, attn_type, index, layer_indices, cache_tensor_meta
             )
             self.cache_allocators[attn_type] = allocator
             self.layer_to_allocator = self.layer_to_allocator | dict.fromkeys(layer_indices, allocator)
@@ -227,7 +221,7 @@ class PagedAttentionCache:
         attn_type: str,
         index: int,
         layer_indices: list[int],
-        num_key_value_heads: int,
+        cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
     ) -> CacheAllocator:
         """Creates the cache allocator for a given set of layers with the same attention type."""
         # Catch a special case: MLA layers are created with the same attention type as full attention layers
@@ -239,8 +233,8 @@ class PagedAttentionCache:
         allocator = allocator_class(
             index=index,
             layer_indices=layer_indices,
-            num_key_value_heads=num_key_value_heads,
             config=self.config,
+            cache_tensor_meta=cache_tensor_meta,
             cache_dtype=self.dtype,
             page_size=continuous_batching_config.page_size,
             allow_block_sharing=continuous_batching_config.allow_block_sharing,
@@ -743,3 +737,38 @@ class PagedAttentionMemoryHandler:
             + num_sectors * self.bytes_per_cache_sector
             + self.attention_mask_bytes(max_batch_tokens, num_sectors)
         )
+
+
+class HookedDummyCache:
+
+    def __init__(self) -> None:
+        self.hooked = {}
+
+    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, kwargs: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+        self.hooked[layer_idx] = [
+            (key_states.shape, key_states.dtype, key_states.device),
+            (value_states.shape, value_states.dtype, value_states.device),
+        ]
+        return key_states, value_states
+
+    def get_query_offset(self, layer_idx: int = 0) -> int:
+        return 0
+
+    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
+        return query_length, 0
+
+
+def hook_cache_tensor_meta(
+    model: "PreTrainedModel", num_tokens: int
+) -> dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]]:
+    """Runs a forward pass on a hooked model to get the dimensions of the model's cached tensors."""
+    cache = HookedDummyCache()
+    with torch.no_grad():
+        model(
+            input_ids=torch.zeros((1, num_tokens), dtype=torch.long, device=model.device),
+            position_ids=torch.arange(num_tokens, device=model.device).unsqueeze(0),
+            attention_mask=None,
+            cache=cache,
+        )
+    return cache.hooked
+

@@ -35,7 +35,7 @@ from ...utils.generic import is_flash_attention_requested
 from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available, is_torch_greater_or_equal
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
-from .cache import PagedAttentionCache
+from .cache import PagedAttentionCache, hook_cache_tensor_meta
 from .cache_allocators import SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
@@ -1161,6 +1161,9 @@ class ContinuousBatchingManager:
             batch_processor.reset()
             return batch_processor
 
+        # Run a forward pass to get the model's dimensions
+        cache_tensor_meta = hook_cache_tensor_meta(self.model, num_tokens=16)
+
         # Create the PagedAttentionCache
         supports_logits_to_keep = getattr(self.model, "_supports_logits_to_keep", None)
         paged_attention_cache = PagedAttentionCache(
@@ -1170,6 +1173,7 @@ class ContinuousBatchingManager:
             distributed_helper=self.distributed_helper,
             dtype=self.model.dtype,
             model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep(),
+            cache_tensor_meta=cache_tensor_meta,
         )
         # Update the approximation now that we know if there is prefix sharing
         self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
