@@ -27,7 +27,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring
@@ -37,13 +41,7 @@ from ..auto import AutoConfig, AutoModel
 from ..detr.modeling_detr import DetrCrossAttention
 from ..idefics2.configuration_idefics2 import Idefics2VisionConfig
 from ..idefics2.modeling_idefics2 import Idefics2VisionTransformer
-from ..llava.modeling_llava import (
-    LlavaCausalLMOutputWithPast,
-    LlavaForConditionalGeneration,
-    LlavaModel,
-    LlavaModelOutputWithPast,
-    LlavaPreTrainedModel,
-)
+from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
 from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, ensure_divide
 from ..minicpmv4_6.image_processing_pil_minicpmv4_6 import MiniCPMV4_6ImageProcessorPil
 
@@ -420,14 +418,6 @@ class MiniCPMV2_5Processor(ProcessorMixin):
         return ["grids"]
 
 
-class MiniCPMV2_5ModelOutputWithPast(LlavaModelOutputWithPast):
-    pass
-
-
-class MiniCPMV2_5CausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    pass
-
-
 class MiniCPMV2_5PreTrainedModel(LlavaPreTrainedModel):
     _no_split_modules = ["MiniCPMV2_5EncoderLayer", "MiniCPMV2_5Resampler"]
 
@@ -556,7 +546,7 @@ class MiniCPMV2_5Model(LlavaModel):
         inputs_embeds: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MiniCPMV2_5ModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`, *optional*):
             Which patches of `pixel_values` are real (`True`) rather than padding.
@@ -581,7 +571,6 @@ class MiniCPMV2_5Model(LlavaModel):
                 **kwargs,
             )
 
-        image_features = None
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
@@ -596,13 +585,7 @@ class MiniCPMV2_5Model(LlavaModel):
             inputs_embeds=inputs_embeds,
             **kwargs,
         )
-        return MiniCPMV2_5ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features,
-        )
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class MiniCPMV2_5ForConditionalGeneration(LlavaForConditionalGeneration):
@@ -646,7 +629,7 @@ class MiniCPMV2_5ForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MiniCPMV2_5CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`, *optional*):
             Which patches of `pixel_values` are real (`True`) rather than padding.
@@ -696,13 +679,13 @@ class MiniCPMV2_5ForConditionalGeneration(LlavaForConditionalGeneration):
             loss = self.loss_function(
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
-        return MiniCPMV2_5CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 
