@@ -363,6 +363,10 @@ _PROTO_PER_QUERY_INDEXER = _os.environ.get("PROTO_PER_QUERY_INDEXER", "0") == "1
 # When every request's context fits in index_topk, the indexer selects all visible tokens whatever the scores: only
 # its keys need caching (for later, longer contexts), the query projection, scoring and top-k are skipped
 _PROTO_INDEXER_SKIP = _os.environ.get("PROTO_INDEXER_SKIP", "0") == "1"
+# WP prefill / engine (bench only): give FlashMLA's sparse kernel the number of valid entries of every list
+# (`topk_length`), so its time follows the keys a query really attends to instead of the padded list width. Same flag
+# name as in the prefill tree (index path); here it covers the block table decode path
+_PROTO_TOPK_LENGTH = _os.environ.get("PROTO_TOPK_LENGTH", "0") == "1"
 
 
 def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k):
@@ -478,15 +482,26 @@ def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_stat
     k = torch.cat([k_rot_i, k_pass_i], dim=-1).squeeze(2)[0]  # [M, D]
     indexer_key_cache = allocator._indexer_token_views[module.layer_idx]
     indexer_key_cache.index_copy_(0, write_rows, k)
+    # Valid entries of each query's list (with PROTO_TOPK_LENGTH they are always the first ones of the list): the
+    # request's context, capped at the list width
+    num_selected = min(indexer.index_topk, rows_all.shape[1])
+    n_visible = visible.sum(-1)
+    lengths = n_visible.clamp(max=num_selected).to(torch.int32)
     if skip_scoring:
-        return torch.where(visible, rows_all, -1), None
+        return torch.where(visible, rows_all, -1), None, lengths
     keys = indexer_key_cache[rows_all]  # [M, max_k, D], the keys of each query's own request, straight from the cache
     scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys.float()) * indexer.softmax_scale)
     weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
     index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
     index_scores = index_scores.masked_fill(~visible, float("-inf"))
-    top = index_scores.topk(min(indexer.index_topk, rows_all.shape[1]), dim=-1).indices
-    return torch.where(visible.gather(-1, top), rows_all.gather(-1, top), -1), None
+    top = index_scores.topk(num_selected, dim=-1).indices
+    rows = torch.where(visible.gather(-1, top), rows_all.gather(-1, top), -1)
+    if _PROTO_TOPK_LENGTH:
+        # a query that sees at most `num_selected` keys selects them all: list them in window order, as the prefill
+        # tree does on the index path (the top-k of a longer window has no invalid entry)
+        partial = (n_visible <= num_selected)[:, None]
+        rows = torch.where(partial, torch.where(visible, rows_all, -1)[:, :num_selected], rows)
+    return rows, None, lengths
 
 
 def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
@@ -510,7 +525,8 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
             kwargs,
         )
         rows = topk_indices[0].to(torch.int32)
-        return _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices)
+        lengths = topk_indices[2] if _PROTO_TOPK_LENGTH else None  # [M] int32, <= list width
+        return _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices, lengths)
     read_index = kwargs["read_index"][allocator.index]  # [N] physical rows of the packed context (past + new)
     write_index = kwargs["write_index"][allocator.index]  # [M]
     kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
@@ -549,8 +565,9 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
     return _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices)
 
 
-def _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices):
-    """Tail of the prototype attention: FlashMLA's sparse kernel on the cache rows `rows` ([M, topk], -1 = empty)."""
+def _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices, lengths=None):
+    """Tail of the prototype attention: FlashMLA's sparse kernel on the cache rows `rows` ([M, topk], -1 = empty).
+    `lengths` ([M] int32), when given, is the number of valid entries at the start of each list."""
     kv_latent_cache, _ = allocator._latent_token_views[module.layer_idx]
     batch_size, num_heads, seq_length, _ = q_pass.shape
     if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
@@ -567,7 +584,7 @@ def _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, top
         (kv_latent_cache.stride(0), 0, 1),
     )
     out_latent = _flash_mla.flash_mla_sparse_fwd(
-        q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank
+        q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank, topk_length=lengths
     )[0][:, :num_heads]  # [M, H, kv_lora]
     attn_output = torch.einsum("shc,hvc->shv", out_latent, w_uv).reshape(batch_size, seq_length, -1)
     return module.o_proj(attn_output), None, topk_indices
