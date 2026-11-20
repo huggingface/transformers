@@ -322,6 +322,9 @@ def _proto_kv_b_dequantized(module):
 
 
 _PROTO_PER_QUERY_INDEXER = _os.environ.get("PROTO_PER_QUERY_INDEXER", "0") == "1"
+# When every request's context fits in index_topk, the indexer selects all visible tokens whatever the scores: only
+# its keys need caching (for later, longer contexts), the query projection, scoring and top-k are skipped
+_PROTO_INDEXER_SKIP = _os.environ.get("PROTO_INDEXER_SKIP", "0") == "1"
 
 
 def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k):
@@ -329,16 +332,24 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     into [M, max_k] instead of scoring the whole packed batch. Returns top-k packed positions and their validity."""
     batch_size, seq_len, _ = hidden_states.shape
     cos, sin = position_embeddings
-    q = indexer.wq_b(q_resid).view(batch_size, seq_len, indexer.n_heads, indexer.head_dim)
-    q_rot, q_pass = torch.split(q, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
+    skip_scoring = _PROTO_INDEXER_SKIP and max_k <= indexer.index_topk
     k = indexer.k_norm(indexer.wk(hidden_states)).unsqueeze(2)
     k_rot, k_pass = torch.split(k, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
-    q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-    q = torch.cat([q_rot, q_pass], dim=-1)[0]  # [M, H, D]
+    if skip_scoring:
+        # rotate the keys alone (the query half of the rotation helper is discarded)
+        _, k_rot = apply_rotary_pos_emb_interleave(k_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = None
+    else:
+        q = indexer.wq_b(q_resid).view(batch_size, seq_len, indexer.n_heads, indexer.head_dim)
+        q_rot, q_pass = torch.split(
+            q, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1
+        )
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)[0]  # [M, H, D]
     k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [1, M, D]
     keys = cache.update_indexer(k, indexer.layer_idx)[0]  # [N, D], the packed context (past + new)
 
-    num_tokens, device = q.shape[0], q.device
+    num_tokens, device = seq_len, hidden_states.device
     tok = torch.arange(num_tokens, device=device)
     num_req = cu_q.shape[0] - 1
     req = torch.searchsorted(cu_q[1:].contiguous(), tok, right=True)
@@ -350,6 +361,8 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     offs = torch.arange(max_k, device=device)
     pos = (k_start[:, None] + offs[None]).clamp(max=keys.shape[0] - 1)  # [M, max_k]
     visible = offs[None] < n_visible[:, None]
+    if skip_scoring:
+        return pos, visible
     scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys[pos].float()) * indexer.softmax_scale)
     weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
     index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
