@@ -116,7 +116,7 @@ You can also pass the kernel repository directly with `attn_implementation="kern
 
 ## Use Hub kernels
 
-Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Transformers detects ROCm and picks the AMD build for each layer, such as [amd/aiter-rope](https://huggingface.co/kernels/amd/aiter-rope) for rotary embeddings and [kernels-community/liger-kernels](https://huggingface.co/kernels/kernels-community/liger-kernels) for RMSNorm. When you write a custom [`KernelConfig`], use `"rocm"` as the device key for AMD-specific mappings.
+Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Transformers detects ROCm and picks the AMD build for each layer, such as [amd/aiter-rope](https://huggingface.co/kernels/amd/aiter-rope) for rotary embeddings, [kernels-community/liger-kernels](https://huggingface.co/kernels/kernels-community/liger-kernels) for RMSNorm, [kernels-community/mamba-ssm](https://huggingface.co/kernels/kernels-community/mamba-ssm) for Mamba layers, and [kernels-community/fla](https://huggingface.co/kernels/kernels-community/fla) for linear attention layers such as Gated DeltaNet. When you write a custom [`KernelConfig`], use `"rocm"` as the device key for AMD-specific mappings.
 
 ```py
 from transformers import AutoModelForCausalLM
