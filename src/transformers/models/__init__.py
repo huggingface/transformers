@@ -472,6 +472,7 @@ if TYPE_CHECKING:
     from .sam_hq import *
     from .sapiens2 import *
     from .sarvam_mla import *
+    from .sarvam_moe import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *
