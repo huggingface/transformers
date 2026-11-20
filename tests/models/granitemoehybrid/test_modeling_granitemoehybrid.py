@@ -58,17 +58,12 @@ class GraniteMoeHybridModelTester(BambaModelTester):
         model_class = GraniteMoeHybridModel
         for_causal_lm_class = GraniteMoeHybridForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        use_cache=False,
-        shared_intermediate_size=174,
-        layer_types=None,
-    ):
-        super().__init__(parent)
-        self.shared_intermediate_size = shared_intermediate_size
-        self.layer_types = layer_types
-        self.use_cache = use_cache
+    defaults = {**BambaModelTester.defaults, **BambaModelTester.small_config_overrides}
+    small_config_overrides = {
+        "use_cache": False,
+        "shared_intermediate_size": 174,
+        "layer_types": None,
+    }
 
     def _update_layer_configs(self):
         super()._update_layer_configs()

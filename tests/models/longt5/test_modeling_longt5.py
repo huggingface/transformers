@@ -21,6 +21,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -39,62 +40,49 @@ if is_torch_available():
     )
 
 
-class LongT5ModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        decoder_seq_length=9,
-        local_radius=5,
-        encoder_attention_type="local",
-        global_block_size=3,
+class LongT5ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 9,
+        "local_radius": 5,
+        "encoder_attention_type": "local",
+        "global_block_size": 3,
         # For common tests
-        is_training=True,
-        use_attention_mask=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        eos_token_id=1,
-        pad_token_id=0,
-        decoder_start_token_id=0,
-        scope=None,
-        decoder_layers=None,
-        large_model_config_path="google/long-t5-local-large",
-    ):
+        "is_training": True,
+        "use_attention_mask": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "decoder_start_token_id": 0,
+        "scope": None,
+        "decoder_layers": None,
+        "large_model_config_path": "google/long-t5-local-large",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        self.local_radius = local_radius
-        self.block_len = local_radius + 1
-        self.encoder_attention_type = encoder_attention_type
-        self.global_block_size = global_block_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["block_len"] = values["local_radius"] + 1
         # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.scope = None
-        self.decoder_layers = decoder_layers
-        self.large_model_config_path = large_model_config_path
+        values["seq_length"] = values["decoder_seq_length"]
+        values["scope"] = None
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -413,6 +401,8 @@ class LongT5ModelTester:
 
 @require_torch
 class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = LongT5ModelTester
+
     all_model_classes = (LongT5Model, LongT5ForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -683,12 +673,21 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         pass
 
 
+class LongT5TGlobalModelTester(LongT5ModelTester):
+    defaults = LongT5ModelTester.small_config_overrides
+
+    small_config_overrides = {
+        "encoder_attention_type": "transient-global",
+        "large_model_config_path": "google/long-t5-tglobal-large",
+    }
+
+
 @require_torch
 class LongT5TGlobalModelTest(LongT5ModelTest):
+    model_tester_class = LongT5TGlobalModelTester
+
     def setUp(self):
-        self.model_tester = LongT5ModelTester(
-            self, encoder_attention_type="transient-global", large_model_config_path="google/long-t5-tglobal-large"
-        )
+        self.model_tester = LongT5TGlobalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 
     def test_attention_outputs(self):
@@ -824,56 +823,46 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
         pass
 
 
-class LongT5EncoderOnlyModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        local_radius=5,
-        encoder_attention_type="local",
-        global_block_size=3,
+class LongT5EncoderOnlyModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
+        "local_radius": 5,
+        "encoder_attention_type": "local",
+        "global_block_size": 3,
         # For common tests
-        use_attention_mask=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        is_training=False,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        is_encoder_decoder=False,
-        eos_token_id=1,
-        pad_token_id=0,
-        scope=None,
-        large_model_config_path="google/long-t5-local-large",
-    ):
+        "use_attention_mask": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "is_training": False,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "is_encoder_decoder": False,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "scope": None,
+        "large_model_config_path": "google/long-t5-local-large",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.local_radius = local_radius
-        self.block_len = local_radius + 1
-        self.encoder_attention_type = encoder_attention_type
-        self.global_block_size = global_block_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["block_len"] = values["local_radius"] + 1
         # For common tests
-        self.seq_length = self.encoder_seq_length
-        self.use_attention_mask = use_attention_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scope = None
-        self.is_training = is_training
-        self.large_model_config_path = large_model_config_path
+        values["seq_length"] = values["encoder_seq_length"]
+        values["scope"] = None
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -941,6 +930,8 @@ class LongT5EncoderOnlyModelTester:
 
 
 class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = LongT5EncoderOnlyModelTester
+
     all_model_classes = (LongT5EncoderModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -1027,11 +1018,20 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
+class LongT5EncoderOnlyTGlobalModelTester(LongT5EncoderOnlyModelTester):
+    defaults = LongT5EncoderOnlyModelTester.small_config_overrides
+
+    small_config_overrides = {
+        "encoder_attention_type": "transient-global",
+        "large_model_config_path": "google/long-t5-tglobal-large",
+    }
+
+
 class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
+    model_tester_class = LongT5EncoderOnlyTGlobalModelTester
+
     def setUp(self):
-        self.model_tester = LongT5EncoderOnlyModelTester(
-            self, encoder_attention_type="transient-global", large_model_config_path="google/long-t5-tglobal-large"
-        )
+        self.model_tester = LongT5EncoderOnlyTGlobalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
 
     def test_attention_outputs(self):

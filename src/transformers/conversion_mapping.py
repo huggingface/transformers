@@ -25,6 +25,7 @@ from .core_model_loading import (
     GroupWeightRename,
     Inkling2IndexOffsetWeightRename,
     Interleave,
+    LayerPairCollapse,
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
@@ -157,6 +158,13 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        # Dory checkpoints store each decoder layer as an attention block followed by an mlp block
+        "dory": [
+            LayerPairCollapse(),
+            WeightRenaming(r"\.self_attn\.g_proj\.", ".self_attn.gate_proj."),
+            WeightRenaming(r"^backbone\.", "model."),
+            WeightRenaming(r"\.embeddings\.", ".embed_tokens."),
+        ],
         "hy_v4": [
             # General HC prefix which is dropped
             WeightRenaming(r"\.hc_pre\.hc_", ".hc_"),
@@ -2279,6 +2287,22 @@ def _build_checkpoint_conversion_mapping():
             operations=[Concatenate(dim=0)],
         ),
         WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.mlp\.gate\.expert_bias", ".mlp.gate.e_score_correction_bias"),
+    ]
+
+    mapping["sarvam_moe"] = mapping["qwen2_moe"].copy()
+    mapping["sarvam_moe"] += [
+        WeightRenaming(r"^model\.word_embeddings\.", "model.embed_tokens."),
+        WeightRenaming(r"\.attention\.", ".self_attn."),
+        # GQA, so the fused rows `[q|k|v]` are split by each target's size
+        WeightConverter(
+            source_patterns="query_key_value",
+            target_patterns=["q_proj", "k_proj", "v_proj"],
+            operations=[Split(dim=0)],
+        ),
+        WeightRenaming(r"\.self_attn\.dense\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.self_attn\.query_layernorm\.", ".self_attn.q_norm."),
+        WeightRenaming(r"\.self_attn\.key_layernorm\.", ".self_attn.k_norm."),
         WeightRenaming(r"\.mlp\.gate\.expert_bias", ".mlp.gate.e_score_correction_bias"),
     ]
 
