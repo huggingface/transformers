@@ -30,6 +30,7 @@ from .utils import WorkloadHints, get_accelerator_graph_name, logger
 
 
 FALLBACK_DEFAULTS = {
+    "max_batch_tokens": 8192,
     "max_requests_per_batch": 1024,
     "max_blocks_per_request": 32,
     "q_padding_interval_size": 64,
@@ -44,7 +45,6 @@ def resolve_continuous_batching_config(
     config: PretrainedConfig,
     cb_config: ContinuousBatchingConfig,
     workload_hints: WorkloadHints | None,
-    has_logit_processors: bool,
     device: torch.device | None = None,
 ) -> ContinuousBatchingConfig:
     """Returns a deep-copied and fully-resolved `ContinuousBatchingConfig`. The original `cb_config` is not mutated."""
@@ -89,7 +89,7 @@ def resolve_continuous_batching_config(
     decide_use_async_batching(cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed)
 
     # Resolve the max memory percent. This can happen anytime before cache creation.
-    resolve_max_memory_percent(cb_config=cb_config, has_logit_processors=has_logit_processors, device=device)
+    resolve_max_memory_percent(cb_config=cb_config, device=device)
     # Check bounds on some of the config values
     check_cb_values_bounds(cb_config)
     return cb_config
@@ -115,8 +115,12 @@ def resolve_using_hints(cb_config: ContinuousBatchingConfig, workload_hints: Wor
 
 def resolve_without_hints(cb_config: ContinuousBatchingConfig) -> None:
     """Fills any remaining unset/sentinel attribute with a fallback default."""
+    if cb_config.max_batch_tokens is None:
+        cb_config.max_batch_tokens = FALLBACK_DEFAULTS["max_batch_tokens"]
     if cb_config.max_requests_per_batch is None:
         cb_config.max_requests_per_batch = FALLBACK_DEFAULTS["max_requests_per_batch"]
+    # A batch cannot hold more requests than it has tokens
+    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, cb_config.max_batch_tokens)
     if cb_config.max_blocks_per_request is None:
         cb_config.max_blocks_per_request = FALLBACK_DEFAULTS["max_blocks_per_request"]
     if cb_config.q_padding_interval_size == 0:
@@ -295,11 +299,9 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
         )
 
 
-def resolve_max_memory_percent(
-    cb_config: ContinuousBatchingConfig, has_logit_processors: bool, device: torch.device | None = None
-) -> None:
-    """Fallback function if the max memory percent is not set. Since logit processors use a lot of memory, we default to
-    0.8 if there are logit processors, and 0.9 otherwise, to keep a reasonnable margin for temporary tensors."""
+def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, device: torch.device | None = None) -> None:
+    """Fallback function if the max memory percent is not set: 0.6 on MPS and CPU, where memory is shared with the host,
+    and 0.9 otherwise."""
     if device is None:
         warnings.warn(
             "Using resolve_max_memory_percent without a device is deprecated and will be removed in v5.24.",
@@ -314,25 +316,8 @@ def resolve_max_memory_percent(
         # For CPU or MPS, since RAM and VRAM are the same, we use less memory to avoid using swap memory
         if device_type == "mps" or device_type == "cpu":
             cb_config.max_memory_percent = 0.6
-        # Since logit processors use a lot of memory, keep a bit more memory for temporary tensors when they are used
-        elif has_logit_processors:
-            cb_config.max_memory_percent = 0.8
         else:
             cb_config.max_memory_percent = 0.9
-
-
-def update_cb_config_after_cache_creation(
-    cb_config: ContinuousBatchingConfig,
-    num_blocks: int,
-    max_batch_tokens: int,
-) -> None:
-    """Updates the continuous batching config with the concrete values inferred during the creation of the cache."""
-    # Memoize concrete values
-    cb_config.num_blocks = num_blocks
-    cb_config.max_batch_tokens = max_batch_tokens
-    # Cap the number of max requests per batch to the max tokens per batch
-    cb_config.max_requests_per_batch = min(cb_config.max_requests_per_batch, max_batch_tokens)
-    # TODO: add a cap based on the cache size to the number of concurrent requests if it's usefull
 
 
 def check_cb_values_bounds(cb_config: ContinuousBatchingConfig) -> None:

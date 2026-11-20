@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from math import ceil
+from typing import Any
 
 import torch
 from torch import nn
@@ -21,17 +24,28 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
-from .requests import RequestState, RequestStatus, create_warmup_future_states
+from .requests import FutureRequestState, RequestState, RequestStatus, create_warmup_future_states
 from .utils import (
     accelerator_graph_capture_context,
     create_accelerator_graph,
+    expandable_segments,
     get_memory_pools,
     logger,
     memory_pool_context,
     pad_to_interval,
     pad_to_pow2,
+    pop_peak_memory,
     stream_context,
+    synchronize_device,
 )
+
+
+def read_memory(device: torch.device) -> tuple[int, int]:
+    """Stricter version of `pop_peak_memory` that raises an error if the peak is not tracked."""
+    memory = pop_peak_memory(device)
+    if memory is None:
+        raise RuntimeError(f"The peak of allocated memory is not tracked on {device}.")
+    return memory
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -51,7 +65,12 @@ def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
 
 class ModelRunner:
     """This class is the continuous batching entry point for running the model. As a rule of thumb, anything running on
-    the device should happen from this class."""
+    the device should happen from this class. The class is also used to size the cache through a few probe forwards."""
+
+    # Parameters for the cache sizing probe
+    _probe_max_rows = 32
+    _probe_query_tokens = (16, 64)
+    _probe_read_tokens = 16384
 
     def __init__(
         self,
@@ -168,13 +187,16 @@ class ModelRunner:
 
     def _capture_graph(self, forward_fn: Callable, compute_stream: torch.cuda.Stream, *args) -> None:
         """Helper function to capture and store a graph for a given forward function."""
-        # Warmup (ensures the right result is computed before capturing the graph)
-        with stream_context(compute_stream), memory_pool_context(self.mem_pool):
-            forward_fn(*args)
-        # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
-        graph = create_accelerator_graph()
-        with accelerator_graph_capture_context(graph, stream=compute_stream, pool=self.graph_pool_id):
-            forward_fn(*args)
+        # The graph pool is allocated in expandable segments, otherwise it fragments and wastes memory for as long as
+        # the graphs live, since it is never shared with other allocations
+        with expandable_segments(self.cache.device):
+            # Warmup (ensures the right result is computed before capturing the graph)
+            with stream_context(compute_stream), memory_pool_context(self.mem_pool):
+                forward_fn(*args)
+            # Capture using a thread-local capture mode to avoid capturing GPU operations from outside the model forward
+            graph = create_accelerator_graph()
+            with accelerator_graph_capture_context(graph, stream=compute_stream, pool=self.graph_pool_id):
+                forward_fn(*args)
         # Store
         self.inputs_and_outputs.set_graph(graph)
 
@@ -283,6 +305,19 @@ class ModelRunner:
         self.cache.reset()
         logger.info(f"Warmup completed in {total_duration:.2f}s")
 
+    @contextmanager
+    def _fake_requests(
+        self, num_requests: int, status: RequestStatus, num_q_tokens: int, past_length: int
+    ) -> Iterator[list[FutureRequestState]]:
+        """Makes up fake requests with their cache blocks allocated, as many as the cache can hold, and frees their
+        blocks on exit."""
+        future_states = create_warmup_future_states(num_requests, status, num_q_tokens, past_length, self.cache)
+        try:
+            yield future_states
+        finally:
+            for fs in future_states:
+                self.cache.free_blocks(fs.state.request_id)
+
     def run_one_warmup(self, model: nn.Module, num_q_tokens: int, max_kv_read: int | None) -> float:
         """Warms up the decode fast path (if max_kv_read is None) or varlen path (if max_kv_read is an int) for a
         specific number of query and cache-resident tokens. `max_kv_read` is the number of tokens already in cache,
@@ -301,49 +336,168 @@ class ModelRunner:
             logger.debug(f"Warming up varlen path for {num_q_tokens = }, {max_kv_read = }.")
         # To limit the compute cost of prefill warmup, we cap the past length to the page size
         past_length = min(max_kv_read, self.cb_config.page_size)
-        future_states = create_warmup_future_states(num_requests, status, num_q_tokens, past_length, self.cache)
-        if not future_states:
-            logger.warning(
-                f"Failed to warm up: no blocks allocated for {num_requests = }, {num_q_tokens = }, {past_length = }."
-            )
-            return 0.0
+        with self._fake_requests(num_requests, status, num_q_tokens, past_length) as future_states:
+            if not future_states:
+                logger.warning(
+                    f"Failed to warm up: no blocks allocated for {num_requests = }, {num_q_tokens = }, {past_length = }."
+                )
+                return 0.0
 
-        # Pad the inputs to the appropriate size
-        padded_q, padded_kv = self.maybe_pad_inputs(
-            num_q_tokens=num_q_tokens * num_requests,
-            max_kv_read=max_kv_read,
-            use_decode_fast_path=use_decode_fast_path,
+            # Pad the inputs to the appropriate size
+            padded_q, padded_kv = self.maybe_pad_inputs(
+                num_q_tokens=num_q_tokens * num_requests,
+                max_kv_read=max_kv_read,
+                use_decode_fast_path=use_decode_fast_path,
+            )
+
+            # Actual warmup, in a try-except block since a failed warmup only degrades performance
+            start = time.perf_counter()
+            try:
+                self.inputs_and_outputs.prepare_batch_tensors(
+                    future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv, use_padding=True
+                )
+                batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
+                # Flash sizes the workspace according to max_length_k, so we set it to the maximum value for one request
+                if not use_decode_fast_path:
+                    # The graph key is read from the IO holding the graphs, so we update it there as well
+                    io = self.inputs_and_outputs
+                    io = io.io_pairs[io.current_pair].device_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
+                    for allocator in self.cache.cache_allocators.values():
+                        max_length_k = allocator.get_seqlen_k(max_kv_read, num_q_tokens)
+                        if self.use_cuda_graph_varlen:
+                            max_length_k = pad_to_pow2(max_length_k, self.cache.max_tokens_read, 1024)
+                        batch_data["max_length_k"][allocator.layer_type] = max_length_k
+                        io.max_length_k[allocator.layer_type] = max_length_k
+                self.compute_batch(model, batch_data)
+                duration = time.perf_counter() - start
+                logger.debug(f"Warmup completed in {duration:.2f}s")
+            except Exception as e:
+                duration = 0.0
+                logger.warning(f"Failed to warm up: {e}.\nGraph pool may fragment and OOM under load.")
+        return duration
+
+    @torch.no_grad()
+    def measure_peak_memory(
+        self, model: nn.Module, num_requests: int, num_q_tokens: int, past_length: int
+    ) -> tuple[int, int, int]:
+        """Runs one eager varlen step on fake requests (`num_requests` requests of `num_q_tokens` query tokens, each with
+        `past_length` tokens already in cache) and measures the memory it allocates. The step is split in two parts at
+        the LM head: the decoder, and the LM head onwards (LM head, logits processing and sampling). Returns, in bytes and
+        relative to the memory allocated before the step:
+            - `decoder_peak`: the peak of the decoder part, preparation of the batch inputs included
+            - `lm_head_peak`: the peak of the LM head onwards part
+            - `allocated_at_lm_head`: the memory still allocated when the LM head starts, eg. the hidden states left by
+              the decoder. The LM head onwards part allocates `lm_head_peak - allocated_at_lm_head` by itself.
+        If the model has no output embeddings to split the step on, both peaks are the peak of the whole step and
+        `allocated_at_lm_head` is 0. Errors are not caught."""
+        device = torch.device(self.cache.device)
+
+        # Right before the LM head, the decoder peak is read and the peak tracking restarts for the rest of the step
+        memory_at_lm_head = []  # (allocated, peak since the step started) when the LM head starts
+
+        def split_at_lm_head(module: nn.Module, args: Any) -> None:
+            """Hook to read the memory when the LM head starts."""
+            if not memory_at_lm_head:
+                memory_at_lm_head.append(read_memory(device))
+
+        output_embeddings = model.get_output_embeddings() if hasattr(model, "get_output_embeddings") else None
+        hook = None if output_embeddings is None else output_embeddings.register_forward_pre_hook(split_at_lm_head)
+
+        try:
+            with self._fake_requests(num_requests, RequestStatus.PREFILLING, num_q_tokens, past_length) as states:
+                if len(states) < num_requests:
+                    raise RuntimeError(
+                        f"The cache cannot hold {num_requests} requests of {num_q_tokens + past_length} tokens to "
+                        "measure the memory of a batch."
+                    )
+
+                # Wait for the previous step to be done with the inputs before overwriting them
+                synchronize_device(device)
+
+                # Measure the memory allocated before the batch is prepared, as it can create large temporary tensors
+                allocated_before, _ = read_memory(device)
+                self.inputs_and_outputs.prepare_batch_tensors(
+                    states,
+                    self.logit_processor,
+                    use_decode_fast_path=False,
+                    num_q_tokens=num_requests * num_q_tokens,
+                    max_kv_read=num_requests * past_length,
+                    use_padding=False,
+                )
+                batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=False)
+                if self.supports_logits_to_keep(model):
+                    batch_data["logits_to_keep"] = batch_data["logits_indices"]
+
+                # The inputs are written on the default stream, so the forward on the compute stream must wait for them
+                synchronize_device(device)
+                with stream_context(self.inputs_and_outputs.compute_stream):
+                    self._forward_process_and_sample(model, batch_data, *self.inputs_and_outputs.get_cb_kwargs())
+                synchronize_device(device)
+                _, final_peak = read_memory(device)  # peak since the LM head started, or since the step started
+
+        # In all cases, un-hook the model if it was hooked
+        finally:
+            if hook is not None:
+                hook.remove()
+
+        # If the model can't be split at the LM head, use the whole step peak as peak of the decoder and of the LM head
+        if not memory_at_lm_head:
+            step_peak = final_peak - allocated_before
+            return step_peak, step_peak, 0
+        # Otherwise, offset the values read during the step by the memory allocated before it
+        allocated_at_lm_head, decoder_peak = (memory - allocated_before for memory in memory_at_lm_head[0])
+        lm_head_peak = final_peak - allocated_before
+        return decoder_peak, lm_head_peak, allocated_at_lm_head
+
+    @classmethod
+    def infer_probe_num_blocks(cls, cb_config: ContinuousBatchingConfig) -> int:
+        """Infers the number of cache blocks the probe needs to run `measure_batch_activations`. Since the probe
+        forwards run one by one and free their blocks, the probe cache only needs to fit the largest forward."""
+        max_batch_tokens, page_size = cb_config.max_batch_tokens, cb_config.page_size
+        probed_rows = min(cb_config.max_requests_per_batch, cls._probe_max_rows)
+        read_tokens = max(max_batch_tokens, cls._probe_read_tokens)
+        return max(
+            ceil(max_batch_tokens / page_size),  # one request with all the batch tokens
+            probed_rows,  # one-token requests, each holding one block
+            ceil((read_tokens + max(cls._probe_query_tokens)) / page_size),  # few query tokens reading a long context
         )
 
-        # Actual warmup, which happens in a try-finally block to ensure the blocks are freed even if the warmup fails
-        start = time.perf_counter()
-        try:
-            self.inputs_and_outputs.prepare_batch_tensors(
-                future_states, self.logit_processor, use_decode_fast_path, padded_q, padded_kv, use_padding=True
-            )
-            batch_data = self.inputs_and_outputs.get_model_kwargs(use_padding=True)
-            # Flash sizes the workspace according to max_length_k, so we set it to the maximum value for one request
-            if not use_decode_fast_path:
-                # The graph key is read from the IO holding the graphs, so we update it there as well
-                io = self.inputs_and_outputs
-                io = io.io_pairs[io.current_pair].device_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
-                for allocator in self.cache.cache_allocators.values():
-                    max_length_k = allocator.get_seqlen_k(max_kv_read, num_q_tokens)
-                    if self.use_cuda_graph_varlen:
-                        max_length_k = pad_to_pow2(max_length_k, self.cache.max_tokens_read, 1024)
-                    batch_data["max_length_k"][allocator.layer_type] = max_length_k
-                    io.max_length_k[allocator.layer_type] = max_length_k
-            self.compute_batch(model, batch_data)
-            duration = time.perf_counter() - start
-            logger.debug(f"Warmup completed in {duration:.2f}s")
+    def measure_batch_activations(self, model: nn.Module) -> tuple[int, float, float]:
+        """Measures the activations of the worst-case batch with eager steps on fake requests. Returns the decoder peak
+        of a batch reading no cache, the growth of that peak per cache token read, and the peak of the LM head onwards
+        (LM head, logits processing and sampling) for `max_requests_per_batch` rows of logits. The cache must have at
+        least `probe_num_blocks` blocks."""
+        max_batch_tokens, num_rows = self.cache.max_batch_tokens, self.cb_config.max_requests_per_batch
+        probed_rows = min(num_rows, self._probe_max_rows)
+        read_tokens = max(max_batch_tokens, self._probe_read_tokens)
 
-        # Exception handling
-        except Exception as e:
-            duration = 0.0
-            logger.warning(f"Failed to warm up: {e}.\nGraph pool may fragment and OOM under load.")
+        # Peaks of a batch made of a single request with all the batch tokens
+        decoder_peak, lm_head_peak, _ = self.measure_peak_memory(model, 1, max_batch_tokens, 0)
+        # The peak of the LM head onwards grows with the number of logit rows: we extrapolate it linearly. The cost of a
+        # row is measured on one-token requests, so the decoder leaves almost nothing allocated when the LM head starts:
+        # in a large batch, the hidden states still allocated then can hide that cost behind them.
+        if probed_rows > 1:
+            half_rows = probed_rows // 2
+            _, half_lm_head_peak, half_allocated_at_lm_head = self.measure_peak_memory(model, half_rows, 1, 0)
+            _, full_lm_head_peak, full_allocated_at_lm_head = self.measure_peak_memory(model, probed_rows, 1, 0)
+            # What the LM head onwards allocates by itself, on top of what the decoder left allocated
+            half_rows_cost = half_lm_head_peak - half_allocated_at_lm_head
+            full_rows_cost = full_lm_head_peak - full_allocated_at_lm_head
+            row_cost = max(0, full_rows_cost - half_rows_cost) / (probed_rows - half_rows)
+            lm_head_peak += row_cost * (num_rows - 1)
 
-        # In any case, free the blocks allocated for the fake warmup requests
-        finally:
-            for fs in future_states:
-                self.cache.free_blocks(fs.state.request_id)
-        return duration
+        # The decoder peak grows with the cache tokens read, but it is a max over layers: in a large batch, that growth
+        # can hide behind MLP activations or token-independent buffers. So it is measured on a few query tokens, where
+        # attention dominates, for two query lengths, since some attention implementations materialize scores of shape
+        # [num_heads, query, key]. The growth is affine in the query length, so we extrapolate it to the batch tokens.
+        query_lengths = sorted({min(q, max_batch_tokens) for q in self._probe_query_tokens})
+        read_costs = []
+        for num_q_tokens in query_lengths:
+            no_read_decoder_peak, _, _ = self.measure_peak_memory(model, 1, num_q_tokens, 0)
+            read_decoder_peak, _, _ = self.measure_peak_memory(model, 1, num_q_tokens, read_tokens)
+            read_costs.append(max(0, read_decoder_peak - no_read_decoder_peak) / read_tokens)
+        read_cost = read_costs[0]
+        if len(read_costs) > 1:
+            per_query_token = max(0.0, (read_costs[1] - read_costs[0]) / (query_lengths[1] - query_lengths[0]))
+            read_cost += per_query_token * (max_batch_tokens - query_lengths[0])
+        return decoder_peak, read_cost, lm_head_peak

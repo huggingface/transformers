@@ -34,16 +34,21 @@ class MLACacheAllocator(FullAttentionCacheAllocator):
         self,
         index: int,
         config: PreTrainedConfig,
-        num_key_value_heads: int,
+        cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
         cache_dtype: torch.dtype,
         page_size: int,
         layer_indices: list[int],
         allow_block_sharing: bool,
     ) -> None:
-        """Initializes the cache allocator for a group of MLA layers. The arguments are the ones of the parent class,
-        `num_key_value_heads` is unused since the latents are cached before they are expanded to heads."""
-        self.kv_lora_rank = config.kv_lora_rank
-        self.row_numel = config.kv_lora_rank + config.qk_rope_head_dim
+        """Initializes the cache allocator for a group of MLA layers."""
+        # Retrieve the kv_lora_rank and qk_rope_head_dim from the cache tensor metadata
+        mla_layers = (cache_tensor_meta[layer_idx] for layer_idx in layer_indices)
+        kv_and_qk = {(kv_pass_shape[-1], k_rot_shape[-1]) for (kv_pass_shape, _, _), (k_rot_shape, _, _) in mla_layers}
+        if len(kv_and_qk) != 1:
+            raise ValueError(f"kv_lora_rank and qk_rope_head_dim differ between layers: found {kv_and_qk}")
+        self.kv_lora_rank, self.qk_rope_head_dim = kv_and_qk.pop()
+
+        self.row_numel = self.kv_lora_rank + self.qk_rope_head_dim
         self.cache_dtype = cache_dtype
         self._before_cache_tensor_init(
             index=index,

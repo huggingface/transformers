@@ -15,7 +15,6 @@
 import torch
 
 from ....configuration_utils import PreTrainedConfig
-from ..utils import find_head_dim
 from .cache_allocator import CacheAllocator
 from .cache_pool import CachePool
 
@@ -33,7 +32,7 @@ class FullAttentionCacheAllocator(CacheAllocator):
         self,
         index: int,
         config: PreTrainedConfig,
-        num_key_value_heads: int,
+        cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
         cache_dtype: torch.dtype,
         page_size: int,
         layer_indices: list[int],
@@ -42,17 +41,34 @@ class FullAttentionCacheAllocator(CacheAllocator):
         """Initializes the cache allocator for a group of full attention layers.
 
         Args:
-            - config: the configuration of the model, used to determine the number of bytes per token
-            - num_key_value_heads: the number of key value heads, accounting for TP if enabled
+            - config: the configuration of the model, unused here but kept so all allocators share one constructor
+            - cache_tensor_meta: the meta data of the cache tensors, formatted as layer_idx -> (shape, dtype, device)
             - cache_dtype: the dtype of the cache, also used to determine the number of bytes per token
             - page_size: the number of tokens per page
             - layer_indices: the indices of the layers which cache is handled by this allocator
             - allow_block_sharing: whether to allow block sharing or not. Can be disabled for diagnostics or perfs.
         """
-        self.head_dim = find_head_dim(config)
-        self.num_key_value_heads = num_key_value_heads
         self.cache_dtype = cache_dtype
-        bytes_per_page = self.get_bytes_per_page(num_key_value_heads, self.head_dim, cache_dtype, page_size)
+
+        # Infer the KV heads number and dim and make sure it's the same across all layers
+        heads_and_dims = None
+        for layer_idx in layer_indices:
+            (k_shape, _, _), (v_shape, _, _) = cache_tensor_meta[layer_idx]
+            _, k_heads, _, k_head_dim = k_shape  # shapes should be [batch_size, num_kv_heads, seq_len, head_dim]
+            _, v_heads, _, v_head_dim = v_shape
+            if k_heads != v_heads or k_head_dim != v_head_dim:
+                raise RuntimeError(f"Shape of K and V heads differ: {k_shape = }, {v_shape = }")
+            if heads_and_dims is not None and heads_and_dims != (k_heads, k_head_dim):
+                raise RuntimeError(
+                    f"KV heads and head dim differ between layers: got {(k_heads, k_head_dim) = } for {layer_idx = }, "
+                    f"but {heads_and_dims = } for previous layers"
+                )
+            heads_and_dims = (k_heads, k_head_dim)
+        if heads_and_dims is None:
+            raise RuntimeError("No KV heads and dim found")
+        self.num_key_value_heads, self.head_dim = heads_and_dims
+
+        bytes_per_page = self.get_bytes_per_page(self.num_key_value_heads, self.head_dim, cache_dtype, page_size)
         self._before_cache_tensor_init(
             index=index,
             layer_indices=layer_indices,

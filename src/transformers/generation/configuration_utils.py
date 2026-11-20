@@ -1692,13 +1692,23 @@ class ContinuousBatchingConfig:
             The number of tokens stored for each layer inside a (full-attention) page. A block storing the cache of N
             layers has N pages (one per layer), each holding cache for `page_size` tokens for one layer. Default is 256.
         num_blocks (`int`, *optional*):
-            Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
+            Size of the KV cache, as the number of blocks every cache allocator can hold at the same time. Each request
+            needs at least one block of every allocator, so this is also the maximum number of concurrent requests.
+            Auto-inferred when `None` (preferable over choosing a value manually).
+        num_sectors (`int`, *optional*):
+            Exact size of the KV cache, in sectors. Meant to be left to `None`: it is filled in when the cache is
+            created, with the inferred size or the one converted from `num_blocks`, so that a re-created cache gets the
+            same size.
         max_batch_tokens (`int`, *optional*):
-            Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
+            Maximum number of tokens in a batch. Defaults to 8192 when `None`.
         max_memory_percent (`float`, *optional*):
-            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
-            resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
-            vocabulary-sized temporary tensors.
+            Maximum percentage of free GPU memory (after the model is loaded) to use for continuous batching: the KV
+            cache, the input / output buffers and the activations. When `None`, resolved at runtime to 0.9, or 0.6 on
+            MPS and CPU where memory is shared with the host. The rest of the free memory is a margin for what the
+            sizing does not see, like the memory of CUDA graphs outside of torch. When expandable segments cannot be
+            used for the memory pool of CUDA graphs (eg. on ROCm, with the `cudaMallocAsync` backend or with TP on
+            pre-Blackwell GPUs), that pool also fragments and can waste up to about 1 GB, so values close to 1 should
+            be used with care.
         max_requests_per_batch (`int`, *optional*):
             Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
         max_blocks_per_request (`int`, *optional*):
@@ -1773,6 +1783,9 @@ class ContinuousBatchingConfig:
 
     # Number of blocks the cache contains. Usually better to leave it as None and be auto inferred.
     num_blocks: int | None = None
+
+    # Exact number of sectors in the cache. Filled in when the cache is created, which memoizes its size.
+    num_sectors: int | None = None
 
     # The maximum number of tokens in a batch. Once the page size is set, this can be auto inferred using GPU size.
     max_batch_tokens: int | None = None

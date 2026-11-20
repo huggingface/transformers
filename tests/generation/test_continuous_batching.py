@@ -43,7 +43,6 @@ from transformers import (
 )
 from transformers.generation.continuous_batching.cache import (
     PagedAttentionCache,
-    PagedAttentionMemoryHandler,
     group_layers_by_attn_type,
 )
 from transformers.generation.continuous_batching.cache_allocators import (
@@ -74,8 +73,6 @@ from transformers.generation.continuous_batching.utils import (
 )
 from transformers.testing_utils import (
     Expectations,
-    backend_empty_cache,
-    backend_memory_allocated,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
@@ -2513,176 +2510,6 @@ class ContinuousBatchingMemoryTests(unittest.TestCase):
         with self.fake_files(files):
             self.assertEqual(_get_numa_nodes_memory({0, 1}), 3072 * 1024)
             self.assertIsNone(_get_numa_nodes_memory({0, 2}))  # node 2 unreadable
-
-
-@require_torch_accelerator
-class TestMemoryHandlerPrediction(unittest.TestCase):
-    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
-
-    For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
-    dtypes, no alignment padding) and compare the CUDA memory delta to the handler's prediction. The handler reserves
-    the largest of the two M-proportional activation peaks (LM head and attention) and always accounts for the cache
-    reads (N-proportional), so we allocate the dominant M peak plus the cache read tensors.
-    """
-
-    NUM_BLOCKS = 4
-    MAX_BATCH_TOKENS = 64
-
-    # Each tuple fully specifies a synthetic model config plus the CB knobs; block_size = head_dim * num_kv_heads.
-    # fmt: off
-    # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async)
-    CONFIGS = [
-        (32, 64, 4, 8, 512, 32000, ["full_attention"], 22, "sdpa", 0, False, torch.float16, False),  # sdpa-like, 1 mask
-        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.float16, False),  # flash-like, no mask
-        (32, 64, 4, 8, 512, 32000, ["full_attention", "sliding_attention"], 14, "sdpa", 0, False, torch.bfloat16, False),  # hybrid, 2 groups + 2 masks
-        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, False),  # block_table + logprobs
-        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, True),  # block_table + logprobs + async
-    ]
-    # fmt: on
-
-    @parameterized.expand(CONFIGS)
-    def test_memory_prediction(
-        self,
-        block_size: int,
-        head_dim: int,
-        num_kv_heads: int,
-        num_attention_heads: int,
-        hidden_size: int,
-        vocab_size: int,
-        group_types: list[str],
-        group_size: int,
-        attn_impl: str,
-        max_bpr: int,
-        logprobs: bool,
-        dtype: torch.dtype,
-        use_async: bool,
-    ) -> None:
-        config = SimpleNamespace(  # rather than creating a full config that we would only use for the namespace
-            head_dim=head_dim,
-            num_key_value_heads=num_kv_heads,
-            num_attention_heads=num_attention_heads,
-            hidden_size=hidden_size,
-            vocab_size=vocab_size,
-            _attn_implementation=attn_impl,
-        )
-        cb_config = ContinuousBatchingConfig(
-            page_size=block_size,
-            num_blocks=self.NUM_BLOCKS,
-            max_blocks_per_request=max_bpr,
-            return_logprobs=logprobs,
-            use_async_batching=use_async,
-            max_memory_percent=0.9,
-        )
-        # Compute the sector geometry the same way PagedAttentionCache does, with the layers evenly split across the
-        # attention types
-        layers_per_group = group_size // len(group_types)
-        bytes_per_token = 2 * num_kv_heads * head_dim * dtype.itemsize
-        bytes_per_block = bytes_per_token * block_size * layers_per_group
-        bytes_per_sector = math.lcm(bytes_per_block, 128)
-        tokens_per_sector = bytes_per_sector // bytes_per_block * block_size
-        bytes_per_model_block = bytes_per_token * block_size * group_size
-        handler = PagedAttentionMemoryHandler(
-            config=config,
-            cb_config=cb_config,
-            dtype=dtype,
-            bytes_per_sector=bytes_per_sector,
-            tokens_per_sector=tokens_per_sector,
-            bytes_per_block=bytes_per_model_block,
-            attn_types=group_types,
-        )
-
-        num_groups = len(group_types)
-        num_attn_masks = handler.num_attention_masks
-        num_output_rows = 2 if logprobs else 1
-        elems_per_kv_token = head_dim * num_kv_heads
-        # K/V read back from the cache: flash reads GQA heads natively, eager/sdpa repeat K and V while V is referenced
-        kv_read_heads = 2 * num_kv_heads if "flash" in attn_impl else 2 * num_attention_heads + num_kv_heads
-        elems_per_kv_read_token = head_dim * kv_read_heads
-        q_dim = num_attention_heads * head_dim
-
-        # NUM_BLOCKS converts to a number of sectors, and reads are sized by the readable tokens those sectors hold
-        num_sectors = handler.num_sectors_from_config()
-        if num_sectors is None:
-            raise ValueError("handler could not find num_sector, which should be impossible in this test.")
-        N = num_sectors * tokens_per_sector  # max number of readable cache tokens
-        M = self.MAX_BATCH_TOKENS
-        k = handler.io_multiplier  # 1 sync, 2 async -- scales IO tensors only
-        predicted = handler.compute_memory_footprint(M, num_sectors)
-
-        # -- Allocate tensors at the exact idealized sizes the handler models --
-        device = torch_device
-        backend_empty_cache(device)
-        baseline = backend_memory_allocated(device)
-
-        # Tensors present regardless of which activation peak is live
-        fixed = []
-        # kv_cache: a single flat byte tensor holding the data sectors plus the two trash sectors (not scaled by k)
-        fixed.append(torch.empty((num_sectors + 2) * bytes_per_sector, dtype=torch.uint8, device=device))
-        # IO tensors below are allocated k times (once per IO instance)
-        for _ in range(k):
-            fixed.append(torch.empty((7, M), dtype=torch.int32, device=device))  # bulk_input
-            fixed.append(torch.empty((num_output_rows, M), dtype=torch.int32, device=device))  # output_ids
-            for _ in range(num_attn_masks):  # attention_mask: [1, 1, M, N + M] per mask type
-                fixed.append(torch.empty((1, 1, M, N + M), dtype=dtype, device=device))
-            if max_bpr > 0:  # block_table: [num_groups, M, max_bpr] (skipped when max_bpr == 0)
-                fixed.append(torch.empty((num_groups, M, max_bpr), dtype=torch.int32, device=device))
-            fixed.append(torch.empty((num_groups, M), dtype=torch.int64, device=device))  # write_index
-            fixed.append(torch.empty((num_groups, N + M), dtype=torch.int64, device=device))  # read_index
-
-        # Old K/V read from the whole readable cache: always reserved along with the sectors (not scaled by k)
-        fixed.append(torch.empty((N, elems_per_kv_read_token), dtype=dtype, device=device))
-
-        # M-proportional activation peaks: only one is live at a time, so the footprint reserves the largest
-        peaks = {
-            # LM head: hidden states [M, hidden] turned into logits [M, vocab] (always fp32)
-            "lm_head": [
-                torch.empty((M, hidden_size), dtype=dtype, device=device),
-                torch.empty((M, vocab_size), dtype=torch.float32, device=device),
-            ],
-            # Attention: hidden + Q + new K/V over M, plus their copy in the K/V read back from the cache
-            "attention": [
-                torch.empty((M, hidden_size), dtype=dtype, device=device),
-                torch.empty((M, q_dim), dtype=dtype, device=device),
-                torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
-                torch.empty((M, elems_per_kv_token), dtype=dtype, device=device),
-                torch.empty((M, elems_per_kv_read_token), dtype=dtype, device=device),
-            ],
-        }
-        peak_nbytes = {name: sum(t.nbytes for t in ts) for name, ts in peaks.items()}
-        dominant = max(peak_nbytes, key=peak_nbytes.get)
-        # Free the non-dominant peak so the accelerator delta reflects only the live one
-        for name in [n for n in peaks if n != dominant]:
-            del peaks[name]
-
-        actual_accelerator = backend_memory_allocated(device) - baseline
-        expected_nbytes = sum(t.nbytes for t in fixed) + peak_nbytes[dominant]
-        num_allocations = len(fixed) + len(peaks[dominant])
-        # The CUDA caching allocator rounds allocations larger than 10MB up to a multiple of 2MB
-        large_alloc_rounding = sum(
-            -t.nbytes % (2 * 1024**2) for t in fixed + peaks[dominant] if t.nbytes > 10 * 1024**2
-        )
-
-        del fixed, peaks
-        backend_empty_cache(device)
-
-        # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the handler's cost
-        #    coefficients against the tensor shapes, with zero tolerance.
-        self.assertEqual(
-            predicted,
-            expected_nbytes,
-            f"Prediction ({predicted}) != sum of tensor nbytes ({expected_nbytes})",
-        )
-
-        # 2) GPU memory check, which accounts for the CUDA caching allocator's rounding up of allocations.
-        if baseline > 0:
-            self.skipTest(f"CUDA allocator already holds {baseline} bytes: the memory delta check would be polluted")
-        max_accelerator_overhead = num_allocations * 512 + large_alloc_rounding
-        self.assertLessEqual(
-            abs(actual_accelerator - predicted),
-            max_accelerator_overhead,
-            f"Accelerator delta ({actual_accelerator}) too far from prediction ({predicted}), "
-            f"allowed overhead = {max_accelerator_overhead} ({num_allocations} allocs × 512B)",
-        )
 
 
 # Worker functions for the TP continuous batching tests, spawned through `run_distributed`.

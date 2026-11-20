@@ -19,6 +19,7 @@ import threading
 from abc import abstractmethod
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import timedelta
 from time import perf_counter
 from typing import Any
@@ -35,17 +36,25 @@ from ...utils.generic import is_flash_attention_requested
 from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available, is_torch_greater_or_equal
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
-from .cache import PagedAttentionCache
+from .cache import PagedAttentionCache, hook_cache_tensor_meta
 from .cache_allocators import SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .distributed import DistributedHelper
-from .initialization import resolve_continuous_batching_config, update_cb_config_after_cache_creation
+from .initialization import resolve_continuous_batching_config
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, logger, stream_context
+from .utils import (
+    ThreadLocalCounter,
+    WorkloadHints,
+    drain_queue,
+    get_device_and_memory_breakdown,
+    logger,
+    pop_peak_memory,
+    stream_context,
+)
 
 
 """
@@ -728,7 +737,6 @@ class ContinuousBatchingManager:
             config=self.model.config.get_text_config(),
             cb_config=continuous_batching_config,
             workload_hints=workload_hints,
-            has_logit_processors=self.logit_processor.do_processing,
             device=model.device,
         )
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
@@ -792,7 +800,7 @@ class ContinuousBatchingManager:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
         if self.batch_processor is None:
-            self.batch_processor = self._create_batch_processor()
+            self.batch_processor = self._get_batch_processor()
         self.batch_processor.warmup(self.model)
         self.warmed_up = True
 
@@ -1114,7 +1122,7 @@ class ContinuousBatchingManager:
                 torch.cuda.set_device(self.model.device)
 
             # Start the generation loop
-            batch_processor = self._create_batch_processor()
+            batch_processor = self._get_batch_processor()
             self.batch_processor = batch_processor  # register the batch processor for main thread access
             self.current_batch = 0
 
@@ -1153,7 +1161,7 @@ class ContinuousBatchingManager:
             raise RuntimeError("Tried to perform a generation step before the batch processor was initialized.")
         self.batch_processor._generation_step(self.model)
 
-    def _create_batch_processor(self) -> ContinuousBatchProcessor:
+    def _get_batch_processor(self) -> ContinuousBatchProcessor:
         """Create a new batch processor. If an already initialized batch processor exists, it is reset and returned."""
         # Early return if a batch processor exists already
         batch_processor = getattr(self, "batch_processor", None)
@@ -1161,48 +1169,62 @@ class ContinuousBatchingManager:
             batch_processor.reset()
             return batch_processor
 
-        # Create the PagedAttentionCache
-        supports_logits_to_keep = getattr(self.model, "_supports_logits_to_keep", None)
+        # Run a forward pass to get the shapes of the tensors each layer caches
+        cache_tensor_meta = hook_cache_tensor_meta(self.model, num_tokens=16)
+
+        # Unless the size of the cache is set, by the user or by a previous cache, measure the memory a batch needs and
+        # fill the rest with cache. For TP, ranks align the number of sectors to the minimal value of the group.
+        if self.continuous_batching_config.num_sectors is None and self.continuous_batching_config.num_blocks is None:
+            num_sectors = self._run_probe_and_infer_num_sectors(cache_tensor_meta)
+            if self.distributed_helper.tp_size > 1:
+                sync = torch.tensor([num_sectors], device=self.model.device, dtype=torch.int64)
+                self.distributed_helper.tp_all_reduce_min(sync)
+                num_sectors = int(sync.item())
+            self.continuous_batching_config.num_sectors = num_sectors
+
+        batch_processor = self._build_cache_and_batch_processor(cache_tensor_meta, self.continuous_batching_config)
+        # Memoize the size of the cache in the config, so a re-created cache gets the same size
+        self.continuous_batching_config.num_sectors = batch_processor.cache.num_sectors
+        # Update the approximation now that we know if there is prefix sharing
+        self._use_prefix_sharing = batch_processor.cache.use_prefix_sharing
+        return batch_processor
+
+    def _build_cache_and_batch_processor(
+        self,
+        cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]],
+        continuous_batching_config: ContinuousBatchingConfig,
+    ) -> ContinuousBatchProcessor:
+        """Builds a batch processor with its cache and scheduler."""
         paged_attention_cache = PagedAttentionCache(
             config=self.model.config.get_text_config(),
-            continuous_batching_config=self.continuous_batching_config,
+            continuous_batching_config=continuous_batching_config,
             device=self.model.device,
-            distributed_helper=self.distributed_helper,
+            cache_tensor_meta=cache_tensor_meta,
             dtype=self.model.dtype,
-            model_supports_logits_to_keep=callable(supports_logits_to_keep) and supports_logits_to_keep(),
-        )
-        # Update the approximation now that we know if there is prefix sharing
-        self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing
-        # And update continuous batching config now that we have concrete values
-        update_cb_config_after_cache_creation(
-            cb_config=self.continuous_batching_config,
-            num_blocks=paged_attention_cache.num_blocks,
-            max_batch_tokens=paged_attention_cache.max_batch_tokens,
         )
 
         # Disable the decode path if the model has sliding window attention (TODO)
         if SLIDING_ATTENTION in paged_attention_cache.cache_allocators:
-            self.continuous_batching_config.max_blocks_per_request = 0
+            continuous_batching_config.max_blocks_per_request = 0
 
         # Retrieve the scheduler class
-        scheduler_type = self.continuous_batching_config.scheduler_type
-        scheduler_cls = SCHEDULER_MAPPING.get(scheduler_type, None)
+        scheduler_cls = SCHEDULER_MAPPING.get(continuous_batching_config.scheduler_type, None)
         if scheduler_cls is None:
-            logger.warning(f"Scheduler '{scheduler_type}' not found. Defaulting to FIFO.")
+            logger.warning(f"Scheduler '{continuous_batching_config.scheduler_type}' not found. Defaulting to FIFO.")
             scheduler_cls = FIFOScheduler
         # Instantiate the actual scheduler
         scheduler = scheduler_cls(
             cache=paged_attention_cache,
-            safety_margin=self.continuous_batching_config.safety_margin,
-            max_requests_per_batch=self.continuous_batching_config.max_requests_per_batch,
+            safety_margin=continuous_batching_config.safety_margin,
+            max_requests_per_batch=continuous_batching_config.max_requests_per_batch,
         )
 
         # Create the batch processor
-        batch_processor = ContinuousBatchProcessor(
+        return ContinuousBatchProcessor(
             cache=paged_attention_cache,
             config=self.model.config.get_text_config(),
             generation_config=self.generation_config,
-            continuous_batching_config=self.continuous_batching_config,
+            continuous_batching_config=continuous_batching_config,
             logit_processor=self.logit_processor,
             input_queue=self.input_queue if self.is_tp_driver else None,
             cancel_queue=self.cancel_queue if self.is_tp_driver else None,
@@ -1213,7 +1235,47 @@ class ContinuousBatchingManager:
             scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
-        return batch_processor
+
+    def _run_probe_and_infer_num_sectors(
+        self, cache_tensor_meta: dict[int, list[tuple[torch.Size, torch.dtype, torch.device]]]
+    ) -> int:
+        """Infers how many cache sectors fit in memory. To do that with real values, this function creates a temporary
+        batch processor with a small cache and measures the memory cost of a batch. On devices that do not track peak
+        memory (MPS, CPU) activations are not measured so CB relies on the margin left by `max_memory_percent` instead.
+        """
+        # Get the total memory available for CB on this device
+        _, total, reserved, allocated = get_device_and_memory_breakdown()
+        available = int((total - max(allocated, reserved)) * self.continuous_batching_config.max_memory_percent)
+        # Activations are only measured on devices that track the peak of allocated memory
+        memory_before_probe = pop_peak_memory(self.model.device)
+
+        # Prepare the probe's config and build it
+        probe_config = deepcopy(self.continuous_batching_config)
+        probe_config.cpu_offload_space = 0.0  # a CPU swap pool would fault the measurements
+        probe_config.num_blocks = ModelRunner.infer_probe_num_blocks(probe_config)
+        probe = self._build_cache_and_batch_processor(cache_tensor_meta, probe_config)
+
+        # The probe gives details about cache geometry
+        bytes_per_cache_token = probe.inputs_and_outputs.bytes_per_cache_token()
+
+        # And if memory tracking is available, we can measure static and transient memory usage
+        probe_static_bytes, activations = None, (0, 0.0, 0.0)
+        if memory_before_probe is not None:
+            # Static cost
+            memory_after_probe = pop_peak_memory(self.model.device)
+            if memory_after_probe is None:
+                raise RuntimeError(f"The peak of allocated memory stopped being tracked on {self.model.device}.")
+            probe_static_bytes = memory_after_probe[0] - memory_before_probe[0]
+            # Transient cost, measured by running a few forwards
+            activations = probe.model_runner.measure_batch_activations(self.model)
+        num_sectors = probe.cache.max_num_sectors(available, probe_static_bytes, bytes_per_cache_token, *activations)
+
+        # Free the probe before the real cache is built
+        del probe
+        gc.collect()
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+            device_module.empty_cache()
+        return num_sectors
 
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:
         """Handle critical errors that terminate the generation loop."""
