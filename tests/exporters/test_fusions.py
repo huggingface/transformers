@@ -96,13 +96,9 @@ ORT_MOE_FUSIONS = {
 }
 
 
-def _ort_fusions(model_type, ort_fusions, component):
-    """The ONNX Runtime ops each layer of `model_type`'s `component` graph must fuse into for `ort_fusions`."""
+def _ort_fusions(model_type, ort_fusions):
+    """The ONNX Runtime ops each layer of `model_type`'s decode graph must fuse into for `ort_fusions`."""
     fusions = dict((ORT_MOE_FUSIONS if model_type in MOE_MODELS else ORT_FUSIONS)[ort_fusions])
-    if ort_fusions == "cuda" and component == "prefill":
-        # CUDA's `GroupQueryAttention` with a mask is slower than `MultiHeadAttention` for a prefill
-        # (microsoft/onnxruntime#33869).
-        fusions["MultiHeadAttention"] = fusions.pop("GroupQueryAttention")
     if ort_fusions == "cuda" and model_type == "olmo2":
         # A float16 OLMo2 rotates in float32: fused, it would rotate in float16.
         fusions["Neg"] = 2
@@ -127,7 +123,7 @@ def _padded_inputs(model):
 
 
 def _export_for_ort(model, ort_fusions, inputs=None, dynamic=True):
-    """The prefill and decode programs of `model`, fused for `ort_fusions`."""
+    """The programs of `model`'s generation export, fused for `ort_fusions`."""
     if inputs is None:
         inputs = {"input_ids": torch.tensor([[1, 5, 7, 9, 11]]), "attention_mask": torch.ones(1, 5, dtype=torch.long)}
     exported = OnnxExporter().export_for_generation(
@@ -187,7 +183,7 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def test_generation_fuses(self, model_type, ort_fusions):
         model = _ort_model(model_type, ort_fusions)
         for component, program in _export_for_ort(model, ort_fusions).items():
-            self.assert_fused(model, program, _ort_fusions(model_type, ort_fusions, component), component)
+            self.assert_fused(model, program, _ort_fusions(model_type, ort_fusions), component)
 
     def test_multidimensional_rotary_fuses(self):
         """Gemma 4's vision tower rotates a row half and a column half of each head, from a per-patch table: each
@@ -244,7 +240,9 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def test_decode_matches_plain_export(self):
         model = _ort_model()
         inputs = _padded_inputs(model)
-        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode"] for fusions in ("cpu", None))
+        fused, plain = (
+            _export_for_ort(model, fusions, inputs, dynamic=False)["decode_model"] for fusions in ("cpu", None)
+        )
         self.assert_fused(model, fused, ORT_FUSIONS["cpu"])
         feeds = _decode_feeds(plain, model.config.vocab_size)
         for fused_output, plain_output in zip(_run(fused, feeds), _run(plain, feeds)):
@@ -255,7 +253,9 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         # The CUDA fusions' kernels run on CUDA only.
         model = _ort_model(ort_fusions="cuda")
         inputs = _padded_inputs(model)
-        fused, plain = (_export_for_ort(model, fusions, inputs, dynamic=False)["decode"] for fusions in ("cuda", None))
+        fused, plain = (
+            _export_for_ort(model, fusions, inputs, dynamic=False)["decode_model"] for fusions in ("cuda", None)
+        )
         self.assert_fused(model, fused, ORT_FUSIONS["cuda"])
         feeds = _decode_feeds(plain, model.config.vocab_size)
         outputs = (_run(program, feeds, "CUDAExecutionProvider") for program in (fused, plain))
@@ -264,7 +264,7 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
 
     def test_decode_group_query_attention_rotates_and_reads_packed_projection(self):
         model = _ort_model()
-        attentions = _group_query_attentions(_export_for_ort(model, "cpu")["decode"])
+        attentions = _group_query_attentions(_export_for_ort(model, "cpu")["model"])
         self.assertTrue(all(node.attributes.get_int("do_rotary", 0) for node in attentions))
         self.assertTrue(all(node.inputs[1] is None and node.inputs[2] is None for node in attentions))
 
@@ -291,7 +291,7 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def test_projections_left_unpacked(self):
         model = _ort_model()
         fusions = OrtFusionConfig(provider="cpu", packed_projections=False)
-        attentions = _group_query_attentions(_export_for_ort(model, fusions)["decode"])
+        attentions = _group_query_attentions(_export_for_ort(model, fusions)["model"])
         self.assertTrue(attentions and all(node.inputs[1] is not None for node in attentions))
 
 
@@ -310,7 +310,8 @@ def _decode(model, multi_token_decode=True, quantizer=None):
         generation_config=GenerationConfig(max_new_tokens=3),
         multi_token_decode=multi_token_decode,
     )
-    return exported.components["decode"].program
+    # Beside a prompt graph (one token per step), the decode graph is `decode_model`.
+    return exported.components["model" if multi_token_decode else "decode_model"].program
 
 
 def _compiled_ops(ov_model):

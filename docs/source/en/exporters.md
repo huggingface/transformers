@@ -433,14 +433,24 @@ logits = model(**inputs).logits
 
 ## Generative models
 
-For autoregressive generation, the model's `forward` has different shapes at the prefill step
-(full prompt, no KV cache) versus the decode step (single token, populated KV cache). Exporters
-expose [`~HfExporter.export_for_generation`], which splits both stages and exports each.
+For autoregressive generation, a model runs in stages: the prompt, then one token at a time against a growing
+cache, and for a multi-modal model, an image or audio encoder once up front. [`~HfExporter.export_for_generation`]
+splits the model into those stages and exports each as a component.
 
-For multi-modal generative models, the prefill additionally splits as [`~HfExporter.export_multimodal`] splits a
-forward (see [Multi-modal models](#multi-modal-models)): `"text_embeddings_model"`, one
-`"<modality>_embeddings_model"` per modality, and `"language_model"`. Each modality graph runs the model's own
-`get_<modality>_features`, projector included, so any architecture exposing those works out of the box.
+The decode graph serves the prompt too, so the model's weights are exported once:
+
+- the decode graph, called on the prompt (with an empty cache) and on every generated token: a causal LM's
+  `"model"`, an encoder-decoder's `"decoder_model"`, or a multi-modal model's `"language_model"`;
+- an `"encoder_model"` for an encoder-decoder, which also computes the decoder's cross-attention cache;
+- for a multi-modal model, `"text_embeddings_model"` and one `"<modality>_embeddings_model"` per modality
+  (`"vision_embeddings_model"`, `"audio_embeddings_model"`, ...), the same ones [`~HfExporter.export_multimodal`]
+  exports (see [Multi-modal models](#multi-modal-models)); the `"language_model"` then takes `inputs_embeds`, with
+  the features scattered in.
+
+The names follow [Optimum Intel](https://huggingface.co/docs/optimum/intel/index)'s, so an OpenVINO export saves as
+`openvino_model.xml`, `openvino_language_model.xml`, and so on.
+
+A model whose prompt would need a graph of its own (it would duplicate the weights) raises instead of exporting.
 
 <hfoptions id="generate">
 <hfoption id="Dynamo">
@@ -458,7 +468,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
 exported = exporter.export_for_generation(model, inputs, config=config)
-# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model", "language_model" and "decode",
+# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model" and "language_model",
 # each an ExportedComponent whose `.program` is an ExportedProgram
 ```
 
@@ -478,7 +488,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 exported = exporter.export_for_generation(model, inputs, config=config)
-# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model", "language_model" and "decode",
+# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model" and "language_model",
 # each an ExportedComponent whose `.program` is an onnx_ir.Model
 ```
 
@@ -498,7 +508,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 exported = exporter.export_for_generation(model, inputs, config=config)
-# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model", "language_model" and "decode",
+# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model" and "language_model",
 # each an ExportedComponent whose `.program` is an ExecutorchProgramManager
 ```
 
@@ -518,7 +528,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = OpenVINOExporter()
 config = OpenVINOConfig(dynamic=True)
 exported = exporter.export_for_generation(model, inputs, config=config)
-# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model", "language_model" and "decode",
+# exported: ExportedModel with "text_embeddings_model", "vision_embeddings_model" and "language_model",
 # each an ExportedComponent whose `.program` is an openvino.Model
 ```
 
@@ -535,42 +545,36 @@ the manifest, the model config, and the generation config passed to `export_for_
 
 ### How `export_for_generation` works
 
-[`~exporters.utils.decompose_for_generation`] runs `model.generate(**inputs, max_new_tokens=2)`
-once and hooks `model.forward` to capture the real prefill and decode kwargs (and the
-per-submodule kwargs via hooks on each encoder/projector/language model if the model is
-multi-modal). That's why it works for any architecture, including decoder-only, SSM,
-encoder-decoder, and multi-modal models, without per-model glue. `export_for_generation` is a
-one-liner over it.
+[`~exporters.decompose.decompose_for_generation`] runs `model.generate` once and hooks `model.forward` (and each
+encoder or modality getter) to capture what every stage is really called with. That's why it works for decoder-only,
+SSM, encoder-decoder, and multi-modal models without per-model glue. `export_for_generation` exports what it returns.
 
-The capture runs the model eagerly on `inputs`, so pass small but representative values, such as a
-short prompt, a single small image, or a few audio frames. The exported program isn't tied to
-those sizes (dynamic shapes still flow through), but smaller capture inputs make
-`decompose_for_generation` cheaper and keep symbolic-shape inference tractable.
+The capture runs the model eagerly on `inputs`, so pass small but representative values, such as a short prompt, a
+single small image, or a few audio frames. The exported graphs aren't tied to those sizes (dynamic shapes still flow
+through), but smaller capture inputs keep the capture cheap and symbolic-shape inference tractable.
 
-Call `decompose_for_generation` directly to act between decomposing and exporting, such as
-running an eager forward for verification, swapping a submodule's inputs, or skipping a stage.
+Call `decompose_for_generation` directly to act between decomposing and exporting, such as running an eager forward
+for verification or swapping a component's inputs. Each component is a [`~exporters.components.Component`], the
+module to export and the inputs to export it with.
 
 ```python
-from transformers.exporters.utils import decompose_for_generation
+from transformers.exporters.decompose import decompose_for_generation
 
-components = decompose_for_generation(model, inputs)
-# {"vision_embeddings_model": (submodel, fwd_kwargs), "language_model": (...), ..., "decode": (...)}
-
+components = decompose_for_generation(model, inputs, multi_token_decode=True)
 exported = {}
-for name, (submodel, subinputs) in components.items():
-    eager_outputs = submodel(**subinputs)  # sanity-check the eager forward before exporting
-    exported[name] = exporter.export(submodel, subinputs, config=config)
+for name, component in components.items():
+    eager_outputs = component.module(**component.inputs)  # sanity-check the eager forward before exporting
+    exported[name] = exporter.export(component.module, component.inputs, config=config)
 ```
 
 ### Multi-token decode
 
-By default the `decode` component is a **single-token** step — one query token against the KV cache —
-so `torch.export` specializes its query-sequence axis to 1. Pass `multi_token_decode=True` to capture
-`decode` as a **multi-token** decode instead: [`~exporters.utils.decompose_for_generation`] merges two
-consecutive decode steps (it captures with `max_new_tokens=3`) into one forward, so that axis stays
-symbolic. A single graph then serves every query length — one token (ordinary decoding), many tokens
-at once (continuation-from-past, e.g. accepting a chunk of speculative tokens), and a plain prefill
-when the cache is empty.
+With a dynamic export (`dynamic=True`), the `decode` component is a **multi-token** decode:
+[`~exporters.decompose.decompose_for_generation`] merges two consecutive decode steps into one forward, so the query
+axis stays symbolic. The one graph serves every query length: the whole prompt with an empty cache, one token
+(ordinary decoding), or several at once (accepting a chunk of speculative tokens). A static export freezes the
+query axis, so its decode graph takes one token per call, the prompt included. `multi_token_decode` defaults to
+whether the export is dynamic.
 
 <hfoptions id="multi-token-decode">
 <hfoption id="Dynamo">
@@ -581,7 +585,7 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
 exported = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# exported.components["decode"] now accepts a variable number of query tokens
+# exported.components["model"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -593,7 +597,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 exported = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# exported.components["decode"] now accepts a variable number of query tokens
+# exported.components["model"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -605,7 +609,7 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 exported = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# exported.components["decode"] now accepts a variable number of query tokens
+# exported.components["model"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -687,7 +691,7 @@ with no host copies — as long as the runtime binds the caller's buffers rather
 own arena. What that takes is the only per-backend part left:
 
 - **Dynamo** — the exported program models the cache write as a `USER_INPUT_MUTATION`, so calling
-  `exported.runners["decode"](...)` updates the cache tensors you pass in directly. Reuse the same
+  `exported.runners["model"](...)` updates the cache tensors you pass in directly. Reuse the same
   tensors each step; nothing to configure.
 
 - **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`
@@ -744,10 +748,10 @@ import torch
 from transformers.exporters import ExportedModel
 
 exported = ExportedModel.from_pretrained("qwen3-static", device="cuda")
-decode = exported.runners["decode"]
+decode = exported.runners["model"]
 
 # the program carries an initialized StaticCache template — reuse it (reset to empty)
-_, example_kwargs = exported.components["decode"].program.example_inputs
+_, example_kwargs = exported.components["model"].program.example_inputs
 cache = copy.deepcopy(example_kwargs["cache"])
 cache.reset()
 

@@ -19,31 +19,46 @@ import copy
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-from ..utils import decompose_for_generation
+from ..decompose import DECODE_GRAPH, PREFILL_GRAPH, decode_graph_name, decompose_for_generation
 
 
 if TYPE_CHECKING:
+    from ...generation import GenerationConfig
     from ...modeling_utils import PreTrainedModel
 
 
 def capture_calibration_inputs(
     model: PreTrainedModel,
     calibration_dataset: Iterable[dict[str, Any]],
-    generation_config: Any = None,
-    multi_token_decode: bool = False,
+    *,
+    multi_token_decode: bool,
+    generation_config: GenerationConfig | None = None,
+    decoder_writes_cross_cache: bool = False,
 ) -> dict[str, list[dict]]:
-    """Run each generate-style sample through `decompose_for_generation` and collect every component's forward
-    kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component."""
+    """Run each generate-style sample through `decompose_for_generation` and collect every exported component's
+    forward kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component, the prompt graph a
+    single-token decode graph leaves included."""
     calibration: dict[str, list[dict]] = {}
     for sample in calibration_dataset:
         components = decompose_for_generation(
-            model, sample, generation_config=generation_config, multi_token_decode=multi_token_decode
+            model,
+            sample,
+            generation_config=generation_config,
+            multi_token_decode=multi_token_decode,
+            decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
-        for name, (_submodel, forward_inputs) in components.items():
-            calibration.setdefault(name, []).append(forward_inputs)
-        # A multi-token decode graph also serves the prefill step, so it calibrates on the prefill inputs too.
-        if multi_token_decode and "prefill" in components and "decode" in components:
-            calibration["decode"].append(components["prefill"][1])
+        prefill = components.pop("prefill")
+        decode_name = decode_graph_name(components)
+        for name, component in components.items():
+            # Beside a prompt graph, the decode graph is `decode_model`.
+            key = DECODE_GRAPH if name == decode_name and not multi_token_decode else name
+            calibration.setdefault(key, []).append(component.inputs)
+        # A multi-token decode graph also runs the prefill step, so it calibrates on that call too; a single-token
+        # one leaves it to the prompt graph.
+        if multi_token_decode:
+            calibration[decode_name].append(prefill.inputs)
+        else:
+            calibration.setdefault(PREFILL_GRAPH, []).append(prefill.inputs)
     return calibration
 
 
