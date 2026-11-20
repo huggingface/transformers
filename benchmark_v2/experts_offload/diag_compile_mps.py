@@ -7,8 +7,8 @@ import time
 
 import torch
 import torch._dynamo
-
 from dense_quant import quantize_dense
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 

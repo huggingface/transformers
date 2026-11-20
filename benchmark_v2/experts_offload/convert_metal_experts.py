@@ -29,8 +29,11 @@ from safetensors.torch import save_file
 
 source, target = sys.argv[1], sys.argv[2]
 bits, group_size = int(os.environ.get("BITS", 4)), int(os.environ.get("GROUP_SIZE", 64))
-device = "cuda" if torch.cuda.is_available() else "cpu"
-out = "/tmp/out"
+device = os.environ.get("DEVICE") or (
+    "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
+)
+local = os.path.isabs(target) or target.startswith(".")  # a local output folder: no upload
+out = target if local else "/tmp/out"
 os.makedirs(out, exist_ok=True)
 
 
@@ -40,17 +43,20 @@ def log(msg):
 
 os.system("df -h /tmp /root 2>/dev/null")
 api = HfApi()
-api.create_repo(target, private=True, exist_ok=True)
+if not local:
+    api.create_repo(target, private=True, exist_ok=True)
 
 
 def upload(name):
     """Upload one finished file and delete it: a crash keeps what is done, the disk stays bounded."""
+    if local:
+        return
     api.upload_file(path_or_fileobj=f"{out}/{name}", path_in_repo=name, repo_id=target)
     os.remove(f"{out}/{name}")
 
 
 start = time.perf_counter()
-path = snapshot_download(source)
+path = source if os.path.isdir(source) else snapshot_download(source)
 log(f"downloaded {source} in {time.perf_counter() - start:.0f}s")
 index = json.load(open(f"{path}/model.safetensors.index.json", encoding="utf-8"))["weight_map"]
 expert_key = re.compile(r"(.*\.experts)\.(\d+)\.(gate_proj|up_proj|down_proj)\.weight(_scale_inv)?$")
@@ -158,5 +164,6 @@ for name in os.listdir(path):
     if not name.endswith(".safetensors") and name not in ("config.json", "model.safetensors.index.json"):
         shutil.copy(f"{path}/{name}", f"{out}/{name}")
 
-api.upload_folder(folder_path=out, repo_id=target)  # index, config, tokenizer files
+if not local:
+    api.upload_folder(folder_path=out, repo_id=target)  # index, config, tokenizer files
 log(f"uploaded to {target} in {(time.perf_counter() - start) / 60:.0f}m total")

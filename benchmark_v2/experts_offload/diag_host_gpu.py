@@ -5,8 +5,8 @@ import sys
 import time
 
 import torch
-
 from dense_quant import quantize_dense
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache
 
 

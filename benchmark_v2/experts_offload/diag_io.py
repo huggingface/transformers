@@ -48,8 +48,11 @@ def run(name, fn, threads=4):
         fn(threads)
         torch.cuda.synchronize()
         seconds = time.perf_counter() - start
-        print(f"{name:36s} {'cold' if cold else 'warm'}  {seconds * 1e3:7.0f} ms  {total / seconds / 1e9:5.2f} GB/s"
-              f"  {seconds / len(experts) * 1e3:5.2f} ms/expert", flush=True)
+        print(
+            f"{name:36s} {'cold' if cold else 'warm'}  {seconds * 1e3:7.0f} ms  {total / seconds / 1e9:5.2f} GB/s"
+            f"  {seconds / len(experts) * 1e3:5.2f} ms/expert",
+            flush=True,
+        )
 
 
 stream = torch.cuda.Stream()

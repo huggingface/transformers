@@ -8,8 +8,8 @@ import inspect
 import sys
 
 import torch
-
 from dense_quant import quantize_dense
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 

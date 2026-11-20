@@ -5,15 +5,39 @@ import sys
 import time
 
 import torch
-
 from dense_quant import quantize_dense
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompileConfig
 
 
 repo = sys.argv[1] if len(sys.argv) > 1 else "ArthurZ/Qwen3-30B-A3B-metal-experts-4bit"
 spec = sys.argv[2] if len(sys.argv) > 2 else "4g32c"
+cache_gib = float(sys.argv[3]) if len(sys.argv) > 3 else 0  # > 0: stream experts (and n-gram rows) through this cache
 tok = AutoTokenizer.from_pretrained(repo)
-model = AutoModelForCausalLM.from_pretrained(repo, dtype=torch.bfloat16, device_map="mps")
+if cache_gib:
+    import glob
+    import os
+
+    from huggingface_hub import snapshot_download
+    from safetensors import safe_open
+
+    path = repo if os.path.isdir(repo) else snapshot_download(repo)
+    resident = 0  # bytes of everything not streamed
+    for file in glob.glob(f"{path}/*.safetensors"):
+        with safe_open(file, "pt") as f:
+            for key in f.keys():
+                if ".experts." not in key and ".ngram_embedding." not in key:
+                    meta = f.get_tensor_meta(key) if hasattr(f, "get_tensor_meta") else None
+                    shape = meta.shape if meta else f.get_slice(key).get_shape()
+                    resident += torch.Size(shape).numel() * 2  # bf16 once loaded
+    model = AutoModelForCausalLM.from_pretrained(
+        repo,
+        dtype=torch.bfloat16,
+        device_map={"": "mps", "experts": "disk", "ngram_embedding": "disk"},
+        max_memory={"mps": int(resident + cache_gib * 2**30)},
+    )
+else:
+    model = AutoModelForCausalLM.from_pretrained(repo, dtype=torch.bfloat16, device_map="mps")
 quantize_dense(model, spec)
 compile_config = CompileConfig()
 compile_config._compile_all_devices = True  # generate only auto-compiles on cuda / xpu / ... otherwise
