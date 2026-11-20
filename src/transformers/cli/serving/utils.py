@@ -27,8 +27,9 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import TYPE_CHECKING, Any
 
 from huggingface_hub import scan_cache_dir
@@ -1150,6 +1151,8 @@ class BaseHandler:
 
     _valid_params_class: type | None = None
     _unused_fields: set[str] = set()
+    # One thread, shared by all the handlers, tokenizes the prompts (see `run_in_thread`)
+    _tokenizer_thread = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tokenizer")
 
     def __init__(
         self,
@@ -1266,6 +1269,11 @@ class BaseHandler:
             generation_kwargs["cache_implementation"] = "static"
 
         return generation_kwargs
+
+    async def run_in_thread(self, function: Callable, *args, **kwargs) -> Any:
+        """Runs `function` in the tokenizer thread, so the event loop isn't blocked."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._tokenizer_thread, partial(function, *args, **kwargs))
 
     def render_messages(self, engine: "EngineClient", messages: list[dict], body: dict) -> dict:
         """OpenAI messages → the model's inputs: the processor's messages, with the request's tools, through the chat

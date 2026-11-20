@@ -95,7 +95,7 @@ class CompletionHandler(BaseHandler):
 
         engine = self._get_engine(body)
         tokenizer = getattr(engine.processor, "tokenizer", engine.processor)
-        inputs = tokenizer(prompt, return_tensors=None if engine.use_cb else "pt")
+        inputs = await self.run_in_thread(tokenizer, prompt, return_tensors=None if engine.use_cb else "pt")
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         suffix = body.get("suffix")

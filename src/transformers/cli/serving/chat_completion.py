@@ -119,7 +119,7 @@ class ChatCompletionHandler(BaseHandler):
         self._validate_request(body)
 
         engine = self._get_engine(body)
-        inputs = self.render_messages(engine, body["messages"], body)
+        inputs = await self.run_in_thread(self.render_messages, engine, body["messages"], body)
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         streaming = body.get("stream")
