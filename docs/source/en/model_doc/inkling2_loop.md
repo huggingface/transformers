@@ -20,7 +20,7 @@ limitations under the License.
 
 # Inkling 2 Mini
 
-Inkling 2 Mini is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is based on [Inkling 2 Small](./inkling2) but has only 24 decoder layers instead of 48. The lower layer count is compensated for by a looping mechanism in which layers 6 to 17 run three times. Information is shared between loop passes through a learned message-passing mechanism that mixes the residuals of the previous pass into the attention and mixture-of-experts inputs of each loop layer. The decoder has a hidden size of 2304 and routes each token to 8 of 128 experts. The image encoder, tokenizer and processor are identical to those of Inkling 2 Small.
+[Inkling 2 Mini](https://huggingface.co/collections/thinkingmachines/inkling-2) is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is based on [Inkling 2 Small](./inkling2) but has only 24 decoder layers instead of 48. The lower layer count is compensated for by a looping mechanism in which layers 6 to 17 run three times. Information is shared between loop passes through a learned message-passing mechanism that mixes the residuals of the previous pass into the attention and mixture-of-experts inputs of each loop layer. The decoder has a hidden size of 2304 and routes each token to 8 of 128 experts. The image encoder, tokenizer and processor are identical to those of Inkling 2 Small.
 
 Inkling 2 Mini comes with an additional [research checkpoint](https://huggingface.co/thinkingmachines/TML-d24-varloop-research) that supports a variable number of loop passes. The architecture is identical to the main Inkling 2 Mini model. The number of loop passes can be adjusted to trade off speed against quality. Fewer passes are faster, while more passes improve quality.
 
@@ -28,11 +28,12 @@ Both checkpoints contain NVFP4 and MXFP8 quantized layers that Transformers dequ
 
 **Checkpoints**
 
-- [Inkling 2 Mini](http://hf.co/thinkingmachines/Inkling-2-Mini)
-- [Inkling 2 Mini varloop research](http://hf.co/thinkingmachines/TML-d24-varloop-research)
+- [Inkling 2 Mini](https://hf.co/thinkingmachines/Inkling-2-Mini)
+- [Inkling 2 Mini varloop research](https://hf.co/thinkingmachines/TML-d24-varloop-research)
 
 ## Resources
 
+- [Thinking Machines Blog](https://thinkingmachines.ai/news/inkling-2-mini/)
 - [Hugging Face Blog](https://huggingface.co/blog/inkling2mini)
 
 <hfoptions id="usage">
