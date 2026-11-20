@@ -39,6 +39,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -48,19 +49,18 @@ if is_torch_available():
     import torch
 
 
-class VideoLlavaVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        video_token_index=1,
-        projector_hidden_act="gelu",
-        seq_length=3,
-        num_frames=2,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        text_config={
+class VideoLlavaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_index": 0,
+        "video_token_index": 1,
+        "projector_hidden_act": "gelu",
+        "seq_length": 3,
+        "num_frames": 2,
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 13,
             "is_training": True,
@@ -83,8 +83,8 @@ class VideoLlavaVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 3,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "model_type": "clip_vision_model",
             "batch_size": 12,
             "image_size": 8,
@@ -100,32 +100,29 @@ class VideoLlavaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-    ):
+        "batch_size": 5,
+        "num_channels": 3,
+        "image_size": 224,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_image_tokens"] = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
+        values["num_video_tokens"] = (values["num_image_tokens"] + 1) * values["num_frames"]
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"] + values["num_video_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.num_frames = num_frames
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 5
-        self.num_channels = 3
-        self.image_size = 224
-
-        self.num_image_tokens = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
-        self.num_video_tokens = (self.num_image_tokens + 1) * self.num_frames
-        self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -189,6 +186,8 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     """
     Model tester for `VideoLlavaForConditionalGeneration`.
     """
+
+    model_tester_class = VideoLlavaVisionText2TextModelTester
 
     all_model_classes = (
         (

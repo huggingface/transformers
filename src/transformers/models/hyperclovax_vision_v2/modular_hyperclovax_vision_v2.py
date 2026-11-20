@@ -333,8 +333,8 @@ class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
         self._pending_needs_placeholder = None
 
     def apply_chat_template(self, conversation, **kwargs):
-        is_batched = isinstance(conversation[0], (list, tuple)) if conversation else False
-        conversations = conversation if is_batched else [conversation]
+        # We only normalize here to look for videos. The original conversation is what we pass on below.
+        conversations, _ = self._normalize_conversations(conversation)
         self._pending_needs_placeholder = [
             "video_duration" not in block
             for conv in conversations

@@ -341,6 +341,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
     # Use the DeepseekV3 implementation, which the auto mappings point to
     "SarvamMLAConfig": True,
+    # Use the GLM-4-MoE implementation, which the auto mappings point to
+    "SarvamMoEConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)

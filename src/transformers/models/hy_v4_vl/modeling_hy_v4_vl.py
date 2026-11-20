@@ -129,8 +129,8 @@ class HYV4VLIndexer(nn.Module):
 
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps, dtype=torch.float32)
+        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False, dtype=torch.float32)
         self.softmax_scale = self.head_dim**-0.5
 
     @torch.no_grad()
@@ -324,7 +324,7 @@ class HYV4VLAttention(nn.Module):
         self.indexer = None if self.skip_topk else HYV4VLIndexer(config, layer_idx)
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
-        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))
+        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init, dtype=torch.float32))
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Expands the compressed latents into key and value states. Args:
@@ -467,7 +467,7 @@ class HYV4VLTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -577,9 +577,11 @@ class HYV4VLHyperConnection(nn.Module):
         self.hc_eps = config.hc_eps
         self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
-        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
-        self.scale = nn.Parameter(torch.empty(2))
+        self.fn = nn.Parameter(
+            torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size, dtype=torch.float32)
+        )
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.empty(2, dtype=torch.float32))
         self.hc_post_magnitude = config.hc_magnitude
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -612,9 +614,9 @@ class HYV4VLHyperHead(nn.Module):
         self.hc_mult = config.hc_mult
         self.input_norm = HYV4VLUnweightedRMSNorm(eps=config.rms_norm_eps)
         self.eps = config.hc_eps
-        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size))
-        self.hc_base = nn.Parameter(torch.empty(self.hc_mult))
-        self.hc_scale = nn.Parameter(torch.empty(1))
+        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size, dtype=torch.float32))
+        self.hc_base = nn.Parameter(torch.empty(self.hc_mult, dtype=torch.float32))
+        self.hc_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
@@ -638,8 +640,8 @@ class HYV4VLDecoderLayer(GradientCheckpointingLayer):
         self.mlp = HYV4VLMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4VLMLP(config)
         self.input_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn_hc = HYV4VLHyperConnection(config)
-        self.ffn_hc = HYV4VLHyperConnection(config)
+        self.attn_hc = HYV4VLHyperConnection(config).to(dtype=torch.float32)
+        self.ffn_hc = HYV4VLHyperConnection(config).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -702,6 +704,7 @@ class HYV4VLPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "fn",
         "scale",
         "base",
@@ -1605,7 +1608,9 @@ class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
     def __init__(self, config: HYV4VLConfig):
         super().__init__(config)
         self.model = HYV4VLModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32
+        )
 
         self.post_init()
 
