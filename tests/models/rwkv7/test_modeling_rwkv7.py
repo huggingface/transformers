@@ -155,13 +155,17 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # one WKV matrix per head
         return (batch_size, config.num_heads, config.head_dim, config.head_dim)
 
+    @unittest.skip("New model: `cache` only, no `cache_params` BC")
+    def test_bc_cache_name_forward(self):
+        pass
+
     # Passing a cache into `generate` makes the prefill call `DynamicCache.get_seq_length()`, which a cache made only of
     # linear-attention layers cannot answer (they do not track a length). Continuing from a cache through `forward` is
     # covered by `test_prefill_in_pieces_matches_one_prefill` and `test_generate_matches_a_manual_cached_greedy_loop`.
     @unittest.skip(
         reason="generate() cannot take a linear-attention-only DynamicCache (no sequence length to slice by)."
     )
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
     @unittest.skip(
@@ -197,7 +201,7 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         out = model(input_ids=input_ids, use_cache=True)
         self.assertEqual(out.last_hidden_state.shape, (2, 7, config.hidden_size))
 
-        cache = out.past_key_values
+        cache = out.cache
         self.assertIsInstance(cache, DynamicCache)
         # No sequence axis anywhere: slot 0 / 1 are the time-mix / channel-mix token shifts,
         # recurrent slot 0 is the WKV matrix, carried in fp32.
@@ -216,7 +220,7 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_ids = torch.randint(0, config.vocab_size, (2, 5), device=torch_device)
         layer = model.layers[0]
         with torch.no_grad():
-            cache = model(input_ids=input_ids, use_cache=True).past_key_values
+            cache = model(input_ids=input_ids, use_cache=True).cache
             hidden = layer.ln0(model.embed_tokens(input_ids))
             att_input = layer.ln1(hidden)
         torch.testing.assert_close(cache.layers[0].conv_states[0][..., 0], att_input[:, -1], rtol=0, atol=0)
@@ -238,7 +242,7 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         def cache_bytes(length):
             ids = torch.randint(0, config.vocab_size, (1, length), device=torch_device)
             with torch.no_grad():
-                cache = model(input_ids=ids, use_cache=True).past_key_values
+                cache = model(input_ids=ids, use_cache=True).cache
             return sum(
                 state.numel() * state.element_size()
                 for layer in cache.layers
@@ -263,8 +267,8 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             full = model(input_ids=input_ids).logits
             cache, steps = None, []
             for position in range(input_ids.shape[1]):
-                out = model(input_ids=input_ids[:, position : position + 1], past_key_values=cache, use_cache=True)
-                cache = out.past_key_values
+                out = model(input_ids=input_ids[:, position : position + 1], cache=cache, use_cache=True)
+                cache = out.cache
                 steps.append(out.logits)
             incremental = torch.cat(steps, dim=1)
 
@@ -279,8 +283,8 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         with torch.no_grad():
             full = model(input_ids=input_ids).logits
             first = model(input_ids=input_ids[:, :4], use_cache=True)
-            second = model(input_ids=input_ids[:, 4:9], past_key_values=first.past_key_values, use_cache=True)
-            third = model(input_ids=input_ids[:, 9:], past_key_values=second.past_key_values, use_cache=True)
+            second = model(input_ids=input_ids[:, 4:9], cache=first.cache, use_cache=True)
+            third = model(input_ids=input_ids[:, 9:], cache=second.cache, use_cache=True)
             pieces = torch.cat([first.logits, second.logits, third.logits], dim=1)
 
         torch.testing.assert_close(full, pieces, rtol=1e-4, atol=1e-4)
@@ -297,7 +301,7 @@ class Rwkv7ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             for _ in range(7):
                 out = model(
                     input_ids=torch.tensor([[manual[-1]]], device=torch_device),
-                    past_key_values=out.past_key_values,
+                    cache=out.cache,
                     use_cache=True,
                 )
                 manual.append(int(out.logits[0, -1].argmax()))
@@ -618,9 +622,7 @@ class Rwkv7IntegrationTests(unittest.TestCase):
             out = self.model(input_ids=torch.tensor([self.PROMPT_IDS]), use_cache=True)
             cached.append(int(out.logits[0, -1].argmax()))
             for _ in range(19):
-                out = self.model(
-                    input_ids=torch.tensor([[cached[-1]]]), past_key_values=out.past_key_values, use_cache=True
-                )
+                out = self.model(input_ids=torch.tensor([[cached[-1]]]), cache=out.cache, use_cache=True)
                 cached.append(int(out.logits[0, -1].argmax()))
 
             walk = list(self.PROMPT_IDS)

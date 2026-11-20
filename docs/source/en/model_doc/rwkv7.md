@@ -82,7 +82,7 @@ inputs = tokenizer("\nThe Eiffel Tower is located in the city of", return_tensor
 print(tokenizer.decode(model.generate(**inputs, max_new_tokens=20)[0]))
 ```
 
-The recurrent state is returned in `past_key_values` as a [`DynamicCache`] whose layers
+The recurrent state is returned in `cache` as a [`DynamicCache`] whose layers
 are linear-attention layers: per block, two width-1 conv states (the token shifts of the
 time mix and of the channel mix) and one recurrent state (the WKV matrix, kept in
 float32). Its size does not depend on the sequence length. Feed it back to continue:
@@ -90,7 +90,7 @@ float32). Its size does not depend on the sequence length. Feed it back to conti
 ```python
 out = model(**inputs, use_cache=True)
 next_token = out.logits[:, -1:].argmax(-1)
-next_out = model(input_ids=next_token, past_key_values=out.past_key_values, use_cache=True)
+next_out = model(input_ids=next_token, cache=out.cache, use_cache=True)
 ```
 
 Continue from a cache through `forward`, as above. `generate` cannot currently be handed an existing cache:

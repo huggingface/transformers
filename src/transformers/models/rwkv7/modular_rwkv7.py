@@ -77,14 +77,14 @@ def torch_rwkv7(r, w, k, v, a, b, scale=1.0, initial_state=None, output_final_st
     return out.to(dtype), state if output_final_state else None
 
 
-def token_shift(hidden_states, past_key_values, layer_idx, state_idx, cu_seqlens=None):
+def token_shift(hidden_states, cache, layer_idx, state_idx, cu_seqlens=None):
     """Previous token's hidden state (zero at sequence start), carried as a width-1 conv state."""
     seq_len = hidden_states.shape[1]
     hidden_states = hidden_states.transpose(1, 2)
-    if past_key_values is None or not past_key_values.has_previous_state(layer_idx, state_idx):
+    if cache is None or not cache.has_previous_state(layer_idx, state_idx):
         hidden_states = F.pad(hidden_states, (1, 0))
-    if past_key_values is not None:
-        hidden_states = past_key_values.update_conv_state(hidden_states, layer_idx, state_idx, conv_kernel_size=1)
+    if cache is not None:
+        hidden_states = cache.update_conv_state(hidden_states, layer_idx, state_idx, conv_kernel_size=1)
     shifted = hidden_states[..., -seq_len - 1 : -1].transpose(1, 2)
     if cu_seqlens is not None:
         # packed sequences: each one starts from a zero shift, not from the previous sequence's last token
@@ -132,15 +132,15 @@ class Rwkv7Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         v_first: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, seq_len, _ = hidden_states.shape
         heads_shape = (batch, seq_len, -1, self.head_dim)
-        has_state = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx, 0)
+        has_state = cache is not None and cache.has_previous_state(self.layer_idx, 0)
 
         cu_seqlens = kwargs.get("cu_seq_lens_q")
-        delta = token_shift(hidden_states, past_key_values, self.layer_idx, 0, cu_seqlens) - hidden_states
+        delta = token_shift(hidden_states, cache, self.layer_idx, 0, cu_seqlens) - hidden_states
         xr, xw, xk, xv, xa, xg = (
             hidden_states + mix * delta for mix in (self.x_r, self.x_w, self.x_k, self.x_v, self.x_a, self.x_g)
         )
@@ -158,7 +158,7 @@ class Rwkv7Attention(nn.Module):
         k = k * (1 + (a - 1) * self.k_a)
         r, w, k, v, a = (x.view(heads_shape) for x in (r, w, k, v, a))
 
-        initial_state = past_key_values.layers[self.layer_idx].recurrent_states[0] if has_state else None
+        initial_state = cache.layers[self.layer_idx].recurrent_states[0] if has_state else None
         out, state = torch_rwkv7(
             r,
             w,
@@ -171,8 +171,8 @@ class Rwkv7Attention(nn.Module):
             output_final_state=True,
             cu_seqlens=cu_seqlens,
         )
-        if past_key_values is not None:
-            past_key_values.update_recurrent_state(state, self.layer_idx, 0)
+        if cache is not None:
+            cache.update_recurrent_state(state, self.layer_idx, 0)
 
         out = self.ln_x(out.reshape(batch * seq_len, -1)).view(batch, seq_len, -1)
         out = out + ((r * k * self.r_k).sum(-1, keepdim=True) * v).view(batch, seq_len, -1)
@@ -190,8 +190,8 @@ class Rwkv7FeedForward(nn.Module):
         self.value = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.act_fn = ACT2FN["relu2"]
 
-    def forward(self, hidden_states: torch.Tensor, past_key_values: Cache | None = None, **kwargs) -> torch.Tensor:
-        shifted = token_shift(hidden_states, past_key_values, self.layer_idx, 1, kwargs.get("cu_seq_lens_q"))
+    def forward(self, hidden_states: torch.Tensor, cache: Cache | None = None, **kwargs) -> torch.Tensor:
+        shifted = token_shift(hidden_states, cache, self.layer_idx, 1, kwargs.get("cu_seq_lens_q"))
         return self.value(self.act_fn(self.key(hidden_states + self.x_k * (shifted - hidden_states))))
 
 
@@ -209,15 +209,15 @@ class Rwkv7DecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         v_first: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         hidden_states = self.ln0(hidden_states)
         residual = apply_mask_to_padding_states(self.ln1(hidden_states), attention_mask)
-        residual, v_first = self.att(residual, v_first, past_key_values, **kwargs)
+        residual, v_first = self.att(residual, v_first, cache, **kwargs)
         hidden_states = hidden_states + residual
         residual = apply_mask_to_padding_states(self.ln2(hidden_states), attention_mask)
-        hidden_states = hidden_states + self.ffn(residual, past_key_values, **kwargs)
+        hidden_states = hidden_states + self.ffn(residual, cache, **kwargs)
         return hidden_states, v_first
 
 
@@ -255,7 +255,7 @@ class Rwkv7Model(Rwkv7PreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -264,21 +264,19 @@ class Rwkv7Model(Rwkv7PreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if isinstance(attention_mask, dict):
             attention_mask = attention_mask["linear_attention"]
         else:
-            attention_mask = create_recurrent_attention_mask(
-                self.config, inputs_embeds, attention_mask, past_key_values
-            )
+            attention_mask = create_recurrent_attention_mask(self.config, inputs_embeds, attention_mask, cache)
         hidden_states, v_first = inputs_embeds, None
         for decoder_layer in self.layers:
             hidden_states, v_first = decoder_layer(
-                hidden_states, v_first, attention_mask=attention_mask, past_key_values=past_key_values, **kwargs
+                hidden_states, v_first, attention_mask=attention_mask, cache=cache, **kwargs
             )
-        return BaseModelOutputWithPast(last_hidden_state=self.norm(hidden_states), past_key_values=past_key_values)
+        return BaseModelOutputWithPast(last_hidden_state=self.norm(hidden_states), cache=cache)
 
 
 class Rwkv7ForCausalLM(LlamaForCausalLM):

@@ -265,10 +265,8 @@ class Rwkv7NumpyReferenceTest(unittest.TestCase):
         with torch.no_grad():
             cache, steps = None, []
             for token in token_ids:
-                out = model(
-                    input_ids=torch.tensor([[token]], device=torch_device), past_key_values=cache, use_cache=True
-                )
-                cache = out.past_key_values
+                out = model(input_ids=torch.tensor([[token]], device=torch_device), cache=cache, use_cache=True)
+                cache = out.cache
                 steps.append(out.logits[0, 0])
             torch_logits = torch.stack(steps)
 
