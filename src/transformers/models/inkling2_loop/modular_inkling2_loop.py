@@ -50,8 +50,7 @@ from ..inkling2.modeling_inkling2 import (
 )
 
 
-# TODO: update before release
-@auto_docstring(checkpoint="thinkingmachines/inkling-1116-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Mini")
 @strict
 class Inkling2LoopTextConfig(Inkling2TextConfig):
     r"""
@@ -145,7 +144,7 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
         return self.num_hidden_layers + (self.loop_num_passes - 1) * num_loop_layers
 
 
-@auto_docstring(checkpoint="thinkingmachines/inkling-1116-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Mini")
 @strict
 class Inkling2LoopConfig(Inkling2Config):
     r"""
@@ -594,9 +593,9 @@ class Inkling2LoopForCausalLM(Inkling2ForCausalLM):
         >>> import torch
         >>> from transformers import AutoTokenizer, Inkling2LoopForCausalLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/inkling-1116-share")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Mini")
         >>> model = Inkling2LoopForCausalLM.from_pretrained(
-        ...     "thinkingmachines/inkling-1116-share", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Mini", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [{"role": "user", "content": "Explain in one sentence why the sky is usually blue."}]
@@ -631,9 +630,9 @@ class Inkling2LoopModel(Inkling2Model):
         >>> import torch
         >>> from transformers import AutoProcessor, Inkling2LoopModel
 
-        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/inkling-1116-share")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Mini")
         >>> model = Inkling2LoopModel.from_pretrained(
-        ...     "thinkingmachines/inkling-1116-share", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Mini", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [
@@ -676,9 +675,9 @@ class Inkling2LoopForConditionalGeneration(Inkling2ForConditionalGeneration):
         >>> import torch
         >>> from transformers import AutoProcessor, Inkling2LoopForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/inkling-1116-share")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Mini")
         >>> model = Inkling2LoopForConditionalGeneration.from_pretrained(
-        ...     "thinkingmachines/inkling-1116-share", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Mini", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [

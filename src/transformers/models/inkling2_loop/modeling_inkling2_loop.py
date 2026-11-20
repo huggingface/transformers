@@ -1502,9 +1502,9 @@ class Inkling2LoopForCausalLM(Inkling2LoopPreTrainedModel, GenerationMixin):
         >>> import torch
         >>> from transformers import AutoTokenizer, Inkling2LoopForCausalLM
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/inkling-1116-share")
+        >>> tokenizer = AutoTokenizer.from_pretrained("thinkingmachines/Inkling-2-Mini")
         >>> model = Inkling2LoopForCausalLM.from_pretrained(
-        ...     "thinkingmachines/inkling-1116-share", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Mini", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [{"role": "user", "content": "Explain in one sentence why the sky is usually blue."}]
@@ -1641,9 +1641,9 @@ class Inkling2LoopModel(Inkling2LoopPreTrainedModel):
         >>> import torch
         >>> from transformers import AutoProcessor, Inkling2LoopModel
 
-        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/inkling-1116-share")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Mini")
         >>> model = Inkling2LoopModel.from_pretrained(
-        ...     "thinkingmachines/inkling-1116-share", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Mini", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [
@@ -1767,9 +1767,9 @@ class Inkling2LoopForConditionalGeneration(Inkling2LoopPreTrainedModel, Generati
         >>> import torch
         >>> from transformers import AutoProcessor, Inkling2LoopForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/inkling-1116-share")
+        >>> processor = AutoProcessor.from_pretrained("thinkingmachines/Inkling-2-Mini")
         >>> model = Inkling2LoopForConditionalGeneration.from_pretrained(
-        ...     "thinkingmachines/inkling-1116-share", dtype=torch.bfloat16, device_map="auto"
+        ...     "thinkingmachines/Inkling-2-Mini", dtype=torch.bfloat16, device_map="auto"
         ... )
 
         >>> messages = [

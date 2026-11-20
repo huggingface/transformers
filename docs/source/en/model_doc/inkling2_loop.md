@@ -28,8 +28,8 @@ Both checkpoints contain NVFP4 and MXFP8 quantized layers that Transformers dequ
 
 **Checkpoints**
 
-- [Inkling 2 Mini](https://hf.co/thinkingmachines/Inkling-2-Mini)
-- [Inkling 2 Mini varloop research](https://hf.co/thinkingmachines/TML-d24-varloop-research)
+- [Inkling 2 Mini](https://huggingface.co/thinkingmachines/Inkling-2-Mini)
+- [Inkling 2 Mini varloop research](https://huggingface.co/thinkingmachines/TML-d24-varloop-research)
 
 ## Resources
 
@@ -45,7 +45,7 @@ import torch
 from transformers import pipeline
 
 pipe = pipeline(
-    "image-text-to-text", model="thinkingmachines/inkling-1116-share", dtype=torch.bfloat16, device_map="auto"
+    "image-text-to-text", model="thinkingmachines/Inkling-2-Mini", dtype=torch.bfloat16, device_map="auto"
 )
 
 messages = [
@@ -81,7 +81,7 @@ import torch
 
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "thinkingmachines/inkling-1116-share"
+model_id = "thinkingmachines/Inkling-2-Mini"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 

@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="thinkingmachines/inkling-1116-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Mini")
 @strict
 class Inkling2LoopTextConfig(PreTrainedConfig):
     r"""
@@ -176,7 +176,7 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
         return self.num_hidden_layers + (self.loop_num_passes - 1) * num_loop_layers
 
 
-@auto_docstring(checkpoint="thinkingmachines/inkling-1116-share")
+@auto_docstring(checkpoint="thinkingmachines/Inkling-2-Mini")
 @strict
 class Inkling2LoopConfig(PreTrainedConfig):
     r"""

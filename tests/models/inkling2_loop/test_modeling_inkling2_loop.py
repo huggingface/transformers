@@ -350,7 +350,7 @@ class Inkling2LoopIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         RUN_SLOW=1 pytest tests/models/inkling2_loop/test_modeling_inkling2_loop.py::Inkling2LoopIntegrationTest -s
     """
 
-    model_id = "thinkingmachines/inkling-1116-share"
+    model_id = "thinkingmachines/Inkling-2-Mini"
 
     MAX_NEW_TOKENS = 30
 
