@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_masks_for_generate, get_layer_mask_keys
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -219,10 +219,15 @@ class ExaoneMoeMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
+        self.swiglu_limit = config.swiglu_limit or float("inf")
 
     def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        gate = self.gate_proj(x)
+        up = self.up_proj(x)
+        # Key difference using clamping
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        return self.down_proj(self.act_fn(gate) * up)
 
 
 class ExaoneMoeTopkRouter(nn.Module):
@@ -277,33 +282,31 @@ class ExaoneMoeExperts(nn.Module):
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.swiglu_limit = config.swiglu_limit or float("inf")
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
+        final = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
+            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
+            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
+        for expert_idx in hit:
             expert_idx = expert_idx[0]
             if expert_idx == self.num_experts:
                 continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+            top_k_pos, token_idx = torch.where(mask[expert_idx])
+            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
+            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
+            final.index_add_(0, token_idx, current.to(final.dtype))
+        return final
 
-        return final_hidden_states
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        gate = gate.clamp(min=None, max=self.swiglu_limit)
+        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        # Simple swiglu instead of alpha
+        return F.silu(gate) * up
 
 
 class ExaoneMoeSparseMoEBlock(nn.Module):
@@ -333,6 +336,8 @@ class ExaoneMoeSparseMoEBlock(nn.Module):
 class ExaoneMoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ExaoneMoeConfig, layer_idx: int):
         super().__init__()
+        # K-EXAONE 2.0 sets `sliding_window` and `swiglu_limit` per layer
+        config = config.per_layer_config[layer_idx]
         self.hidden_size = config.hidden_size
         self.self_attn = ExaoneMoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
@@ -467,6 +472,7 @@ class ExaoneMoeModel(ExaoneMoePreTrainedModel):
         self.rotary_emb = ExaoneMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.has_sliding_layers = "sliding_attention" in self.config.layer_types
+        self.mask_keys = get_layer_mask_keys(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -500,20 +506,13 @@ class ExaoneMoeModel(ExaoneMoePreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache": cache,
-                "position_ids": position_ids,
-            }
-            mask_creation_functions = {
-                "full_attention": lambda: create_causal_mask(**mask_kwargs),
-                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
-            }
-            causal_mask_mapping = {}
-            for layer_type in set(self.config.layer_types):
-                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
+            causal_mask_mapping = create_masks_for_generate(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+                position_ids=position_ids,
+            )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -521,7 +520,7 @@ class ExaoneMoeModel(ExaoneMoePreTrainedModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                attention_mask=causal_mask_mapping[self.mask_keys[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 cache=cache,
