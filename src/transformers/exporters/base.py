@@ -104,7 +104,7 @@ class ExportedModel(PushToHubMixin):
         self.export_format = export_format
         self.config = config
         self.generation_config = generation_config
-        # Graphs a generation loop drives (`HfExporter.export_for_generation`), not called directly
+        # Graphs `generate` drives (`HfExporter.export_for_generation`)
         self.generation = generation
         self._runners: dict[str, ModelRunner] | None = None
 
@@ -160,12 +160,6 @@ class ExportedModel(PushToHubMixin):
         """Run a single-graph export, returning what the source model returns. Kwargs the export was not traced with
         are dropped, so a processor's whole output can be passed; the runner's `share_inputs` and `share_outputs` go to
         it (see [`ModelRunner.__call__`])."""
-        if self.generation:
-            raise ValueError(
-                f"This is a generation export ({list(self.components)}), run by a generation loop; that runtime isn't "
-                "available yet. Calling an export runs a single graph (`HfExporter.export`) or a multimodal split "
-                "(`HfExporter.export_multimodal`)."
-            )
         name = self._single_component()
         runner = self.runners[name]
         runner_options = {key: kwargs.pop(key) for key in ("share_inputs", "share_outputs") if key in kwargs}
@@ -351,7 +345,7 @@ class ExportedModel(PushToHubMixin):
         generation_config = (
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
-        model_class = _exported_model_class(components)
+        model_class = _exported_model_class(components, generation=manifest.get("generation", False))
         if not issubclass(model_class, cls):
             raise TypeError(
                 f"{pretrained_model_name_or_path} runs as a {model_class.__name__}, not a {cls.__name__}: load it with "
@@ -369,13 +363,26 @@ class ExportedModel(PushToHubMixin):
         return model
 
 
-def _exported_model_class(component_names) -> type[ExportedModel]:
-    """The class an export runs as, from its components: a multimodal split as an `ExportedMultimodalModel`."""
+def _exported_model_class(component_names, generation: bool = False) -> type[ExportedModel]:
+    """The class an export runs as, from its components: a multimodal split as an `ExportedMultimodalModel`, and a
+    generation export as the model `generate` drives."""
+    from .generation import ExportedModelForCausalLM, ExportedModelForSeq2SeqLM, ExportedMultimodalModelForCausalLM
     from .multimodal import MULTIMODAL_COMPONENTS, ExportedMultimodalModel
 
-    if {"language_model", "text_embeddings_model"} <= set(component_names) <= MULTIMODAL_COMPONENTS:
-        return ExportedMultimodalModel
-    return ExportedModel
+    # Beside a prompt graph, the language model is `decode_model`.
+    names = {"language_model" if name == DECODE_GRAPH else name for name in component_names if name != PREFILL_GRAPH}
+    multimodal = {"language_model", "text_embeddings_model"} <= names <= MULTIMODAL_COMPONENTS
+    if generation:
+        if "encoder_model" in component_names:
+            return ExportedModelForSeq2SeqLM
+        return ExportedMultimodalModelForCausalLM if multimodal else ExportedModelForCausalLM
+    return ExportedMultimodalModel if multimodal else ExportedModel
+
+
+def _is_dynamic(config) -> bool:
+    """Whether the decode graph's export config (or the single config) exports dynamic shapes."""
+    decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
+    return bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
 
 
 def _is_dynamic(config) -> bool:
@@ -667,7 +674,7 @@ class HfExporter(ABC):
                 decoder_writes_cross_cache=decoder_writes_cross_cache,
             )
 
-        return ExportedModel(
+        return _exported_model_class(components, generation=True)(
             self._export_components(components, config, calibration),
             self.export_format,
             config=getattr(model, "config", None),

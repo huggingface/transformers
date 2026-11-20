@@ -23,6 +23,7 @@ from .decompose import (
     _MODALITY_SPECS,
     DEEPSTACK_INPUTS,
     ModalitySpec,
+    decode_graph_name,
     dense_deepstack,
     flatten_anyres_patches,
     pack_anyres_features,
@@ -50,34 +51,7 @@ class ExportedMultimodalModel(ExportedModel):
     def __call__(self, share_inputs: bool = True, share_outputs: bool = False, **kwargs) -> Any:
         """Run the components on a processor's whole output, returning what the source model returns.
         `share_inputs` and `share_outputs` go to the `language_model` runner, as for [`ExportedModel.__call__`]."""
-        input_ids = kwargs["input_ids"]
-        # The embedder's and modality graphs' outputs are read within this call (what the model returns is copied
-        # out), so a backend may hand out its own buffers.
-        embedded = self.runners["text_embeddings_model"](input_ids=input_ids, share_outputs=True)
-        inputs_embeds = embedded["inputs_embeds"] if isinstance(embedded, dict) else embedded
-        features, deepstack = {}, []
-        for spec in _MODALITY_SPECS:
-            given = [key for key in spec.feature_keys if kwargs.get(key) is not None]
-            if not given:
-                continue
-            runner = self.runners.get(spec.component)
-            if runner is None:
-                raise ValueError(
-                    f"Got `{given[0]}`, but this export has no `{spec.component}`: export the model with inputs that "
-                    "include this modality to run it."
-                )
-            features[spec.component], layers = self._features(spec, runner, kwargs)
-            mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
-            if features[spec.component] is None:
-                # All of Granite4-Vision's features are added inside the decoder, over zeroed placeholder rows; the
-                # model returns them too, one tensor per decoder layer in its config's order.
-                inputs_embeds = inputs_embeds.masked_fill(mask, 0.0)
-                layers = {layer: torch.cat(images) for layer, images in layers.items()}
-                features["deepstack_features"] = list(layers.values())
-            else:
-                inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
-            if layers is not None:
-                deepstack.append((mask[..., 0], layers))
+        embedded, features = self.embed(**kwargs)
         inputs = dict(kwargs)
         # M-RoPE positions come from the token ids and grids, which the language model no longer takes.
         if (
@@ -85,8 +59,7 @@ class ExportedMultimodalModel(ExportedModel):
             and (rope_index := get_rope_index_from_config(self.config, kwargs)) is not None
         ):
             inputs["position_ids"] = rope_index[0]
-        inputs["inputs_embeds"] = inputs_embeds
-        inputs.update(self._deepstack_inputs(deepstack, inputs_embeds))
+        inputs.update(embedded)
         language_model = self.runners["language_model"]
         traced = language_model.metadata.kwargs
         outputs = language_model(
@@ -105,10 +78,50 @@ class ExportedMultimodalModel(ExportedModel):
             ]
         return outputs
 
+    def embed(self, **kwargs) -> tuple[dict, dict]:
+        """`input_ids` as `inputs_embeds` (plus `per_layer_inputs` when the embedder returns them), each present
+        modality's features scattered into its placeholder rows, and what a deepstack decoder adds inside its layers;
+        and the features, by component (a Granite4-Vision tower's per-layer ones under `deepstack_features`)."""
+        input_ids = kwargs["input_ids"]
+        # The embedder's and modality graphs' outputs are read within this call (what the model returns is copied
+        # out), so a backend may hand out its own buffers.
+        embedded = self.runners["text_embeddings_model"](input_ids=input_ids, share_outputs=True)
+        embedded = dict(embedded) if isinstance(embedded, dict) else {"inputs_embeds": embedded}
+        inputs_embeds = embedded["inputs_embeds"]
+        features, deepstack = {}, []
+        for spec in _MODALITY_SPECS:
+            given = [key for key in spec.feature_keys if kwargs.get(key) is not None]
+            if not given:
+                continue
+            runner = self.runners.get(spec.component)
+            if runner is None:
+                raise ValueError(
+                    f"Got `{given[0]}`, but this export has no `{spec.component}`: export the model with inputs that "
+                    "include this modality to run it."
+                )
+            mask = (input_ids == getattr(self.config, spec.token_field)).unsqueeze(-1).to(inputs_embeds.device)
+            # A generation step after the prompt carries the modality inputs on but no placeholder to fill
+            if not mask.any():
+                continue
+            features[spec.component], layers = self._features(spec, runner, kwargs)
+            if features[spec.component] is None:
+                # All of Granite4-Vision's features are added inside the decoder, over zeroed placeholder rows; the
+                # model returns them too, one tensor per decoder layer in its config's order.
+                inputs_embeds = inputs_embeds.masked_fill(mask, 0.0)
+                layers = {layer: torch.cat(images) for layer, images in layers.items()}
+                features["deepstack_features"] = list(layers.values())
+            else:
+                inputs_embeds = inputs_embeds.masked_scatter(mask, features[spec.component].to(inputs_embeds))
+            if layers is not None:
+                deepstack.append((mask[..., 0], layers))
+        embedded["inputs_embeds"] = inputs_embeds
+        embedded.update(self._deepstack_inputs(deepstack, inputs_embeds))
+        return embedded, features
+
     def _deepstack_inputs(self, deepstack: list, inputs_embeds: torch.Tensor) -> dict[str, Any]:
         """What a deepstack decoder adds inside its layers, from each modality's `(rows, features by layer)`, in the
         dense form its graph was traced with (`dense_deepstack`): zeros on a step without images."""
-        traced = self.runners["language_model"].metadata.kwargs
+        traced = self.runners[decode_graph_name(self.runners)].metadata.kwargs
         for mask_name, spec in DEEPSTACK_INPUTS.items():
             if spec.features in traced:
                 recorded = traced[spec.features]
