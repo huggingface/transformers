@@ -1103,7 +1103,7 @@ class PreTrainedModel(
 
     # Device-map related properties
     _no_split_modules: set[str] | list[str] | None = None
-    _skip_keys_device_placement: set[str] | list[str] | None = None
+    _skip_keys_device_placement: set[str] | list[str] | None = ["cache"]
 
     # Specific dtype upcasting
     # `_keep_in_fp32_modules` will upcast to fp32 only if the requested dtype is fp16

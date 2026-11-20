@@ -426,6 +426,20 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         # Only caring about this not crashing
         _ = model.generate(**model_inputs, max_new_tokens=24)
 
+    def test_dequantized_model_takes_the_requested_dtype(self):
+        """
+        Checks that a dequantized model takes the requested dtype everywhere, including the weights the checkpoint
+        stores unquantized (embeddings, norms, lm_head)
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/MiniMax-M2-Tiny-FP8",
+            quantization_config=FineGrainedFP8Config(dequantize=True),
+            dtype=torch.float32,
+            device_map=self.device_map,
+        )
+        self.assertEqual({param.dtype for param in model.parameters()}, {torch.float32})
+        model(input_ids=torch.arange(10, 20, device=self.device_map).unsqueeze(0))
+
     @parameterized.expand(["eager", "grouped_mm"])
     @with_grad
     def test_quantized_moe_backward(self, experts_implementation):

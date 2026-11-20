@@ -44,8 +44,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -1366,7 +1367,6 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     _no_split_modules = ["Glm5NextTextDecoderLayer", "Glm5NextVisionBlock", "Glm5NextVisionPatchMerger"]
-    _skip_keys_device_placement = ["cache"]
     # TODO: this can be fixed but is limited by
     # 1. assuming the cache name
     # 2. linear attention not being considered atm
@@ -2013,7 +2013,7 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -2065,12 +2065,8 @@ class Glm5NextModel(Glm5NextPreTrainedModel):
         )
 
         # Only change is the output type to Moe
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -2216,7 +2212,7 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeCausalLMOutputWithPast:
+    ) -> tuple | MultimodalMoeCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -2290,13 +2286,15 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
             router_logits=outputs.router_logits,
         )
 

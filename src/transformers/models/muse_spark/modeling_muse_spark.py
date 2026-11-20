@@ -34,14 +34,15 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
@@ -55,52 +56,31 @@ from ..auto import AutoModel
 from .configuration_muse_spark import MuseSparkAudioConfig, MuseSparkConfig, MuseSparkTextConfig, MuseSparkVisionConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MuseSpark outputs, with hidden states and attentions.
-    """
-)
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring
 @dataclass
-class MuseSparkModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
+class MuseSparkModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-    image_hidden_states: torch.Tensor | None = None
-    router_logits: tuple[torch.Tensor] | None = None
 
-
-@auto_docstring(
-    custom_intro="""
-    Base class for MuseSpark causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class MuseSparkCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-    router_logits: tuple[torch.Tensor] | None = None
+class MuseSparkCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class MuseSparkRMSNorm(nn.Module):
@@ -499,7 +479,6 @@ class MuseSparkPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MuseSparkTextDecoderLayer", "MuseSparkVisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -677,53 +656,6 @@ class MuseSparkTextModel(MuseSparkPreTrainedModel):
         )
 
 
-class MuseSparkVisionPatchEmbedder(nn.Module):
-    def __init__(self, config: MuseSparkVisionConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.patch_embedding = nn.Linear(
-            config.patch_temporal * 3 * config.patch_size**2, self.hidden_size, bias=False
-        )
-        self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
-        # FIXME: only if square images - vision utils don't yet support non-square
-        # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
-        self.num_grid_per_side = config.pos_emb_height
-        # muse_spark resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
-        self.interpolation_mode = "bilinear"
-        self.interpolation_align_corners = False
-        self.interpolation_padding = "zeros"
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        """
-        Args:
-            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
-                The tensors corresponding to the input images.
-            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-        """
-        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
-
-        # Patch (h, w) reads the position table at (w, h): ref code passes
-        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
-        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
-            grid_thw[:, [0, 2, 1]],
-            num_grid_per_side=self.num_grid_per_side,
-            mode=self.interpolation_mode,
-            align_corners=self.interpolation_align_corners,
-            spatial_merge_size=1,
-            padding=self.interpolation_padding,
-            kwargs=kwargs,
-        )
-        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
-        return embeddings + pos_embeds.to(embeddings.dtype)
-
-
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -859,6 +791,54 @@ class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
+
+
+class MuseSparkVisionPatchEmbedder(nn.Module):
+    def __init__(self, config: MuseSparkVisionConfig):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.patch_embedding = nn.Linear(
+            config.patch_temporal * 3 * config.patch_size**2, self.hidden_size, bias=False
+        )
+        self.position_embedding_table = nn.Embedding(config.pos_emb_height * config.pos_emb_width, self.hidden_size)
+        # FIXME: only if square images - vision utils don't yet support non-square
+        # For now assume pos_emb_height == pos_emb_width always, i.e. as in shared ckpt
+        self.num_grid_per_side = config.pos_emb_height
+        # muse_spark resamples its position grid with `F.grid_sample(align_corners=False, padding_mode="zeros")`
+        self.interpolation_mode = "bilinear"
+        self.interpolation_align_corners = False
+        self.interpolation_padding = "zeros"
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.Tensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
+                The tensors corresponding to the input images.
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        """
+        embeddings = self.patch_embedding(pixel_values.to(dtype=self.patch_embedding.weight.dtype))
+
+        # Patch (h, w) reads the position table at (w, h): ref code passes
+        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw[:, [0, 2, 1]],
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+            padding=self.interpolation_padding,
+            kwargs=kwargs,
+        )
+        # helper returns `(total_thw, n_taps)`, so sum over the taps axis
+        pos_embeds = (self.position_embedding_table(interp_indices) * interp_weights[:, :, None]).sum(1)
+        return embeddings + pos_embeds.to(embeddings.dtype)
 
 
 class MuseSparkVisionRotaryEmbedding(nn.Module):
@@ -1489,13 +1469,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MuseSparkModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+        return MuseSparkModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
     @can_return_tuple
     @auto_docstring
@@ -1702,7 +1676,7 @@ class MuseSparkForConditionalGeneration(MuseSparkPreTrainedModel, GenerationMixi
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

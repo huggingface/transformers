@@ -30,7 +30,7 @@ from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
@@ -82,7 +82,6 @@ class CohereCompassTextConfig(Cohere2Config):
 
     model_type = "cohere_compass_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
     rope_parameters: dict[str, RopeParameters | dict | float | str | int | None] | None = None
@@ -483,7 +482,7 @@ class CohereCompassForConditionalGeneration(Qwen3VLForConditionalGeneration, Coh
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MultimodalCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -558,12 +557,14 @@ class CohereCompassForConditionalGeneration(Qwen3VLForConditionalGeneration, Coh
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

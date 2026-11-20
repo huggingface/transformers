@@ -419,7 +419,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
         "Blip2TextEmbeddings",
         "Blip2VisionEmbeddings",
     ]
-    _skip_keys_device_placement = ["cache"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

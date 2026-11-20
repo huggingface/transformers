@@ -31,8 +31,9 @@ from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -417,7 +418,6 @@ class Dots3NoteConfig(PreTrainedConfig):
         "vision_config": Dots3NoteVisionConfig,
         "audio_config": Dots3NoteAudioConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | Dots3NoteTextConfig | None = None
     vision_config: dict | Dots3NoteVisionConfig | None = None
@@ -1066,7 +1066,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
         chunk_sample_lengths: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> MoeModelOutputWithPast | tuple:
+    ) -> MultimodalMoeBaseModelOutputWithPast | tuple:
         r"""
         chunk_sample_lengths (`torch.Tensor`, *optional*):
             Waveform sample count for each audio feature chunk.
@@ -1111,12 +1111,15 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_embeddings.to(inputs_embeds))
 
-        return self.language_model(
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
+        )
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -1193,7 +1196,7 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, VoxtralForCond
         chunk_sample_lengths: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
+    ) -> MultimodalMoeCausalLMOutputWithPast:
         r"""
         chunk_sample_lengths (`torch.Tensor`, *optional*):
             Number of waveform samples in each audio chunk.
@@ -1225,12 +1228,13 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, VoxtralForCond
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 
