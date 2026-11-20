@@ -103,6 +103,11 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "model. TODO: revisit on demand."
         ),
         "GlmImageForConditionalGeneration": "Same as `GlmImageModel`.",
+        "Gr00tForConditionalGeneration": (
+            "Always runs its Qwen3-VL backbone on images, so the M-RoPE position ids are computed by "
+            "`get_rope_index`, a Python loop over `mm_token_type_ids.tolist()` that hits "
+            "`GuardOnDataDependentSymNode`. TODO: revisit once processors return the 3D position ids (#50821)."
+        ),
     },
     # Exported and run as usual, but not compared against eager (see the ``.exactness`` note above).
     "exactness": {

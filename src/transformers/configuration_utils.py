@@ -77,6 +77,8 @@ ALLOWED_ATTN_LAYER_TYPES = (
     "hybrid",  # layers that combine attention + mamba/linear-attention-shaped states (zamba2, falcon_h1, zaya1)
     "hybrid_sliding",  # layers that combine sliding attention + linear-attention-shaped states (zaya1)
     "reference_sliding_attention",  # UnlimitedOcr: full attention over prefill + ring-buffered sliding window over generated tokens
+    "text_cross_attention",  # GR00T: DiT blocks cross-attending to the text tokens of the backbone
+    "image_cross_attention",  # GR00T: DiT blocks cross-attending to the image tokens of the backbone
     # Recurrent layers (mamba / mamba2 / GDN / minimax-lightning)
     "linear_attention",
 )
