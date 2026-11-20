@@ -306,8 +306,8 @@ def is_flash_attention_requested(
     return "flash" in checked_attention_implementation
 
 
-def suppress_kernels_logging(func=None, *, layers=None):
-    """Temporarily suppress kernels kernelization logs, optionally for specific layers"""
+def suppress_kernels_logging(layers: set[str]):
+    """Decorator that suppresses the kernels "No kernel mapping found" warnings for `layers` during the call."""
     import logging
 
     def decorate(fn):
@@ -315,27 +315,13 @@ def suppress_kernels_logging(func=None, *, layers=None):
         def wrapper(*args, **kwargs):
             logger = logging.getLogger("kernels.layer.layer")
 
-            # 1. Ignore everything (no specific layers)
-            if layers is None:
-                previous_level = logger.level
-                try:
-                    logger.setLevel(logging.CRITICAL + 1)
-                    return fn(*args, **kwargs)
-                finally:
-                    logger.setLevel(previous_level)
+            def log_filter(record: logging.LogRecord) -> bool:
+                message = record.getMessage().lstrip()
+                return not (
+                    record.levelno == logging.WARNING
+                    and any(message.startswith(f"No kernel mapping found for layer `{layer}`.") for layer in layers)
+                )
 
-            # 2. Only ignore those layers that are specified
-            class LayerFilter(logging.Filter):
-                def filter(self, record):
-                    return not (
-                        record.levelno == logging.WARNING
-                        and any(
-                            record.getMessage().lstrip().startswith(f"No kernel mapping found for layer `{layer}`.")
-                            for layer in layers
-                        )
-                    )
-
-            log_filter = LayerFilter()
             logger.addFilter(log_filter)
             try:
                 return fn(*args, **kwargs)
@@ -344,7 +330,7 @@ def suppress_kernels_logging(func=None, *, layers=None):
 
         return wrapper
 
-    return decorate(func) if func is not None else decorate
+    return decorate
 
 
 def get_max_seqlen(

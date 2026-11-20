@@ -322,7 +322,7 @@ class Inkling2ShortConvolution(InklingShortConvolution):
             cache,
             self.layer_idx,
             state_idx=self.conv_idx,
-            seq_idx=kwargs.get("seq_idx"),
+            **kwargs,
         )
 
         hidden_states = hidden_states.transpose(1, 2)

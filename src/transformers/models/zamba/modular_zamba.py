@@ -253,7 +253,7 @@ class ZambaMambaMixer(nn.Module):
             cache,
             self.layer_idx,
             activation=self.activation,
-            seq_idx=kwargs.get("seq_idx"),
+            **kwargs,
         )
 
         # 3. SSM transformation
