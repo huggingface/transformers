@@ -99,6 +99,19 @@ def hp_space(trial):
 </hfoption>
 </hfoptions>
 
+### Generation parameters
+
+With [`Seq2SeqTrainer`], you can also search over generation parameters used during evaluation by returning a `generation_config` from `hp_space`. It can be a [`GenerationConfig`] or a dict, which is the natural format for Ray Tune search spaces. The model must be created with `model_init` so that every trial applies its own generation config.
+
+```py
+from transformers import GenerationConfig
+
+def hp_space(trial):
+    return {
+        "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
+        "generation_config": GenerationConfig(num_beams=trial.suggest_int("num_beams", 1, 4)),
+    }
+
 ## Run the search
 
 Provide an optional `compute_objective` function to define the optimization target. It defaults to `eval_loss` if present, or the sum of all metric values otherwise. Pass an explicit function to avoid relying on this fallback. The search `backend` optimizes the objective over `n_trials` runs in a given `direction`.
