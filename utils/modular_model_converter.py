@@ -1038,9 +1038,8 @@ def replace_class_node(
 
     # If we explicitly passed a new base with common suffix to an old base, it is for switching the prefix
     # e.g. if the "natural" parent class is `PreTrainedModel` but we wanted to rename it to `PreTrainedVisionModel`
-    # A base the parent already has is listed again, not a replacement: keep it out of the suffix matching below.
-    # Otherwise `Child(Parent, MultimodalMixin)` swaps the parent's `GenerationMixin` for `MultimodalMixin`, as both
-    # end in `Mixin`, and listing `GenerationMixin` again on top would duplicate it
+    # A base the parent already has is listed again, not a replacement: keep it out of the suffix matching below,
+    # or `Child(Parent, MultimodalMixin)` swaps the parent's `GenerationMixin` for `MultimodalMixin` (same suffix)
     original_bases = {get_full_attribute_name(k.value) for k in original_modeling_node.bases}
     additional_bases = {
         base for base in all_new_bases.keys() if base != original_super_class and base not in original_bases
