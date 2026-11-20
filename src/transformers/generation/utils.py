@@ -408,7 +408,12 @@ class DeferredStopCheck(StopCheck):
     extra `forward` pass, whose results the caller undoes using the count returned by `finish`.
     Streaming needs the tokens themselves on the host, which is the same synchronization, so tokens are streamed one step behind.
     The extra token is never streamed: it is still in flight when the loop breaks, and `finish` drops it.
+    Without a streamer, `finish` does not wait either: `generate` returns device tensors as soon as the work is queued, and the
+    host buffers the last copies write into are kept alive until the next generation's first synchronization.
     """
+
+    # The previous generation's check while its last copies may still be in flight (see `finish`)
+    _in_flight: "DeferredStopCheck | None" = None
 
     def __init__(
         self,
@@ -465,6 +470,7 @@ class DeferredStopCheck(StopCheck):
         should_stop_before, tokens_cpu_before, copy_done_before = self.slots[0]
         copy_done_before.synchronize()
         if not self.is_first_step:
+            DeferredStopCheck._in_flight = None  # synchronized after everything queued before: its copies are done
             if self.streamer is not None:
                 self.streamer.put(tokens_cpu_before.clone())
             self.stop_reported = bool(should_stop_before)
@@ -475,8 +481,11 @@ class DeferredStopCheck(StopCheck):
         return stopping
 
     def finish(self) -> int:
-        for *_, copy_done in self.slots:
-            copy_done.synchronize()
+        if self.streamer is not None:  # it needs the last tokens on the host
+            for *_, copy_done in self.slots:
+                copy_done.synchronize()
+        else:  # the stop flags read so far are on the host already: return without waiting on the device
+            DeferredStopCheck._in_flight = self
         steps_to_undo = 1 if self.stop_reported else 0
         if self.streamer is not None and not steps_to_undo:
             _, tokens_cpu, _ = self.slots[1]
