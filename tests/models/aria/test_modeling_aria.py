@@ -55,19 +55,26 @@ class AriaVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = AriaForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 9)
-        kwargs.setdefault("pad_token_id", 1)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 8)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("intermediate_size", 16)
-        kwargs.setdefault("head_dim", 4)
-        kwargs.setdefault("max_position_embeddings", 60)
-        kwargs.setdefault("moe_num_experts", 3)
-        kwargs.setdefault("moe_topk", 2)
-        super().__init__(parent, **kwargs)
-        self.projector_patch_to_query_dict = {(self.image_size // self.patch_size) ** 2: self.num_image_tokens}
+    small_config_overrides = {
+        "image_token_id": 9,
+        "pad_token_id": 1,
+        "image_size": 16,
+        "patch_size": 8,
+        "num_image_tokens": 4,
+        "intermediate_size": 16,
+        "head_dim": 4,
+        "max_position_embeddings": 60,
+        "moe_num_experts": 3,
+        "moe_topk": 2,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["projector_patch_to_query_dict"] = {
+            (values["image_size"] // values["patch_size"]) ** 2: values["num_image_tokens"]
+        }
+        return values
 
 
 @require_torch

@@ -26,6 +26,7 @@ from transformers import PocketTTSConfig, PocketTTSFlowHeadConfig
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin, with_grad
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -49,47 +50,43 @@ if is_torch_available():
 
 
 @require_torch
-class PocketTTSModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_prompt_frames=2,
-        is_training=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=64,
-        latent_dim=8,
-        flow_hidden_size=16,
-        flow_num_hidden_layers=2,
-        flow_type="lsd",
-    ):
+class PocketTTSModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_prompt_frames": 2,
+        "is_training": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 64,
+        "latent_dim": 8,
+        "flow_hidden_size": 16,
+        "flow_num_hidden_layers": 2,
+        "flow_type": "lsd",
+        "pad_token_id": 0,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        vocab_size = values["vocab_size"]
+        values["audio_prompt_token_id"] = vocab_size - 4
+        values["audio_latent_token_id"] = vocab_size - 3
+        values["audio_prompt_bos_token_id"] = vocab_size - 2
+        values["audio_bos_token_id"] = vocab_size - 1
+        # what precedes the voice placeholders, and the width of the voice latents
+        values["voice_prefix_ids"] = [values["audio_prompt_bos_token_id"]]
+        values["audio_prompt_dim"] = values["latent_dim"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
         self.model_class = PocketTTSForConditionalGeneration if is_torch_available() else None
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.num_prompt_frames = num_prompt_frames
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.latent_dim = latent_dim
-        self.flow_hidden_size = flow_hidden_size
-        self.flow_num_hidden_layers = flow_num_hidden_layers
-        self.flow_type = flow_type
-        self.pad_token_id = 0
-        self.audio_prompt_token_id = vocab_size - 4
-        self.audio_latent_token_id = vocab_size - 3
-        self.audio_prompt_bos_token_id = vocab_size - 2
-        self.audio_bos_token_id = vocab_size - 1
-        # what precedes the voice placeholders, and the width of the voice latents
-        self.voice_prefix_ids = [self.audio_prompt_bos_token_id]
-        self.audio_prompt_dim = latent_dim
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return PocketTTSConfig(
@@ -197,6 +194,8 @@ class PocketTTSModelTester:
 
 @require_torch
 class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = PocketTTSModelTester
+
     all_model_classes = (PocketTTSModel, PocketTTSForConditionalGeneration) if is_torch_available() else ()
     _is_composite = True
     test_resize_embeddings = False

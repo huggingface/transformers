@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -48,15 +49,15 @@ if is_torch_available():
     import torch
 
 
-class CsmModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        batch_size=3,
-        seq_length=7,
-        is_training=True,
-        depth_decoder_config={
+class CsmModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "batch_size": 3,
+        "seq_length": 7,
+        "is_training": True,
+        "depth_decoder_config": {
             "num_codebooks": 10,
             "backbone_hidden_size": 64,
             "vocab_size": 6,
@@ -68,7 +69,7 @@ class CsmModelTester:
             "hidden_act": "silu",
             "max_position_embeddings": 10,
         },
-        codec_config={
+        "codec_config": {
             "model_type": "mimi",
             "audio_channels": 1,
             "chunk_in_sec": None,
@@ -86,7 +87,7 @@ class CsmModelTester:
             "codebook_dim": 64,
             "use_cache": False,
         },
-        config={
+        "config": {
             "num_codebooks": 10,
             "vocab_size": 6,
             "text_vocab_size": 99,
@@ -103,21 +104,23 @@ class CsmModelTester:
             "codebook_pad_token_id": 2,
             "codebook_eos_token_id": 3,
         },
-    ):
-        self.parent = parent
-        self.is_training = is_training
-        self.ignore_index = ignore_index
-        self.depth_decoder_config = depth_decoder_config
-        self.codec_config = codec_config
-        self.config = config
-        self.seq_length = seq_length
-        self.batch_size = batch_size
+    }
 
-        self.num_hidden_layers = config["num_hidden_layers"]
-        self.vocab_size = config["vocab_size"]
-        self.hidden_size = config["hidden_size"]
-        self.num_attention_heads = config["num_attention_heads"]
-        self.pad_token_id = config["pad_token_id"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        config = values["config"]
+        values["num_hidden_layers"] = config["num_hidden_layers"]
+        values["vocab_size"] = config["vocab_size"]
+        values["hidden_size"] = config["hidden_size"]
+        values["num_attention_heads"] = config["num_attention_heads"]
+        values["pad_token_id"] = config["pad_token_id"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return CsmConfig(
@@ -139,6 +142,8 @@ class CsmModelTester:
 
 
 class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = CsmModelTester
+
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
 
     test_resize_embeddings = False
