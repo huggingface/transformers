@@ -24,6 +24,7 @@ from transformers import (
     AutoTokenizer,
     GenerationConfig,
     GgufConfig,
+    Glm4MoeForCausalLM,
     Lfm2ForCausalLM,
     Qwen3_5ForCausalLM,
     Qwen3_5MoeForCausalLM,
@@ -503,6 +504,23 @@ class Lfm2GgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
     expected_completion = " Berlin"
 
 
+@require_torch_accelerator
+@slow
+class Glm4MoeGgufModelTest(GgufModelIntegrationTesterMixin, unittest.TestCase):
+    gguf_repo = "unsloth/GLM-4.5-Air-GGUF"
+    gguf_file = "GLM-4.5-Air-Q2_K.gguf"
+    quantized_gguf_file = "GLM-4.5-Air-Q2_K.gguf"
+    reference_repo = "zai-org/GLM-4.5-Air"
+    model_class = Glm4MoeForCausalLM
+
+    prompt = "The capital of France is Paris. The capital of Germany is"
+    expected_completion = " Berlin"
+
+    @unittest.skip("the bf16 reference checkpoint is ~220GB")
+    def test_state_dict_matches_transformers(self):
+        pass
+
+
 @slow
 class Lfm2GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "LiquidAI/LFM2.5-230M-GGUF"
@@ -579,6 +597,15 @@ class FlanT5GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "Felladrin/gguf-flan-t5-small"
     quantized_gguf_file = "flan-t5-small.Q8_0.gguf"
     reference_repo = "google/flan-t5-small"
+
+
+@slow
+class Glm4MoeGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
+    """Byte-level with the `glm4` pre-tokenizer. The first split of this file holds the metadata alone."""
+
+    gguf_repo = "ggml-org/GLM-4.5-Air-GGUF"
+    quantized_gguf_file = "GLM-4.5-Air-Q4_K_M-00001-of-00002.gguf"
+    reference_repo = "zai-org/GLM-4.5-Air"
 
 
 @slow

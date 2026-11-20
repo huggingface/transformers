@@ -117,10 +117,67 @@ def _lfm2_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     }
 
 
+def _glm4moe_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+    """GLM-4.5 / 4.6: sigmoid-routed MoE with shared experts, a few dense layers first, and an MTP block."""
+    key = lambda name: metadata[f"glm4moe.{name}"]  # noqa: E731
+    head_dim = key("attention.key_length")
+    mtp_layers = metadata.get("glm4moe.nextn_predict_layers", 0)
+    # The checkpoint stops on three ids, `<|endoftext|>`, `<|user|>` and `<|observation|>`, which llama.cpp
+    # writes as eos, eot and eom. With eos alone, a chat would run on past the end of the assistant's turn.
+    stop_ids = [metadata.get(f"tokenizer.ggml.{name}_token_id") for name in ("eos", "eot", "eom")]
+    stop_ids = list(dict.fromkeys(token_id for token_id in stop_ids if token_id is not None))
+
+    return {
+        "model_type": "glm4_moe",
+        # Nothing in the file states this, but callers that pick a class from `config.architectures`
+        # would otherwise need a GGUF special case.
+        "architectures": ["Glm4MoeForCausalLM"],
+        "max_position_embeddings": key("context_length"),
+        "hidden_size": key("embedding_length"),
+        "intermediate_size": key("feed_forward_length"),
+        "num_attention_heads": key("attention.head_count"),
+        "num_key_value_heads": key("attention.head_count_kv"),
+        # GLM-4.5 heads are not `hidden_size // num_attention_heads` wide, so this has to be stated
+        "head_dim": head_dim,
+        "rms_norm_eps": key("attention.layer_norm_rms_epsilon"),
+        # the file counts the multi-token-prediction block as a layer; the decoder stack does not
+        "num_hidden_layers": key("block_count") - mtp_layers,
+        "num_nextn_predict_layers": mtp_layers,
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": key("rope.freq_base"),
+            # a rotary width in dimensions, where transformers takes a fraction of the head
+            "partial_rotary_factor": key("rope.dimension_count") / head_dim,
+        },
+        "moe_intermediate_size": key("expert_feed_forward_length"),
+        "n_routed_experts": key("expert_count"),
+        "num_experts_per_tok": key("expert_used_count"),
+        "n_shared_experts": key("expert_shared_count"),
+        "first_k_dense_replace": key("leading_dense_block_count"),
+        "routed_scaling_factor": key("expert_weights_scale"),
+        "norm_topk_prob": key("expert_weights_norm"),
+        # llama.cpp writes the groups only when the checkpoint's config has them; one group is no grouping
+        "n_group": metadata.get("glm4moe.expert_group_count", 1),
+        "topk_group": metadata.get("glm4moe.expert_group_used_count", 1),
+        # neither has a key of its own; the file says so by carrying the tensors or not
+        "attention_bias": "blk.0.attn_q.bias" in tensor_names,
+        "use_qk_norm": "blk.0.attn_q_norm.weight" in tensor_names,
+        # `read_gguf_metadata` leaves the vocabulary as its length
+        "vocab_size": metadata["tokenizer.ggml.tokens"],
+        # llama.cpp writes the output projection only when it is not the embedding matrix
+        "tie_word_embeddings": "output.weight" not in tensor_names,
+        # absent ids stay `None`, as they are on a config by default
+        "eos_token_id": (stop_ids[0] if len(stop_ids) == 1 else stop_ids) or None,
+        "bos_token_id": metadata.get("tokenizer.ggml.bos_token_id"),
+        "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
+    }
+
+
 GGUF_CONFIG_ARCHS = {
     "qwen35": _qwen35_config,
     "qwen35moe": _qwen35moe_config,
     "lfm2": _lfm2_config,
+    "glm4moe": _glm4moe_config,
 }
 
 
