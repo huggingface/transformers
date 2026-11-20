@@ -568,11 +568,18 @@ class _ExpertReader:
 
 
 class _RowReader:
-    """Rows of a table the checkpoint stores as slices concatenated on dim 0 (one slice, or e.g. 128 shards)."""
+    """Rows of a table the checkpoint stores as slices concatenated on dim 0 (one slice, or e.g. 128 shards), with an
+    optional dequantization scale per shard (or one for all: an FP8 table's scalar `weight_scale_inv`)."""
 
     def __init__(self, reads: dict[str, list], device):
-        # The sources in collection order (e.g. `shard_0..shard_127`, maybe under several patterns), concatenated on rows
-        self.slices = [entry for slices in reads.values() for entry in slices]
+        entries = [entry for slices in reads.values() for entry in slices]
+        self.slices = [entry for entry in entries if len(entry[0].get_shape()) >= 1]
+        scales = [entry for entry in entries if len(entry[0].get_shape()) == 0]
+        if scales and len(scales) not in (1, len(self.slices)):
+            raise ValueError(
+                f"Cannot stream rows of {list(reads)}: {len(scales)} scales for {len(self.slices)} shards"
+            )
+        self.scales = [slice_[...].float().item() for slice_, *_ in scales]  # a few scalars: read once
         widths = {tuple(slice_.get_shape()[1:]) for slice_, *_ in self.slices}
         if len(widths) != 1:
             raise ValueError(f"Cannot stream rows of {list(reads)}: their sources differ in row shape {widths}")
@@ -587,7 +594,10 @@ class _RowReader:
             shard = bisect.bisect_right(self.offsets, row) - 1
             slice_, dtype, _ = self.slices[shard]
             local = row - self.offsets[shard]
-            out.append(slice_[local : local + 1].to(self.device, dtype))
+            values = slice_[local : local + 1].to(self.device)
+            if self.scales:
+                values = values.float() * self.scales[shard if len(self.scales) > 1 else 0]
+            out.append(values.to(dtype))
         return torch.cat(out)
 
 
