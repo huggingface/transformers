@@ -1104,7 +1104,7 @@ class InklingVisionModel(InklingPreTrainedModel):
     @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         num_patches = pixel_values.shape[0]
-        hidden_states = pixel_values
+        hidden_states = pixel_values.to(self.encoder_layers[0].projection.weight.dtype)
         for layer in self.encoder_layers:
             hidden_states = layer(hidden_states=hidden_states)
 
