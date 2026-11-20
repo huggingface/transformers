@@ -82,6 +82,10 @@ class WavLMConfig(PreTrainedConfig):
         along the time axis. This is only relevant if `apply_spec_augment is True`.
     mask_feature_length (`int`, *optional*, defaults to 10):
         Length of vector span along the feature axis.
+    mask_feature_min_masks (`int`, *optional*, defaults to 0):
+        The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+        step, irrespectively of `mask_feature_prob`. Only relevant if
+        ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
     num_codevectors_per_group (`int`, *optional*, defaults to 320):
         Number of entries in each quantization codebook (group).
     num_codevector_groups (`int`, *optional*, defaults to 2):
@@ -187,6 +191,7 @@ class WavLMConfig(PreTrainedConfig):
     mask_time_min_masks: int = 2
     mask_feature_prob: float | int = 0.0
     mask_feature_length: int = 10
+    mask_feature_min_masks: int = 0
     num_codevectors_per_group: int = 320
     num_codevector_groups: int = 2
     contrastive_logits_temperature: float = 0.1
