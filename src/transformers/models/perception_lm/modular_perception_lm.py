@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -165,10 +165,7 @@ class PerceptionLMModel(LlavaModel):
         image_features = self.multi_modal_projector(last_hidden_state)
         image_outputs.pooler_output = image_features
 
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
     @can_return_tuple
@@ -282,14 +279,7 @@ class PerceptionLMModel(LlavaModel):
             return_dict=True,
             **kwargs,
         )
-        return PerceptionLMModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            cache=outputs.cache,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            video_hidden_states=video_features if mm_encoder_outputs.get("video") is not None else None,
-        )
+        return PerceptionLMModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -387,8 +377,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            video_hidden_states=outputs.video_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

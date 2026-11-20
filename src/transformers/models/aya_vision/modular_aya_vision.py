@@ -26,7 +26,7 @@ from transformers.models.llava.modeling_llava import (
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -140,10 +140,7 @@ class AyaVisionModel(LlavaModel):
             selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
         )
 
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
     @can_return_tuple
@@ -199,13 +196,7 @@ class AyaVisionModel(LlavaModel):
             **kwargs,
         )
 
-        return AyaVisionModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return AyaVisionModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):

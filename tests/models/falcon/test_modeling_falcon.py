@@ -45,11 +45,11 @@ class FalconModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = FalconModel
 
-    def __init__(self, parent, new_decoder_architecture=True):
-        super().__init__(parent)
-        self.new_decoder_architecture = new_decoder_architecture
-        self.hidden_size = 64
-        self.num_attention_heads = 4
+    small_config_overrides = {
+        "new_decoder_architecture": True,
+        "hidden_size": 64,
+        "num_attention_heads": 4,
+    }
 
 
 @require_torch

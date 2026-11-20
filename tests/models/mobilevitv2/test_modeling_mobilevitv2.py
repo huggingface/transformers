@@ -26,6 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -52,45 +53,37 @@ class MobileViTV2ConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "width_multiplier"))
 
 
-class MobileViTV2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=64,
-        patch_size=2,
-        num_channels=3,
-        hidden_act="swish",
-        conv_kernel_size=3,
-        output_stride=32,
-        classifier_dropout_prob=0.1,
-        initializer_range=0.02,
-        is_training=True,
-        use_labels=True,
-        num_labels=10,
-        scope=None,
-        width_multiplier=0.25,
-        ffn_dropout=0.0,
-        attn_dropout=0.0,
-    ):
+class MobileViTV2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 64,
+        "patch_size": 2,
+        "num_channels": 3,
+        "hidden_act": "swish",
+        "conv_kernel_size": 3,
+        "output_stride": 32,
+        "classifier_dropout_prob": 0.1,
+        "use_labels": True,
+        "is_training": True,
+        "num_labels": 10,
+        "initializer_range": 0.02,
+        "scope": None,
+        "width_multiplier": 0.25,
+        "ffn_dropout_prob": 0.0,
+        "attn_dropout_prob": 0.0,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["last_hidden_size"] = make_divisible(512 * values["width_multiplier"], divisor=8)
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.last_hidden_size = make_divisible(512 * width_multiplier, divisor=8)
-        self.hidden_act = hidden_act
-        self.conv_kernel_size = conv_kernel_size
-        self.output_stride = output_stride
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.use_labels = use_labels
-        self.is_training = is_training
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.width_multiplier = width_multiplier
-        self.ffn_dropout_prob = ffn_dropout
-        self.attn_dropout_prob = attn_dropout
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -185,6 +178,8 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     Here we also overwrite some of the tests of test_modeling_common.py, as MobileViTV2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = MobileViTV2ModelTester
 
     all_model_classes = (
         (MobileViTV2Model, MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation)

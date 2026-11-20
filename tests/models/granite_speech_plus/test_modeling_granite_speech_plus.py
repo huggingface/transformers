@@ -47,11 +47,17 @@ class GraniteSpeechPlusForConditionalGenerationModelTester(ALMModelTester):
 
     audio_config_key = "encoder_config"
 
-    def __init__(self, parent, cat_hidden_layers=(0,), **kwargs):
-        kwargs.setdefault("projector_intermediate_size", 256)
-        kwargs.setdefault("projector_encoder_hidden_size", 32 * (len(cat_hidden_layers) + 1))
-        kwargs.setdefault("cat_hidden_layers", list(cat_hidden_layers))
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "projector_intermediate_size": 256,
+        "cat_hidden_layers": [0],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["cat_hidden_layers"] = list(values["cat_hidden_layers"])
+        values.setdefault("projector_encoder_hidden_size", 32 * (len(values["cat_hidden_layers"]) + 1))
+        return values
 
     def create_audio_features(self, batch_size: int | None = None):
         # GraniteSpeech expects [B, seq_len, features] (time-first), unlike the standard [B, features, seq_len]

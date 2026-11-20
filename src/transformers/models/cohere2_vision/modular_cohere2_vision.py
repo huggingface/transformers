@@ -30,6 +30,7 @@ from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageP
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
@@ -107,10 +108,7 @@ class Cohere2VisionModel(AyaVisionModel):
             selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
         )
 
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -156,13 +154,7 @@ class Cohere2VisionModel(AyaVisionModel):
             **kwargs,
         )
 
-        return Cohere2VisionModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Cohere2VisionModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
@@ -241,7 +233,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

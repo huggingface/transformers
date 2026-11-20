@@ -49,14 +49,19 @@ class AudioFlamingo3ModelTester(ALMModelTester):
 
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # feat_seq_length → (L-1)//2+1 after conv2 → (·-2)//2+1 after avg_pool, so
         # feat_seq_length=60 gives 15 audio embed tokens (fits inside seq_length=32 + BOS + text).
-        kwargs.setdefault("feat_seq_length", 60)
+        "feat_seq_length": 60,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Encoder adds a learned positional embedding of size max_source_positions to post-conv2 features,
         # so it must equal (feat_seq_length - 1) // 2 + 1.
-        kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
-        super().__init__(parent, **kwargs)
+        values.setdefault("max_source_positions", (values["feat_seq_length"] - 1) // 2 + 1)
+        return values
 
     def get_audio_embeds_mask(self, audio_mask):
         # Mirrors AudioFlamingo3Encoder._get_feat_extract_output_lengths:

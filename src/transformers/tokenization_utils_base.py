@@ -2965,6 +2965,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Returns:
             `list[str]`: The list of decoded sentences.
         """
+        sequences = to_py_obj(sequences)
+        # An empty batch has no sequences to decode, `decode` would read it as a single empty sequence
+        if len(sequences) == 0:
+            return []
+
         # Forward to decode() which now handles batched input natively
         result = self.decode(
             token_ids=sequences,
@@ -2974,6 +2979,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         )
         # Ensure we always return a list for backwards compatibility
         if isinstance(result, str):
+            # See #41872: `batch_decode` expects a batch, single sequences belong to `decode`
+            logger.warning_once(
+                "Passing a single sequence to `batch_decode` is deprecated and will be removed in a future version, "
+                "use `decode` instead."
+            )
             return [result]
         return result
 

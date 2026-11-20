@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -47,74 +48,46 @@ if is_torch_available():
     )
 
 
-class ChameleonModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=35,
-        is_training=False,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        image_token_id=4,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        vq_num_embeds=5,
-        vq_embed_dim=5,
-        vq_resolution=512,
-        vq_channel_multiplier=[1, 2],
-        vq_num_res_blocks=2,
-        vq_attn_resolutions=None,
-        vq_attn_type="vanilla",
-        vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
-        scope=None,
-    ):
+class ChameleonModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 35,
+        "is_training": False,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "image_token_id": 4,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 0,
+        "scope": None,
+        "vq_num_embeds": 5,
+        "vq_embed_dim": 5,
+        "vq_resolution": 512,
+        "vq_channel_multiplier": [1, 2],
+        "vq_num_res_blocks": 2,
+        "vq_attn_resolutions": None,
+        "vq_attn_type": "vanilla",
+        "vq_img_token_start_id": 10,  # has to be less than vocab size when added with vq_num_embeds
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.image_token_id = image_token_id
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.vq_num_embeds = vq_num_embeds
-        self.vq_embed_dim = vq_embed_dim
-        self.vq_resolution = vq_resolution
-        self.vq_channel_multiplier = vq_channel_multiplier
-        self.vq_num_res_blocks = vq_num_res_blocks
-        self.vq_attn_resolutions = vq_attn_resolutions
-        self.vq_attn_type = vq_attn_type
-        self.vq_img_token_start_id = vq_img_token_start_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -207,6 +180,8 @@ class ChameleonModelTester:
 
 @require_torch
 class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = ChameleonModelTester
+
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -259,10 +234,12 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
 
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
-    def __init__(self, parent, image_size=10, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.image_size = image_size
-        self.image_seq_length = 25
+    # `small_config_overrides` does not inherit, so the parent's values are this tester's defaults
+    defaults = {**ChameleonModelTester.defaults, **ChameleonModelTester.small_config_overrides}
+    small_config_overrides = {
+        "image_size": 10,
+        "image_seq_length": 25,
+    }
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -284,6 +261,8 @@ class ChameleonVision2SeqModelTester(ChameleonModelTester):
 
 @require_torch
 class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = ChameleonVision2SeqModelTester
+
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
