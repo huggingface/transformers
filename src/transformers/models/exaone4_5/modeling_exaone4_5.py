@@ -636,7 +636,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         super().__init__(config)
         self.visual = Exaone4_5_VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
         self.post_init()

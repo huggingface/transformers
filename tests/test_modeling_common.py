@@ -1616,7 +1616,9 @@ class ModelTesterMixin(ExportTesterMixin):
             batch_size = self.model_tester.batch_size
             single_row_input = {}
             for key, value in batched_input_prepared.items():
-                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
+                if key == "position_ids" and value.ndim == 3:  # 3D RoPE positions are (axes, batch, seq)
+                    single_row_input[key] = value[:, :1]
+                elif isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
                     # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
                     single_batch_shape = value.shape[0] // batch_size
                     single_row_input[key] = value[:single_batch_shape]
@@ -6837,6 +6839,26 @@ def find_parent_traceback(full_param_name: str, model: PreTrainedModel) -> tuple
         pretrained_parent_class = type(parent).__name__
 
     return name, immediate_parent_class, pretrained_parent_class
+
+
+def mrope_position_ids(config, inputs_dict, split_video_frames=False):
+    """3D RoPE `position_ids` for a model tester's inputs, laid out the way the processor does it.
+    `split_video_frames`: each video frame is its own block (Qwen3-VL / GLM-4V put a timestamp between frames)."""
+    from transformers.processing_utils import create_mrope_position_ids
+
+    merge_size = config.vision_config.spatial_merge_size
+    grids = {
+        token_type: [(t, h // merge_size, w // merge_size, 1) for t, h, w in inputs_dict[key].tolist()]
+        for token_type, key in ((1, "image_grid_thw"), (2, "video_grid_thw"))
+        if inputs_dict.get(key) is not None
+    }
+    if split_video_frames and 2 in grids:
+        grids[2] = [(1, h, w, 1) for t, h, w, _ in grids[2] for _ in range(t)]
+    attention_mask = inputs_dict.get("attention_mask")
+    position_ids = create_mrope_position_ids(
+        inputs_dict["mm_token_type_ids"].tolist(), None if attention_mask is None else attention_mask.tolist(), grids
+    )
+    return torch.tensor(position_ids, device=inputs_dict["input_ids"].device)
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):

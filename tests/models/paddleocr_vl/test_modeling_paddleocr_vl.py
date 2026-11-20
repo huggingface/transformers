@@ -43,6 +43,7 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
+    mrope_position_ids,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_processing_common import url_to_local_path
@@ -164,6 +165,7 @@ class PaddleOCRVLVisionText2TextModelTester(ModelTesterConfigMixin):
             "attention_mask": attention_mask,
             "mm_token_type_ids": mm_token_type_ids,
         }
+        inputs_dict["position_ids"] = mrope_position_ids(config, inputs_dict)
         return config, inputs_dict
 
 
@@ -248,7 +250,10 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
             mm_token_type_ids = torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0)
+            mm_types = (input_ids == config.image_token_id).long()
+            positions = {"input_ids": input_ids, "mm_token_type_ids": mm_types, "image_grid_thw": image_grid_thw}
             _ = model(
+                position_ids=mrope_position_ids(config, positions),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,

@@ -90,6 +90,10 @@ class Glm5NextProcessor(ProcessorMixin):
 
         return video_structure
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # GLM-5-Next uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
@@ -156,7 +160,7 @@ class Glm5NextProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
+        return super().model_input_names + ["mm_token_type_ids", "position_ids"]
 
     def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
         # We have to iterate for each list separately because inputs

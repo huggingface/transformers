@@ -19,6 +19,7 @@ import bisect
 import copy
 import functools
 import inspect
+import itertools
 import json
 import os
 import re
@@ -601,6 +602,49 @@ def _merge_typed_dict(preprocessor_typed_dict: type, modality_typed_dict: type) 
     )
 
 
+def create_mrope_position_ids(
+    mm_token_type_ids: list[list[int]],
+    attention_mask: list[list[int]] | None,
+    grids: dict[int, list[tuple[int, int, int, float]]],
+) -> np.ndarray:
+    """
+    3D RoPE `position_ids` of shape `(3, batch_size, sequence_length)` for the (t, h, w) axes. The processor built
+    the prompt, so the layout is known: text advances all three axes by 1, each image or video run sits on its
+    `(t, h, w)` grid at the current position and advances it by `max(h, w)`. Frame `i` of a video sits at
+    `int(i * time_step)` on the t axis. Padding gets 0. For example:
+
+        tokens:  text text | image t=1, h=2, w=3  | text
+        t:        0    1   |  2  2  2  2  2  2    |  5
+        h:        0    1   |  2  2  2  3  3  3    |  5
+        w:        0    1   |  2  3  4  2  3  4    |  5
+
+    Args:
+        mm_token_type_ids (`list[list[int]]`): 0 for text, 1 for image and 2 for video tokens.
+        attention_mask (`list[list[int]]`, *optional*): padding is skipped and gets position 0.
+        grids (`dict[int, list[tuple[int, int, int, float]]]`):
+            `(t, h, w, time_step)` of every image (key `1`) and video (key `2`), in the order they appear in the text.
+    """
+    position_ids = np.zeros((3, len(mm_token_type_ids), len(mm_token_type_ids[0])), dtype=np.int64)
+    grids = {token_type: iter(type_grids) for token_type, type_grids in grids.items()}
+    for row, token_types in enumerate(mm_token_type_ids):
+        kept = np.flatnonzero(attention_mask[row]) if attention_mask is not None else np.arange(len(token_types))
+        positions, start = [np.zeros((3, 0), dtype=np.int64)], 0
+        for token_type, run in itertools.groupby(np.asarray(token_types)[kept].tolist()):
+            length = len(list(run))
+            if token_type == 0:
+                positions.append(np.broadcast_to(start + np.arange(length), (3, length)))
+                start += length
+                continue
+            while length > 0:  # adjacent images or videos share one run
+                frames, height, width, time_step = next(grids[token_type])
+                temporal, rows, columns = np.indices((frames, height, width)).reshape(3, -1)
+                positions.append(start + np.stack([(temporal * time_step).astype(np.int64), rows, columns]))
+                start += max(height, width)
+                length -= frames * height * width
+        position_ids[:, row, kept] = np.concatenate(positions, axis=1)
+    return position_ids
+
+
 class ProcessorMixin(PushToHubMixin):
     """
     This is a mixin used to provide saving/loading functionality for all processor classes.
@@ -724,6 +768,12 @@ class ProcessorMixin(PushToHubMixin):
 
             if return_mm_token_type_ids:
                 text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+            grids = self.get_mrope_grids(processed_images, processed_videos)
+            if return_mm_token_type_ids and grids is not None and any(grids.values()):
+                text_inputs["position_ids"] = create_mrope_position_ids(
+                    text_inputs["mm_token_type_ids"], text_inputs.get("attention_mask"), grids
+                )
 
         # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
         data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
@@ -1023,6 +1073,14 @@ class ProcessorMixin(PushToHubMixin):
             mm_token_types[np.isin(tokenizer_input, self.audio_token_ids)] = 3
             mm_token_type_ids.append(mm_token_types.tolist())
         return mm_token_type_ids
+
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]] | None:
+        """
+        The `(t, h, w, time_step)` grid of every image (key `1`) and video (key `2`) as the language model sees it, in
+        the order they appear in the text (see `create_mrope_position_ids`). Models with 3D RoPE override this so the
+        processor returns their `position_ids`.
+        """
+        return None
 
     @property
     def all_special_multimodal_tokens(self) -> list[str]:
@@ -2672,6 +2730,12 @@ class OmniModalProcessorMixin(ProcessorMixin):
 
             if return_mm_token_type_ids:
                 text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+            grids = self.get_mrope_grids(processed_images, processed_videos)
+            if return_mm_token_type_ids and grids is not None and any(grids.values()):
+                text_inputs["position_ids"] = create_mrope_position_ids(
+                    text_inputs["mm_token_type_ids"], text_inputs.get("attention_mask"), grids
+                )
 
         # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
         data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}

@@ -98,6 +98,16 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
             for timestamp in timestamps
         )
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]]:
+        # every video frame is its own block in the text (separated by its timestamp), so each frame is a (1, h, w) grid
+        image_merge, video_merge = self.image_processor.merge_size, self.video_processor.merge_size
+        image_grids = np.asarray(image_inputs.get("image_grid_thw", [])).tolist()
+        video_grids = np.asarray(video_inputs.get("video_grid_thw", [])).tolist()
+        return {
+            1: [(t, h // image_merge, w // image_merge, 1) for t, h, w in image_grids],
+            2: [(1, h // video_merge, w // video_merge, 1) for t, h, w in video_grids for _ in range(t)],
+        }
+
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """Compute placeholder counts for serving frameworks without materializing pixels."""
         vision_data = {}
@@ -152,7 +162,7 @@ class Cosmos3EdgeProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
+        return super().model_input_names + ["mm_token_type_ids", "position_ids"]
 
     @staticmethod
     def _calculate_timestamps(

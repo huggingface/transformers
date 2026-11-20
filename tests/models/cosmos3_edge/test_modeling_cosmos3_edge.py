@@ -106,6 +106,7 @@ class Cosmos3EdgeTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
     """Tiny packed-vision inputs for the shared VLM model-test suite."""
 
     base_model_class = Cosmos3EdgeModel

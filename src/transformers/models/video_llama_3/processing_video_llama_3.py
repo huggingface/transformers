@@ -75,6 +75,10 @@ class VideoLlama3Processor(ProcessorMixin):
 
         return ",".join(video_placeholder)
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # VideoLLaMA3 uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.

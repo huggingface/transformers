@@ -42,6 +42,7 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
+    mrope_position_ids,
 )
 from ...test_processing_common import url_to_local_path
 from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
@@ -187,6 +188,7 @@ class Glm4vMoeVisionText2TextModelTester:
             "attention_mask": attention_mask,
             "mm_token_type_ids": mm_token_type_ids,
         }
+        inputs_dict["position_ids"] = mrope_position_ids(config, inputs_dict)
         return config, inputs_dict
 
 

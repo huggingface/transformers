@@ -29,7 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor, mrope_position_ids
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -192,6 +192,8 @@ class Qwen3_5MoeTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Qwen3_5MoeVisionText2TextModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
+    mrope_split_video_frames = True
     base_model_class = Qwen3_5MoeModel
     config_class = Qwen3_5MoeConfig
 
@@ -434,9 +436,6 @@ class Qwen3_5MoeModelTest(VLMModelTest, unittest.TestCase):
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
-            if hasattr(model.base_model, "rope_deltas"):
-                model.base_model.rope_deltas = None
-
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
             image_grid_thw = curr_input_dict["image_grid_thw"][:1]
@@ -451,15 +450,15 @@ class Qwen3_5MoeModelTest(VLMModelTest, unittest.TestCase):
                     mm_token_type_ids=torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0),
                 )
 
-            if hasattr(model.base_model, "rope_deltas"):
-                model.base_model.rope_deltas = None
-
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
             mm_token_type_ids = torch.cat(
                 [curr_input_dict["mm_token_type_ids"][:1], curr_input_dict["mm_token_type_ids"][:1]], dim=0
             )
+            mm_types = (input_ids == config.image_token_id).long()
+            positions = {"input_ids": input_ids, "mm_token_type_ids": mm_types, "image_grid_thw": image_grid_thw}
             _ = model(
+                position_ids=mrope_position_ids(config, positions),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
@@ -510,6 +509,10 @@ class Qwen3_5MoeModelTest(VLMModelTest, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "image_grid_thw": image_grid_thw},
+                ),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
@@ -595,6 +598,11 @@ class Qwen3_5MoeModelTest(VLMModelTest, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "video_grid_thw": video_grid_thw},
+                    split_video_frames=True,
+                ),
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,

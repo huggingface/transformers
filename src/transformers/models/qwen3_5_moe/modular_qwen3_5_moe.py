@@ -367,16 +367,8 @@ class Qwen3_5MoeModel(Qwen3_5Model):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        if position_ids is None:
-            position_ids = self.compute_3d_position_ids(
-                input_ids=input_ids,
-                image_grid_thw=image_grid_thw,
-                video_grid_thw=video_grid_thw,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache=cache,
-                mm_token_type_ids=mm_token_type_ids,
-            )
+        if position_ids is None and (image_grid_thw is not None or video_grid_thw is not None):
+            raise ValueError("Multimodal inputs need the 3D RoPE `position_ids` returned by the processor.")
 
         outputs = self.language_model(
             input_ids=None,

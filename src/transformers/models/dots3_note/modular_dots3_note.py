@@ -1323,6 +1323,10 @@ class Dots3NoteProcessor(Qwen2VLProcessor):
     return_mm_token_type_ids = AttributeError()
     valid_processor_kwargs = ProcessingKwargs
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # Dots3Note uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     @property
     def unused_input_names(self):
         return ["num_audio_tokens"]

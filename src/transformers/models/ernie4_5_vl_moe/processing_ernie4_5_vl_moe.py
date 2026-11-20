@@ -120,10 +120,21 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
         else:
             return moe_mm_token_type_ids.tolist()
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]]:
+        # the language model sees each grid after the vision tower's spatial (and, for videos, temporal) merge
+        image_merge, video_merge = self.image_processor.merge_size, self.video_processor.merge_size
+        temporal_merge = self.video_processor.temporal_patch_size
+        image_grids = np.asarray(image_inputs.get("image_grid_thw", [])).tolist()
+        video_grids = np.asarray(video_inputs.get("video_grid_thw", [])).tolist()
+        return {
+            1: [(t, h // image_merge, w // image_merge, 1) for t, h, w in image_grids],
+            2: [(t // temporal_merge, h // video_merge, w // video_merge, 1) for t, h, w in video_grids],
+        }
+
     @property
     def model_input_names(self):
         """Additional `mm_token_type_ids` used for modality isolated MoE"""
-        return super().model_input_names + ["mm_token_type_ids", "moe_mm_token_type_ids"]
+        return super().model_input_names + ["mm_token_type_ids", "moe_mm_token_type_ids", "position_ids"]
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """

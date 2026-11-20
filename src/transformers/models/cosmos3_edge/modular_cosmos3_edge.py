@@ -23,7 +23,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -596,76 +595,12 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
         # Video frames use the same vision tower and projector path as images.
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
-    def get_rope_index(
-        self,
-        input_ids: torch.LongTensor,
-        mm_token_type_ids: torch.IntTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **super_kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        # Edge's processor emits one timestamped visual span per frame, so split each video's temporal grid before
-        # applying Qwen2-VL's common multimodal position-index routine.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0).clone()
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(
-            input_ids=input_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            attention_mask=attention_mask,
-            mm_token_type_ids=mm_token_type_ids,
-            **super_kwargs,
-        )
-
 
 @auto_docstring
 class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmos3EdgePreTrainedModel):
     config: Cosmos3EdgeConfig
     _tied_weights_keys = {}
     accepts_loss_kwargs = False
-
-    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
-        # Qwen2-VL exposes four axes (text plus three visual axes). Edge's interleaved M-RoPE consumes the three
-        # visual axes directly, so start from the common 2D text positions rather than Qwen2-VL's four-axis helper.
-        text_positions = GenerationMixin._prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs)
-
-        # Early exit in case we are continuing generation from past kv.
-        past_length = 0
-        if (cache := model_kwargs.get("cache")) is not None:
-            past_length = cache.get_seq_length()
-        if past_length != 0 and self.model.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.model.rope_deltas
-            return position_ids
-
-        # Otherwise compute 3D position ids for vision tokens.
-        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
-            inputs_tensor = model_kwargs["input_ids"]
-
-        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
-        has_multimodal_inputs = (
-            model_kwargs.get("image_grid_thw") is not None or model_kwargs.get("video_grid_thw") is not None
-        )
-        if is_input_ids and has_multimodal_inputs and model_kwargs.get("mm_token_type_ids") is None:
-            raise ValueError(
-                "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
-                "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
-                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
-            )
-
-        if is_input_ids and model_kwargs.get("mm_token_type_ids") is not None and has_multimodal_inputs:
-            model_kwargs = {key: value for key, value in model_kwargs.items() if key != "input_ids"}
-            position_ids, rope_deltas = self.model.get_rope_index(inputs_tensor, **model_kwargs)
-            self.model.rope_deltas = rope_deltas
-        else:
-            position_ids = text_positions.unsqueeze(0).expand(3, -1, -1)
-            self.model.rope_deltas = torch.zeros(
-                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
-            )
-
-        return position_ids
 
     def forward(self, **super_kwargs):
         r"""
@@ -1058,7 +993,7 @@ class Cosmos3EdgeProcessor(Qwen3VLProcessor):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
+        return super().model_input_names + ["mm_token_type_ids", "position_ids"]
 
 
 __all__ = [

@@ -39,6 +39,7 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
+    mrope_position_ids,
 )
 from ...test_processing_common import url_to_local_path
 
@@ -171,6 +172,7 @@ class Glm4vVisionText2TextModelTester:
             "attention_mask": attention_mask,
             "mm_token_type_ids": mm_token_type_ids,
         }
+        inputs_dict["position_ids"] = mrope_position_ids(config, inputs_dict)
         return config, inputs_dict
 
 
@@ -195,52 +197,6 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @unittest.skip("Error with compilation")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
-
-    def test_vision_position_ids(self):
-        """
-        Tests that vision position ids are built correctly for images and for videos.
-        See https://github.com/huggingface/transformers/pull/45400
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Glm4vModel(config).to(torch_device)
-
-        # Each image encodes to more than 1 token (i.e. 4 height and 3 width patches = 12 tokens)
-        image_token_id = config.image_token_id
-        pad_token_id = config.text_config.pad_token_id
-        input_ids = torch.tensor([[pad_token_id] + [image_token_id] * 12 + [pad_token_id]], device=torch_device)
-        mm_token_type_ids = torch.tensor([[0] + [1] * 12 + [0]], device=torch_device)
-        image_grid_thw = torch.tensor([[1, 4, 3]], device=torch_device)
-        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, image_grid_thw)[0]
-        expected_positions = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5]],
-                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
-                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
-            ]
-        )
-
-        self.assertListEqual(list(position_ids.shape), [3, 1, 14])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
-        # Check video position ids with 2 frames, and 4 height, 3 width patches (= 12 * 2 tokens)
-        video_token_id = config.video_token_id
-        input_ids = torch.tensor(
-            [[pad_token_id] + [video_token_id] * 12 + [pad_token_id] + [video_token_id] * 12 + [pad_token_id]],
-            device=torch_device,
-        )
-        mm_token_type_ids = torch.tensor([[0] + [2] * 12 + [0] + [2] * 12 + [0]], device=torch_device)
-        video_grid_thw = torch.tensor([[2, 4, 3]], device=torch_device)
-        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, video_grid_thw=video_grid_thw)[0]
-        expected_positions = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 10]],
-                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10]],
-                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5, 6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8, 10]],
-            ]
-        )
-
-        self.assertListEqual(list(position_ids.shape), [3, 1, 27])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
 
 
 @require_torch

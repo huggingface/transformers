@@ -459,15 +459,6 @@ class VideoLlama3Model(Qwen2VLModel):
 
         self.post_init()
 
-    def get_rope_index(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
-    def get_vision_position_ids(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
-    def compute_3d_position_ids(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
     def get_video_features(
         self,
         pixel_values_videos: torch.Tensor,
@@ -703,14 +694,15 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             video_hidden_states=outputs.video_hidden_states,
         )
 
-    def _prepare_position_ids_for_generation(self):
-        raise AttributeError("Not needed for VideoLLaMA3")
-
 
 class VideoLlama3Processor(Qwen3VLProcessor):
     text_kwargs = AttributeError()
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = AttributeError()
+
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # VideoLLaMA3 uses 1D RoPE, the model builds its own `position_ids`
+        return None
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token

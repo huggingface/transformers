@@ -45,6 +45,7 @@ if is_torch_available():
 
 
 class Ernie4_5_VLMoeVisionText2TextModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
     base_model_class = Ernie4_5_VLMoeModel
     config_class = Ernie4_5_VLMoeConfig
 

@@ -814,14 +814,8 @@ class GlmImageTextModel(GlmImagePreTrainedModel):
 
         # NOTE: we need to pass text position ids for packing. Qwen2-VL uses 3D positions
         # where each dim indicates visual spatial positions for temporal/height/width grids.
-        # There are two scenarios when FA2-like packed masking might be activated.
-        # 1. User specifically passed packed `position_ids` and no attention mask.
-        #    In this case we expect the user to create correct position ids for all 3 grids
-        #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
-        # 2. User runs forward with no attention mask and no position ids. In this case, position ids
-        #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
-        #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
-        #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
+        # For FA2-like packed masking (packed `position_ids` and no attention mask), prepend the text-only
+        # position ids to the 3 grids: the tensor is then [4, bs, seq-len] and the mask is built from row 0.
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
@@ -871,9 +865,9 @@ class GlmImageModel(GlmImagePreTrainedModel):
         super().__init__(config)
         self.visual = GlmImageVisionModel._from_config(config.vision_config)
         self.language_model = GlmImageTextModel._from_config(config.text_config)
+        self.vqmodel = GlmImageVQVAE._from_config(config.vq_config)
 
         self.rope_deltas = None  # cache rope_deltas here
-        self.vqmodel = GlmImageVQVAE._from_config(config.vq_config)
 
         # Per-sample caches for batch processing
         self._cached_decode_position_ids = None  # shape: [batch_size, 3, max_decode_len]
@@ -881,6 +875,138 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            The number of image inputs per each sample in the batch.
+        """
+        if (
+            images_per_sample is not None
+            and image_grid_thw is not None
+            and sum(images_per_sample) == len(image_grid_thw)
+        ):
+            image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+
+        pixel_values = pixel_values.type(self.visual.dtype)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+
+        reshaped_embeds = []
+        for i, embed in enumerate(image_embeds):
+            grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
+            embed = embed.view(grid_t, grid_h, grid_w, -1)
+            # grid-h is always one for images, so we squeeze the extrac dim back in reality
+            embed = embed.permute(0, 3, 1, 2).reshape(-1, grid_h, grid_w)
+            reshaped_embeds.append(embed.contiguous())
+
+        vision_outputs.pooler_output = reshaped_embeds
+
+        return vision_outputs
+
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor,
+        image_ids: torch.LongTensor,
+    ):
+        """
+        Replace image placeholder tokens in input_ids with actual image token ids from VQVAE.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Input token ids with image placeholders.
+            image_ids (`torch.LongTensor` of shape `(num_images, num_tokens_per_image)` or flattened):
+                Discrete token indices from the VQVAE codebook.
+
+        Returns:
+            special_image_mask (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Mask indicating positions in input ids that will be replaced by actual image tokens.
+        """
+
+        special_image_mask = input_ids == self.config.image_token_id
+        n_placeholder_tokens = special_image_mask.sum()
+        n_image_tokens = image_ids.shape[0]
+
+        if n_placeholder_tokens != n_image_tokens:
+            raise ValueError(
+                f"Number of image placeholder tokens ({n_placeholder_tokens.item()}) does not match "
+                f"number of image tokens from VQVAE ({n_image_tokens})"
+            )
+
+        return special_image_mask
+
+    @can_return_tuple
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        images_per_sample: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Number of images (including target grids) for each sample in the batch.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, source_grids, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_ids = self.get_image_tokens(mm_encoder_outputs["image"].pooler_output)
+            image_ids = image_ids.view(-1).to(input_ids.device)
+            special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
+            input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                images_per_sample=images_per_sample,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+            )
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            cache=cache,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
+        )
+
+        return outputs
 
     def get_vision_position_ids(
         self,
@@ -1103,176 +1229,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
         return position_ids, mrope_position_deltas
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        images_per_sample: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            The number of image inputs per each sample in the batch.
-        """
-        if (
-            images_per_sample is not None
-            and image_grid_thw is not None
-            and sum(images_per_sample) == len(image_grid_thw)
-        ):
-            image_grid_thw = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-
-        pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-
-        reshaped_embeds = []
-        for i, embed in enumerate(image_embeds):
-            grid_t, grid_h, grid_w = image_grid_thw[i].tolist()
-            embed = embed.view(grid_t, grid_h, grid_w, -1)
-            # grid-h is always one for images, so we squeeze the extrac dim back in reality
-            embed = embed.permute(0, 3, 1, 2).reshape(-1, grid_h, grid_w)
-            reshaped_embeds.append(embed.contiguous())
-
-        vision_outputs.pooler_output = reshaped_embeds
-
-        return vision_outputs
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor,
-        image_ids: torch.LongTensor,
-    ):
-        """
-        Replace image placeholder tokens in input_ids with actual image token ids from VQVAE.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
-                Input token ids with image placeholders.
-            image_ids (`torch.LongTensor` of shape `(num_images, num_tokens_per_image)` or flattened):
-                Discrete token indices from the VQVAE codebook.
-
-        Returns:
-            special_image_mask (`torch.LongTensor` of shape `(batch_size, seq_len)`):
-                Mask indicating positions in input ids that will be replaced by actual image tokens.
-        """
-
-        special_image_mask = input_ids == self.config.image_token_id
-        n_placeholder_tokens = special_image_mask.sum()
-        n_image_tokens = image_ids.shape[0]
-
-        if n_placeholder_tokens != n_image_tokens:
-            raise ValueError(
-                f"Number of image placeholder tokens ({n_placeholder_tokens.item()}) does not match "
-                f"number of image tokens from VQVAE ({n_image_tokens})"
-            )
-
-        return special_image_mask
-
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def compute_3d_position_ids(
-        self,
-        input_ids: torch.Tensor | None,
-        image_grid_thw: torch.Tensor | None,
-        images_per_sample: torch.Tensor | None,
-        inputs_embeds: torch.Tensor | None,
-        attention_mask: torch.Tensor | None,
-        cache: torch.Tensor | None,
-    ) -> torch.Tensor | None:
-        cache_length = 0 if cache is None else cache.get_seq_length()
-        can_compute_mrope = input_ids is not None and image_grid_thw is not None
-
-        if can_compute_mrope and (self.rope_deltas is None or cache_length == 0):
-            position_ids, rope_deltas = self.get_rope_index(
-                input_ids,
-                image_grid_thw=image_grid_thw,
-                attention_mask=attention_mask,
-                images_per_sample=images_per_sample,
-            )
-            self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
-        # generation (cache_length > 0) or when only inputs_embeds is provided (no input_ids
-        # to recompute from). Skip when input_ids is provided without cache to avoid shape
-        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
-        elif self.rope_deltas is not None and (cache_length > 0 or input_ids is None):
-            batch_size, seq_length, _ = inputs_embeds.shape
-            if self._cached_decode_position_ids is not None:
-                step = cache_length - self._prefill_len
-                position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
-            else:
-                position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + cache_length
-                position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
-        else:
-            # Can't build correct 3D positions. Let the model infer it
-            position_ids = None
-        return position_ids
-
-    @can_return_tuple
-    @auto_docstring
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        cache: Cache | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        images_per_sample: torch.LongTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
-        r"""
-        images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Number of images (including target grids) for each sample in the batch.
-        """
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if pixel_values is not None and mm_encoder_outputs is not None:
-            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
-
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
-        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            source_grids = self.get_image_grids_for_generation(images_per_sample, image_grid_thw)
-            mm_encoder_outputs["image"] = self.get_image_features(
-                pixel_values, source_grids, return_dict=True, **kwargs
-            )
-
-        if mm_encoder_outputs.get("image") is not None:
-            image_ids = self.get_image_tokens(mm_encoder_outputs["image"].pooler_output)
-            image_ids = image_ids.view(-1).to(input_ids.device)
-            special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
-            input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if position_ids is None:
-            position_ids = self.compute_3d_position_ids(
-                input_ids=input_ids,
-                image_grid_thw=image_grid_thw,
-                images_per_sample=images_per_sample,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache=cache,
-            )
-
-        outputs = self.language_model(
-            input_ids=None,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            cache=cache,
-            inputs_embeds=inputs_embeds,
-            **kwargs,
-        )
-
-        return outputs
-
     def get_image_tokens(
         self,
         hidden_states: torch.Tensor,
@@ -1312,6 +1268,44 @@ class GlmImageModel(GlmImagePreTrainedModel):
             # Fallback for batch_size=1: all but last grid are source images
             source_grids = image_grid_thw[:-1]
         return source_grids
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        image_grid_thw: torch.Tensor | None,
+        images_per_sample: torch.Tensor | None,
+        inputs_embeds: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+        cache: torch.Tensor | None,
+    ) -> torch.Tensor | None:
+        cache_length = 0 if cache is None else cache.get_seq_length()
+        can_compute_mrope = input_ids is not None and image_grid_thw is not None
+
+        if can_compute_mrope and (self.rope_deltas is None or cache_length == 0):
+            position_ids, rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                attention_mask=attention_mask,
+                images_per_sample=images_per_sample,
+            )
+            self.rope_deltas = rope_deltas
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (cache_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without cache to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (cache_length > 0 or input_ids is None):
+            batch_size, seq_length, _ = inputs_embeds.shape
+            if self._cached_decode_position_ids is not None:
+                step = cache_length - self._prefill_len
+                position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
+            else:
+                position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + cache_length
+                position_ids = position_ids.view(1, 1, -1).repeat(3, batch_size, 1)
+        else:
+            # Can't build correct 3D positions. Let the model infer it
+            position_ids = None
+        return position_ids
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
