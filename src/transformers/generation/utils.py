@@ -774,6 +774,13 @@ class GenerationMixin(ContinuousMixin):
             elif key not in model_inputs:
                 model_inputs[key] = value
 
+        # 6. The forward's data-dependent inputs, computed with the prompt's; those already laid out are kept
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            data_dependent_inputs = self.get_data_dependent_inputs(**model_inputs)
+            model_inputs.update(
+                {key: value for key, value in data_dependent_inputs.items() if key not in model_inputs}
+            )
+
         # BC for remote code models only: create `cache_position` on the fly here, as we don't want to maintain them in kwargs
         # between `forward`s
         if self.is_remote_code() and "cache_position" in set(inspect.signature(self.forward).parameters):
@@ -786,7 +793,7 @@ class GenerationMixin(ContinuousMixin):
             cache_position = torch.arange(sequence_length, device=input_ids.device) + past_seen_tokens
             model_inputs["cache_position"] = cache_position
 
-        # 6. Move the tensors the forward consumes onto the model device, right before the call.
+        # 7. Move the tensors the forward consumes onto the model device, right before the call.
         # It lets the caller intentionally keep inputs on a different device (e.g. Neuron/TPU) so
         # the generation loop's growing-tensor bookkeeping stays off-device.
         input_tensor = model_inputs.get("inputs_embeds", model_inputs[input_ids_key])  # input_ids is None for embeds

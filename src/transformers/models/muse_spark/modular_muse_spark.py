@@ -37,6 +37,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilab
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...vision_utils import get_vision_interpolation_indices_and_weights
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
@@ -54,6 +55,7 @@ from ..muse_glimmer.modeling_muse_glimmer import (
     MuseGlimmerTextMLP,
     MuseGlimmerTextModel,
     MuseGlimmerVisionModel,
+    MuseGlimmerVisionPatchEmbedder,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -592,6 +594,21 @@ class MuseSparkTextModel(MuseGlimmerTextModel):
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             cache=cache,
+        )
+
+
+class MuseSparkVisionPatchEmbedder(MuseGlimmerVisionPatchEmbedder):
+    def get_interpolation_inputs(self, grid_thw: torch.Tensor, kwargs: dict | None = None):
+        # Patch (h, w) reads the position table at (w, h): ref code passes
+        # `meshgrid(pos_h, pos_w, indexing="xy")` to `grid_sample` which takes first coord as width.
+        return get_vision_interpolation_indices_and_weights(
+            grid_thw[:, [0, 2, 1]],
+            num_grid_per_side=self.num_grid_per_side,
+            mode=self.interpolation_mode,
+            align_corners=self.interpolation_align_corners,
+            spatial_merge_size=1,
+            padding=self.interpolation_padding,
+            kwargs=kwargs,
         )
 
 

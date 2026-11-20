@@ -41,7 +41,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    can_return_tuple,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_nearest_position_ids, get_vision_window_index
@@ -441,6 +447,22 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         }
         return downsampled_kwargs, target_sizes, cu_seqlens
 
+    def get_data_dependent_inputs(self, target_sizes: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `target_sizes` with data-dependent ops: the patches' `position_ids`, the
+        attention's `max_seqlen`, and the window merger's `window_index` and `cu_window_seqlens`."""
+        position_ids = get_vision_nearest_position_ids(
+            target_sizes, self.embeddings.num_patches_per_side, kwargs=kwargs
+        )
+        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
+        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        window_index, cu_window_seqlens, _ = self.vit_merger.get_window_index(target_sizes, kwargs=kwargs)
+        return {
+            "position_ids": position_ids,
+            "max_seqlen": max_seqlen,
+            "window_index": window_index,
+            "cu_window_seqlens": cu_window_seqlens,
+        }
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -601,6 +623,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel, MultimodalMixin):
         self.merger = MiniCPMV4_6Merger(config)
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
     def get_image_embeddings(
@@ -748,6 +771,15 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel, MultimodalMixin):
         return MultimodalBaseModelOutputWithPast(
             **output, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
+
+    def get_data_dependent_inputs(self, target_sizes: torch.IntTensor | None = None, **kwargs) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the vision
+        tower's (see [`MiniCPMV4_6VisionModel.get_data_dependent_inputs`]) prefixed `image_`, as
+        `get_image_features` takes them."""
+        if target_sizes is None:
+            return {}
+        tower_inputs = self.vision_tower.get_data_dependent_inputs(target_sizes)
+        return {f"image_{name}": value for name, value in tower_inputs.items()}
 
     @can_return_tuple
     @auto_docstring(

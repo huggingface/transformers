@@ -19,6 +19,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -429,6 +430,13 @@ class Lfm3VlVisionModel(Lfm3VlPreTrainedModel):
 
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` of the patches,
+        and the attention's `cu_seqlens` and `max_seqlen`."""
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -607,6 +615,42 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
             )
         return special_image_mask, special_video_mask
 
+    def get_data_dependent_inputs(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from the processor's outputs with data-dependent ops: the M-RoPE
+        `position_ids`, the vision tower's inputs (see
+        [`Qwen2VisionTransformerPretrainedModel.get_data_dependent_inputs`]) prefixed `image_` and `video_`, as
+        `get_image_embeddings` and `get_video_embeddings` take them."""
+        inputs = {}
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                tower_inputs = self.get_encoder(modality="image").get_data_dependent_inputs(grid_thw)
+                inputs.update({prefix + name: value for name, value in tower_inputs.items()})
+        has_vision = image_grid_thw is not None or video_grid_thw is not None
+        if position_ids is None and input_ids is not None and mm_token_type_ids is not None and has_vision:
+            vision_position_ids, _ = self.get_rope_index(
+                input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                attention_mask=attention_mask,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+            if attention_mask is not None:
+                text_position_ids = (attention_mask.long().cumsum(-1) - 1).masked_fill(attention_mask == 0, 0)
+            else:
+                text_position_ids = torch.arange(input_ids.shape[1], device=input_ids.device).expand_as(input_ids)
+            # The text positions first: the text model builds the attention mask from them
+            inputs["position_ids"] = torch.cat([text_position_ids[None], vision_position_ids], dim=0)
+        return inputs
+
     @can_return_tuple
     @auto_docstring
     @merge_mm_encoder_outputs
@@ -694,6 +738,10 @@ class Lfm3VlForConditionalGeneration(Lfm3VlPreTrainedModel, MultimodalMixin, Gen
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Lfm3VlModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

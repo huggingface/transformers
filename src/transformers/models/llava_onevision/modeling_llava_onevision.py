@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import math
+from typing import Any
 
 import numpy as np
 import torch
@@ -610,6 +611,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Mult
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=image_newline,
         )
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`LlavaOnevisionModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @merge_with_config_defaults
     @can_return_tuple

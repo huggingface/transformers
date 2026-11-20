@@ -99,6 +99,10 @@ class MusicFlamingoForConditionalGenerationModelTest(ALMModelTest, unittest.Test
         else {}
     )
 
+    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
+    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     def test_rotary_window_axis_resets_per_audio(self):
         config = self.model_tester.get_config()
         pos_emb = MusicFlamingoForConditionalGeneration(config).model.pos_emb.to(torch_device)

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import torch
@@ -595,6 +596,13 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
         self.gradient_checkpointing = False
         self.post_init()
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the rotary `position_ids` and the
+        attention's `cu_seqlens` and `max_seqlen`."""
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"position_ids": position_ids, "cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
 
     @merge_with_config_defaults
     @capture_outputs
