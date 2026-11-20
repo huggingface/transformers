@@ -61,28 +61,32 @@ class Molmo2VisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = Molmo2ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_size", 378)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("num_image_tokens", 32)
-        kwargs.setdefault("seq_length", 7 + kwargs["num_image_tokens"])
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
-        kwargs.setdefault("image_start_token_id", 3)
-        kwargs.setdefault("image_end_token_id", 4)
-        kwargs.setdefault("image_patch_id", 5)
+    small_config_overrides = {
+        "image_size": 378,
+        "patch_size": 14,
+        "num_image_tokens": 32,
+        "hidden_size": 32,
+        "intermediate_size": 37,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "num_hidden_layers": 2,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
+        "image_start_token_id": 3,
+        "image_end_token_id": 4,
+        "image_patch_id": 5,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
         # Alias so base helpers (special-token clearing, mismatch tests) protect image patch tokens.
-        kwargs.setdefault("image_token_id", kwargs["image_patch_id"])
-        super().__init__(parent, **kwargs)
+        kwargs.setdefault("image_token_id", kwargs.get("image_patch_id", cls.small_config_overrides["image_patch_id"]))
+        # seq_length defaults to 7 + num_image_tokens (VLMModelTester).
+        return super().get_small_config_defaults(**kwargs)
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

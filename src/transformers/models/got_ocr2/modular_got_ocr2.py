@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -250,10 +250,7 @@ class GotOcr2Model(LlavaModel):
         last_hidden_state = image_outputs.last_hidden_state
         image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
 
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            image_outputs.pooler_output.shape[:1], image_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
     @can_return_tuple
@@ -305,13 +302,7 @@ class GotOcr2Model(LlavaModel):
             **kwargs,
         )
 
-        return GotOcr2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return GotOcr2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
@@ -393,7 +384,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

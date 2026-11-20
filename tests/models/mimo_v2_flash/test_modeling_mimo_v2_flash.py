@@ -38,27 +38,25 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MiMoV2FlashModel
 
-    def __init__(self, parent):
-        super().__init__(
-            parent=parent,
-            batch_size=2,
-            is_training=True,
-            num_attention_heads=4,
-            intermediate_size=64,
-            hidden_act="silu",
-            max_position_embeddings=64,
-        )
+    small_config_overrides = {
+        "batch_size": 2,
+        "is_training": True,
+        "num_attention_heads": 4,
+        "intermediate_size": 64,
+        "hidden_act": "silu",
+        "max_position_embeddings": 64,
         # MiMo-V2-Flash specific test config (other defaults match Glm4MoeConfig).
-        self.v_head_dim = 16
-        self.layer_types = ["full_attention", "sliding_attention"]
-        self.rope_parameters = {
+        "v_head_dim": 16,
+        "layer_types": ["full_attention", "sliding_attention"],
+        "rope_parameters": {
             "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.5},
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
-        }
+        },
         # 2 layers
-        self.mlp_layer_types = ["dense", "sparse"]
-        self.n_routed_experts = 4
-        self.sliding_window = 64
+        "mlp_layer_types": ["dense", "sparse"],
+        "n_routed_experts": 4,
+        "sliding_window": 64,
+    }
 
 
 @require_torch

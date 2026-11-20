@@ -27,7 +27,12 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -41,62 +46,28 @@ from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Ide
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Idefics2 model's outputs that may also contain a past key/values (to speed up sequential decoding).
-    """
-)
+@auto_docstring
 @dataclass
-class Idefics2BaseModelOutputWithPast(ModelOutput):
-    r"""
-    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
-        If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-        hidden_size)` is output.
-    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
-        sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
-    """
-
-    last_hidden_state: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
+class Idefics2BaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Idefics2 causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Idefics2
-class Idefics2CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
-        sequence_length, hidden_size)`.
-
-        image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
+class Idefics2CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class Idefics2VisionEmbeddings(nn.Module):
@@ -818,7 +789,7 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         return inputs_embeds
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(custom_intro="Skips the padding images.")
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -826,8 +797,6 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Skips the padding images.
-
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         pixel_attention_mask (`torch.LongTensor`, *optional*):
@@ -964,13 +933,7 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
             **kwargs,
         )
 
-        return Idefics2BaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
-        )
+        return Idefics2BaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring(
@@ -1093,7 +1056,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, MultimodalMixin,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

@@ -26,6 +26,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
@@ -49,47 +50,38 @@ if is_torch_available():
     )
 
 
-class Pix2StructVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=12,
-        patch_embed_hidden_size=12,
-        projection_dim=32,
-        max_patches=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=1e-10,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_embed_hidden_size = patch_embed_hidden_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.max_patches = max_patches
-        self.seq_length = self.max_patches
-        self.patch_proj_dim = ((patch_size**2) * num_channels) + 2
+class Pix2StructVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 12,
+        "patch_embed_hidden_size": 12,
+        "projection_dim": 32,
+        "max_patches": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 1e-10,
+        "scope": None,
+    }
 
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = values["max_patches"]
+        values["patch_proj_dim"] = ((values["patch_size"] ** 2) * values["num_channels"]) + 2
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         flattened_patches = floats_tensor([self.batch_size, self.max_patches, self.patch_proj_dim])
@@ -137,6 +129,8 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as Pix2Struct does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = Pix2StructVisionModelTester
 
     all_model_classes = (Pix2StructVisionModel,) if is_torch_available() else ()
 
@@ -207,47 +201,38 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class Pix2StructTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=12,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        bos_token_id=0,
-        scope=None,
-    ):
+class Pix2StructTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 12,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "bos_token_id": 0,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["d_kv"] = values["hidden_size"] // values["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.d_kv = hidden_size // num_attention_heads
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.bos_token_id = bos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -301,6 +286,7 @@ class Pix2StructTextModelTester:
 
 @require_torch
 class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Pix2StructTextModelTester
     all_model_classes = (Pix2StructTextModel,) if is_torch_available() else ()
 
     def setUp(self):
@@ -355,8 +341,24 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class Pix2StructModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class Pix2StructModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_values = Pix2StructTextModelTester.get_small_config_defaults(**(text_kwargs or {}))
+        values["batch_size"] = text_values["batch_size"]  # need bs for batching_equivalence test
+        values["seq_length"] = text_values["seq_length"]  # need seq_length for common tests
+        values["max_patches"] = Pix2StructVisionModelTester.get_small_config_defaults(**(vision_kwargs or {}))[
+            "max_patches"
+        ]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -365,10 +367,8 @@ class Pix2StructModelTester:
         self.parent = parent
         self.text_model_tester = Pix2StructTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Pix2StructVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
-        self.is_training = is_training
-        self.max_patches = self.vision_model_tester.max_patches
+        for key, value in self.get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -408,6 +408,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     test_resize_embeddings = True
     test_attention_outputs = False
+    model_tester_class = Pix2StructModelTester
 
     def setUp(self):
         self.model_tester = Pix2StructModelTester(self)

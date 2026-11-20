@@ -35,11 +35,16 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
@@ -56,15 +61,31 @@ from ...vision_utils import (
 from .configuration_hunyuan_vl import HunYuanVLConfig, HunYuanVLTextConfig, HunYuanVLVisionConfig
 
 
+logger = logging.get_logger(__name__)
+
+
 @auto_docstring
 @dataclass
-class HunYuanVLModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_hidden_states (`torch.Tensor`, *optional*):
-        Last image features produced by the vision tower and scattered into the language-model token stream.
-    """
+class HunYuanVLModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-    image_hidden_states: torch.Tensor | None = None
+
+@auto_docstring
+@dataclass
+class HynYuanVLCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -1015,6 +1036,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         merged_height, merged_width = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(
             -1
         )
+        # Include row separators and image boundary tokens in each split.
         image_outputs.split_sizes = merged_height * (merged_width + 1) + 2
         return image_outputs
 
@@ -1169,11 +1191,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         )
 
         return HunYuanVLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_embeds if mm_encoder_outputs.get("image") is not None else None,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -1213,7 +1231,7 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, MultimodalMixi
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> HynYuanVLCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1272,64 +1290,15 @@ class HunYuanVLForConditionalGeneration(HunYuanVLPreTrainedModel, MultimodalMixi
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return HynYuanVLCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
-
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        cache=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        image_grid_thw=None,
-        mm_token_type_ids=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            cache=cache,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
-            mm_token_type_ids=mm_token_type_ids,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        position_ids = model_inputs.get("position_ids")
-        if position_ids is not None and position_ids.dim() == 3:
-            rope_parameters = self.config.text_config.rope_parameters or {}
-            num_mrope_axes = len(rope_parameters.get("mrope_section", []))
-            if num_mrope_axes and position_ids.shape[0] != num_mrope_axes:
-                batch_size_source = model_inputs.get("input_ids")
-                if batch_size_source is None:
-                    batch_size_source = model_inputs.get("inputs_embeds")
-                if batch_size_source is None:
-                    batch_size_source = attention_mask
-                batch_size = batch_size_source.shape[0]
-                if position_ids.shape[0] % num_mrope_axes == 0 and position_ids.shape[1] != batch_size:
-                    expand_size = position_ids.shape[0] // num_mrope_axes
-                    position_ids = position_ids.view(expand_size, num_mrope_axes, *position_ids.shape[1:])
-                    position_ids = position_ids.permute(1, 0, 2, 3).reshape(num_mrope_axes, -1, position_ids.shape[-1])
-                    model_inputs["position_ids"] = position_ids
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-
-        return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Same as qwen-vl with variable `num_mrope_axes` based on config values

@@ -26,15 +26,22 @@ import torch.nn as nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoModel
 from .configuration_deepseek_vl_hybrid import DeepseekVLHybridConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -61,63 +68,28 @@ class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
     high_res_vision_attentions: tuple[torch.Tensor] | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for DeepseekVLHybrid model's outputs that may also contain a past key/values (to speed up sequential decoding).
-    """
-)
+@auto_docstring
 @dataclass
-class DeepseekVLHybridBaseModelOutputWithPast(ModelOutput):
-    r"""
-    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
-
-        If `cache` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-        hidden_size)` is output.
-    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
-        sequence_length, hidden_size)`.
-
-        image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
-    """
-
-    last_hidden_state: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
+class DeepseekVLHybridBaseModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for DeepseekVLHybrid causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class DeepseekVLHybridCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`tuple(torch.Tensor)`, *optional*):
-        Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
-        sequence_length, hidden_size)`.
-
-        image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
+class DeepseekVLHybridCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class DeepseekVLHybridLayerNorm(nn.LayerNorm):
@@ -285,11 +257,12 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel, MultimodalMixin):
         low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
         high_res_outputs = self.get_high_res_image_features(high_res_pixel_values, **kwargs)
         image_features = self.aligner(low_res_outputs.last_hidden_state, high_res_outputs.last_hidden_state)
+        pooler_output, split_sizes = flatten_items(image_features)
 
         return BaseModelOutputWithHighResVisionEncodings(
             last_hidden_state=low_res_outputs.last_hidden_state,
-            pooler_output=image_features.flatten(0, 1),
-            split_sizes=image_features.new_full(image_features.shape[:1], image_features.shape[1], dtype=torch.long),
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=low_res_outputs.hidden_states,
             attentions=low_res_outputs.attentions,
             high_res_vision_last_hidden_state=high_res_outputs.last_hidden_state,
@@ -360,7 +333,6 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel, MultimodalMixin):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.reshape(-1, inputs_embeds.shape[-1])
             image_attention_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = image_attention_mask.to(inputs_embeds.device)
@@ -375,13 +347,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel, MultimodalMixin):
             **kwargs,
         )
 
-        return DeepseekVLHybridBaseModelOutputWithPast(
-            last_hidden_state=lm_output.last_hidden_state,
-            cache=lm_output.cache,
-            hidden_states=lm_output.hidden_states,
-            attentions=lm_output.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return DeepseekVLHybridBaseModelOutputWithPast(**lm_output, image_outputs=mm_encoder_outputs.get("image"))
 
     def get_low_res_image_features(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         return self.vision_model(pixel_values, return_dict=True, **kwargs)
@@ -476,7 +442,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

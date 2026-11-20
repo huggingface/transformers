@@ -32,7 +32,7 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
-from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
@@ -310,10 +310,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         video_features = video_features.reshape(batch_size, self.config.num_query_tokens * frames, -1)
         vision_outputs.pooler_output = video_features
 
-        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
-            vision_outputs.pooler_output.shape[:1], vision_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
+        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 
     def get_image_embeddings(**super_kwargs):
