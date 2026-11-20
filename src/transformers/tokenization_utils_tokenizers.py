@@ -307,7 +307,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     @classmethod
     def _convert_from_sentencepiece(cls, vocab_file: str, local_kwargs: dict[str, Any]) -> dict[str, Any]:
-        from .convert_slow_tokenizer import SentencePieceExtractor
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, SentencePieceExtractor
+
+        converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
 
         # 1. Extract vocab, merges, and spm_precompiled from the .model proto
         extractor = SentencePieceExtractor(vocab_file)
@@ -315,9 +317,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         # 2. If a model-specific converter exists, use it.
         try:
-            from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
-
-            converter_class = SLOW_TO_FAST_CONVERTERS.get(cls.__name__)
             if converter_class is not None and hasattr(converter_class, "convert_from_spm"):
                 local_kwargs = converter_class.convert_from_spm(**local_kwargs)
         except Exception as e:
@@ -332,24 +331,33 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         #    from the proto so normalizer/decoder are configured correctly.
         if "tokenizer_object" not in local_kwargs and (cls is TokenizersBackend or "__init__" not in cls.__dict__):
             vocab = local_kwargs.pop("vocab", None)
-            merges = local_kwargs.pop("merges", None)
+            # Regenerated from the piece scores by `build_tokenizer_from_spm_proto`
+            local_kwargs.pop("merges", None)
 
             # Replace placeholder tokens as specified in added_tokens_decoder
             added_tokens_decoder = local_kwargs.get("added_tokens_decoder") or {}
-            if vocab is not None and added_tokens_decoder:
-                id_to_token = {token_id: token for token, token_id in vocab.items()}
-                for token_id, new_token in added_tokens_decoder.items():
-                    token_id = int(token_id)
-                    new_token = str(new_token)
-                    current_token = id_to_token.get(token_id)
-                    if current_token and current_token != new_token and new_token not in vocab:
-                        vocab[new_token] = vocab.pop(current_token)
-                        id_to_token[token_id] = new_token
+            if isinstance(vocab, dict) and added_tokens_decoder:
+                names = {int(token_id): str(token) for token_id, token in added_tokens_decoder.items()}
+                # Skip a rename onto a piece that keeps its own id (two pieces may swap names)
+                kept = {token for token, token_id in vocab.items() if token_id not in names}
+                vocab = {(names[i] if i in names and names[i] not in kept else token): i for token, i in vocab.items()}
+
+            # User-defined pieces are handled by the backend tokenizer, not as special tokens
+            user_defined = {piece.piece for piece in extractor.proto.pieces if piece.type == 4}
+            if user_defined and local_kwargs.get("additional_special_tokens"):
+                local_kwargs["additional_special_tokens"] = [
+                    token for token in local_kwargs["additional_special_tokens"] if str(token) not in user_defined
+                ]
+
+            # Match added tokens on the raw text, so each chunk between them gets its own dummy prefix
+            if extractor.proto.normalizer_spec.add_dummy_prefix and added_tokens_decoder:
+                local_kwargs["added_tokens_decoder"] = {
+                    i: AddedToken(**{**t.__getstate__(), "normalized": False}) if isinstance(t, AddedToken) else t
+                    for i, t in added_tokens_decoder.items()
+                }
 
             tokenizer_object = SpmConverter.build_tokenizer_from_spm_proto(
-                proto=extractor.proto,
-                vocab=vocab,
-                merges=merges,
+                proto=extractor.proto, vocab=vocab, legacy=local_kwargs.get("legacy", True)
             )
             if tokenizer_object is not None:
                 local_kwargs["tokenizer_object"] = tokenizer_object
@@ -1510,7 +1518,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Detect if we can skip the mistral fix by
                 #   a) having a non-mistral tokenizer
                 #   b) fixed version of transformers
-                if transformers_version and version.parse(transformers_version) < version.parse("5.0.0"):
+                if not transformers_version or version.parse(transformers_version) < version.parse("5.0.0"):
                     if (
                         is_local
                         and transformers_model_type is not None
@@ -1524,7 +1532,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ]
                     ):
                         return tokenizer
-                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
+                else:
                     return tokenizer
 
                 mistral_config_detected = True

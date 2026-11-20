@@ -47,7 +47,6 @@ class SLANetPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _keep_in_fp32_modules_strict = []
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

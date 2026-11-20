@@ -39,7 +39,13 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    ModelOutput,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -47,9 +53,11 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_compilable_check,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_gemma4_unified import (
@@ -58,6 +66,9 @@ from .configuration_gemma4_unified import (
     Gemma4UnifiedTextConfig,
     Gemma4UnifiedVisionConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -74,89 +85,72 @@ class Gemma4UnifiedAudioModelOutput(ModelOutput):
     attention_mask: torch.BoolTensor | None = None
 
 
+@auto_docstring
 @dataclass
 class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
-    """
-    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
-
-    Args:
-        shared_kv_states (`dict`, *optional*):
-            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
-            Used to pass shared KV states between layers during KV sharing.
-    """
-
-    shared_kv_states: KVSharingDict | None = None
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4Unified causal language model (or autoregressive) outputs.
-    """
-)
-@dataclass
-class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
     r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
-
     shared_kv_states: KVSharingDict | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4Unified outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
+class Gemma4UnifiedCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
     shared_kv_states (`dict`, *optional*):
         Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
-    image_hidden_states: torch.Tensor | None = None
+    shared_kv_states: KVSharingDict | None = None
 
-    audio_hidden_states: torch.Tensor | None = None
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
+
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
+
+
+@auto_docstring
+@dataclass
+class Gemma4UnifiedModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    r"""
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
+    """
 
     shared_kv_states: KVSharingDict | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
+
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
 
 
 class Gemma4UnifiedRMSNorm(nn.Module):
@@ -238,7 +232,6 @@ class Gemma4UnifiedTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -376,13 +369,14 @@ class Gemma4UnifiedTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
         shared_kv_states: KVSharingDict,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -397,7 +391,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
 
         # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer.
         # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
-        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
+        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when cache is not None
         if self.is_kv_shared_layer:
             key_states, value_states = shared_kv_states[self.layer_type]
 
@@ -412,8 +406,8 @@ class Gemma4UnifiedTextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-            if past_key_values is not None:
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if cache is not None:
+                key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         if self.store_full_length_kv:
             shared_kv_states[self.layer_type] = key_states, value_states
@@ -473,6 +467,7 @@ class Gemma4UnifiedTextDecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -480,7 +475,7 @@ class Gemma4UnifiedTextDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -492,7 +487,7 @@ class Gemma4UnifiedTextDecoderLayer(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             shared_kv_states=shared_kv_states,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -529,7 +524,6 @@ class Gemma4UnifiedPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma4UnifiedTextDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -539,7 +533,6 @@ class Gemma4UnifiedPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # override
     input_modalities = ("image", "text", "video", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma4UnifiedTextRotaryEmbedding):
@@ -589,12 +582,13 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -606,11 +600,11 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         if input_ids is not None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -621,7 +615,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
             # Create the masks
@@ -652,6 +646,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
                     position_embeddings,
                     causal_mask_mapping,
                     logits_to_keep,
+                    cache=cache,
                     **kwargs,
                 )
 
@@ -661,7 +656,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -669,7 +664,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
 
         return Gemma4UnifiedTextModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             shared_kv_states=shared_kv_states if kwargs.get("return_shared_kv_states", False) else None,
         )
 
@@ -679,6 +674,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         position_embeddings,
         causal_mask_mapping,
         logits_to_keep,
+        cache,
         **kwargs,
     ):
         """
@@ -701,10 +697,13 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
         # Flex cannot slice mask
         elif self.config._attn_implementation == "flex_attention":  # trf-ignore: TRF051
             can_optimize = False
-        # In this case, we cannot rely on the `is_causal` attribute, as dropping some tokens will make us loose causality
+        # Flash cannot slice mask
+        elif is_flash_attention_requested(self.config):
+            can_optimize = False
+        # In those 2 cases, we cannot rely on the `is_causal` attribute, as dropping some query tokens will make us loose causality
         elif (
             self.config._attn_implementation == "sdpa"  # trf-ignore: TRF051
-            and logits_to_keep > 1
+            and (logits_to_keep > 1 or getattr(cache, "is_compileable", False))
             and any(mask is None for mask in causal_mask_mapping.values())
         ):
             can_optimize = False
@@ -745,12 +744,13 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -779,7 +779,7 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
@@ -803,7 +803,7 @@ class Gemma4UnifiedForCausalLM(Gemma4UnifiedPreTrainedModel, GenerationMixin):
         return Gemma4UnifiedCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             shared_kv_states=outputs.shared_kv_states,
@@ -939,6 +939,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
 
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: Gemma4UnifiedConfig):
         super().__init__(config)
@@ -1032,6 +1033,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1041,7 +1043,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
@@ -1129,6 +1131,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
             )
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
             audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
@@ -1151,7 +1154,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1160,7 +1163,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
                 "config": self.config.get_text_config(),
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
 
@@ -1181,7 +1184,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         outputs = self.language_model(
             attention_mask=causal_mask_mapping,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
@@ -1189,13 +1192,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel):
         )
 
         return Gemma4UnifiedModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
-            shared_kv_states=outputs.shared_kv_states,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
         )
 
     @can_return_tuple
@@ -1274,7 +1271,7 @@ def create_masks_for_vision_model(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None,
     block_sequence_ids: torch.Tensor,
 ) -> dict:
@@ -1290,7 +1287,7 @@ def create_masks_for_vision_model(
         "config": config,
         "inputs_embeds": inputs_embeds,
         "attention_mask": attention_mask,
-        "past_key_values": past_key_values,
+        "cache": cache,
         "position_ids": position_ids,
     }
 
@@ -1299,8 +1296,8 @@ def create_masks_for_vision_model(
 
     # The sliding mask must be sized against a `sliding_attention` layer, but layer 0 may not be one
     # and `create_causal_mask` defaults to the first `full_attention` layer, which has a different kv_length.
-    if getattr(past_key_values, "is_sliding", None) and True in past_key_values.is_sliding:
-        sliding_layer_idx = past_key_values.is_sliding.index(True)
+    if getattr(cache, "is_sliding", None) and True in cache.is_sliding:
+        sliding_layer_idx = cache.is_sliding.index(True)
     else:
         sliding_layer_idx = 0
 
@@ -1342,6 +1339,8 @@ def create_masks_for_vision_model(
 class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     accepts_loss_kwargs = False
     base_model_prefix = "model"
 
@@ -1367,6 +1366,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1379,7 +1379,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -1409,7 +1409,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             attention_mask=attention_mask,
             input_features_mask=input_features_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             mm_token_type_ids=mm_token_type_ids,
             inputs_embeds=inputs_embeds,
             labels=labels,
@@ -1440,20 +1440,20 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
         return Gemma4UnifiedCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            audio_hidden_states=outputs.audio_hidden_states,
+            image_outputs=outputs.image_outputs,
             shared_kv_states=outputs.shared_kv_states,
         )
 
     @staticmethod
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def create_masks_for_generate(
         config: PreTrainedConfig,
         inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         position_ids: torch.Tensor | None,
         mm_token_type_ids: torch.Tensor | None = None,
         is_first_iteration: bool | None = False,
@@ -1463,7 +1463,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
             "config": config.get_text_config(),
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "position_ids": position_ids,
         }
 
@@ -1479,6 +1479,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
 
         return create_masks_for_generate(**mask_kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(self, input_ids, use_cache=True, is_first_iteration=False, **kwargs):
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, use_cache=use_cache, is_first_iteration=is_first_iteration, **kwargs

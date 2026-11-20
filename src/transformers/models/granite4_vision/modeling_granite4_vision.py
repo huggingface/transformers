@@ -36,24 +36,29 @@ from ...image_processing_utils import select_best_resolution
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionTextConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring
 @dataclass
-class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
+class Granite4VisionModelOutputWithPast(MultimodalBaseModelOutputWithPast):
     r"""
     deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
         List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
@@ -61,18 +66,20 @@ class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
         is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
-    image_hidden_states: torch.Tensor | None = None
-
     deepstack_features: list | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Granite4Vision causal language model (or autoregressive) outputs.
-    """
-)
+
+@auto_docstring
 @dataclass
-class Granite4VisionCausalLMOutputWithPast(ModelOutput):
+class Granite4VisionCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -84,14 +91,15 @@ class Granite4VisionCausalLMOutputWithPast(ModelOutput):
         is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-
     deepstack_features: list | None = None
+
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(
@@ -246,7 +254,6 @@ class Granite4VisionTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -354,12 +361,13 @@ class Granite4VisionTextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -372,8 +380,8 @@ class Granite4VisionTextAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -443,12 +451,13 @@ class Granite4VisionTextDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = Granite4VisionTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.residual_multiplier = config.residual_multiplier
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -463,9 +472,9 @@ class Granite4VisionTextDecoderLayer(GradientCheckpointingLayer):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
+                If set to `True`, `cache` key value states are returned and can be used to speed up decoding
+                (see `cache`).
+            cache (`Cache`, *optional*): cached past key and value projection states
             position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -481,7 +490,7 @@ class Granite4VisionTextDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -502,7 +511,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -516,7 +524,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
         "attentions": Granite4VisionTextAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Granite4VisionModel):
@@ -554,12 +561,13 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         vision_mask: torch.BoolTensor | None = None,
@@ -582,7 +590,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = (
                 torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             ).unsqueeze(0)
@@ -591,7 +599,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -610,7 +618,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -620,7 +628,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -943,6 +951,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -950,7 +959,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         image_sizes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
@@ -1005,7 +1014,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             vision_mask=vision_mask,
             deepstack_features=deepstack_features,
@@ -1014,7 +1023,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
 
         return Granite4VisionModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             deepstack_features=mm_encoder_outputs["image"].deepstack_features
@@ -1084,6 +1093,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1091,7 +1101,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         image_sizes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
@@ -1138,7 +1148,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             vision_feature_select_strategy=vision_feature_select_strategy,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             mm_encoder_outputs=mm_encoder_outputs,
             use_cache=use_cache,
@@ -1161,7 +1171,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
         return Granite4VisionCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             deepstack_features=outputs.deepstack_features,

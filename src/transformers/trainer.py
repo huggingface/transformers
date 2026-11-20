@@ -1730,6 +1730,14 @@ class Trainer:
             self.optimizer, self.lr_scheduler = deepspeed_init(self, num_training_steps=max_steps)
 
         if not delay_optimizer_creation:
+            if self.is_fsdp_enabled or self.is_distributed_loading_by_transformers:
+                from torch.distributed.fsdp import FSDPModule
+
+                # A forward before training (e.g. `evaluate`) leaves the FSDP2 modules with `reshard_after_forward=False`
+                # holding their unsharded parameters, and the optimizer must get the sharded ones
+                for module in self.model.modules():
+                    if isinstance(module, FSDPModule):
+                        module.reshard()
             self.create_optimizer()
 
         # Pass `self.model_wrapped` so that `_wrap_model` can detect if the model is already
@@ -3224,7 +3232,7 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
             if hasattr(self.model, "config"):
-                ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", ["past_key_values"])
+                ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", ["cache"])
             else:
                 ignore_keys = []
 
@@ -3708,6 +3716,10 @@ class Trainer:
                     active_adapter = active_adapters[0]
 
                     if adapter_subdirs:
+                        if os.path.exists(adapter_weights_file) or os.path.exists(adapter_safe_weights_file):
+                            model.load_adapter(
+                                resume_from_checkpoint, "default", is_trainable=(active_adapter == "default")
+                            )
                         for subdir_name in adapter_subdirs:
                             peft_id = os.path.join(resume_from_checkpoint, subdir_name)
                             model.load_adapter(peft_id, subdir_name, is_trainable=(subdir_name == active_adapter))

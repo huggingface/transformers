@@ -47,11 +47,17 @@ class GraniteSpeechPlusForConditionalGenerationModelTester(ALMModelTester):
 
     audio_config_key = "encoder_config"
 
-    def __init__(self, parent, cat_hidden_layers=(0,), **kwargs):
-        kwargs.setdefault("projector_intermediate_size", 256)
-        kwargs.setdefault("projector_encoder_hidden_size", 32 * (len(cat_hidden_layers) + 1))
-        kwargs.setdefault("cat_hidden_layers", list(cat_hidden_layers))
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "projector_intermediate_size": 256,
+        "cat_hidden_layers": [0],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["cat_hidden_layers"] = list(values["cat_hidden_layers"])
+        values.setdefault("projector_encoder_hidden_size", 32 * (len(values["cat_hidden_layers"]) + 1))
+        return values
 
     def create_audio_features(self, batch_size: int | None = None):
         # GraniteSpeech expects [B, seq_len, features] (time-first), unlike the standard [B, features, seq_len]
@@ -77,6 +83,13 @@ class GraniteSpeechPlusForConditionalGenerationModelTest(ALMModelTest, unittest.
     # The cat path changes the encoder output feature dim, so the generic shape assertion in
     # `test_get_audio_features_output` (which assumes hidden_dim) does not apply.
     skip_test_audio_features_output_shape = True
+
+    # FIXME: @eustlb, re-enable once ibm-granite/granite-speech-4.1-2b-plus is re-uploaded without `.model.model`
+    @unittest.skip(
+        reason="ibm-granite/granite-speech-4.1-2b-plus was saved with the #45534 bug (`language_model.model.model.*`)"
+    )
+    def test_save_pretrained_matches_hub_checkpoint(self):
+        pass
 
     @unittest.skip(reason="FIXME eustlib, ALMs could accept embeddings as input.")
     def test_inputs_embeds_matches_input_ids(self):

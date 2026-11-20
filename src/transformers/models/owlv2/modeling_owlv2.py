@@ -465,7 +465,6 @@ class Owlv2PreTrainedModel(PreTrainedModel):
         "attentions": Owlv2Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -579,7 +578,7 @@ class Owlv2TextTransformer(Owlv2PreTrainedModel):
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
         )
 
         kwargs.pop("is_causal", None)

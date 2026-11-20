@@ -317,7 +317,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
         Joint-network scores over the vocabulary plus the blank symbol, for every encoder/decoder frame pair.
     decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*):
         Updated decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
-    encoder_past_key_values (`Cache`, *optional*):
+    encoder_cache (`Cache`, *optional*):
         Updated encoder attention K/V sliding-window cache, returned when encoding audio with `use_cache=True`
         (cache-aware streaming). Pass it to the next chunk's forward.
     padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*):
@@ -329,7 +329,7 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
     logits: torch.Tensor | None = None
     decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
-    encoder_past_key_values: Cache | None = None
+    encoder_cache: Cache | None = None
     padding_cache: "NemotronAsrStreamingEncoderCausalConvPaddingCache | None" = None  # noqa: F821
 
 
@@ -337,7 +337,6 @@ class Nemotron3_5AsrPreTrainedModel(NemotronAsrStreamingPreTrainedModel):
     _no_split_modules = None
     _can_record_outputs = {}
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
 
@@ -489,7 +488,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             decoder_cache=decoder_cache,
-            encoder_past_key_values=encoder_outputs.past_key_values,
+            encoder_cache=encoder_outputs.cache,
             padding_cache=encoder_outputs.padding_cache,
         )
 

@@ -34,7 +34,6 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
 
     model_type = "musicgen_melody_decoder"
     base_config_key = "decoder_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 2048
     max_position_embeddings: int = 2048

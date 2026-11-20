@@ -57,19 +57,26 @@ class VoxtralRealtimeModelTester(ALMModelTester):
     base_model_class = VoxtralRealtimeModel
     conditional_generation_class = VoxtralRealtimeForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # VoxtralRealtime does additive audio/text fusion: seq_length must equal num_audio_embeds.
         # With audio_length_per_tok=8 (config default), num_audio_embeds = feat_seq_length // 8.
-        kwargs.setdefault("seq_length", 32)
-        kwargs.setdefault("feat_seq_length", kwargs["seq_length"] * 8)
+        "seq_length": 32,
+        "head_dim": 8,
+        "rms_norm_eps": 1e-6,
+        "activation_function": "silu",
+        "hidden_act": "silu",
+        "_max_new_tokens": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if "feat_seq_length" not in kwargs:
+            values["feat_seq_length"] = values["seq_length"] * 8
         # Audio encoder uses RoPE; max position must cover post-conv length (feat_seq_length // 2).
-        kwargs.setdefault("max_position_embeddings", kwargs["feat_seq_length"])
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("rms_norm_eps", 1e-6)
-        kwargs.setdefault("activation_function", "silu")
-        kwargs.setdefault("hidden_act", "silu")
-        super().__init__(parent, **kwargs)
-        self._max_new_tokens = None
+        if "max_position_embeddings" not in kwargs:
+            values["max_position_embeddings"] = values["feat_seq_length"]
+        return values
 
     def get_audio_embeds_mask(self, audio_mask):
         # Causal conv2 (stride 2, left-pad 1): post_conv_len = feat_seq_length // 2.
@@ -208,9 +215,9 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
         pass
 
     @unittest.skip(
-        reason="This test does not apply to VoxtralRealtime for now since encoder_past_key_values AND padding_cache are returned by generate"
+        reason="This test does not apply to VoxtralRealtime for now since encoder_cache AND padding_cache are returned by generate"
     )
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
     @unittest.skip(

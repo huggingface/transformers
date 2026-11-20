@@ -103,7 +103,7 @@ class DeformableDetrConfig(PreTrainedConfig):
     return_intermediate: bool = True
     auxiliary_loss: bool = False
     position_embedding_type: str = "sine"
-    dilation: bool = False
+    dilation: bool | None = False
     num_feature_levels: int = 4
     encoder_n_points: int = 4
     decoder_n_points: int = 4

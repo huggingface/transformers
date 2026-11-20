@@ -38,6 +38,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -51,88 +52,82 @@ if is_torch_available():
     import torch
 
 
-class Qwen2_5_VLVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=14,
-        bos_token_id=0,
-        eos_token_id=1,
-        pad_token_id=2,
-        hidden_act="silu",
-        hidden_size=32,
-        vocab_size=99,
-        intermediate_size=37,
-        max_position_embeddings=512,
-        max_window_layers=3,
-        num_attention_heads=4,
-        num_hidden_layers=2,
-        num_key_value_heads=2,
-        rope_theta=10000,
-        tie_word_embeddings=True,
-        is_training=True,
-        vision_config=None,
-        rope_parameters=None,
-        vision_start_token_id=3,
-        image_token_id=4,
-        video_token_id=5,
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_size = hidden_size
-        self.vision_start_token_id = vision_start_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.num_image_tokens = 32
-        self.seq_length = seq_length + self.num_image_tokens
-        # Default vision config is None to avoid a mutable default argument
-        if vision_config is None:
-            vision_config = {
-                "depth": 2,
-                "in_chans": 3,
-                "hidden_act": "silu",
-                "intermediate_size": 32,
-                "out_hidden_size": 32,
-                "hidden_size": 32,
-                "num_heads": 4,
-                "patch_size": 14,
-                "spatial_patch_size": 14,
-                "spatial_merge_size": 1,
-                "temporal_patch_size": 2,
-                "tokens_per_second": 1,
-            }
-        self.vision_config = vision_config
-        self.text_config = {
-            "bos_token_id": bos_token_id,
-            "eos_token_id": eos_token_id,
-            "pad_token_id": pad_token_id,
-            "hidden_act": hidden_act,
-            "hidden_size": hidden_size,
-            "intermediate_size": intermediate_size,
-            "max_position_embeddings": max_position_embeddings,
-            "max_window_layers": max_window_layers,
-            "num_attention_heads": num_attention_heads,
-            "num_hidden_layers": num_hidden_layers,
-            "num_key_value_heads": num_key_value_heads,
-            "rope_theta": rope_theta,
-            "tie_word_embeddings": tie_word_embeddings,
-            "vocab_size": vocab_size,
+class Qwen2_5_VLVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_channels": 3,
+        "ignore_index": -100,
+        "image_size": 14,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
+        "hidden_act": "silu",
+        "hidden_size": 32,
+        "vocab_size": 99,
+        "intermediate_size": 37,
+        "max_position_embeddings": 512,
+        "max_window_layers": 3,
+        "num_attention_heads": 4,
+        "num_hidden_layers": 2,
+        "num_key_value_heads": 2,
+        "rope_theta": 10000,
+        "tie_word_embeddings": True,
+        "is_training": True,
+        "vision_config": {
+            "depth": 2,
+            "in_chans": 3,
+            "hidden_act": "silu",
+            "intermediate_size": 32,
+            "out_hidden_size": 32,
+            "hidden_size": 32,
+            "num_heads": 4,
+            "patch_size": 14,
+            "spatial_patch_size": 14,
+            "spatial_merge_size": 1,
+            "temporal_patch_size": 2,
+            "tokens_per_second": 1,
+        },
+        "rope_parameters": None,
+        "vision_start_token_id": 3,
+        "image_token_id": 4,
+        "video_token_id": 5,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if values["vision_config"] is None:
+            values["vision_config"] = copy.deepcopy(cls.small_config_overrides["vision_config"])
+        values["num_image_tokens"] = 32
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        # Accepted for compatibility but unused: the text config always uses mrope below
+        values.pop("rope_parameters")
+        values["text_config"] = {
+            "bos_token_id": values["bos_token_id"],
+            "eos_token_id": values["eos_token_id"],
+            "pad_token_id": values["pad_token_id"],
+            "hidden_act": values.pop("hidden_act"),
+            "hidden_size": values["hidden_size"],
+            "intermediate_size": values.pop("intermediate_size"),
+            "max_position_embeddings": values.pop("max_position_embeddings"),
+            "max_window_layers": values.pop("max_window_layers"),
+            "num_attention_heads": values["num_attention_heads"],
+            "num_hidden_layers": values["num_hidden_layers"],
+            "num_key_value_heads": values.pop("num_key_value_heads"),
+            "rope_theta": values.pop("rope_theta"),
+            "tie_word_embeddings": values.pop("tie_word_embeddings"),
+            "vocab_size": values["vocab_size"],
             "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
         }
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Qwen2_5_VLConfig(
@@ -187,6 +182,8 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     """
     Model tester for `Qwen2_5_VLForConditionalGeneration`.
     """
+
+    model_tester_class = Qwen2_5_VLVisionText2TextModelTester
 
     all_model_classes = (
         (
@@ -719,6 +716,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             ("cuda", None): [
                 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',
                 "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\n�\n\n addCriterion\nI'm sorry, but I don't understand your question. Could you please provide more context or clarify what you're asking",
+            ],
+            ("cuda", 8): [
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',
+                'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to assist with a wide range of tasks, from answering questions and',
             ],
             ("rocm", (9, 4)): [
                 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and outgoing personalities, as well as their',

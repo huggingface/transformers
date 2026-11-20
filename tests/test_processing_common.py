@@ -1378,52 +1378,6 @@ class ProcessorTesterMixin:
         for prompt in continue_prompt:
             self.assertTrue(prompt.endswith("It is the sound of"))  # no `eos` token at the end
 
-    def _get_transcription_training_processor(self):
-        """Processor whose `apply_transcription_request` accepts a target `transcription`, or skip the test."""
-        processor = self.get_processor()
-        apply_transcription_request = getattr(processor, "apply_transcription_request", None)
-        if (
-            apply_transcription_request is None
-            or "transcription" not in inspect.signature(apply_transcription_request).parameters
-        ):
-            self.skipTest(
-                f"{self.processor_class.__name__} does not support training with `apply_transcription_request`."
-            )
-        return processor
-
-    @require_torch
-    def test_apply_transcription_request_with_transcription(self):
-        processor = self._get_transcription_training_processor()
-        audio = self.prepare_audio_inputs(batch_size=2)
-        transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
-        outputs = processor.apply_transcription_request(audio=audio, transcription=transcriptions)
-
-        # the same as processing the untokenized prompts, with labels
-        prompts = processor.apply_transcription_request(audio=audio, transcription=transcriptions, tokenize=False)
-        expected_outputs = processor(text=prompts, audio=audio, output_labels=True)
-        self.assertIn("labels", outputs)
-        self.assertEqual(set(outputs.keys()), set(expected_outputs.keys()))
-        for key in outputs:
-            self.assertTrue(outputs[key].equal(expected_outputs[key]))
-
-        # each target transcription is in the labels of its audio
-        for labels, transcription in zip(outputs["labels"], transcriptions):
-            self.assertIn(transcription, processor.tokenizer.decode(labels[labels != -100]))
-
-        # user `processor_kwargs` are merged with the labels request
-        merged_outputs = processor.apply_transcription_request(
-            audio=audio, transcription=transcriptions, processor_kwargs={"text_kwargs": {"padding": True}}
-        )
-        self.assertTrue(merged_outputs["labels"].equal(outputs["labels"]))
-
-    @require_torch
-    def test_apply_transcription_request_single_transcription_not_broadcast(self):
-        # a transcription is specific to its audio, so a single one is not broadcast to the batch
-        processor = self._get_transcription_training_processor()
-        audio = self.prepare_audio_inputs(batch_size=2)
-        with self.assertRaises(ValueError):
-            processor.apply_transcription_request(audio=audio, transcription="Hello world.")
-
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):
@@ -1823,6 +1777,21 @@ class ProcessorTesterMixin:
         result = processor.apply_chat_template(messages, tokenize=True)
         self.assertIsInstance(result, list)
 
+        # Also test with explicit content=None (OpenAI returns this for tool-call-only messages)
+        messages_with_none = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
+            },
+        ]
+        result_none = processor.apply_chat_template(messages_with_none, tokenize=True)
+        self.assertIsInstance(result_none, list)
+
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
 
@@ -2018,26 +1987,41 @@ class ProcessorTesterMixin:
                 else:
                     processor_inputs[modality] = prepare_method()
 
+        # The offsets index the text after replacement, so capture the text the processor tokenizes
+        expanded_texts = []
+        get_text_with_replacements = processor.get_text_with_replacements
+
+        def capture_text_with_replacements(*args, **kwargs):
+            text, offsets = get_text_with_replacements(*args, **kwargs)
+            expanded_texts.append(text)
+            return text, offsets
+
         # Test combined processing
-        model_inputs = processor(
-            **processor_inputs,
-            add_special_tokens=False,
-            padding=False,
-            truncation=False,
-            max_length=None,
-            return_text_replacement_offsets=True,
-            **processing_kwargs,
-        )
-        detokenized_text = processor.tokenizer.batch_decode(
-            model_inputs["input_ids"], skip_special_tokens=False, clean_up_tokenization_spaces=True
-        )
+        with patch.object(processor, "get_text_with_replacements", side_effect=capture_text_with_replacements):
+            model_inputs = processor(
+                **processor_inputs,
+                add_special_tokens=False,
+                padding=False,
+                truncation=False,
+                max_length=None,
+                return_text_replacement_offsets=True,
+                **processing_kwargs,
+            )
+        if expanded_texts:
+            expanded_text = expanded_texts[-1]
+            expanded_text = [expanded_text] if isinstance(expanded_text, str) else expanded_text
+        else:
+            # Processors that don't expand the text with `get_text_with_replacements`
+            expanded_text = processor.tokenizer.batch_decode(
+                model_inputs["input_ids"], skip_special_tokens=False, clean_up_tokenization_spaces=True
+            )
         self.assertIn("text_replacement_offsets", model_inputs)
 
         for i, sample_offsets in enumerate(model_inputs["text_replacement_offsets"]):
             for curr_dict in sample_offsets:
                 self.assertIn(curr_dict["type"], modalities)
                 start, end = curr_dict["new_span"]
-                self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])
+                self.assertEqual(expanded_text[i][start:end], curr_dict["replacement"])
 
     def test_no_redundant_default_kwargs(self):
         """Tests that a processor doesn't define redundant default kwargs for a modality if the subprocessor
@@ -2058,6 +2042,7 @@ class ProcessorTesterMixin:
             "Kosmos2_5Processor",  # Hub config doesn't match processor defaults
             "LlavaNextProcessor",  # Hub config doesn't match processor defaults
             "Pix2StructProcessor",  # __call__ relies on add_special_tokens default
+            "Qwen3ASRProcessor",  # Original checkpoints use WhisperFeatureExtractor
             "ShieldGemma2Processor",  # Hub config doesn't match processor defaults
             "VideoLlama3Processor",  # Hub config doesn't match processor defaults
         }

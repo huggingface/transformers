@@ -244,12 +244,68 @@ print(decoded_outputs)
 
 ➡️ Training:
 
+Audio understanding
+```python
+from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 
-<hfoptions id="training">
-<hfoption id="transcription">
 
-Pass the target transcripts to `apply_transcription_request` with `transcription`. They are written as the assistant turn, and `labels` are returned for computing the loss.
+model_id = "nvidia/audio-flamingo-3-hf"
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/6")
+model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model.train()
 
+conversation = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe the input speech."},
+                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3"},
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "The transcription of the audio is 'summer follows spring the days grow longer and the nights are warm'."}],
+        }
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
+                },
+                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "The reverberation and gentle guitar strumming."}],
+        }
+
+    ]
+]
+
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
+    processor_kwargs={"output_labels": True},
+).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
+
+loss = model(**inputs).loss
+print("Loss:", loss.item())
+loss.backward()
+```
+
+
+Transcription (ASR)
 ```python
 from datasets import Audio, load_dataset
 from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
@@ -258,65 +314,42 @@ from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
 model_id = "nvidia/audio-flamingo-3-hf"
 NUM_SAMPLES = 2
 
-processor = AutoProcessor.from_pretrained(model_id)
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/6")
 model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
-text_samples = ds["text"][:NUM_SAMPLES]
-
-inputs = processor.apply_transcription_request(speech_samples, transcription=text_samples)
-inputs.to(model.device, dtype=model.dtype)
-
-loss = model(**inputs).loss
-print("Loss:", loss.item())
-loss.backward()
-```
-
-</hfoption>
-<hfoption id="chat template">
-
-For other tasks, put the target in the assistant turn and pass `processor_kwargs={"output_labels": True}`.
-
-```python
-from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
-
-
-model_id = "nvidia/audio-flamingo-3-hf"
-processor = AutoProcessor.from_pretrained(model_id)
-model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-model.train()
-
 conversation = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "How does the tone of female speech change throughout the audio?"},
-            {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/000000786159.31.wav"},
-        ],
-    },
-    {
-        "role": "assistant",
-        "content": [{"type": "text", "text": "It goes from sad to happy."}],
-    },
+    [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe the input speech."},
+                {"type": "audio", "audio": sample["audio"]["array"]},
+            ],
+        },
+        {"role": "assistant", "content": [{"type": "text", "text": sample["text"]}]},
+    ]
+    for sample in ds.select(range(NUM_SAMPLES))
 ]
 
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
     return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
     processor_kwargs={"output_labels": True},
 ).to(model.device, dtype=model.dtype)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 
 loss = model(**inputs).loss
 print("Loss:", loss.item())
 loss.backward()
 ```
-
-</hfoption>
-</hfoptions>
 
 ➡️ transcription shortcut
 

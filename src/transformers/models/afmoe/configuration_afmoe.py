@@ -53,7 +53,6 @@ class AfmoeConfig(PreTrainedConfig):
     """
 
     model_type = "afmoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default pipeline parallel plan for base model
     base_model_pp_plan = {
