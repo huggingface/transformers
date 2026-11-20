@@ -31,3 +31,23 @@ Reproduce: `PYTHONPATH=src python verify_generate.py ArthurZ/Qwen3-30B-A3B-metal
 | 14 | 2026-11-20 | regression check after the NaN fix: MetalExperts `torch.where` sentinel mask | 54.42 | 49.59 | - | where() in MetalExperts broke compiled decode (152 extra aten::copy_/token); reverted to the weight product, NaN-safety kept by zero-initialized pools |
 | 15 | 2026-11-20 | #13 config, current code (`verify_generate.py ... 4g32c`) | **88.26** | **81.98** | - | Qwen3-30B-A3B stepping stone; greedy == eager 27/128 (bf16 fusion numerics) |
 | 16 | 2026-11-20 | `bench_generate_overhead.py`: StaticCache `cumulative_length` created on the device instead of `.to(device)` (was a sync per layer on MPS) | step 12.27 -> 11.67 ms | - | - | per-generate overhead 70.9 -> 53.4 ms (10-token prompt, 1 new token) |
+
+## Qwen3.8-Flash-Next on M3 Max (synthetic weights at the real dims, `bench_qwen38_synthetic.py`)
+
+Real config (48 layers: 36 gated-delta-net + 12 full attention with QSA indexer, hidden 2560, top-10 routing, vocab
+248k), random weights, 64 experts instead of 512 (same work per token), 4-bit experts g64 + 4-bit dense g32, static
+cache + compile, 256 greedy tokens. Weights generated once to `~/.cache/qwen38-synthetic-64e-all4bit.safetensors`.
+
+| # | Date | Change | Decode tok/s (median) | ms/token | Notes |
+|---|---|---|---|---|---|
+| Q1 | 2026-11-20 | first run (scales float32: per-call cast of the expert scale banks) | 20.0 | 50.9 | build artefact |
+| Q2 | 2026-11-20 | bf16 scales like a loaded checkpoint | 29.6 | 34.5 | GPU busy 99.8% (Metal System Trace) |
+| Q3 | 2026-11-20 | thin linears (min dim <= 640) kept bf16 | 30.3 | 33.7 | +1.2 GB/token bf16 offsets the slow MLX thin qmv |
+| Q4 | 2026-11-20 | all dense 4-bit + own batch-1 `qmv4` for out_features <= 1024 (`integrations/metal_qmv.py`) | **39.2** | 26.1 | MLX qmv: 4x10240 in 51-105 us |
+| Q5 | 2026-11-20 | own gather qmv for experts (scalar, then 4-row vectorized) | 37.3 / 33.4 | | reverted: MLX `gather_qmm` faster; 4-row kernel starves thin matrices |
+
+Stub ablations of Q4 (`diag_qwen38_ablate.py`, 25.0 ms/token): experts 7.97 ms (1.33 GB, 167 GB/s), linear_attn proj
+6.67 ms (1.32 GB, 198 GB/s), hyper-connections 2.93 ms (0.40 GB, 137 GB/s), self_attn proj+indexer 2.85 ms (0.46 GB),
+lm_head 1.77 ms (0.40 GB, 225 GB/s), shared expert 1.22 ms (0.15 GB); all matmuls 21.9 ms for 4.06 GB, the rest 3.1 ms.
+Measured bandwidth: 250 GB/s read (`x.sum()`), so 4-bit single-token decode tops out near 4.06 GB / 250 GB/s + 3.1 ms
+= 19.3 ms = **52 tok/s**. 100 tok/s needs <= ~1.7 GB/token, or several tokens per forward (speculative / MTP).
