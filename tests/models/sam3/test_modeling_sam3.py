@@ -15,8 +15,11 @@
 
 import gc
 import math
+import os
+import pickle
 import tempfile
 import unittest
+from unittest import mock
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
@@ -1588,3 +1591,47 @@ class Sam3SinePositionEmbeddingTest(unittest.TestCase):
 
         self.assertEqual(compiled.dtype, torch.bfloat16)
         torch.testing.assert_close(compiled, eager, atol=2e-2, rtol=2e-2)
+
+
+def _create_marker_file(path):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("marker")
+
+
+class _MarkerFilePayload:
+    """Test-only pickle payload whose unpickling creates a marker file."""
+
+    def __init__(self, marker_path):
+        self.marker_path = marker_path
+
+    def __reduce__(self):
+        return (_create_marker_file, (self.marker_path,))
+
+
+@require_torch
+class Sam3CheckpointLoadingTest(unittest.TestCase):
+    def test_load_original_state_dict_rejects_malicious_pickle(self):
+        """Regression test for #51008: loading a checkpoint must never execute pickle payloads,
+        even with TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 set (which disables the torch >= 2.6
+        safe default for calls that omit weights_only)."""
+        from transformers.models.sam3.convert_sam3_to_hf import load_original_state_dict
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            marker_path = os.path.join(tmpdir, "marker.txt")
+            malicious_path = os.path.join(tmpdir, "malicious.pt")
+            torch.save(
+                {"model": {"weight": torch.zeros(2), "evil": _MarkerFilePayload(marker_path)}},
+                malicious_path,
+            )
+            clean_path = os.path.join(tmpdir, "clean.pt")
+            torch.save({"model": {"weight": torch.zeros(2)}}, clean_path)
+
+            with mock.patch.dict(os.environ, {"TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD": "1"}):
+                os.environ.pop("TORCH_FORCE_WEIGHTS_ONLY_LOAD", None)
+                with self.assertRaises(pickle.UnpicklingError):
+                    load_original_state_dict(malicious_path)
+                self.assertFalse(os.path.exists(marker_path))
+
+                state_dict = load_original_state_dict(clean_path)
+                self.assertIn("weight", state_dict)
+                torch.testing.assert_close(state_dict["weight"], torch.zeros(2))
