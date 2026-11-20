@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
+import os
 import warnings
 from math import ceil, lcm
 from typing import Any
@@ -34,7 +35,13 @@ from .cache_allocators import (
 )
 from .distributed import DistributedHelper
 from .requests import RequestState, RequestStatus
-from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memory_breakdown, logger
+from .utils import (
+    find_head_dim,
+    find_num_key_value_heads,
+    get_device_and_memory_breakdown,
+    logger,
+    proto_no_mask,
+)
 
 
 # Maps each attention type to the allocator class handling its cache
@@ -69,6 +76,10 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
             raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
     return layer_counts
+
+# PROTOTYPES of the engine work package (bench only, off by default), see PagedAttentionMemoryHandler
+_PROTO_NO_READBACK_BUDGET = os.environ.get("CB_PROTO_NO_READBACK_BUDGET", "0") == "1"
+_PROTO_VARLEN_PEAK_GB = float(os.environ.get("CB_PROTO_VARLEN_PEAK_GB", "0"))
 
 
 class PagedAttentionCache:
@@ -633,6 +644,9 @@ class PagedAttentionMemoryHandler:
         if is_flash_attention_requested(self.config):
             self.num_attention_masks = 0
             self.kv_heads_at_peak = 2 * num_key_value_heads
+        elif proto_no_mask(self.config):  # PROTOTYPE: no mask allocated for MLA models
+            self.num_attention_masks = 0
+            self.kv_heads_at_peak = 2 * self.config.num_attention_heads + num_key_value_heads
         else:
             self.num_attention_masks = 2 if SLIDING_ATTENTION in attn_types else 1
             self.kv_heads_at_peak = 2 * self.config.num_attention_heads + num_key_value_heads  # repeated KV + V
@@ -654,6 +668,10 @@ class PagedAttentionMemoryHandler:
         config = self.config
         if getattr(config, "kv_lora_rank", None) is None:
             return self.kv_heads_at_peak * find_head_dim(config)
+        # PROTOTYPE (CB_PROTO_NO_READBACK_BUDGET=1): the prototype attention reads the latents in place, so the only
+        # per-token read-back left is the indexer key of the packed context on varlen batches, one layer at a time
+        if _PROTO_NO_READBACK_BUDGET:
+            return getattr(config, "index_head_dim", 0)
         # MLA layers read two latents back from the cache and expand them to heads: the projected keys and values,
         # the keys completed with their rotated part and, for flash, the values padded to the key head dimension
         qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
@@ -713,6 +731,9 @@ class PagedAttentionMemoryHandler:
         """Reservations that scale with neither batch tokens nor cache size: the trash sectors and, when the model
         slices hidden states with logits_to_keep, the LM head peak of the per-request logit rows."""
         overhead = self.trash_bytes
+        # PROTOTYPE (CB_PROTO_VARLEN_PEAK_GB=<float>): explicit reservation for the transient peak of the largest varlen
+        # (prefill) forward and its graph pool, which the read-back term used to cover by accident
+        overhead += int(_PROTO_VARLEN_PEAK_GB * 1024**3)
         if self.model_supports_logits_to_keep:
             a = self.activation_dtype.itemsize
             # 1024 mirrors FALLBACK_DEFAULTS["max_requests_per_batch"] in initialization.py (import would be circular)

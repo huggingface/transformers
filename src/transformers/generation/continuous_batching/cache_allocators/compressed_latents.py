@@ -12,11 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 import torch
 
 from ....configuration_utils import PreTrainedConfig
 from .cache_pool import CachePool
 from .full_attention import FullAttentionCacheAllocator
+
+
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_MLA_BLOCK_TABLE=1: decode batches of MLA
+# allocators use the block table (no read index, no mask work, graph key independent of the context of the batch). Only
+# valid with a model whose attention reads the cache rows through the block table (the GLM prototype in this tree).
+# "check" also recomputes, outside the captured step, the rows the attention will compute from the uploaded block table
+# and asserts they are the allocator's own read and write indices.
+_PROTO_MLA_BLOCK_TABLE = os.environ.get("CB_PROTO_MLA_BLOCK_TABLE", "0") in ("1", "check")
+_PROTO_MLA_BLOCK_TABLE_CHECK = os.environ.get("CB_PROTO_MLA_BLOCK_TABLE", "0") == "check"
 
 
 class MLACacheAllocator(FullAttentionCacheAllocator):
@@ -27,7 +38,7 @@ class MLACacheAllocator(FullAttentionCacheAllocator):
         [  (KV LATENT 0 | ROTATED KEY 0)  |  (KV LATENT 1 | ROTATED KEY 1)  |  ...  ]
     """
 
-    supports_block_table = False
+    supports_block_table = _PROTO_MLA_BLOCK_TABLE
     rows_per_token = 1  # A single row for the two latents of each token
     index_head_dim = 0  # Width of the indexer keys cached after the latents, set by the subclass for indexed layers
 

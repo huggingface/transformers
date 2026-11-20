@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import asyncio
 import gc
 import queue
@@ -295,6 +296,13 @@ class BackgroundThreadStatus:
 
 
 # Continuous Batch Processor (Internal Logic)
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_TP_STATE_OVERLAP=1: in synchronous mode,
+# the per-step exchange with the TP group (new requests, cancellations, stop and pause signals) happens right after the
+# step is launched, while the device computes it, instead of before the next batch is prepared.
+_PROTO_TP_STATE_OVERLAP = os.environ.get("CB_PROTO_TP_STATE_OVERLAP", "0") == "1"
+_PROTO_IDLE_DRIVER_WAIT = os.environ.get("CB_PROTO_IDLE_DRIVER_WAIT", "0") == "1"
+
+
 class ContinuousBatchProcessor:
     inputs_and_outputs: ContinuousBatchingIOs | ContinuousBatchingAsyncIOs
     scheduler: Scheduler
@@ -368,6 +376,7 @@ class ContinuousBatchProcessor:
         }
         self.use_async_batching = self.cb_config.use_async_batching
 
+        self._proto_tp_state_done: bool | None = None
         if self.use_async_batching:
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
@@ -408,6 +417,7 @@ class ContinuousBatchProcessor:
 
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
+        self._proto_tp_state_done = None
         self.offloading_manager.reset()
         self.scheduler.reset()
         self.inputs_and_outputs.reset()
@@ -484,7 +494,10 @@ class ContinuousBatchProcessor:
         False otherwise."""
 
         # Communicate with the TP driver to retrieve new requests, cancellations and an eventual stop signal
-        hard_stopping = self._update_tp_group_state()
+        if self._proto_tp_state_done is not None:  # PROTOTYPE: already exchanged during the previous step
+            hard_stopping, self._proto_tp_state_done = self._proto_tp_state_done, None
+        else:
+            hard_stopping = self._update_tp_group_state()
         if hard_stopping:
             return False
 
@@ -641,6 +654,10 @@ class ContinuousBatchProcessor:
         # This takes care of the forward pass, logits processing, and sampling. After this returns, the compute is
         # scheduled on the device's compute stream, but may not have finished yet.
         self.model_runner.compute_batch(model, batch_data)
+
+        # PROTOTYPE: the step is in flight on the device, exchange the TP group state now
+        if _PROTO_TP_STATE_OVERLAP and not self.use_async_batching:
+            self._proto_tp_state_done = self._update_tp_group_state()
 
         # This initiates the transfer of the outputs to the host. It is blocking in sync mode and non-blocking in async
         # mode.
@@ -1127,6 +1144,11 @@ class ContinuousBatchingManager:
             return False
         # Otherwise, we wait for new requests and retry
         else:
+            # PROTOTYPE (CB_PROTO_IDLE_DRIVER_WAIT=1): only the TP driver sleeps until a request arrives. The other ranks
+            # go straight back to the state exchange, which blocks until the driver joins it, so a request that
+            # arrives on an idle engine no longer waits for their 0.1 s sleeps to expire
+            if _PROTO_IDLE_DRIVER_WAIT and not self.is_tp_driver:
+                return True
             self._wake_up_loop.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
             self._wake_up_loop.clear()
             return True

@@ -363,6 +363,10 @@ _PROTO_PER_QUERY_INDEXER = _os.environ.get("PROTO_PER_QUERY_INDEXER", "0") == "1
 # When every request's context fits in index_topk, the indexer selects all visible tokens whatever the scores: only
 # its keys need caching (for later, longer contexts), the query projection, scoring and top-k are skipped
 _PROTO_INDEXER_SKIP = _os.environ.get("PROTO_INDEXER_SKIP", "0") == "1"
+# WP prefill / engine (bench only): give FlashMLA's sparse kernel the number of valid entries of every list
+# (`topk_length`), so its time follows the keys a query really attends to instead of the padded list width. Same flag
+# name as in the prefill tree (index path); here it covers the block table decode path
+_PROTO_TOPK_LENGTH = _os.environ.get("PROTO_TOPK_LENGTH", "0") == "1"
 
 
 def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k):
@@ -412,6 +416,94 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     return pos.gather(-1, top), visible.gather(-1, top)
 
 
+def _proto_block_table_row_state(table, cu_k, max_k, page, last_safe_row, write_trash_index):
+    """PROTOTYPE of the engine work package: the physical rows of a decode batch from CB's block table. Token `o` of a
+    request lives at row `block_table[request, o // page] * page + o % page` of the layer's view. Returns the row each
+    request writes its new token to ([R]), the rows of its first `max_k` tokens ([R, max_k]) and which of them exist.
+    Every row is clamped to [0, last_safe_row], so a wrong table can only give a wrong result."""
+    table = table.long()  # [R, max_blocks], -1 for unused entries
+    cu_k = cu_k.long()  # [R + 1]
+    seqlen_k = cu_k[1:] - cu_k[:-1]  # cached tokens + the new one, 0 for padding requests
+    new_offset = (seqlen_k - 1).clamp(min=0)
+    new_page = table.gather(1, (new_offset // page).clamp(max=table.shape[1] - 1)[:, None]).squeeze(1)
+    write_rows = torch.where(
+        (seqlen_k > 0) & (new_page >= 0), new_page * page + new_offset % page, write_trash_index
+    ).clamp(0, last_safe_row)
+    offsets = torch.arange(max_k, device=table.device)
+    pages = table[:, (offsets // page).clamp(max=table.shape[1] - 1)]  # [R, max_k]
+    visible = (offsets[None] < seqlen_k[:, None]) & (pages >= 0)
+    rows_all = torch.where(visible, pages * page + offsets % page, 0).clamp(0, last_safe_row)
+    return write_rows, rows_all, visible
+
+
+def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
+                            prev_topk_indices, kwargs):
+    """PROTOTYPE of the engine work package: a decode batch (one query token per request, token j belongs to request
+    j) served from CB's block table. Writes the new latents (and indexer keys), and returns the physical rows of the
+    top-k tokens of each query, -1 for empty slots. Neither the read index nor the mask is used."""
+    page = allocator.tokens_per_page
+    kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
+    state = getattr(cache, "_proto_bt_state", None)
+    if module.layer_idx == allocator.layer_indices[0] or state is None:
+        # the smallest layer view is the one of the group's last layer, which starts `tokens_per_block - page` rows
+        # later than the first
+        last_safe_row = allocator.cache_tensor.shape[0] - allocator.tokens_per_block + page - 1
+        state = _proto_block_table_row_state(
+            kwargs["block_table"][allocator.index],
+            kwargs["cu_seq_lens_k"][allocator.layer_type],
+            kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
+            page,
+            last_safe_row,
+            allocator.write_trash_index,
+        )
+        cache._proto_bt_state = state
+    write_rows, rows_all, visible = state
+    kv_latent_cache.index_copy_(0, write_rows, k_pass.reshape(-1, module.kv_lora_rank))
+    rotated_key_cache.index_copy_(0, write_rows, k_rot.reshape(-1, module.qk_rope_head_dim))
+    if module.indexer is None:
+        return prev_topk_indices
+    indexer = module.indexer
+    batch_size, seq_len, _ = hidden_states.shape
+    cos, sin = position_embeddings
+    # Same as `_proto_indexer_per_query`: when every request fits in index_topk, only the keys need caching
+    skip_scoring = _PROTO_INDEXER_SKIP and rows_all.shape[1] <= indexer.index_topk
+    k = indexer.k_norm(indexer.wk(hidden_states)).unsqueeze(2)
+    k_rot_i, k_pass_i = torch.split(k, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
+    if skip_scoring:
+        _, k_rot_i = apply_rotary_pos_emb_interleave(k_rot_i, k_rot_i, cos, sin, unsqueeze_dim=2)
+        q = None
+    else:
+        q = indexer.wq_b(q_resid).view(batch_size, seq_len, indexer.n_heads, indexer.head_dim)
+        q_rot_i, q_pass_i = torch.split(
+            q, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1
+        )
+        q_rot_i, k_rot_i = apply_rotary_pos_emb_interleave(q_rot_i, k_rot_i, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot_i, q_pass_i], dim=-1)[0]  # [M, H, D]
+    k = torch.cat([k_rot_i, k_pass_i], dim=-1).squeeze(2)[0]  # [M, D]
+    indexer_key_cache = allocator._indexer_token_views[module.layer_idx]
+    indexer_key_cache.index_copy_(0, write_rows, k)
+    # Valid entries of each query's list (with PROTO_TOPK_LENGTH they are always the first ones of the list): the
+    # request's context, capped at the list width
+    num_selected = min(indexer.index_topk, rows_all.shape[1])
+    n_visible = visible.sum(-1)
+    lengths = n_visible.clamp(max=num_selected).to(torch.int32)
+    if skip_scoring:
+        return torch.where(visible, rows_all, -1), None, lengths
+    keys = indexer_key_cache[rows_all]  # [M, max_k, D], the keys of each query's own request, straight from the cache
+    scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys.float()) * indexer.softmax_scale)
+    weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
+    index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
+    index_scores = index_scores.masked_fill(~visible, float("-inf"))
+    top = index_scores.topk(num_selected, dim=-1).indices
+    rows = torch.where(visible.gather(-1, top), rows_all.gather(-1, top), -1)
+    if _PROTO_TOPK_LENGTH:
+        # a query that sees at most `num_selected` keys selects them all: list them in window order, as the prefill
+        # tree does on the index path (the top-k of a longer window has no invalid entry)
+        partial = (n_visible <= num_selected)[:, None]
+        rows = torch.where(partial, torch.where(visible, rows_all, -1)[:, :num_selected], rows)
+    return rows, None, lengths
+
+
 def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
                                 attention_mask, position_ids, cache, prev_topk_indices, kwargs):
     """Writes the new latents to CB's cache without reading the context back, selects top-k tokens (the indexer is
@@ -423,6 +515,18 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
 
         _flash_mla = _fm
     allocator = cache.layer_to_allocator[module.layer_idx]
+    if kwargs.get("block_table") is not None:  # PROTOTYPE of the engine work package: decode batch on the block table
+        if not _PROTO_PER_QUERY_INDEXER or _GLUE_OPAQUE_CACHE_WRITE:
+            raise RuntimeError(
+                "The block table prototype needs PROTO_PER_QUERY_INDEXER=1 and has no GLUE_OPAQUE_CACHE_WRITE variant"
+            )
+        topk_indices = _proto_block_table_rows(
+            module, allocator, cache, k_pass, k_rot, hidden_states, q_resid, position_embeddings, prev_topk_indices,
+            kwargs,
+        )
+        rows = topk_indices[0].to(torch.int32)
+        lengths = topk_indices[2] if _PROTO_TOPK_LENGTH else None  # [M] int32, <= list width
+        return _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices, lengths)
     read_index = kwargs["read_index"][allocator.index]  # [N] physical rows of the packed context (past + new)
     write_index = kwargs["write_index"][allocator.index]  # [M]
     kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
@@ -440,7 +544,8 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
 
     batch_size, num_heads, seq_length, _ = q_pass.shape  # batch_size is 1 under CB
     if module.indexer is not None:
-        if _PROTO_PER_QUERY_INDEXER and seq_length <= 512:
+        # engine WP: without a mask (CB_PROTO_NO_MASK=1) every batch size takes the per-request indexer
+        if _PROTO_PER_QUERY_INDEXER and (seq_length <= 512 or attention_mask is None):
             cu_q = kwargs["cu_seq_lens_q"]
             cu_k = kwargs["cu_seq_lens_k"][allocator.layer_type]
             max_k = kwargs["max_length_k"][allocator.layer_type]
@@ -457,6 +562,14 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
         topk_indices = prev_topk_indices
     positions, allowed = topk_indices
     rows = torch.where(allowed, read_index[positions], -1).to(torch.int32)  # [M, topk]
+    return _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices)
+
+
+def _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices, lengths=None):
+    """Tail of the prototype attention: FlashMLA's sparse kernel on the cache rows `rows` ([M, topk], -1 = empty).
+    `lengths` ([M] int32), when given, is the number of valid entries at the start of each list."""
+    kv_latent_cache, _ = allocator._latent_token_views[module.layer_idx]
+    batch_size, num_heads, seq_length, _ = q_pass.shape
     if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
         rows = F.pad(rows, (0, 128 - rows.shape[-1] % 128), value=-1)
 
@@ -471,7 +584,7 @@ def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_sta
         (kv_latent_cache.stride(0), 0, 1),
     )
     out_latent = _flash_mla.flash_mla_sparse_fwd(
-        q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank
+        q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank, topk_length=lengths
     )[0][:, :num_heads]  # [M, H, kv_lora]
     attn_output = torch.einsum("shc,hvc->shv", out_latent, w_uv).reshape(batch_size, seq_length, -1)
     return module.o_proj(attn_output), None, topk_indices
