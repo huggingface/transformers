@@ -265,9 +265,17 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
     fn = _layer_fn()
     tp = state["tp"]
     timings = STATS.get("layer_seconds")  # set to a list by a benchmark to get the wall time of each layer call
+    ranges = STATS.get("ranges")  # set by a benchmark: one profiler range per layer call, for kernel attribution
     for i, layer in enumerate(state["layers"]):
         if timings is not None:
             start = time.perf_counter()
+        if ranges:
+            with torch.autograd.profiler.record_function(f"M:L{i}:layer"):
+                hidden_states = fn(
+                    layer, hidden_states, cos, sin, state["views"][i], write_index, rows, state["w_kv_b"][i],
+                    state["h_pad"], tp,
+                )
+            continue
         hidden_states = fn(
             layer, hidden_states, cos, sin, state["views"][i], write_index, rows, state["w_kv_b"][i], state["h_pad"],
             tp,
