@@ -133,6 +133,6 @@ language-model head and generation interface. `Dots3NoteForCausalLM` is the text
 [[autodoc]] Dots3NoteProcessor
     - __call__
 
-## Dots3NoteFeatureExtractor
+## Dots3NoteAudioProcessor
 
-[[autodoc]] Dots3NoteFeatureExtractor
+[[autodoc]] Dots3NoteAudioProcessor

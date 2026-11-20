@@ -937,9 +937,9 @@ class NemotronAsrStreamingAudioProcessor(ParakeetAudioProcessor):
         if self.mel_filters_dtype != "float32" and getattr(self, "mel_filters", None) is not None:
             self.mel_filters = _round_to_dtype(self.mel_filters, self.mel_filters_dtype)
 
-    def _standardize_kwargs(self, **kwargs):
-        kwargs = BaseAudioProcessor._standardize_kwargs(self, **kwargs)
-        center, spectrogram_config = kwargs.get("center"), kwargs.get("spectrogram_config")
+    def _standardize_kwargs(self, center: bool | None = None, **kwargs):
+        kwargs = BaseAudioProcessor._standardize_kwargs(self, center=center, **kwargs)
+        spectrogram_config = kwargs.get("spectrogram_config")
         if center is not None and spectrogram_config is not None and spectrogram_config.stft_config.center != center:
             stft_config = replace(spectrogram_config.stft_config, center=center)
             kwargs["spectrogram_config"] = replace(spectrogram_config, stft_config=stft_config)

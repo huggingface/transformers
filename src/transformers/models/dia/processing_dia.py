@@ -111,7 +111,7 @@ class DiaProcessor(ProcessorMixin):
         # TODO: dac with batching is currently broken, but non-batch is working
         # refer to https://gist.github.com/vasqu/643a45b680cf39fd7467271ee2eb6f80 for a validation script
         for padding_mask, audio_sample in zip(input_audios["audio_values_mask"], input_audios["audio_values"]):
-            base_pad_len = self.audio_processor.hop_length
+            base_pad_len = self.audio_processor.pad_to_multiple_of
             current_audio_len = math.ceil(padding_mask.sum(dim=-1) / base_pad_len) * base_pad_len
             encoded_sequence_len = current_audio_len // compression_rate
             padding_len = max_encoded_sequence_len - encoded_sequence_len

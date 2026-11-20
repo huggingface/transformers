@@ -51,23 +51,32 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
 
         super().__init__(audio_processor, tokenizer)
 
-        if audio_processor.win_length != self.mistral_common_audio_config.encoding_config.window_size:
+        if (
+            audio_processor.spectrogram_config.stft_config.win_length
+            != self.mistral_common_audio_config.encoding_config.window_size
+        ):
             raise ValueError(
-                f"audio_processor.win_length ({audio_processor.win_length}) "
+                f"audio_processor.spectrogram_config.stft_config.win_length ({audio_processor.spectrogram_config.stft_config.win_length}) "
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.window_size "
                 f"({self.mistral_common_audio_config.encoding_config.window_size}) must be equal"
             )
 
-        if audio_processor.hop_length != self.mistral_common_audio_config.encoding_config.hop_length:
+        if (
+            audio_processor.spectrogram_config.stft_config.hop_length
+            != self.mistral_common_audio_config.encoding_config.hop_length
+        ):
             raise ValueError(
-                f"audio_processor.hop_length ({audio_processor.hop_length}) "
+                f"audio_processor.spectrogram_config.stft_config.hop_length ({audio_processor.spectrogram_config.stft_config.hop_length}) "
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.hop_length "
                 f"({self.mistral_common_audio_config.encoding_config.hop_length}) must be equal"
             )
 
-        if audio_processor.feature_size != self.mistral_common_audio_config.encoding_config.num_mel_bins:
+        if (
+            audio_processor.spectrogram_config.mel_scale_config.n_mels
+            != self.mistral_common_audio_config.encoding_config.num_mel_bins
+        ):
             raise ValueError(
-                f"audio_processor.feature_size ({audio_processor.feature_size}) "
+                f"audio_processor.spectrogram_config.mel_scale_config.n_mels ({audio_processor.spectrogram_config.mel_scale_config.n_mels}) "
                 f"and tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config.num_mel_bins "
                 f"({self.mistral_common_audio_config.encoding_config.num_mel_bins}) must be equal"
             )
@@ -115,14 +124,18 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
     def num_samples_first_audio_chunk(self) -> int:
         num_prefill_mel_frames = self.num_mel_frames_first_audio_chunk
         num_prefill_audio_samples = (
-            num_prefill_mel_frames - 1
-        ) * self.audio_processor.hop_length + self.audio_processor.win_length // 2
+            (num_prefill_mel_frames - 1) * self.audio_processor.spectrogram_config.stft_config.hop_length
+            + self.audio_processor.spectrogram_config.stft_config.win_length // 2
+        )
 
         return num_prefill_audio_samples
 
     @property
     def num_samples_per_audio_chunk(self) -> int:
-        return self.audio_length_per_tok * self.audio_processor.hop_length + self.audio_processor.win_length
+        return (
+            self.audio_length_per_tok * self.audio_processor.spectrogram_config.stft_config.hop_length
+            + self.audio_processor.spectrogram_config.stft_config.win_length
+        )
 
     def __call__(
         self,

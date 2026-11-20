@@ -197,7 +197,7 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
-                self.audio_processor.hop_length
+                self.audio_processor.spectrogram_config.stft_config.hop_length
                 / self.audio_processor.sampling_rate
                 * output_kwargs["audio_kwargs"]["subsampling_factor"]
             )
@@ -264,7 +264,12 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
     @property
     def _encoder_frame_ms(self) -> float:
         """Duration in milliseconds of one subsampled encoder frame (`subsampling_factor * hop_length / sampling_rate`)."""
-        return self._subsampling_factor * self.audio_processor.hop_length / self.audio_processor.sampling_rate * 1000
+        return (
+            self._subsampling_factor
+            * self.audio_processor.spectrogram_config.stft_config.hop_length
+            / self.audio_processor.sampling_rate
+            * 1000
+        )
 
     @property
     def streaming_latency_ms(self) -> int:
@@ -309,8 +314,10 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
         so it returns exactly `num_mel_frames_first_audio_chunk` frames.
         """
         return (
-            self.num_mel_frames_first_audio_chunk - 1
-        ) * self.audio_processor.hop_length + self.audio_processor.win_length // 2
+            (self.num_mel_frames_first_audio_chunk - 1)
+            * self.audio_processor.spectrogram_config.stft_config.hop_length
+            + self.audio_processor.spectrogram_config.stft_config.win_length // 2
+        )
 
     @property
     def num_samples_per_audio_chunk(self) -> int:
@@ -318,7 +325,10 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
         Number of raw audio samples to feed the processor (with `is_first_audio_chunk=False`, i.e. `center=False`)
         so it returns exactly `num_mel_frames_per_audio_chunk` frames.
         """
-        return self.num_mel_frames_per_audio_chunk * self.audio_processor.hop_length + self.audio_processor.win_length
+        return (
+            self.num_mel_frames_per_audio_chunk * self.audio_processor.spectrogram_config.stft_config.hop_length
+            + self.audio_processor.spectrogram_config.stft_config.win_length
+        )
 
 
 __all__ = ["NemotronAsrStreamingProcessor"]

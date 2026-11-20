@@ -99,7 +99,7 @@ class VoxtralProcessor(ProcessorMixin):
 
             # let's split into chunks of max_source_positions, and then stack them along batch dimension
             input_features = audio_inputs["input_features"].reshape(
-                self.audio_processor.feature_size, -1, max_source_positions
+                self.audio_processor.spectrogram_config.mel_scale_config.n_mels, -1, max_source_positions
             )
             input_features_list.append(input_features.transpose(0, 1))
 

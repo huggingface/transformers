@@ -159,7 +159,7 @@ class ParakeetProcessor(ProcessorMixin):
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
-                self.audio_processor.hop_length
+                self.audio_processor.spectrogram_config.stft_config.hop_length
                 / self.audio_processor.sampling_rate
                 * output_kwargs["audio_kwargs"]["subsampling_factor"]
             )

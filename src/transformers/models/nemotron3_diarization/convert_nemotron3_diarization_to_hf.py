@@ -30,7 +30,7 @@ from transformers import (
     Nemotron3DiarizationHeadConfig,
     Nemotron3DiarizationProcessor,
     Nemotron3DiarizationStreamingConfig,
-    NemotronAsrStreamingFeatureExtractor,
+    NemotronAsrStreamingAudioProcessor,
 )
 from transformers.models.nemotron3_diarization.processing_nemotron3_diarization import DEFAULT_STREAMING_MODES
 
@@ -146,7 +146,7 @@ def build_config(nemo_config: dict) -> Nemotron3DiarizationConfig:
     )
 
 
-def build_feature_extractor(nemo_config: dict) -> NemotronAsrStreamingFeatureExtractor:
+def build_audio_processor(nemo_config: dict) -> NemotronAsrStreamingAudioProcessor:
     """
     The NeMo mel front-end of this checkpoint is the one NemotronAsrStreaming already implements: un-normalized
     log-mel features with a `center` switch for streaming chunks.
@@ -155,13 +155,16 @@ def build_feature_extractor(nemo_config: dict) -> NemotronAsrStreamingFeatureExt
     sampling_rate = preprocessor["sample_rate"]
     if preprocessor.get("normalize", "per_feature") != "NA":
         raise ValueError("Only un-normalized spectrograms are supported.")
-    return NemotronAsrStreamingFeatureExtractor(
-        feature_size=preprocessor["features"],
-        sampling_rate=sampling_rate,
-        hop_length=int(round(preprocessor["window_stride"] * sampling_rate)),
-        n_fft=preprocessor["n_fft"],
-        win_length=int(round(preprocessor["window_size"] * sampling_rate)),
-        preemphasis=preprocessor.get("preemph", 0.97),
+    # Flat legacy keys, mapped onto `spectrogram_config` by `from_dict`
+    return NemotronAsrStreamingAudioProcessor.from_dict(
+        {
+            "feature_size": preprocessor["features"],
+            "sampling_rate": sampling_rate,
+            "hop_length": int(round(preprocessor["window_stride"] * sampling_rate)),
+            "n_fft": preprocessor["n_fft"],
+            "win_length": int(round(preprocessor["window_size"] * sampling_rate)),
+            "preemphasis": preprocessor.get("preemph", 0.97),
+        }
     )
 
 
@@ -179,7 +182,7 @@ def main(nemo_path: str | None, model_id: str, output_dir: str):
     model.load_state_dict(convert_state_dict(state_dict), strict=True)
     model.save_pretrained(output_dir)
     processor = Nemotron3DiarizationProcessor(
-        feature_extractor=build_feature_extractor(nemo_config),
+        audio_processor=build_audio_processor(nemo_config),
         subsampling_factor=config.audio_config.subsampling_factor,
         # the model-card modes, written out so that the checkpoint is their source of truth
         streaming_modes=DEFAULT_STREAMING_MODES,

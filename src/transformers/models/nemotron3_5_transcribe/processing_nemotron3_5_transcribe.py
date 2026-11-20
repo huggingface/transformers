@@ -230,7 +230,7 @@ def _diarization_segments(is_active: "torch.Tensor", frame_duration: float, audi
 class Nemotron3_5TranscribeProcessor(ProcessorMixin):
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         alignment_tokenizer,
         chat_template=None,
@@ -256,7 +256,7 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.default_transcription_prompt = default_transcription_prompt
         self.subsampling_factor = subsampling_factor
-        super().__init__(feature_extractor, tokenizer, alignment_tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, alignment_tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(
@@ -307,10 +307,13 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
         return (audio_lengths + self.subsampling_factor - 1) // self.subsampling_factor
 
     def _process_audio(self, audio, **kwargs):
-        audio = self.feature_extractor.fetch_audio(audio)
-        audio_inputs = self.feature_extractor(audio, **kwargs)
-        # whole audio tokens: the spectrogram is padded to a multiple of `subsampling_factor` frames. The feature
-        # extractor's `pad_to_multiple_of` cannot do it, it pads audio samples and the centered STFT adds a frame.
+        audio = self.audio_processor.fetch_audio(audio)
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        # Rename to the model's input names
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
+        audio_inputs["attention_mask"] = audio_inputs.pop("audio_features_mask")
+        # whole audio tokens: the spectrogram is padded to a multiple of `subsampling_factor` frames. The audio
+        # processor's `pad_to_multiple_of` cannot do it, it pads audio samples and the centered STFT adds a frame.
         padding = -audio_inputs["input_features"].shape[1] % self.subsampling_factor
         audio_inputs["input_features"] = torch.nn.functional.pad(audio_inputs["input_features"], (0, 0, 0, padding))
         audio_inputs["input_features_mask"] = torch.nn.functional.pad(audio_inputs.pop("attention_mask"), (0, padding))
@@ -324,7 +327,9 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self) -> list[str]:
-        return super().model_input_names + ["input_features_mask"]
+        # The audio processor's outputs are renamed in `_process_audio`
+        names = [name for name in super().model_input_names if name not in ("audio_features", "audio_features_mask")]
+        return ["input_features"] + names + ["input_features_mask"]
 
     @property
     def unused_input_names(self) -> list[str]:
@@ -524,7 +529,8 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
                 f"`word_timestamp_logits` has {word_timestamp_logits.shape[1]} frames, not a multiple of the "
                 f"{num_padded_frames} encoder frames of `input_features_mask`."
             )
-        hop_length, sampling_rate = self.feature_extractor.hop_length, self.feature_extractor.sampling_rate
+        hop_length = self.audio_processor.spectrogram_config.stft_config.hop_length
+        sampling_rate = self.audio_processor.sampling_rate
         dropped_tokens = [
             token for token in self.tokenizer.all_special_tokens if not KEPT_TAG_PATTERN.fullmatch(token)
         ]

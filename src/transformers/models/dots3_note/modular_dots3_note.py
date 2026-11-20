@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -24,7 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...audio_utils import make_list_of_audio
+from ...audio_processing_utils import BaseAudioProcessor
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
@@ -36,13 +37,11 @@ from ...modeling_outputs import (
     MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
-    TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_available,  # noqa: F401 -- used by the inherited feature extractor
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -50,7 +49,6 @@ from ...utils.generic import (
     accepts_precomputed_kwargs,
     merge_with_config_defaults,
 )
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention, eager_attention_forward
@@ -89,7 +87,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from ..video_llama_3.configuration_video_llama_3 import VideoLlama3VisionConfig
 from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration
-from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
+from ..whisper.audio_processing_whisper import WhisperAudioProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -1239,87 +1237,78 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, VoxtralForCond
         )
 
 
-@requires(backends=("torch",))
-class Dots3NoteFeatureExtractor(WhisperFeatureExtractor):
-    """Convert 16 kHz mono waveforms into Dots 3 Note Preview log-mel chunks."""
+class Dots3NoteAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    chunk_length (`int`, *optional*, defaults to 60):
+        Length, in seconds, of the chunks a waveform is split into. Each chunk is zero-padded to this length
+        before its log-mel spectrogram is computed, and the features are then cropped to the frames the
+        longest chunk's audio tokens cover.
+    """
 
-    model_input_names = ["input_features", "chunk_sample_lengths"]
+    chunk_length: int
 
-    def __init__(
-        self,
-        feature_size: int = 128,
-        sampling_rate: int = 16_000,
-        padding_value: float = 0.0,
-        n_fft: int = 400,
-        hop_length: int = 160,
-        chunk_length: int = 60,
-        chunk_seconds: int | None = None,
-        return_attention_mask: bool = False,
-        dither: float = 0.0,
-        **kwargs,
-    ):
-        chunk_length = chunk_length if chunk_seconds is None else chunk_seconds
-        super().__init__(
-            feature_size=feature_size,
-            sampling_rate=sampling_rate,
-            padding_value=padding_value,
-            n_fft=n_fft,
-            hop_length=hop_length,
-            chunk_length=chunk_length,
-            return_attention_mask=return_attention_mask,
-            dither=dither,
-            **kwargs,
+
+class Dots3NoteAudioProcessor(WhisperAudioProcessor):
+    r"""
+    Dots 3 Note log-mel front end: the Whisper recipe with 128 mel bins, applied to fixed-length chunks.
+
+    Each waveform is split into `chunk_length`-second chunks, which all go through the encoder as one batch.
+    Besides the features, the output carries each chunk's length in samples (`chunk_sample_lengths`) and each
+    waveform's number of audio tokens (`num_audio_tokens`): three stride-2 convolutions downsample the mel
+    frames by eight. The chunk geometry is the model's, so per-call `padding`, `max_length` and `truncation`
+    do not apply.
+    """
+
+    max_length = 960000
+    padding = "max_length"
+    truncation = False
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 400,
+            "hop_length": 160,
+            "power": 2.0,
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "mel_scale": "slaney",
+            "norm": "slaney",
+            "computation_dtype": "float64",
+            "matmul_order": "filters_first_matmul",  # the legacy extractor does `mel_filters @ magnitudes`
+        },
+        "log_mode": "log10",
+        "drop_last_frame": True,
+        "floor_below_peak": 8.0,
+        "log_shift": 4.0,
+        "log_scale": 0.25,
+    }
+    chunk_length = 60
+    extra_model_input_names = ["chunk_sample_lengths", "num_audio_tokens"]
+    legacy_field_mapping = {"chunk_seconds": "chunk_length"}
+    valid_kwargs = Dots3NoteAudioProcessorKwargs
+
+    def _preprocess(self, audio, *, chunk_length, spectrogram_config, return_tensors, **kwargs):
+        """Split each waveform into chunks, run the default workflow on them, and crop the frames."""
+        chunk_samples = chunk_length * self.sampling_rate
+        # three stride-2 convolutions turn 8 mel frames into one audio token
+        samples_per_token = spectrogram_config.stft_config.hop_length * 8
+        chunks, chunk_sample_lengths, num_audio_tokens = [], [], []
+        for waveform in audio:
+            tokens = 0
+            for start in range(0, waveform.shape[-1], chunk_samples):
+                chunk = waveform[start : start + chunk_samples]
+                chunks.append(chunk)
+                chunk_sample_lengths.append(chunk.shape[-1])
+                tokens += math.ceil(chunk.shape[-1] / samples_per_token)
+            num_audio_tokens.append(tokens)
+
+        kwargs.update(padding="max_length", max_length=chunk_samples, truncation=False, pad_to_multiple_of=None)
+        output = BaseAudioProcessor._preprocess(
+            self, chunks, spectrogram_config=spectrogram_config, return_tensors=None, **kwargs
         )
-
-    def _np_extract_fbank_features(self, *args, **kwargs):
-        raise AttributeError("Dots audio feature extraction requires PyTorch")
-
-    def zero_mean_unit_var_norm(self, *args, **kwargs):
-        raise AttributeError("Dots audio uses unnormalized waveforms")
-
-    def __call__(
-        self,
-        raw_speech,
-        sampling_rate: int | None = None,
-        return_tensors: str | TensorType | None = "pt",
-        device: str = "cpu",
-        **kwargs,
-    ) -> BatchFeature:
-        """Extract chunked log-mel features and their waveform sample lengths."""
-        if sampling_rate is not None and sampling_rate != self.sampling_rate:
-            raise ValueError(f"Expected sampling rate {self.sampling_rate}, got {sampling_rate}")
-        chunks = []
-        chunk_sample_lengths = []
-        chunk_token_lengths = []
-        audio_token_lengths = []
-
-        for waveform in make_list_of_audio(raw_speech):
-            waveform = torch.as_tensor(waveform, dtype=torch.float32)
-            per_audio_tokens = 0
-            for chunk in waveform.split(self.n_samples):
-                sample_length = int(chunk.numel())
-                # Three stride-2 convolutions downsample the mel frames by a factor of eight.
-                token_length = math.ceil(sample_length / (self.hop_length * 8))
-                chunks.append(chunk.cpu().numpy()[:, None])
-                chunk_sample_lengths.append(sample_length)
-                chunk_token_lengths.append(token_length)
-                per_audio_tokens += token_length
-            audio_token_lengths.append(per_audio_tokens)
-
-        inputs = self.pad(
-            BatchFeature({"input_features": chunks}),
-            padding="max_length",
-            max_length=self.n_samples,
-            return_tensors="np",
-            return_attention_mask=False,
-        )
-        input_features = self._torch_extract_fbank_features(inputs["input_features"].squeeze(-1), device)
-        input_features = input_features[..., : max(chunk_token_lengths) * 8]
-        data = {
-            "input_features": torch.from_numpy(input_features).to(device),
-            "chunk_sample_lengths": torch.tensor(chunk_sample_lengths, dtype=torch.long, device=device),
-            "num_audio_tokens": torch.tensor(audio_token_lengths, dtype=torch.long, device=device),
-        }
+        num_frames = max(math.ceil(length / samples_per_token) for length in chunk_sample_lengths) * 8
+        data = {key: value[..., :num_frames] for key, value in output.items()}
+        data["chunk_sample_lengths"] = np.asarray(chunk_sample_lengths, dtype=np.int64)
+        data["num_audio_tokens"] = np.asarray(num_audio_tokens, dtype=np.int64)
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
@@ -1335,15 +1324,25 @@ class Dots3NoteProcessor(Qwen2VLProcessor):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         return self.audio_token * audio_inputs["num_audio_tokens"][audio_idx]
 
+    def _process_audio(self, audio, **kwargs):
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        # The audio processor's keys are renamed to the ones the model's `forward` takes.
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
+        audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
+        return audio_inputs, audio_replacements
+
+    @property
     def model_input_names(self):
-        raise AttributeError("Use ProcessorMixin.model_input_names")
+        # The audio processor's `audio_features` reach the model as `input_features` (see `_process_audio`).
+        names = ProcessorMixin.model_input_names.fget(self)
+        return ["input_features" if name == "audio_features" else name for name in names]
 
     def __init__(
         self,
         image_processor=None,
         tokenizer=None,
         video_processor=None,
-        feature_extractor=None,
+        audio_processor=None,
         chat_template=None,
     ):
         self.image_token = "<|imgpad|>"
@@ -1357,7 +1356,7 @@ class Dots3NoteProcessor(Qwen2VLProcessor):
             image_processor=image_processor,
             tokenizer=tokenizer,
             video_processor=video_processor,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
             chat_template=chat_template,
         )
 
@@ -1367,7 +1366,7 @@ __all__ = [
     "Dots3NoteConfig",
     "Dots3NoteTextConfig",
     "Dots3NoteVisionConfig",
-    "Dots3NoteFeatureExtractor",
+    "Dots3NoteAudioProcessor",
     "Dots3NoteProcessor",
     "Dots3NoteAudioModel",
     "Dots3NoteAudioPreTrainedModel",

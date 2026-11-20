@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_moss_transcribe_diarize import *
     from .configuration_moss_transcribe_diarize import *
     from .feature_extraction_moss_transcribe_diarize import *
     from .modeling_moss_transcribe_diarize import *

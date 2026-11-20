@@ -30,7 +30,7 @@ class Dots3NoteProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         video_processor=None,
-        feature_extractor=None,
+        audio_processor=None,
         chat_template=None,
     ):
         self.image_token = "<|imgpad|>"
@@ -43,7 +43,7 @@ class Dots3NoteProcessor(ProcessorMixin):
             image_processor=image_processor,
             tokenizer=tokenizer,
             video_processor=video_processor,
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
             chat_template=chat_template,
         )
 
@@ -122,11 +122,24 @@ class Dots3NoteProcessor(ProcessorMixin):
         )
 
     @property
+    def model_input_names(self):
+        # The audio processor's `audio_features` reach the model as `input_features` (see `_process_audio`).
+        names = ProcessorMixin.model_input_names.fget(self)
+        return ["input_features" if name == "audio_features" else name for name in names]
+
+    @property
     def unused_input_names(self):
         return ["num_audio_tokens"]
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         return self.audio_token * audio_inputs["num_audio_tokens"][audio_idx]
+
+    def _process_audio(self, audio, **kwargs):
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        # The audio processor's keys are renamed to the ones the model's `forward` takes.
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
+        audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
+        return audio_inputs, audio_replacements
 
 
 __all__ = ["Dots3NoteProcessor"]

@@ -226,6 +226,18 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         )
         return video_replacement
 
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        # Rename to the model's input names
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
+        audio_inputs["input_features_mask"] = audio_inputs.pop("audio_features_mask")
+        audio_replacements = []
+        if self.audio_token is not None:
+            audio_replacements = [
+                self.replace_audio_token(audio_inputs, audio_idx=idx, **kwargs) for idx in range(len(audio))
+            ]
+        return audio_inputs, audio_replacements
+
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
 
@@ -342,7 +354,9 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
+        # The audio processor's outputs are renamed in `_process_audio`
+        renamed = {"audio_features": "input_features", "audio_features_mask": "input_features_mask"}
+        return [renamed.get(name, name) for name in super().model_input_names] + ["mm_token_type_ids"]
 
     @property
     def unused_input_names(self) -> list[str]:

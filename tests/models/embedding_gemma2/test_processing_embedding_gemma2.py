@@ -127,7 +127,7 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if not hasattr(processor, "_get_num_multimodal_tokens"):
             self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
 
-        sampling_rate = processor.feature_extractor.sampling_rate
+        sampling_rate = processor.audio_processor.sampling_rate
         # Sub-second through multi-second, so the mel/subsampling arithmetic is exercised
         # at several lengths rather than a single round number.
         audio_lengths = [sampling_rate // 4, sampling_rate // 2, sampling_rate, 2 * sampling_rate]
