@@ -1373,6 +1373,8 @@
         title: DeepseekVL
       - local: model_doc/deepseek_vl_hybrid
         title: DeepseekVLHybrid
+      - local: model_doc/deepseek_vl_v2
+        title: DeepseekVLV2
       - local: model_doc/deplot
         title: DePlot
       - local: model_doc/diffusion_gemma

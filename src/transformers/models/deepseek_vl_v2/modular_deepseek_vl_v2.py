@@ -401,7 +401,9 @@ class DeepseekVLV2ForConditionalGeneration(DeepseekVLV2PreTrainedModel, Generati
         is_first_iteration=False,
         **kwargs,
     ):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, is_first_iteration=is_first_iteration, **kwargs)
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, is_first_iteration=is_first_iteration, **kwargs
+        )
         # Images only go in on the prefill step; later steps reuse the cache.
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
