@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout Transformers
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: huggingface/transformers
           persist-credentials: false
@@ -61,7 +61,7 @@ jobs:
           echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: vllm-project/vllm
           ref: ${{ env.VLLM_COMMIT }}
@@ -185,7 +185,7 @@ jobs:
 
     steps:
       - name: Checkout Transformers
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: huggingface/transformers
           persist-credentials: false
@@ -208,7 +208,7 @@ jobs:
           echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: vllm-project/vllm
           ref: ${{ env.VLLM_COMMIT }}
@@ -320,7 +320,7 @@ jobs:
 
     steps:
       - name: Checkout Transformers
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: huggingface/transformers
           persist-credentials: false
@@ -343,7 +343,7 @@ jobs:
           echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: vllm-project/vllm
           ref: ${{ env.VLLM_COMMIT }}
@@ -481,7 +481,7 @@ jobs:
           echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: vllm-project/vllm
           ref: ${{ env.VLLM_COMMIT }}
@@ -524,7 +524,7 @@ jobs:
 
     steps:
       - name: Checkout Transformers
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: huggingface/transformers
           persist-credentials: false
@@ -547,7 +547,7 @@ jobs:
           echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: vllm-project/vllm
           ref: ${{ env.VLLM_COMMIT }}
@@ -611,7 +611,7 @@ jobs:
 
     steps:
       - name: Checkout Transformers
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           repository: huggingface/transformers
           persist-credentials: false
@@ -663,7 +663,7 @@ jobs:
 
       - name: Upload failure reports
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vllm-ci-failure-reports
           path: vllm-ci-reports/
