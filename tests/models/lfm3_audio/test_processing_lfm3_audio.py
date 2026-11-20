@@ -91,7 +91,10 @@ class Lfm3AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
-        shutil.rmtree(cls.codec_dirname, ignore_errors=True)
+        if hasattr(cls, "codec_dirname"):
+            shutil.rmtree(cls.codec_dirname, ignore_errors=True)
+            # a rerun sets the class up again: it must save a new codec
+            del cls.codec_dirname
 
     def get_component(self, attribute, **kwargs):
         # `codec_feature_extractor` is saved in the processor config: no file an auto class could load it from

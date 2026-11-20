@@ -85,29 +85,33 @@ class Lfm3AudioModelTester(ALMModelTester):
     conditional_generation_class = Lfm3AudioForConditionalGeneration
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("feat_seq_length", 40)
+    small_config_overrides = {
+        "feat_seq_length": 40,
         # 2 attention layers, as the common attention-output test expects
-        kwargs.setdefault("text_layer_types", ["conv", "sliding_attention", "full_attention"])
-        kwargs.setdefault("text_num_hidden_layers", 3)
-        kwargs.setdefault("expected_num_hidden_layers", 4)
-        kwargs.setdefault("subsampling_factor", 8)
-        kwargs.setdefault("audio_num_hidden_layers", 3)
-        kwargs.setdefault("audio_layer_types", ["conv", "sliding_attention", "conv"])
+        "text_layer_types": ["conv", "sliding_attention", "full_attention"],
+        "text_num_hidden_layers": 3,
+        "expected_num_hidden_layers": 4,
+        "subsampling_factor": 8,
+        "audio_num_hidden_layers": 3,
+        "audio_layer_types": ["conv", "sliding_attention", "conv"],
         # default range: encoder output ~1e-4, lost in float noise for the streaming / padding tests
-        kwargs.setdefault("audio_initializer_range", 1.0)
-        kwargs.setdefault("num_codebooks", 4)
-        kwargs.setdefault("codebook_size", 7)
-        kwargs.setdefault("audio_eos_code", 6)
+        "audio_initializer_range": 1.0,
+        "num_codebooks": 4,
+        "codebook_size": 7,
+        "audio_eos_code": 6,
         # inside the tester's vocabulary
-        kwargs.setdefault("audio_out_token_id", 4)
-        kwargs.setdefault("audio_start_token_id", 5)
-        kwargs.setdefault("text_end_token_id", 6)
-        kwargs.setdefault("mixed_start_token_id", 7)
-        kwargs.setdefault("mixed_end_token_id", 8)
+        "audio_out_token_id": 4,
+        "audio_start_token_id": 5,
+        "text_end_token_id": 6,
+        "mixed_start_token_id": 7,
+        "mixed_end_token_id": 8,
+    }
 
-        super().__init__(parent, **kwargs)
-        self.depth_decoder_backbone_hidden_size = self.hidden_size
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values.setdefault("depth_decoder_backbone_hidden_size", values["hidden_size"])
+        return values
 
     @property
     def _special_token_ids(self):
@@ -160,7 +164,7 @@ class Lfm3AudioModelTest(ALMModelTest, unittest.TestCase):
         if any(mode in self._testMethodName for mode in ("beam", "assisted_decoding", "prompt_lookup")):
             self.skipTest("LFM3-Audio generates with greedy search or sampling only")
 
-        if not getattr(self, self._testMethodName).__qualname__.startswith("Lfm3AudioModelTest."):
+        if self._testMethodName not in Lfm3AudioModelTest.__dict__:
             # Common tests: random weights write placeholders / open speech (random frames) -> flaky comparisons.
             # Released checkpoints suppress them in `generation_config.json`; done here instead.
             tester = self.model_tester
