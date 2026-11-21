@@ -88,7 +88,9 @@ class Mistral4RotaryEmbedding(nn.Module):
     @staticmethod
     def compute_default_rope_parameters(config: Mistral4Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
-        Computes the inverse frequencies according to the original RoPE implementation
+        Computes the inverse frequencies according to the original RoPE implementation. As in the other MLA models,
+        RoPE is only applied to the `qk_rope_head_dim` channels of the queries and keys, so these are the frequencies'
+        dimension (`head_dim` is `qk_nope_head_dim + qk_rope_head_dim` for Mistral4).
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
@@ -97,7 +99,7 @@ class Mistral4RotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = config.qk_rope_head_dim
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
