@@ -20,14 +20,11 @@ rendered properly in your Markdown viewer.
 
 There are several libraries for quantizing models with the AWQ algorithm, such as [llm-awq](https://github.com/mit-han-lab/llm-awq), [autoawq](https://github.com/casper-hansen/AutoAWQ) or [optimum-intel](https://huggingface.co/docs/optimum/main/en/intel/optimization_inc). Transformers supports loading models quantized with the llm-awq and autoawq libraries. This guide will show you how to load models quantized with autoawq, but the process is similar for llm-awq quantized models.
 
-Run the command below to install autoawq
+Transformers loads AWQ models with [GPT-QModel](https://github.com/ModelCloud/GPTQModel). Run the command below to install it.
 
 ```bash
-pip install autoawq
+pip install gptqmodel
 ```
-
-> [!WARNING]
-> AutoAWQ downgrades Transformers to version 4.47.1. If you want to do inference with AutoAWQ, you may need to reinstall your Transformers' version after installing AutoAWQ.
 
 Identify an AWQ-quantized model by checking the `quant_method` key in the models [config.json](https://huggingface.co/TheBloke/zephyr-7B-alpha-AWQ/blob/main/config.json) file.
 
@@ -202,13 +199,9 @@ The parameter `modules_to_fuse` should include the following keys.
 
 ## ExLlamaV2
 
-[ExLlamaV2](https://github.com/turboderp/exllamav2) kernels support faster prefill and decoding. Run the command below to install the latest version of autoawq with ExLlamaV2 support.
+[ExLlamaV2](https://github.com/turboderp/exllamav2) kernels support faster prefill and decoding. GPT-QModel includes them.
 
-```bash
-pip install git+https://github.com/casper-hansen/AutoAWQ.git
-```
-
-Set `version="exllama"` in [`AwqConfig`] to enable ExLlamaV2 kernels.
+Set `backend="exllama_v2"` in [`AwqConfig`] to enable ExLlamaV2 kernels.
 
 > [!TIP]
 > ExLlamaV2 is supported on AMD GPUs.
@@ -217,7 +210,7 @@ Set `version="exllama"` in [`AwqConfig`] to enable ExLlamaV2 kernels.
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
 
-quantization_config = AwqConfig(version="exllama")
+quantization_config = AwqConfig(backend="exllama_v2")
 
 model = AutoModelForCausalLM.from_pretrained(
     "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
