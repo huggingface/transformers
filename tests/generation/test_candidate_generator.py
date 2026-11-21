@@ -100,16 +100,19 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
         self.assertTrue(torch.equal(actual_target_logits, expected_target_logits))
 
     def test_same_vocab_padded_vocab_sizes_with_pruning(self):
-        """Same tokenizer but padded vocab sizes (e.g. Qwen2.5-7B + Qwen2.5-0.5B), as used by sampling: nothing to prune."""
+        """Same tokenizer but padded vocab sizes (e.g. Qwen2.5-7B + Qwen2.5-0.5B), as used by sampling: nothing to prune,
+        and the padded rows of the assistant LM head are never sampled."""
         vocab = {"hello": 0, "world": 1, "foo": 2}
         target_tokenizer, assistant_tokenizer = MagicMock(), MagicMock()
         target_tokenizer.get_vocab.return_value = vocab
         assistant_tokenizer.get_vocab.return_value = vocab
+        assistant_model = MagicMock(device=torch_device)
+        assistant_model.config.get_text_config.return_value.vocab_size = 4  # one padded row
         translator = AssistantToTargetTranslator(
             target_tokenizer=target_tokenizer,
             assistant_tokenizer=assistant_tokenizer,
             target_vocab_size=5,
-            assistant_model=MagicMock(device=torch_device),
+            assistant_model=assistant_model,
             assistant_prune_lm_head=True,
         )
         translator.unmap_input_ids()
@@ -122,6 +125,9 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
         expected_target_logits = torch.full((1, 1, 5), translator.FILTER_VALUE).to(torch_device)
         expected_target_logits[0, 0, :3] = torch.FloatTensor([0.1, 0.2, 0.3])
         self.assertTrue(torch.equal(translator.get_target_logits(assistant_logits), expected_target_logits))
+
+        scores = translator.logits_processors(None, assistant_logits[0].clone())
+        self.assertTrue(torch.equal(scores, expected_target_logits[0, :, :4]))
 
 
 class MockTokenizer:

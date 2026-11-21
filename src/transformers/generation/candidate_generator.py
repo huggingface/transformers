@@ -748,6 +748,19 @@ class AssistantToTargetTranslator:
                 self.logits_processors = LogitsProcessorList(
                     [SuppressTokensLogitsProcessor(self._get_suppress_input_ids(), self._assistant_model_device)]
                 )
+        if not self.assistant_prune_lm_head and assistant_model is not None:
+            # Rows of the assistant LM head past its tokenizer (vocab_size padding) have no token and must not be sampled
+            padded_ids = list(
+                range(len(self._assistant_to_target_input_ids), assistant_model.config.get_text_config().vocab_size)
+            )
+            if len(padded_ids) > 0:
+                self.logits_processors = LogitsProcessorList(
+                    [
+                        SuppressTokensLogitsProcessor(
+                            self._suppress_input_ids.tolist() + padded_ids, self._assistant_model_device
+                        )
+                    ]
+                )
 
     def unmap_input_ids(self):
         """
