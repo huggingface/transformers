@@ -120,11 +120,16 @@ class T5Tokenizer(TokenizersBackend):
         if _spm_precompiled_charsmap is not None:
             self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-            ]
+        # SentencePiece vocabularies that include explicit whitespace tokens (e.g. MADLAD-400's "\n")
+        # must not discard whitespace in the pre-tokenizer before the Unigram model sees it.
+        has_whitespace_tokens = isinstance(self._vocab_scores, list) and any(
+            token in ("\n", "\t", "\r") for token, _ in self._vocab_scores
+        )
+        metaspace = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
+        self._tokenizer.pre_tokenizer = (
+            metaspace
+            if has_whitespace_tokens
+            else pre_tokenizers.Sequence([pre_tokenizers.WhitespaceSplit(), metaspace])
         )
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
