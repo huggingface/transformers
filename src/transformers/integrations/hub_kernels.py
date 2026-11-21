@@ -987,6 +987,39 @@ def get_kernel(
     )
 
 
+# Metal kernels for streamed MoE / hybrid linear attention on Apple Silicon, pinned (interim homes: the event API is
+# meant for torch, the reads for safetensors, see the repos' READMEs)
+_METAL_KERNELS = {
+    "metal-moe-decode": ("ArthurZ/metal-moe-decode", "eb2c774e8ffe24d5f8c3690fbfb1c0dea869fc8a"),
+    "mps-events": ("ArthurZ/mps-events", "a770c6dd7bbc0db7cb0d2814a194d9f59232e2d3"),
+}
+
+
+@functools.cache
+def metal_kernel(name: str):
+    """The pinned hub kernel `name` of `_METAL_KERNELS`, or None where it does not load (no `kernels`, not MPS, no
+    build for this torch / Python)."""
+    if not (is_kernels_available() and torch.backends.mps.is_available()):
+        return None
+    from kernels import get_kernel as get_hub_kernel  # the library's own: pinned revision, a trusted non-community repo
+
+    repo_id, revision = _METAL_KERNELS[name]
+    try:
+        return get_hub_kernel(repo_id, revision=revision, trust_remote_code=True)
+    except Exception as error:  # noqa: BLE001
+        logger.warning_once(f"Could not load the Metal kernel {repo_id}: {error}")
+        return None
+
+
+# Linear-attention ops the Metal kernel implements, by the name of the function they replace
+_METAL_LINEAR_ATTENTION = {
+    "causal_conv1d_fn": "causal_conv1d_fn",
+    "causal_conv1d_update": "causal_conv1d_update",
+    "chunk_gated_delta_rule": "gated_delta_rule",
+    "fused_recurrent_gated_delta_rule": "gated_delta_rule",
+}
+
+
 def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
     """
     The same as `use_kernel_forward_from_hub` but with the optional fallback to an original package if it exists, e.g.,
@@ -1023,12 +1056,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
         applicable_params = tuple(inspect.signature(implementation).parameters)
         # A boolean to track if the implementation is new, i.e. not the original torch function
         is_new_implementation = implementation is not torch_function
+        # On MPS the original packages (FLA, causal-conv1d) don't run: use our Metal kernels, never the torch loop
+        metal = metal_kernel("metal-moe-decode") if func_name in _METAL_LINEAR_ATTENTION else None
+        metal_implementation = getattr(metal, _METAL_LINEAR_ATTENTION[func_name]) if metal is not None else None
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
             # Some original packages are incompatible with torch.export, so we always use the torch path when exporting
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
+
+            if metal_implementation is not None and args[0].device.type == "mps":
+                return metal_implementation(*args, **kwargs)
 
             if not is_new_implementation and (
                 kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None

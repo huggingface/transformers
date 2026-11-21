@@ -45,6 +45,18 @@ logger = logging.get_logger(__name__)
 _metal_kernel = None
 
 
+_decode_kernels = []
+
+
+def _decode_kernel():
+    """The pinned `metal-moe-decode` hub kernel (batch-1 decode matvecs), or None where it does not load."""
+    if not _decode_kernels:
+        from .hub_kernels import metal_kernel
+
+        _decode_kernels.append(metal_kernel("metal-moe-decode"))
+    return _decode_kernels[0]
+
+
 def _get_metal_kernel():
     """Lazily load the quantization-mlx kernel from Hugging Face Hub."""
     global _metal_kernel
@@ -52,14 +64,46 @@ def _get_metal_kernel():
         try:
             from .hub_kernels import get_kernel
 
-            _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=1)
+            try:  # v2 has `gather_qmm` and the builds for recent torch versions
+                _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=2)
+            except Exception:
+                _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=1)
         except Exception as e:
             raise ImportError(
                 f"Failed to load the quantization-mlx kernel from the Hub: {e}. "
                 "Make sure you have `kernels` installed (`pip install kernels`) "
                 "and are running on an Apple Silicon machine."
             ) from e
+        _register_fake_kernels(_metal_kernel)
     return _metal_kernel
+
+
+def _register_fake_kernels(kernel):
+    """Shape-only implementations of the kernel's ops, so `torch.compile` traces through them (one graph per decode
+    step) instead of breaking the graph at every quantized matmul."""
+    namespace = kernel.ops.__name__.rpartition(".")[2]
+
+    def register(op, fake):
+        try:
+            torch.library.register_fake(f"{namespace}::{op}")(fake)
+        except (RuntimeError, AttributeError):  # already registered, or an older build without the op
+            pass
+
+    def quantized_matmul(x, w, scales, biases, transpose, group_size, bits, mode):
+        # transpose: w is [..., N, K * bits / 32] -> [..., N]; else w is [..., K, N * bits / 32]
+        n = w.shape[-2] if transpose else w.shape[-1] * 32 // (bits or 4)
+        return x.new_empty(*torch.broadcast_shapes(x.shape[:-2], w.shape[:-2]), x.shape[-2], n)
+
+    def gather_qmm(
+        x, w, scales, biases, lhs_indices, rhs_indices, transpose, group_size, bits, mode, global_scale, sorted_indices
+    ):
+        n = w.shape[-2] if transpose else w.shape[-1] * 32 // (bits or 4)
+        indices = [i.shape for i in (lhs_indices, rhs_indices) if i is not None]
+        batch = torch.broadcast_shapes(*indices) if indices else x.shape[:-2]
+        return x.new_empty(*batch, x.shape[-2], n)
+
+    register("quantized_matmul", quantized_matmul)
+    register("gather_qmm", gather_qmm)
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +157,21 @@ class MetalLinear(nn.Linear):
         if self.weight.dtype != torch.uint32:
             return nn.functional.linear(input, self.weight, self.bias)
 
+        if (
+            self.bits == 4
+            and self.group_size in (32, 64)
+            and input.numel() == self.in_features
+            and input.device.type == "mps"
+            and _decode_kernel() is not None
+        ):
+            # One token: `qmv4` beats MLX's qmv in the decode step (short sides 1.3-5.7x, large ones at par alone and
+            # faster in the model: Qwen3.8 synthetic 46.6 -> 47.9 tok/s on M3 Max)
+            qmv4 = _decode_kernel().qmv4
+
+            scales, biases = self.scales.to(input.dtype), self.qbiases.to(input.dtype)  # no-op when already alike
+            output = qmv4(input, self.weight, scales, biases, self.group_size)
+            return output if self.bias is None else output + self.bias
+
         kernel = _get_metal_kernel()
 
         output = kernel.affine_qmm_t(
@@ -127,6 +186,121 @@ class MetalLinear(nn.Linear):
         if self.bias is not None:
             output = output + self.bias
         return output
+
+
+class MetalExperts(nn.Module):
+    """
+    Quantized experts (3D banks) run by the ``gather_qmm`` Metal kernel: each route multiplies its token by the packed
+    weights of its expert, no dequantized copy. Replaces an experts module (`gate_up_proj` / `down_proj` banks of
+    shape `[num_experts, N, K]`) with `[num_experts, N, K_packed]` uint32 banks and their `_scales` / `_qbiases`.
+
+    Expert ids `>= num_experts` are expert-parallel / streamed-experts sentinels: their routes contribute zero.
+    """
+
+    PROJECTIONS = ("gate_up_proj", "down_proj")
+
+    def __init__(self, experts: nn.Module, bits: int = 4, group_size: int = 64, dtype=torch.uint32):
+        super().__init__()
+        self.num_experts = experts.num_experts
+        self.bits = bits
+        self.group_size = group_size
+        self.act_fn = experts.act_fn
+        self.config = getattr(experts, "config", None)
+        for flag in ("has_gate", "has_bias", "is_concatenated", "is_transposed"):
+            setattr(self, flag, getattr(experts, flag, None))
+        self._apply_gate_fn = type(experts)._apply_gate
+        # The Metal decode down+routing kernel: 4 bits, no bias, group a multiple of 32 (one scale per uint4 block)
+        self._fused_decode = bits == 4 and not getattr(experts, "has_bias", False) and group_size in (32, 64)
+        for name in self.PROJECTIONS:
+            num_experts, rows, columns = getattr(experts, name).shape
+            groups = columns // group_size
+            if dtype == torch.uint32:
+                weight = torch.zeros(num_experts, rows, columns * bits // 32, dtype=torch.uint32)
+            else:  # quantized on the fly: the float bank is loaded first
+                weight = torch.zeros(num_experts, rows, columns, dtype=dtype)
+            self.register_parameter(name, nn.Parameter(weight, requires_grad=False))
+            for suffix in ("scales", "qbiases"):
+                # The activations' dtype (the model's default): the kernel takes them as they are, no cast per call
+                tensor = torch.zeros(num_experts, rows, groups)
+                self.register_parameter(f"{name}_{suffix}", nn.Parameter(tensor, requires_grad=False))
+
+    def masked_decode(self, hidden_states, top_k_index, top_k_weights):
+        """One token through only its routes with an in-range id (`< num_experts`), reading nothing for the others:
+        a correction pass over a few routes (streamed misses)."""
+        kernel = _decode_kernel()
+        if kernel is None:  # no decode kernel: the regular path, the masked routes weighted 0
+            return self.forward(hidden_states, top_k_index, top_k_weights)
+        experts_down_sum, experts_gate_up_masked = kernel.experts_down_sum, kernel.experts_gate_up_masked
+
+        ids = top_k_index.reshape(-1)
+        weights = (top_k_weights.reshape(-1) * (ids < self.num_experts)).float()
+        ids = ids.clamp(max=self.num_experts - 1).to(torch.int32).contiguous()
+        dtype, gs = hidden_states.dtype, self.group_size
+        up = (self.gate_up_proj, self.gate_up_proj_scales.to(dtype), self.gate_up_proj_qbiases.to(dtype))
+        act = self._apply_gate(experts_gate_up_masked(hidden_states.contiguous(), *up, ids, weights, gs))
+        down = (self.down_proj, self.down_proj_scales.to(dtype), self.down_proj_qbiases.to(dtype))
+        return experts_down_sum(act.contiguous(), *down, ids, weights, gs)
+
+    def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
+        return self._apply_gate_fn(self, gate_up_out)
+
+    def _qmm(self, x, name, ids, sorted_indices):
+        scales = getattr(self, f"{name}_scales")
+        if x.device.type == "cuda":  # same packed layout, Triton kernel
+            from .triton_affine_moe import gather_qmv
+
+            biases = getattr(self, f"{name}_qbiases")
+            return gather_qmv(x, getattr(self, name), scales, biases, ids, self.group_size, self.bits)
+        kernel = _get_metal_kernel()
+        out = kernel.gather_qmm(
+            x[:, None, :],
+            getattr(self, name),
+            scales.to(x.dtype),
+            getattr(self, f"{name}_qbiases").to(x.dtype),
+            rhs_indices=ids,
+            transpose=True,
+            group_size=self.group_size,
+            bits=self.bits,
+            sorted_indices=sorted_indices,
+        )
+        return out.squeeze(1)
+
+    def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor):
+        num_tokens, top_k = top_k_index.shape
+        ids = top_k_index.reshape(-1)
+        # Sentinels (expert parallel, streamed misses) get weight 0; their clamped slot holds finite values (a pool's
+        # unfilled slots are zeros), so the product is 0
+        weights = top_k_weights.reshape(-1) * (ids < self.num_experts)
+        ids = ids.clamp(max=self.num_experts - 1).to(torch.int32)
+        if (
+            num_tokens == 1
+            and self._fused_decode
+            and hidden_states.device.type == "mps"
+            and _decode_kernel() is not None
+        ):
+            # One token: MLX gate/up for every route (231 GB/s), then one dispatch for the down projections + routing sum
+            experts_down_sum = _decode_kernel().experts_down_sum
+
+            act = self._apply_gate(self._qmm(hidden_states.expand(top_k, -1), "gate_up_proj", ids, False))
+            down = (self.down_proj, self.down_proj_scales.to(act.dtype), self.down_proj_qbiases.to(act.dtype))
+            return experts_down_sum(act.contiguous(), *down, ids.contiguous(), weights.float(), self.group_size)
+        if num_tokens == 1:
+            # One token: every route reads the same row, and the routes reduce with a weighted sum (no scatter)
+            x = hidden_states.expand(top_k, -1)
+            out = self._qmm(self._apply_gate(self._qmm(x, "gate_up_proj", ids, False)), "down_proj", ids, False)
+            return (out * weights[:, None].to(out.dtype)).sum(0, keepdim=True)
+        rows = torch.arange(num_tokens * top_k, device=ids.device) // top_k
+        # MLX picks its batched kernel for sorted ids (prefill); decode rows stay in place
+        sorted_indices = ids.numel() >= 16
+        if sorted_indices:
+            ids, order = torch.sort(ids, stable=True)
+            rows, weights = rows[order], weights[order]
+        x = hidden_states[rows]
+        out = self._qmm(
+            self._apply_gate(self._qmm(x, "gate_up_proj", ids, sorted_indices)), "down_proj", ids, sorted_indices
+        )
+        out = out * weights[:, None].to(out.dtype)
+        return torch.zeros_like(hidden_states).index_add_(0, rows, out)
 
 
 def _affine_quantize_tensor(weight: torch.Tensor, group_size: int, bits: int):
@@ -203,11 +377,17 @@ class MetalQuantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        w_packed, scales, biases = _affine_quantize_tensor(value, group_size, bits)
+        # Experts banks `[num_experts, N, K]` are quantized row by row like a `[num_experts * N, K]` weight
+        w_packed, scales, biases = _affine_quantize_tensor(value.reshape(-1, value.shape[-1]), group_size, bits)
+        lead = value.shape[:-1]
+        w_packed, scales, biases = (t.reshape(*lead, -1) for t in (w_packed, scales, biases))
 
-        base = target_key.rsplit(".", 1)[0] if "." in target_key else ""
-        scale_key = f"{base}.scales" if base else "scales"
-        bias_key = f"{base}.qbiases" if base else "qbiases"
+        base, _, name = target_key.rpartition(".")
+        if name == "weight":
+            scale_key = f"{base}.scales" if base else "scales"
+            bias_key = f"{base}.qbiases" if base else "qbiases"
+        else:  # several quantized params in one module (experts): `gate_up_proj_scales`, ...
+            scale_key, bias_key = f"{target_key}_scales", f"{target_key}_qbiases"
 
         orig_dtype = value.dtype
         return {
@@ -253,3 +433,67 @@ class MetalDequantize(ConversionOps):
     @property
     def reverse_op(self) -> "ConversionOps":
         return _IdentityOp()
+
+
+# Sibling projections that read the same input, per parent module class: on Metal one token's small matvecs are
+# latency-bound (a few us per dispatch), so each group runs as one `MetalLinear` over the concatenated rows.
+SIBLING_LINEARS = {
+    "Qwen4ExpTextGatedDeltaNet": ["in_proj_qkv", "in_proj_z", "in_proj_b", "in_proj_a"],
+    "Qwen4ExpTextAttention": ["q_proj", "k_proj", "v_proj", "indexer.index_qk_proj"],
+    "Qwen4ExpTextGatedResidual": ["input_mix_weight_down", "block_inject_weight"],
+    "Qwen4ExpTextSparseMoeBlock": ["shared_expert.gate_proj", "shared_expert.up_proj", "shared_expert_gate"],
+}
+
+
+class _SiblingSlice(nn.Module):
+    """One member of a fused group: the first member called on an input computes the whole group, the others slice."""
+
+    def __init__(self, fused: MetalLinear, state: dict, start: int, end: int):
+        super().__init__()
+        self.fused, self.state, self.start, self.end = fused, state, start, end
+        self.in_features, self.out_features = fused.in_features, end - start
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.state.get("input") is not x:
+            self.state["input"], self.state["output"] = x, self.fused(x)
+        return self.state["output"][..., self.start : self.end]
+
+
+def fuse_sibling_linears(model: nn.Module, plan: dict | None = None) -> int:
+    """Replace each group of `plan` (default `SIBLING_LINEARS`) whose members are all bias-free `MetalLinear`s with the
+    same input size and quantization by slices of one fused `MetalLinear`. Returns the number of fused groups."""
+    plan = SIBLING_LINEARS if plan is None else plan
+    groups = 0
+    for module in list(model.modules()):
+        paths = plan.get(type(module).__name__)
+        if not paths:
+            continue
+        members = []
+        for path in paths:
+            try:
+                members.append((path, module.get_submodule(path)))
+            except AttributeError:  # absent child (e.g. a mixer without `block_inject_weight`)
+                pass
+        linears = [m for _, m in members]
+        same = {(m.in_features, m.bits, m.group_size) for m in linears if isinstance(m, MetalLinear)}
+        if (
+            len(linears) < 2
+            or len(same) != 1
+            or any(type(m) is not MetalLinear or m.bias is not None for m in linears)
+        ):
+            continue
+        first = linears[0]
+        fused = MetalLinear(
+            first.in_features, sum(m.out_features for m in linears), bits=first.bits, group_size=first.group_size
+        )
+        for name in ("weight", "scales", "qbiases"):
+            tensor = torch.cat([getattr(m, name) for m in linears])
+            setattr(fused, name, nn.Parameter(tensor, requires_grad=False))
+        state, start = {}, 0
+        for path, linear in members:
+            parent, _, child = path.rpartition(".")
+            owner = module.get_submodule(parent) if parent else module
+            owner.register_module(child, _SiblingSlice(fused, state, start, start + linear.out_features))
+            start += linear.out_features
+        groups += 1
+    return groups

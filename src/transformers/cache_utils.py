@@ -445,7 +445,9 @@ class StaticLayer(CacheLayerMixin):
             dtype=self.dtype,
             device=self.device,
         )
-        self.cumulative_length = self.cumulative_length.to(self.device)
+        # Made on the device (it is 0 here): a 0-d host -> device copy waits for the zeros queued above (MPS: a full sync
+        # per layer)
+        self.cumulative_length = torch.zeros((), dtype=self.cumulative_length.dtype, device=self.device)
         # Note: `mark_static_address` is used to tag the tensors as a fixed data pointer, preventing compiled graph
         # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
         # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
