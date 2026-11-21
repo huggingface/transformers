@@ -114,7 +114,7 @@ def _pad(items, key, padding_value, padding_side):
 
         for i, item in enumerate(items):
             if padding_side == "left":
-                tensor[i, -len(item[key][0]) :] = item[key][0]
+                tensor[i, max_length - len(item[key][0]) :] = item[key][0]
             else:
                 tensor[i, : len(item[key][0])] = item[key][0]
 

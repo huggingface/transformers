@@ -482,6 +482,8 @@ class PipelinePadTest(unittest.TestCase):
                 torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
             )
         )
+        empty = [{"input_ids": torch.LongTensor([[]])}, {"input_ids": torch.LongTensor([[1, 2]])}]
+        self.assertTrue(torch.equal(_pad(empty, "input_ids", 10, "left"), torch.LongTensor([[10, 10], [1, 2]])))
         self.assertTrue(
             torch.allclose(
                 _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
