@@ -253,6 +253,18 @@ SPECIAL_CASES_TO_ALLOW = {
         "max_atomic_number",
     ],
     "AXK2Config": ["layer_types"],  # needed for correct cache
+    "GraniteSwitchConfig": [
+        # Needed for correct cache: read by the Cache classes, not by the modeling file.
+        "layer_types",
+        # Adapter metadata, validated in the config's own `__post_init__`. A checkpoint records the
+        # adapter names and the rank each was trained at; the modeling file only ever needs the
+        # maximum, which it reads as `max_lora_rank`.
+        "adapter_names",
+        "adapter_ranks",
+        # The dense MLP's width default: the inherited MLP reads `shared_intermediate_size`, which
+        # `__post_init__` fills from it when unset.
+        "intermediate_size",
+    ],
     # ESMFold2's sub-configs are reached as `config.<sub_config>.<attribute>`, but this check only
     # matches the literal `config.<attribute>`, so it cannot resolve nested access at all.
     "EsmFold2AtomEncoderConfig": True,
