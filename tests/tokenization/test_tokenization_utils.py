@@ -360,6 +360,46 @@ class TokenizerUtilsTest(unittest.TestCase):
             self.assertIn("benign_repo_token", vocab)
             self.assertNotIn("secret_leaked_token", vocab)
 
+    @require_tokenizers
+    def test_add_eos_token_keeps_bos_from_post_processor(self):
+        # https://github.com/huggingface/transformers/issues/50985
+        # tokenizer.json sets add_bos_token in post-processor, setting add_eos_token must keep it
+        repo = "hf-internal-testing/llama-tokenizer"
+        tokenizer = AutoTokenizer.from_pretrained(repo)
+        bos, eos = tokenizer.bos_token_id, tokenizer.eos_token_id
+        # by default: BOS, no EOS
+        self.assertTrue(tokenizer.add_bos_token)
+        self.assertFalse(tokenizer.add_eos_token)
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertNotEqual(input_ids[-1], eos)
+
+        tokenizer.add_eos_token = True
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertEqual(input_ids[-1], eos)
+
+        tokenizer.add_eos_token = False
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertNotEqual(input_ids[-1], eos)
+
+        tokenizer = AutoTokenizer.from_pretrained(repo, add_eos_token=False)
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertNotEqual(input_ids[-1], eos)
+
+        tokenizer = AutoTokenizer.from_pretrained(repo, add_eos_token=True)
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertEqual(input_ids[-1], eos)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            input_ids = AutoTokenizer.from_pretrained(tmp_dir)("hello").input_ids
+            self.assertEqual(input_ids[0], bos)
+            self.assertEqual(input_ids[-1], eos)
+
     def test_additional_special_tokens_are_preserved_when_extra_tokens_are_configured(self):
         for empty_container in [{}, []]:
             with tempfile.TemporaryDirectory() as repo:
