@@ -188,6 +188,14 @@ class Sam3ImageSegmentationOutput(ModelOutput):
         Attention weights from DETR decoder layers (self-attention and cross-attention).
     mask_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from mask decoder layers.
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        It is a list of dictionaries containing the two above keys (`pred_logits` and
+        `pred_boxes` in normalized [cx, cy, w, h] format) for each decoder layer.
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided):
+        Total loss as a weighted sum of binary cross-entropy (IoU-adaptive), bounding box (L1 and GIoU),
+        and mask (focal and dice) losses.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
     """
 
     pred_masks: torch.Tensor = None
@@ -203,6 +211,9 @@ class Sam3ImageSegmentationOutput(ModelOutput):
     detr_encoder_attentions: tuple[torch.Tensor] | None = None
     detr_decoder_attentions: tuple[torch.Tensor] | None = None
     mask_decoder_attentions: tuple[torch.Tensor] | None = None
+    auxiliary_outputs: list[dict] | None = None
+    loss: torch.Tensor | None = None
+    loss_dict: dict | None = None
 
 
 def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
@@ -2308,6 +2319,7 @@ class Sam3Model(Sam3PreTrainedModel):
         text_embeds: torch.Tensor | None = None,
         input_boxes: torch.Tensor | None = None,
         input_boxes_labels: torch.LongTensor | None = None,
+        labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3ImageSegmentationOutput:
         r"""
@@ -2321,6 +2333,15 @@ class Sam3Model(Sam3PreTrainedModel):
             Normalized box coordinates in [0, 1] range, in (cx, cy, w, h) format.
         input_boxes_labels (`torch.LongTensor` of shape `(batch_size, num_boxes)`, *optional*):
             Labels for boxes: 1 (positive), 0 (negative).
+        labels (`list[dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing the
+            following keys:
+            - 'boxes' (`torch.Tensor` of shape `(num_boxes, 4)`): bounding boxes in (x1, y1, x2, y2)
+              format, normalized to [0, 1].
+            - 'masks' (`torch.Tensor` of shape `(num_boxes, H, W)`, *optional*): binary instance masks
+              for each box. Can be omitted for detection-only training.
+            - 'is_valid_mask' (`torch.BoolTensor` of shape `(num_boxes,)`, *optional*): boolean mask
+              indicating which ground-truth masks are valid. When omitted, all masks are assumed valid.
 
         Example:
 
@@ -2473,6 +2494,30 @@ class Sam3Model(Sam3PreTrainedModel):
             **kwargs,
         )
 
+        auxiliary_outputs = None
+        if self.config.auxiliary_loss:
+            auxiliary_outputs = [
+                {
+                    "pred_logits": all_pred_logits[i],
+                    "pred_boxes": all_pred_boxes_cxcywh[i],
+                    "pred_masks": None,
+                }
+                for i in range(len(all_pred_logits) - 1)
+            ]
+
+        loss, loss_dict = None, None
+
+        if labels is not None:
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits=pred_logits,
+                labels=labels,
+                device=self.device,
+                pred_boxes=all_pred_boxes_cxcywh[-1],
+                pred_masks=mask_outputs.pred_masks,
+                config=self.config,
+                auxiliary_outputs=auxiliary_outputs,
+            )
+
         return Sam3ImageSegmentationOutput(
             pred_masks=mask_outputs.pred_masks,
             pred_boxes=pred_boxes,
@@ -2487,6 +2532,9 @@ class Sam3Model(Sam3PreTrainedModel):
             detr_encoder_attentions=encoder_outputs.attentions,
             detr_decoder_attentions=decoder_outputs.attentions,
             mask_decoder_attentions=mask_outputs.attentions,
+            auxiliary_outputs=auxiliary_outputs,
+            loss=loss,
+            loss_dict=loss_dict,
         )
 
 
