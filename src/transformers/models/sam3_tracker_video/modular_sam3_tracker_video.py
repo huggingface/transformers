@@ -463,11 +463,11 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam3TrackerVideoVisionEncoderOutput:
         r"""
-        pixel_values (`torch.FloatTensor`):
+        pixel_values (`torch.Tensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
         vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(

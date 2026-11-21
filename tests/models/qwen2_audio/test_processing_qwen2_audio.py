@@ -28,10 +28,6 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     audio_unstructured_max_length = 201
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.audio_token = processor.audio_token
-
     def test_can_load_various_tokenizers(self):
         processor = Qwen2AudioProcessor.from_pretrained(self.tmpdirname)
         tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)

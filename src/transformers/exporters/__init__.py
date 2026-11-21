@@ -18,8 +18,8 @@ from ..utils import _LazyModule
 
 
 _import_structure = {
-    "auto": ["AutoExportConfig", "AutoHfExporter", "get_hf_exporter", "register_export_config", "register_exporter"],
-    "base": ["HfExporter"],
+    "auto": ["AutoExportConfig", "AutoHfExporter", "register_backend"],
+    "base": ["ExportedComponent", "ExportedModel", "HfExporter"],
     "configs": [
         "DynamoConfig",
         "ExecutorchConfig",
@@ -32,6 +32,7 @@ _import_structure = {
     "exporter_executorch": ["ExecutorchExporter"],
     "exporter_onnx": ["OnnxExporter"],
     "exporter_openvino": ["OpenVINOExporter"],
+    "metadata": ["ExportMetadata"],
     "quantizers": [
         "ExportQuantizer",
         "NNCFOnnxQuantizer",
@@ -44,16 +45,18 @@ _import_structure = {
         "OnnxRuntimeStaticConfig",
         "PT2EQuantizer",
     ],
+    "runners": ["ModelRunner"],
 }
 
 if TYPE_CHECKING:
-    from .auto import AutoExportConfig, AutoHfExporter, get_hf_exporter, register_export_config, register_exporter
-    from .base import HfExporter
+    from .auto import AutoExportConfig, AutoHfExporter, register_backend
+    from .base import ExportedComponent, ExportedModel, HfExporter
     from .configs import DynamoConfig, ExecutorchConfig, ExportConfigMixin, ExportFormat, OnnxConfig, OpenVINOConfig
     from .exporter_dynamo import DynamoExporter
     from .exporter_executorch import ExecutorchExporter
     from .exporter_onnx import OnnxExporter
     from .exporter_openvino import OpenVINOExporter
+    from .metadata import ExportMetadata
     from .quantizers import (
         ExportQuantizer,
         NNCFOnnxQuantizer,
@@ -66,6 +69,7 @@ if TYPE_CHECKING:
         OnnxRuntimeStaticConfig,
         PT2EQuantizer,
     )
+    from .runners import ModelRunner
 else:
     import sys
 

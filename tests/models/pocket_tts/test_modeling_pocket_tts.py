@@ -26,6 +26,7 @@ from transformers import PocketTTSConfig, PocketTTSFlowHeadConfig
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin, with_grad
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -49,47 +50,43 @@ if is_torch_available():
 
 
 @require_torch
-class PocketTTSModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_prompt_frames=2,
-        is_training=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=64,
-        latent_dim=8,
-        flow_hidden_size=16,
-        flow_num_hidden_layers=2,
-        flow_type="lsd",
-    ):
+class PocketTTSModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_prompt_frames": 2,
+        "is_training": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 64,
+        "latent_dim": 8,
+        "flow_hidden_size": 16,
+        "flow_num_hidden_layers": 2,
+        "flow_type": "lsd",
+        "pad_token_id": 0,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        vocab_size = values["vocab_size"]
+        values["audio_prompt_token_id"] = vocab_size - 4
+        values["audio_latent_token_id"] = vocab_size - 3
+        values["audio_prompt_bos_token_id"] = vocab_size - 2
+        values["audio_bos_token_id"] = vocab_size - 1
+        # what precedes the voice placeholders, and the width of the voice latents
+        values["voice_prefix_ids"] = [values["audio_prompt_bos_token_id"]]
+        values["audio_prompt_dim"] = values["latent_dim"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
         self.model_class = PocketTTSForConditionalGeneration if is_torch_available() else None
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.num_prompt_frames = num_prompt_frames
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.latent_dim = latent_dim
-        self.flow_hidden_size = flow_hidden_size
-        self.flow_num_hidden_layers = flow_num_hidden_layers
-        self.flow_type = flow_type
-        self.pad_token_id = 0
-        self.audio_prompt_token_id = vocab_size - 4
-        self.audio_latent_token_id = vocab_size - 3
-        self.audio_prompt_bos_token_id = vocab_size - 2
-        self.audio_bos_token_id = vocab_size - 1
-        # what precedes the voice placeholders, and the width of the voice latents
-        self.voice_prefix_ids = [self.audio_prompt_bos_token_id]
-        self.audio_prompt_dim = latent_dim
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return PocketTTSConfig(
@@ -197,6 +194,8 @@ class PocketTTSModelTester:
 
 @require_torch
 class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = PocketTTSModelTester
+
     all_model_classes = (PocketTTSModel, PocketTTSForConditionalGeneration) if is_torch_available() else ()
     _is_composite = True
     test_resize_embeddings = False
@@ -216,7 +215,7 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             "test_beam",
             "test_sample_generate",
             "test_greedy_generate",
-            "test_generate_continue_from_past_key_values",
+            "test_generate_continue_from_cache",
             "test_generate_from_random_inputs_embeds",
             "test_generate_from_inputs_embeds",
             "test_generate_methods_with_logits_to_keep",
@@ -228,12 +227,22 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             "test_generate_continue_from_inputs_embeds",
             "test_generate_with_and_without_position_ids",  # reads token sequences; `test_generate` checks position_ids
             "test_generate_compilation_all_outputs",  # checks vocabulary-sized scores
+            # argmaxes the vocabulary logits to pick the next token, then compares against `generate`'s logits: here
+            # the logits are end-of-speech scores of width 1 and `generate` emits latents, so neither side applies
+            "test_flash_attention_2_continue_generate_with_position_ids",
         ]
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(
                     reason="Pocket TTS generates continuous latents; token-based generation tests do not apply."
                 )
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # the flow head is conditioned on the backbone hidden states, so it has to follow the widened `hidden_size`
+        config.flow_head_config.condition_dim = config.hidden_size
+        return config
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -269,11 +278,11 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             )
             voice_cache = model(
                 input_ids=input_ids[:, :prefix_length], audio_prompt_latents=voice, use_cache=True
-            ).past_key_values
+            ).cache
             from_cache = model.generate(
                 input_ids=input_ids[:, prefix_length:],
                 attention_mask=attention_mask[:, prefix_length:],
-                past_key_values=voice_cache,
+                cache=voice_cache,
                 **kwargs,
             )
         torch.testing.assert_close(from_cache.audio_latents, expected.audio_latents, atol=1e-5, rtol=1e-5)
@@ -572,7 +581,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def _prepare(self, processor, texts, voices=None, audio=None):
         """
         One conversation per text, the voice given as recordings (in the conversations), as precomputed latents, or
-        neither: the text only, the voice coming as a cache (`past_key_values`).
+        neither: the text only, the voice coming as a cache (`cache`).
         """
         conversations = []
         for row, text in enumerate(texts):
@@ -608,7 +617,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         input_ids = torch.cat([inputs["input_ids"], placeholders], dim=-1)
         audio_latents = expected_latents[None, :-1].to(model.device)
         if voice_cache is not None:
-            voice = {"past_key_values": voice_cache}
+            voice = {"cache": voice_cache}
             attention_mask = torch.ones(1, voice_cache.get_seq_length() + input_ids.shape[1], device=model.device)
         else:
             voice = {key: inputs[key] for key in ("audio_prompt_latents", "audio_prompt_latents_mask")}
@@ -631,7 +640,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         text, voice = self.CASES[0]
         # the shipped voice is the cache of its prefix: the prompt is the text only
         inputs = self._prepare(self.processor, [text])
-        output = self._generate(model, inputs, past_key_values=self._load_voices(model, [voice]), do_sample=False)
+        output = self._generate(model, inputs, cache=self._load_voices(model, [voice]), do_sample=False)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
         latents, eos_logits = self._teacher_forced(
@@ -656,7 +665,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # the positions follow the mask, which covers both
         inputs = self._prepare(self.processor, texts)
         voice_cache = self._load_voices(model, voices, inputs=inputs)
-        output = self._generate(model, inputs, past_key_values=voice_cache, do_sample=False)
+        output = self._generate(model, inputs, cache=voice_cache, do_sample=False)
 
         self.assertListEqual(
             output.audio_latents_mask.sum(-1).tolist(), [row["sanity"]["num_frames"] for row in metadata["rows"]]
@@ -677,9 +686,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         inputs = self._prepare(self.processor, [text])
         voice_cache = self._load_voices(model, [voice])
         torch.manual_seed(self.SAMPLED_SEED)
-        output = self._generate(
-            model, inputs, past_key_values=voice_cache, do_sample=True, temperature=self.SAMPLED_TEMPERATURE
-        )
+        output = self._generate(model, inputs, cache=voice_cache, do_sample=True, temperature=self.SAMPLED_TEMPERATURE)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
         # compared in the flow head's normalised space (the original's)
@@ -701,7 +708,7 @@ class PocketTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         text, voice = self.CASES[0]
         inputs = self._prepare(processor, [text])
         voice_cache = self._load_voices(model, [voice], checkpoint_name=self.drifting_checkpoint_name)
-        output = self._generate(model, inputs, past_key_values=voice_cache, do_sample=False)
+        output = self._generate(model, inputs, cache=voice_cache, do_sample=False)
 
         self.assertEqual(output.audio_latents_mask.sum().item(), metadata["sanity"]["num_frames"])
         # generation filled the cache: load a fresh one

@@ -14,11 +14,11 @@
 
 import unittest
 
-from transformers import FunAsrNanoConfig, FunAsrNanoEncoderConfig, Qwen3Config
+from transformers import FunAsrNanoConfig
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
 from ...alm_tester import ALMModelTest, ALMModelTester
-from ...test_modeling_common import is_torch_available, torch_device
+from ...test_modeling_common import floats_tensor, is_torch_available, torch_device
 
 
 if is_torch_available():
@@ -31,50 +31,36 @@ class FunAsrNanoModelTester(ALMModelTester):
     config_class = FunAsrNanoConfig
     base_model_class = FunAsrNanoModel
     conditional_generation_class = FunAsrNanoForConditionalGeneration
-    text_config_class = Qwen3Config
-    audio_config_class = FunAsrNanoEncoderConfig
+
     audio_config_key = "audio_config"
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # Fun-ASR-Nano audio features are (batch, time, feature_dim) after LFR.
-        kwargs.setdefault("feat_seq_length", 20)
-        kwargs.setdefault("num_mel_bins", 80)
-        kwargs.setdefault("num_stacked_frames", 1)
-        kwargs.setdefault("vocab_size", 100)
-        kwargs.setdefault("audio_token_id", 0)
-        kwargs.setdefault("is_training", False)
-
+        "feat_seq_length": 20,
+        "num_mel_bins": 80,
+        "num_stacked_frames": 1,
+        "vocab_size": 100,
+        "audio_token_id": 0,
+        "is_training": False,
         # Small text (Qwen3) and encoder configs
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("max_position_embeddings", 128)
-        kwargs.setdefault("num_timestamp_prediction_layers", 1)
-        kwargs.setdefault("fsmn_kernel_size", 5)
-        kwargs.setdefault("hidden_dropout", 0.0)
-
+        "hidden_size": 64,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 16,
+        "max_position_embeddings": 128,
+        "num_timestamp_prediction_layers": 1,
+        "fsmn_kernel_size": 5,
+        "hidden_dropout": 0.0,
         # Compatible adapter config for the text model
-        kwargs.setdefault(
-            "adaptor_config",
-            {
-                "hidden_size": kwargs["hidden_size"],
-                "intermediate_size": kwargs["hidden_size"] // 4,
-                "num_attention_heads": kwargs["num_attention_heads"],
-                "num_hidden_layers": kwargs["num_hidden_layers"],
-                "projector_hidden_size": kwargs["hidden_size"],
-            },
-        )
-
-        super().__init__(parent, **kwargs)
+        "adaptor_intermediate_size": 16,  # 64 // 4
+        "adaptor_projector_hidden_size": 64,
+    }
 
     def create_audio_features(self, batch_size: int | None = None):
         """Fun-ASR-Nano audio features are (batch, time, feature_dim) after LFR."""
-        from ...test_modeling_common import floats_tensor
-
         return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
 
     def get_audio_embeds_mask(self, audio_mask):

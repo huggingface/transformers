@@ -33,7 +33,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     logging,
-    requires_backends,
 )
 
 
@@ -252,7 +251,6 @@ class FuyuImageProcessor(TorchvisionBackend):
             patch_size (`SizeDict`, *optional*):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
         """
-        requires_backends(self, ["torch"])
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):
                 patch_size = self.patch_size

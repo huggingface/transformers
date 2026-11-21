@@ -42,16 +42,16 @@ class OlmoHybridModelTester(CausalLMModelTester):
         base_model_class = OlmoHybridModel
         causal_lm_class = OlmoHybridForCausalLM
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.layer_types = ["linear_attention", "full_attention"]
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 4
-        self.linear_key_head_dim = 8
-        self.linear_value_head_dim = 8
-        self.linear_conv_kernel_dim = 4
-        self.linear_allow_neg_eigval = False
-        self.hidden_act = "silu"
+    small_config_overrides = {
+        "layer_types": ["linear_attention", "full_attention"],
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 4,
+        "linear_key_head_dim": 8,
+        "linear_value_head_dim": 8,
+        "linear_conv_kernel_dim": 4,
+        "linear_allow_neg_eigval": False,
+        "hidden_act": "silu",
+    }
 
 
 @require_torch
@@ -92,16 +92,16 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
         multi_input = torch.cat([next_token, distractors], dim=1)
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)

@@ -18,8 +18,6 @@ import unittest
 from transformers import (
     AutoProcessor,
     MiniCPMV4_7Config,
-    MiniCPMV4_7VisionConfig,
-    Qwen3_5TextConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -114,51 +112,50 @@ GOLDEN_CANVAS_LAYOUTS = {
 class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniCPMV4_7Model
     config_class = MiniCPMV4_7Config
-    text_config_class = Qwen3_5TextConfig
-    vision_config_class = MiniCPMV4_7VisionConfig
+
     conditional_generation_class = MiniCPMV4_7ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("image_token_id", 100)
-        kwargs.setdefault("video_token_id", 101)
+    small_config_overrides = {
+        "batch_size": 2,
+        "image_token_id": 100,
+        "video_token_id": 101,
         # Canvas M-RoPE reads the visual span from these markers, so they must be real ids everywhere.
-        kwargs.setdefault("image_start_id", 10)
-        kwargs.setdefault("image_end_id", 11)
-        kwargs.setdefault("slice_start_id", 12)
-        kwargs.setdefault("slice_end_id", 13)
-        kwargs.setdefault("newline_id", 14)
+        "image_start_id": 10,
+        "image_end_id": 11,
+        "slice_start_id": 12,
+        "slice_end_id": 13,
+        "newline_id": 14,
         # patch_size=8, image_size=32 → 4×4 grid → vit_merger [2×2] → merger [1×1] = 1 token
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 8)
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 32)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("rope_parameters", {"type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1]})
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
+        "image_size": 64,
+        "patch_size": 8,
+        "num_image_tokens": 4,
+        "vocab_size": 256,
+        "hidden_size": 64,
+        "intermediate_size": 37,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 32,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "rope_parameters": {"type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1]},
+        "tie_word_embeddings": True,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
         # Qwen3.5 hybrid attention
-        kwargs.setdefault("layer_types", ["full_attention", "linear_attention"])
-        kwargs.setdefault("linear_conv_kernel_dim", 2)
-        kwargs.setdefault("linear_key_head_dim", 16)
-        kwargs.setdefault("linear_value_head_dim", 16)
-        kwargs.setdefault("linear_num_key_heads", 4)
-        kwargs.setdefault("linear_num_value_heads", 8)
+        "layer_types": ["full_attention", "linear_attention"],
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
         # Vision config overrides
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("vision_intermediate_size", 128)
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "vision_intermediate_size": 128,
         # MiniCPM-V 4.6 specific
-        kwargs.setdefault("insert_layer_id", 0)
-        super().__init__(parent, **kwargs)
+        "insert_layer_id": 0,
+    }
 
     @property
     def _canvas_marker_ids(self):
@@ -239,51 +236,6 @@ class MiniCPMV4_7VisionText2TextModelTester(VLMModelTester):
             "target_sizes": target_sizes,
             "mm_token_type_ids": self._mm_token_type_ids(input_ids),
         }
-
-    def get_config(self):
-        text_config = {
-            "model_type": "qwen3_5_text",
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "head_dim": self.head_dim,
-            "intermediate_size": self.intermediate_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "hidden_act": "silu",
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_parameters": self.rope_parameters,
-            "tie_word_embeddings": self.tie_word_embeddings,
-            "bos_token_id": self.bos_token_id,
-            "eos_token_id": self.eos_token_id,
-            "pad_token_id": self.pad_token_id,
-            "layer_types": self.layer_types,
-            "linear_conv_kernel_dim": self.linear_conv_kernel_dim,
-            "linear_key_head_dim": self.linear_key_head_dim,
-            "linear_value_head_dim": self.linear_value_head_dim,
-            "linear_num_key_heads": self.linear_num_key_heads,
-            "linear_num_value_heads": self.linear_num_value_heads,
-        }
-        vision_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "intermediate_size": self.vision_intermediate_size,
-            "image_size": self.image_size,
-            "patch_size": self.patch_size,
-            "num_channels": self.num_channels,
-            "hidden_act": self.vision_hidden_act,
-        }
-        return MiniCPMV4_7Config(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            image_size=self.image_size,
-            drop_vision_last_layer=False,
-            insert_layer_id=self.insert_layer_id,
-            **self._canvas_marker_ids,
-        )
 
 
 @require_torch
@@ -474,16 +426,14 @@ class MiniCPMV4_7ModelTest(VLMModelTest, unittest.TestCase):
         model = self.model_tester._mrope_model()
         model.rope_deltas = torch.tensor([[-3]], device=torch_device)
 
-        past_key_values = DynamicCache()
+        cache = DynamicCache()
         num_kv_heads = model.config.text_config.num_key_value_heads
         head_dim = model.config.text_config.head_dim
         prefilled = torch.zeros(1, num_kv_heads, 8, head_dim, device=torch_device)
-        past_key_values.update(prefilled, prefilled, 0)
+        cache.update(prefilled, prefilled, 0)
 
         inputs_embeds = torch.zeros(1, 1, model.config.text_config.hidden_size, device=torch_device)
-        position_ids = model.compute_3d_position_ids(
-            input_ids=None, inputs_embeds=inputs_embeds, past_key_values=past_key_values
-        )
+        position_ids = model.compute_3d_position_ids(input_ids=None, inputs_embeds=inputs_embeds, cache=cache)
 
         self.assertIsNotNone(position_ids)
         self.assertEqual(tuple(position_ids.shape), (3, 1, 1))
@@ -551,7 +501,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         messages = [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device)
 
         with torch.no_grad():
@@ -581,7 +536,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -589,7 +549,10 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the",
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 6)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                ("cuda", (8, 0)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                ("rocm", (9, 4)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
                 ("xpu", 5): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
             }
         ).get_expectation()
@@ -617,7 +580,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -625,7 +593,8 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me analyze the image. The video shows a tennis match or practice on an indoor tennis court. There's a player in the foreground,",
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 0)): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
                 ("xpu", 5): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
             }
         )  # fmt: skip
@@ -662,6 +631,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -669,8 +639,9 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
                 ("cuda", (8, 0)): [
-                    'So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the'
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a'
                 ] * 2,
                 ("xpu", 5): [
                     'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a',
@@ -711,6 +682,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -718,9 +690,18 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 6)): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- It’s",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
                 ("cuda", (8, 0)): [
-                    "So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the",
-                    "Hmm, the user is asking about my identity. I should clearly state I'm from the MiniCPM series, developed by ModelBest and OpenB",
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
+                ("rocm", (9, 4)): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
                 ],
                 ("xpu", 5): [
                     "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",

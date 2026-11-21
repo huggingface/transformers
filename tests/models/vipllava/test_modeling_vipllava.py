@@ -26,7 +26,6 @@ from transformers import (
     VipLlavaForConditionalGeneration,
     VipLlavaModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -37,6 +36,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -45,22 +45,19 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
-
 
 # Copied from transformers.tests.models.llava.test_modeling_llava.LlavaVisionText2TextModelTester with Llava->VipLlava
-class VipLlavaVisionText2TextModelTester:
+class VipLlavaVisionText2TextModelTester(ModelTesterConfigMixin):
     # Ignore copy
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        projector_hidden_act="gelu",
-        seq_length=7,
-        vision_feature_layers=[0, 0, 1, 1, 0],
-        text_config={
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_index": 0,
+        "projector_hidden_act": "gelu",
+        "seq_length": 7,
+        "vision_feature_layer": [0, 0, 1, 1, 0],
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -83,8 +80,8 @@ class VipLlavaVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "batch_size": 12,
             "image_size": 8,
             "patch_size": 2,
@@ -99,28 +96,30 @@ class VipLlavaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-    ):
+        "batch_size": 3,
+        "num_channels": 3,
+        "image_size": 336,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["num_image_tokens"] = (
+            values["vision_config"]["image_size"] // values["vision_config"]["patch_size"]
+        ) ** 2
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_layers = vision_feature_layers
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 336
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return VipLlavaConfig(
@@ -129,7 +128,7 @@ class VipLlavaVisionText2TextModelTester:
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
-            vision_feature_layers=self.vision_feature_layers,
+            vision_feature_layer=self.vision_feature_layer,
             image_seq_length=self.num_image_tokens,
         )
 
@@ -169,6 +168,8 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     Model tester for `VipLlavaForConditionalGeneration`.
     """
 
+    model_tester_class = VipLlavaVisionText2TextModelTester
+
     all_model_classes = (
         (
             VipLlavaModel,
@@ -184,7 +185,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)
-        common_properties = ["image_token_index", "vision_feature_layers", "image_seq_length"]
+        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
         self.config_tester = ConfigTester(
             self, config_class=VipLlavaConfig, has_text_modality=False, common_properties=common_properties
         )
@@ -231,20 +232,15 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             ([-1, -2],),
         ],
     )
-    def test_vision_feature_layers(self, vision_feature_layers):
+    def test_vision_feature_layers(self, vision_feature_layer):
         """
         Test that we can use either one vision feature layer, or a list of
         vision feature layers.
         """
-        # NOTE: vipllava uses vision_feature_layers instead of vision_feature_layer as the
-        # config key. The reason is that other llava classes supported one vision feature layer
-        # and added support for a list of layers with granite vision support, while vipllava
-        # originally supported multiple feature layers, and added support for a single layer for
-        # for compatibility reasons.
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.vision_feature_layers = vision_feature_layers
+        config.vision_feature_layer = vision_feature_layer
 
-        num_feature_layers = 1 if isinstance(vision_feature_layers, int) else len(vision_feature_layers)
+        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
         hidden_size = config.vision_config.hidden_size
         expected_features = hidden_size * num_feature_layers
 

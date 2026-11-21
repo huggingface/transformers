@@ -57,6 +57,8 @@ class HunYuanVLImageProcessingTester(ImageProcessingTester):
 @require_torchvision
 class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = HunYuanVLImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
 
     def assert_image_processor_output(self, output, batch_size):
         grid_h = grid_w = 2

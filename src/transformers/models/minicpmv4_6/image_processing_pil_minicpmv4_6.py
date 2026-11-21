@@ -96,6 +96,7 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
         image_size: tuple[int, int],
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str,
         allow_upscale: bool = False,
     ) -> tuple[int, int]:
         height, width = image_size
@@ -103,9 +104,10 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
             aspect_ratio = width / height
             height = int(scale_resolution / math.sqrt(aspect_ratio))
             width = int(height * aspect_ratio)
-        # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
-        best_width = ensure_divide(width, patch_size * 4)
-        best_height = ensure_divide(height, patch_size * 4)
+        # "4x" merges one 2×2 block, "16x" merges twice (ViT insert merger + downsample MLP)
+        merge_factor = 2 if downsample_mode == "4x" else 4
+        best_width = ensure_divide(width, patch_size * merge_factor)
+        best_height = ensure_divide(height, patch_size * merge_factor)
         return best_height, best_width
 
     def get_refine_size(
@@ -114,6 +116,7 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
         grid: list[int],
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str,
         allow_upscale: bool = False,
     ) -> tuple[int, int]:
         height, width = image_size
@@ -125,6 +128,7 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
             image_size=(refine_height / grid_y, refine_width / grid_x),
             scale_resolution=scale_resolution,
             patch_size=patch_size,
+            downsample_mode=downsample_mode,
             allow_upscale=allow_upscale,
         )
         return best_height * grid_y, best_width * grid_x
@@ -188,6 +192,7 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
         scale_resolution: int,
         patch_size: int,
         slice_mode: bool,
+        downsample_mode: str,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -206,7 +211,11 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
             source_height, source_width = image_size
             if do_resize:
                 source_height, source_width = self.find_best_resize(
-                    image_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
+                    image_size,
+                    scale_resolution,
+                    patch_size,
+                    downsample_mode=downsample_mode,
+                    allow_upscale=(best_grid is None),
                 )
                 source_img = self.resize(
                     image, size=SizeDict(height=source_height, width=source_width), resample=resample
@@ -225,7 +234,12 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
                 refine_h, refine_w = image_size
                 if do_resize:
                     refine_h, refine_w = self.get_refine_size(
-                        image_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                        image_size,
+                        best_grid,
+                        scale_resolution,
+                        patch_size,
+                        downsample_mode=downsample_mode,
+                        allow_upscale=True,
                     )
                     refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
 

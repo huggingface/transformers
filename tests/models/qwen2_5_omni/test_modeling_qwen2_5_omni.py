@@ -19,7 +19,6 @@ import unittest
 from io import BytesIO
 from urllib.request import urlopen
 
-import librosa
 import pytest
 import requests
 
@@ -35,9 +34,11 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_librosa_available,
     require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_flash_attn,
+    require_librosa,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -45,6 +46,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -54,6 +56,9 @@ from ...test_modeling_common import (
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
+if is_librosa_available():
+    import librosa
+
 if is_torch_available():
     import torch
 
@@ -61,16 +66,16 @@ if is_vision_available():
     from PIL import Image
 
 
-class Qwen2_5OmniThinkerForConditionalGenerationTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        feat_seq_length=30,
-        num_channels=3,
-        image_size=14,
-        seq_length=39,
-        vision_config={
+class Qwen2_5OmniThinkerForConditionalGenerationTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "feat_seq_length": 30,
+        "num_channels": 3,
+        "image_size": 14,
+        "seq_length": 39,
+        "vision_config": {
             "depth": 2,
             "embed_dim": 32,
             "hidden_act": "quick_gelu",
@@ -85,7 +90,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "fullatt_block_indexes": [0],
             "initializer_range": 0.02,
         },
-        audio_config={
+        "audio_config": {
             "d_model": 32,
             "encoder_attention_heads": 4,
             "encoder_ffn_dim": 32,
@@ -96,7 +101,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "n_window": 100,
             "output_dim": 32,
         },
-        text_config={
+        "text_config": {
             "rope_parameters": {"mrope_section": [1, 1, 2], "rope_type": "default", "type": "default"},
             "vocab_size": 99,
             "hidden_size": 32,
@@ -117,45 +122,36 @@ class Qwen2_5OmniThinkerForConditionalGenerationTester:
             "pad_token_id": 0,
             "initializer_range": 0.02,
         },
-        audio_token_index=1,
-        image_token_index=2,
-        video_token_index=3,
-        position_id_per_seconds=25,
-        seconds_per_chunk=2,
-        audio_start_token_id=4,
-        audio_end_token_id=5,
-        user_token_id=6,
-        vision_start_token_id=7,
-        vision_end_token_id=8,
-        initializer_range=0.02,
-    ):
-        self.parent = parent
-        self.audio_config = audio_config
-        self.vision_config = vision_config
-        self.text_config = text_config
-        self.audio_token_index = audio_token_index
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
-        self.position_id_per_seconds = position_id_per_seconds
-        self.seconds_per_chunk = seconds_per_chunk
-        self.audio_start_token_id = audio_start_token_id
-        self.audio_end_token_id = audio_end_token_id
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-        self.user_token_id = user_token_id
-        self.initializer_range = initializer_range
-        self.batch_size = batch_size
-        self.feat_seq_length = feat_seq_length
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.seq_length = seq_length
-        self.is_training = False
+        "audio_token_index": 1,
+        "image_token_index": 2,
+        "video_token_index": 3,
+        "position_id_per_seconds": 25,
+        "seconds_per_chunk": 2,
+        "audio_start_token_id": 4,
+        "audio_end_token_id": 5,
+        "user_token_id": 6,
+        "vision_start_token_id": 7,
+        "vision_end_token_id": 8,
+        "initializer_range": 0.02,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["is_training"] = False
 
         # Used from `self.model_tester` by common model tests
-        self.num_hidden_layers = self.text_config["num_hidden_layers"]
-        self.hidden_size = self.text_config["hidden_size"]
-        self.num_attention_heads = self.text_config["num_attention_heads"]
-        self.vocab_size = self.text_config["vocab_size"]
+        text_config = values["text_config"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["vocab_size"] = text_config["vocab_size"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Qwen2_5OmniThinkerConfig(
@@ -257,6 +253,8 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
     """
     Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
     """
+
+    model_tester_class = Qwen2_5OmniThinkerForConditionalGenerationTester
 
     all_model_classes = (
         (
@@ -604,6 +602,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
 
 
 @require_torch
+@require_librosa
 class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -685,7 +684,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(
-            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+            **inputs, thinker_temperature=0, thinker_do_sample=False, generation_mode="text", thinker_max_new_tokens=20
         )
 
         EXPECTED_DECODED_TEXT = Expectations({
@@ -710,7 +709,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=torch.bfloat16)
 
         output = model.generate(
-            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+            **inputs, thinker_temperature=0, thinker_do_sample=False, generation_mode="text", thinker_max_new_tokens=20
         )
 
         EXPECTED_DECODED_TEXTS = Expectations(
@@ -758,7 +757,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=torch.bfloat16)
 
         output = model.generate(
-            **inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False, thinker_max_new_tokens=20
+            **inputs, thinker_temperature=0, thinker_do_sample=False, generation_mode="text", thinker_max_new_tokens=20
         )
 
         EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.\nuser\nHow about this one?\nassistant\nThe sound is a cough."
@@ -1006,7 +1005,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device)
 
-        output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, return_audio=False)
+        output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False, generation_mode="text")
 
         EXPECTED_DECODED_TEXT = Expectations({
             (None, None): "system\nYou are a helpful assistant.\nuser\nWhat's that sound and what kind of dog is this?\nassistant\nThe sound is glass shattering, and the dog appears to be a Labrador Retriever.",

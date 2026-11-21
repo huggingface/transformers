@@ -41,6 +41,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_jina_embeddings_v3 import JinaEmbeddingsV3Config
@@ -65,7 +66,7 @@ class JinaEmbeddingsV3Embeddings(nn.Module):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         embeddings = inputs_embeds
         if inputs_embeds is None:
@@ -122,7 +123,6 @@ class JinaEmbeddingsV3RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -211,6 +211,7 @@ class JinaEmbeddingsV3Attention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -279,7 +280,7 @@ class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
         attention_output, _ = self.self_attn(
             hidden_states,
@@ -314,7 +315,7 @@ class JinaEmbeddingsV3Pooler(nn.Module):
 
 @auto_docstring
 class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
-    config_class = JinaEmbeddingsV3Config
+    config: JinaEmbeddingsV3Config
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -326,7 +327,6 @@ class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
         "attentions": JinaEmbeddingsV3Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -452,7 +452,7 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config=config)
 
         self.lm_head = JinaEmbeddingsV3LMHead(config)
@@ -472,10 +472,10 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
@@ -547,7 +547,7 @@ class JinaEmbeddingsV3ClassificationHead(nn.Module):
     """
 )
 class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -563,10 +563,10 @@ class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel)
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
@@ -628,7 +628,7 @@ class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel)
 
 @auto_docstring
 class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         classifier_dropout = (
@@ -647,10 +647,10 @@ class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
@@ -697,7 +697,7 @@ class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
 
 @auto_docstring
 class JinaEmbeddingsV3ForQuestionAnswering(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
@@ -712,10 +712,10 @@ class JinaEmbeddingsV3ForQuestionAnswering(JinaEmbeddingsV3PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],

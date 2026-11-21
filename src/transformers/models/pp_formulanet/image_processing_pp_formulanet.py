@@ -28,7 +28,6 @@ from ...image_transforms import get_resize_output_image_size, group_images_by_sh
 from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 
 
 class PPFormulaNetImageProcessorKwargs(ImagesKwargs, total=False):
@@ -47,7 +46,6 @@ class PPFormulaNetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPFormulaNetImageProcessor(TorchvisionBackend):
     valid_kwargs = PPFormulaNetImageProcessorKwargs
     resample = PILImageResampling.BILINEAR

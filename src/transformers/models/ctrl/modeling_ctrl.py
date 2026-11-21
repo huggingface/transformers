@@ -34,6 +34,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_ctrl import CTRLConfig
@@ -214,7 +215,7 @@ class CTRLPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CTRLModel(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
 
         self.d_model_size = config.n_embd
@@ -242,14 +243,15 @@ class CTRLModel(CTRLPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
@@ -286,10 +288,10 @@ class CTRLModel(CTRLPreTrainedModel):
         batch_size = inputs_embeds.shape[0]
         device = inputs_embeds.device
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
-        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_length = cache.get_seq_length() if cache is not None else 0
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
@@ -307,7 +309,7 @@ class CTRLModel(CTRLPreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -324,7 +326,7 @@ class CTRLModel(CTRLPreTrainedModel):
         for h in self.h:
             hidden_states = h(
                 hidden_states,
-                layer_past=past_key_values,
+                layer_past=cache,
                 attention_mask=causal_mask,
                 **kwargs,
             )
@@ -333,7 +335,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 
@@ -346,7 +348,7 @@ class CTRLModel(CTRLPreTrainedModel):
 class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.w.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
         self.transformer = CTRLModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
@@ -356,14 +358,15 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -402,7 +405,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         ```"""
         transformer_outputs = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -427,19 +430,18 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, use_cache=None, is_first_iteration=False, **kwargs
-    ):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def prepare_inputs_for_generation(self, input_ids, cache=None, use_cache=None, is_first_iteration=False, **kwargs):
         # Overwritten -- `token_type_ids` are created in custom way inside model`
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
             **kwargs,
@@ -463,7 +465,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     """
 )
 class CTRLForSequenceClassification(CTRLPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CTRLConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = CTRLModel(config)
@@ -474,14 +476,15 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -560,7 +563,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         transformer_outputs = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,

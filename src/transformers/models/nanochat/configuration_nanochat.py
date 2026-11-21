@@ -40,7 +40,6 @@ class NanoChatConfig(PreTrainedConfig):
     ```"""
 
     model_type = "nanochat"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

@@ -41,9 +41,9 @@ class Kolibri1ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Kolibri1Model
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.layer_types = ["sliding_attention", "full_attention"]
+    small_config_overrides = {
+        "layer_types": ["sliding_attention", "full_attention"],
+    }
 
 
 @require_torch
