@@ -519,6 +519,19 @@ class ExpertsOffloadStore:
         return self.order[index + 1 : index + 1 + self.lookahead]
 
 
+def _prefetch_to_mps_supported() -> bool:
+    """Whether safetensors' `prefetch` can read into existing MPS tensors (`device="mps"`, `out=`)."""
+    import inspect
+
+    prefetch = getattr(safe_open, "prefetch", None)
+    if prefetch is None:
+        return False
+    try:
+        return "out" in inspect.signature(prefetch).parameters  # PyO3 methods expose their text signature
+    except (TypeError, ValueError):
+        return False
+
+
 def _read_into(job) -> bool:
     fd, address, size, offset = job
     return os.preadv(fd, [memoryview((ctypes.c_char * size).from_address(address)).cast("B")], offset) == size
@@ -537,6 +550,10 @@ class _MPSHostRouter:
     def __init__(self, store, ext):
         self.store, self.ext = store, ext
         self.slot_bases = {}  # (pool, param) -> (CPU address of slot 0, slot bytes)
+        self.keys: dict[tuple[str, str], tuple[str, str]] = {}  # (layer, param) -> (file, checkpoint key)
+        self.handles = {}  # file -> safe_open handle reading misses straight into the slots
+        # safetensors >= 0.9 with `prefetch(device="mps", out=...)` (safetensors#996): reads by its own threads
+        self.prefetch_to_mps = _prefetch_to_mps_supported()
         self.stamps: dict[int, torch.Tensor] = {}  # pool -> last use per slot (job counter), written by the hit path
         self.owners: dict[int, dict[int, tuple[str, int]]] = {}  # pool -> slot -> (layer, expert)
         self.deferred: list[tuple[str, list[int]]] = []  # resolved calls whose pass-2 entries reset later
@@ -575,6 +592,7 @@ class _MPSHostRouter:
                 rows = info["shape"][0]
                 row_bytes = (info["data_offsets"][1] - info["data_offsets"][0]) // rows
                 self.layout[(layer, param)] = (self.files[path], start + info["data_offsets"][0], row_bytes)
+                self.keys[(layer, param)] = (path, key)
 
     def guess(self, layer, hidden_states, top_k_index):
         """The next streamed layer's experts as its router would pick them on this layer's input (decode only; an
@@ -673,16 +691,30 @@ class _MPSHostRouter:
                 pass2[e] = pool.num_slots
         self.deferred = keep
 
-    def _install(self, pool, layer, e, keep):
-        """Read expert `e` of `layer` into a slot and publish it (data first, then the table entry)."""
-        slot = self._evict_into(pool, (layer, e), keep)
+    def _install_many(self, pool, layer, experts, keep):
+        """Read `experts` of `layer` into slots and publish them (data first, then the table entries): one
+        safetensors `prefetch` per bank straight into the slots (GIL released), else `preadv` per row."""
+        slots = {e: self._evict_into(pool, (layer, e), keep) for e in experts}
         for param in pool.layout:
-            fd, base, row_bytes = self.layout[(layer, param)]
-            if not _read_into((fd, self._slot_address(pool, param, slot), row_bytes, base + e * row_bytes)):
-                raise OSError(f"short read of expert {e} of {layer}")
-        self.store.reads += 1
+            if self.prefetch_to_mps:
+                path, key = self.keys[(layer, param)]
+                handle = self.handles.get(path)
+                if handle is None:
+                    handle = self.handles[path] = safe_open(path, framework="pt", device="mps")
+                bank = pool.banks[param]
+                rows = [slice(e, e + 1) for e in experts]
+                out = [bank[slots[e] : slots[e] + 1] for e in experts]
+                handle.prefetch({key: rows}, device="mps", threads=8, out={key: out}).take(key)
+            else:
+                fd, base, row_bytes = self.layout[(layer, param)]
+                for e in experts:
+                    if not _read_into(
+                        (fd, self._slot_address(pool, param, slots[e]), row_bytes, base + e * row_bytes)
+                    ):
+                        raise OSError(f"short read of expert {e} of {layer}")
+        self.store.reads += len(experts)
         self._publish(pool)
-        return slot
+        return slots
 
     def _publish(self, pool):
         """The changed slot tables (installs, and the entries of evicted experts) to the device. Safe at any time: a
@@ -716,9 +748,10 @@ class _MPSHostRouter:
             pass2 = (ctypes.c_int64 * pool.tables[layer].numel()).from_address(
                 self.ext.cpu_address(store.pass2_tables[layer])
             )
+            # Installed since pass 1 gathered (read ahead): reuse; the others are read now, in one batch
+            installed = self._install_many(pool, layer, [e for e in misses if (layer, e) not in pool.cache], keep)
             for e in misses:
-                slot = pool.cache.get((layer, e))  # installed since pass 1 gathered (read ahead): reuse it
-                pass2[e] = self._install(pool, layer, e, keep) if slot is None else slot
+                pass2[e] = installed.get(e, pool.cache.get((layer, e)))
             stamps[[pool.cache[(layer, e)] for e in set(experts)]] = counter
             ctypes.memset(address, 0xFF, (2 * n + g) * 4)
             self.ext.cpu_signal(self.event, counter)
@@ -733,10 +766,10 @@ class _MPSHostRouter:
             npool = store.pool_of[nxt]
             self._stamps(npool)
             wanted = {(nxt, e) for e in guesses}
-            for e in dict.fromkeys(guesses):
-                if (nxt, e) not in npool.cache:
-                    self._install(npool, nxt, e, keep | wanted)
-                    self.ahead_reads += 1
+            absent = [e for e in dict.fromkeys(guesses) if (nxt, e) not in npool.cache]
+            if absent:
+                self._install_many(npool, nxt, absent, keep | wanted)
+                self.ahead_reads += len(absent)
         self.work_seconds += time.perf_counter() - landed
         self.jobs_done += 1
 
