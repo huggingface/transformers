@@ -20,6 +20,7 @@ import pytest
 import torch
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
+from torch.distributed.tensor import DTensor
 
 from transformers import (
     AutoModelForCausalLM,
@@ -112,6 +113,16 @@ class TestUlyssesAttention(unittest.TestCase):
         ):
             with self.subTest(message, sp_size=sp_size), self.assertRaisesRegex(ValueError, message):
                 UlyssesAttention().install_forward(MistralAttention(config, layer_idx=0), _mesh(sp_size))
+
+    @unittest.skipUnless(is_torch_greater_or_equal("2.9"), "Sequence parallelism requires torch>=2.9")
+    def test_refuses_heads_the_ranks_cannot_split_under_tensor_parallelism(self):
+        # tensor parallelism leaves `num_heads / tp_size` heads on each rank, and those are what Ulysses splits
+        for num_kv_heads, sp_size in ((2, 2), (4, 4)):
+            config = _config(num_attention_heads=8, num_key_value_heads=num_kv_heads)
+            config.distributed_config = DistributedConfig(tp_size=2, sp_size=sp_size)
+            with self.subTest(num_kv_heads=num_kv_heads, sp_size=sp_size):
+                with self.assertRaisesRegex(ValueError, r"`sp_size \* tp_size` must divide"):
+                    UlyssesAttention().install_forward(MistralAttention(config, layer_idx=0), _mesh(sp_size))
 
 
 class TestSplitSequenceParallel(unittest.TestCase):
@@ -297,6 +308,44 @@ def _compare_with_unsharded(init_dir, batch, distributed_config, keep=None):
         torch.testing.assert_close(grad, expected, rtol=SP_RTOL, atol=SP_ATOL, msg=f"Gradient mismatch for {name}")
 
 
+def _test_matches_unsharded_with_tp(rank, tp_size, sp_size, fsdp_size, packed):
+    """The tp ranks hold the same batch and the same sp slice, and split the heads before sp splits them again."""
+    # 4 attention heads and 4 key/value heads, both divisible by `tp_size * sp_size` = 4
+    config = _config(num_key_value_heads=4)
+    batch_size, seq_len = 2, 8
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        input_ids, position_ids = _tiny_batch(config, batch_size * fsdp_size, seq_len, packed)
+        distributed_config = DistributedConfig(tp_size=tp_size, sp_size=sp_size, fsdp_size=fsdp_size)
+        batch = {"input_ids": input_ids, "labels": input_ids.clone(), "use_cache": False}
+        if position_ids is not None:
+            batch["position_ids"] = position_ids
+        _compare_with_unsharded(init_dir, batch, distributed_config)
+        dist.barrier()
+
+
+def _test_tp_and_sp_compose(rank, tp_size, sp_size):
+    """The tp plan shards the projections of an attention layer, the sp plan registers its attention call."""
+    config = _config(num_key_value_heads=4)
+    with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
+        distributed_config = DistributedConfig(tp_size=tp_size, sp_size=sp_size)
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
+        attention = model.model.layers[0].self_attn
+        # tensor parallelism sharded the projections of the very module whose forward sequence parallelism wrapped
+        assert isinstance(attention.q_proj.weight, DTensor), type(attention.q_proj.weight)
+        assert hasattr(attention.forward, "__wrapped__"), "the attention style was not installed"
+
+        # and one forward goes through both: the logits of this rank's slice match the unsharded run
+        input_ids, _ = _tiny_batch(config, 2, 8)
+        with torch.no_grad():
+            logits = model(input_ids=input_ids).logits
+        reference = AutoModelForCausalLM.from_pretrained(init_dir)
+        with torch.no_grad():
+            expected = reference(input_ids=input_ids).logits
+        sp_rank = model._mesh_manager.get_mesh("sp").get_local_rank()
+        torch.testing.assert_close(logits, expected.chunk(sp_size, dim=1)[sp_rank], rtol=SP_RTOL, atol=SP_ATOL)
+        dist.barrier()
+
+
 def _test_matches_unsharded(rank, sp_size, fsdp_size, dp_replicate_size, packed, seq_len=8):
     config = _config()
     if sp_size > 2:  # Ulysses splits the heads over the ranks, so four ranks need four key/value heads
@@ -386,15 +435,16 @@ def _test_custom_attention_style(rank, sp_size):
         dist.barrier()
 
 
-def _test_save_pretrained(rank, sp_size):
+def _test_save_pretrained(rank, sp_size, tp_size=1):
     """Weights saved from a sequence parallel model reload without a distributed config, unchanged."""
-    config = _config()
+    config = _config(num_key_value_heads=4 if tp_size > 1 else 2)
     with _deterministic_init_model_dir(rank, config, torch.float32) as init_dir:
         reference = AutoModelForCausalLM.from_pretrained(init_dir)
         expected = {name: value.clone() for name, value in reference.state_dict().items()}
         del reference
 
-        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=DistributedConfig(sp_size=sp_size))
+        distributed_config = DistributedConfig(sp_size=sp_size, tp_size=tp_size)
+        model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
         with _distributed_tmpdir(rank) as save_dir:
             model.save_pretrained(save_dir, is_main_process=(rank == 0))
             dist.barrier()
@@ -428,10 +478,9 @@ def _test_save_load_distributed_checkpoint(rank, sp_size):
 
 @unittest.skipUnless(is_torch_greater_or_equal("2.9"), "Sequence parallelism requires torch>=2.9")
 class TestSequenceParallelConfig(unittest.TestCase):
-    def test_refuses_other_parallelisms(self):
-        for other in ({"pp_size": 2}, {"tp_size": 2}, {"ep_size": 2}):
-            with self.subTest(**other), self.assertRaisesRegex(ValueError, "not supported yet with"):
-                DistributedConfig(sp_size=2, **other)
+    def test_refuses_pipeline_parallelism(self):
+        with self.assertRaisesRegex(ValueError, "not supported yet with `pp_size`"):
+            DistributedConfig(sp_size=2, pp_size=2)
 
     def test_refuses_a_model_without_a_sp_plan(self):
         config = _config()
@@ -548,6 +597,14 @@ class TestSequenceParallelModel(unittest.TestCase):
         )
         run_distributed(world_size=2, backend="gloo")(_test_padded)(2, config, False)
 
+    def test_matches_unsharded_with_tensor_parallelism(self):
+        for packed in (False, True):
+            with self.subTest(packed=packed):
+                run_distributed(world_size=4, backend="gloo")(_test_matches_unsharded_with_tp)(2, 2, 1, packed)
+
+    def test_tensor_parallelism_and_sequence_parallelism_compose(self):
+        run_distributed(world_size=4, backend="gloo")(_test_tp_and_sp_compose)(2, 2)
+
     def test_inputs_embeds(self):
         run_distributed(world_size=2, backend="gloo")(_test_inputs_embeds)(2)
 
@@ -556,6 +613,9 @@ class TestSequenceParallelModel(unittest.TestCase):
 
     def test_save_pretrained(self):
         run_distributed(world_size=2, backend="gloo")(_test_save_pretrained)(2)
+
+    def test_save_pretrained_with_tensor_parallelism(self):
+        run_distributed(world_size=4, backend="gloo")(_test_save_pretrained)(2, 2)
 
     def test_save_load_distributed_checkpoint(self):
         run_distributed(world_size=2, backend="gloo")(_test_save_load_distributed_checkpoint)(2)
