@@ -48,9 +48,9 @@ kernel void causal_conv1d_step(device const T* x, device S* state, device const 
 // Gated delta rule, token by token. One threadgroup per (batch, value head), one thread per value column, each
 // holding its column of the [DK, DV] state in registers:
 //   S = S * exp(g_t);  S += k_t (x) (v_t - S^T k_t) * beta_t;  o_t = S^T q_t / sqrt(DK)
-template <typename T, int DK>
+template <typename T, typename S, int DK>
 kernel void gated_delta_rule(device const T* q, device const T* k, device const T* v, device const float* g,
-                             device const T* beta, device float* state, device T* out,
+                             device const T* beta, device S* state, device T* out,
                              constant int& L, constant int& HK, constant int& HV, constant int& DV,
                              constant int& l2norm, uint2 lane [[thread_position_in_threadgroup]],
                              uint2 group [[threadgroup_position_in_grid]]) {
@@ -62,8 +62,8 @@ kernel void gated_delta_rule(device const T* q, device const T* k, device const 
     threadgroup float norms[2];
     threadgroup float red[SLICES][256];
     float s[R];
-    device float* st = state + ((b * HV + h) * DK + slice * R) * DV + col;
-    for (int i = 0; i < R; ++i) s[i] = st[i * DV];
+    device S* st = state + ((b * HV + h) * DK + slice * R) * DV + col;
+    for (int i = 0; i < R; ++i) s[i] = float(st[i * DV]);
     int tid = slice * DV + col, nthreads = SLICES * DV;
     for (int t = 0; t < L; ++t) {
         int qk = ((b * L + t) * HK + hk) * DK;
@@ -96,7 +96,7 @@ kernel void gated_delta_rule(device const T* q, device const T* k, device const 
         }
         threadgroup_barrier(mem_flags::mem_threadgroup);
     }
-    for (int i = 0; i < R; ++i) st[i * DV] = s[i];
+    for (int i = 0; i < R; ++i) st[i * DV] = S(s[i]);
 }
 
 #define CONV(T) \\
@@ -106,14 +106,15 @@ template [[host_name("causal_conv1d_fwd_" #T)]] kernel void causal_conv1d_fwd<T>
 template [[host_name("causal_conv1d_step_" #T "_" #S)]] kernel void causal_conv1d_step<T, S>(device const T*, \\
     device S*, device const T*, device const T*, device T*, constant int&, constant int&, constant int&, \\
     constant int&, constant int&, uint2);
-#define GDR(T, D) \\
-template [[host_name("gated_delta_rule_" #T "_" #D)]] kernel void gated_delta_rule<T, D>(device const T*, \\
-    device const T*, device const T*, device const float*, device const T*, device float*, device T*, \\
+#define GDR(T, S, D) \\
+template [[host_name("gated_delta_rule_" #T "_" #S "_" #D)]] kernel void gated_delta_rule<T, S, D>(device const T*, \\
+    device const T*, device const T*, device const float*, device const T*, device S*, device T*, \\
     constant int&, constant int&, constant int&, constant int&, constant int&, uint2, uint2);
 CONV(float) CONV(half) CONV(bfloat)
 STEP(float, float) STEP(half, half) STEP(half, float) STEP(bfloat, bfloat) STEP(bfloat, float)
-GDR(float, 64) GDR(half, 64) GDR(bfloat, 64) GDR(float, 128) GDR(half, 128) GDR(bfloat, 128)
-GDR(float, 256) GDR(half, 256) GDR(bfloat, 256)
+#define GDR_ALL(D) GDR(float, float, D) GDR(half, float, D) GDR(bfloat, float, D) GDR(half, half, D) \\
+    GDR(bfloat, bfloat, D)
+GDR_ALL(64) GDR_ALL(128) GDR_ALL(256)
 """
 
 _NAMES = {torch.float32: "float", torch.float16: "half", torch.bfloat16: "bfloat"}
@@ -174,12 +175,13 @@ def _gdr(
     q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, g: torch.Tensor, beta: torch.Tensor, state: torch.Tensor,
     l2norm: int,
 ) -> torch.Tensor:  # fmt: skip
-    """Advances the float32 contiguous `state` [B, HV, DK, DV] in place; returns the outputs."""
+    """Advances the contiguous `state` [B, HV, DK, DV] (float32, or the activations' dtype) in place, computing in
+    float32; returns the outputs."""
     batch, length, k_heads, k_dim = k.shape
     v_heads, v_dim = v.shape[-2:]
     dtype = v.dtype
     out = torch.empty_like(v)
-    getattr(_lib(), f"gated_delta_rule_{_NAMES[dtype]}_{k_dim}")(
+    getattr(_lib(), f"gated_delta_rule_{_NAMES[dtype]}_{_NAMES[state.dtype]}_{k_dim}")(
         q, k, v, g, beta, state, out, length, k_heads, v_heads, v_dim, l2norm,
         threads=(v_heads * v_dim, batch * 4), group_size=(v_dim, 4),  # 4 = SLICES in the kernel
     )  # fmt: skip
@@ -214,15 +216,17 @@ def gated_delta_rule(
         raise ValueError("Metal gated delta rule does not keep packed sequences apart (`cu_seqlens`)")
     batch, _, _, k_dim = key.shape
     v_heads, v_dim = value.shape[-2:]
+    dtype = value.dtype
     if initial_state is None:
-        state = torch.zeros(batch, v_heads, k_dim, v_dim, device=value.device, dtype=torch.float32)
-    elif initial_state.dtype == torch.float32 and initial_state.is_contiguous():
+        # In the activations' dtype: the cache keeps it (half the state traffic of float32); the kernel computes in
+        # float32 and rounds once per token (outputs within ~5e-3 of a float32 state after 2048 tokens, no drift)
+        state = torch.zeros(batch, v_heads, k_dim, v_dim, device=value.device, dtype=dtype)
+    elif initial_state.dtype in (torch.float32, dtype) and initial_state.is_contiguous():
         # Advanced in place: a cache's state buffer, which the cache's `copy_` of the result then skips (same tensor)
         state = initial_state
     else:
         state = initial_state.float().contiguous()
     # Contiguous / dtype casts here, where compile fuses them into the producers, not inside the op
-    dtype = value.dtype
     query, key = query.to(dtype).contiguous(), key.to(dtype).contiguous()
     value, beta, g = value.contiguous(), beta.to(dtype).contiguous(), g.float().contiguous()
     out = _gdr(query, key, value, g, beta, state, int(use_qk_l2norm_in_kernel))
