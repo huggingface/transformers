@@ -223,7 +223,16 @@ class PagedAttentionCache:
         # The cache holds two trash sectors followed by the data sectors. The trash sectors are never allocated.
         non_trash_bytes = self.num_sectors * self.bytes_per_sector
         trash_bytes = 2 * self.bytes_per_sector
-        self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
+        self._vmm = None
+        if os.environ.get("CB_CACHE_VMM", "0") == "1":
+            # [scratch, gap4 pause] a fixed virtual address range, mapped chunk by chunk (see `_proto_vmm.py`)
+            from ._proto_vmm import VmmBuffer
+
+            chunk_bytes = int(float(os.environ.get("CB_CACHE_VMM_CHUNK_MIB", 64)) * 2**20)
+            self._vmm = VmmBuffer(non_trash_bytes + trash_bytes, torch.device(self.device), chunk_bytes)
+            self.cache_tensor = self._vmm.make_tensor().zero_()
+        else:
+            self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
         self._host_copy: torch.Tensor | None = None  # where the cache waits while it is released, see release_memory
         # Cache pool, which keeps track of the free sectors and their allocation
         self.pool = CachePool(self.num_sectors, len(self.cache_allocators))
@@ -504,6 +513,17 @@ class PagedAttentionCache:
         """Copies the cache tensor to host memory and frees its GPU memory, returning the number of bytes released.
         The tensor and every view of it stay valid objects and the requests keep their blocks, but nothing may read or
         write the cache until `restore_memory` copies it back."""
+        if self._vmm is not None:
+            # [scratch, gap4 pause] the chunks holding blocks in use stay mapped where they are, the others go back to
+            # the device. Prefix-only blocks are dropped first, as with CB_RELEASE_LIVE_ONLY
+            self.evict_cached_blocks()
+            chunk = self._vmm.chunk
+            keep = set()
+            for begin, end in self._live_byte_ranges():
+                keep.update(range(begin // chunk, (end - 1) // chunk + 1))
+            torch.accelerator.synchronize()  # nothing in flight may touch a chunk once it is unmapped
+            self._released_address = self.cache_tensor.data_ptr()
+            return self._vmm.unmap_chunks([i for i in range(self._vmm.num_chunks) if i not in keep])
         if _RELEASE_LIVE_ONLY:
             # WP train: only the blocks in use go to the host, so host memory follows the requests in flight instead
             # of the cache size (the whole cache, pinned, is 139 GiB per rank on GLM-5.3 at TP8). Prefix-only blocks
@@ -540,6 +560,22 @@ class PagedAttentionCache:
         # large enough for the cache: hand them back to the device first
         if hasattr(device_module := torch.get_device_module(), "empty_cache"):
             device_module.empty_cache()
+        if self._vmm is not None:
+            # [scratch, gap4 pause] new physical memory at the same addresses, zeroed as the cache was created (the
+            # read trash must be zeros, and no bytes of the caller's use of the memory may sit in the cache)
+            chunks = self._vmm.unmapped_chunks()
+            self._vmm.map_chunks(chunks)
+            runs = []  # [first, last + 1) runs of consecutive chunks, one memset each
+            for i in chunks:
+                if runs and runs[-1][1] == i:
+                    runs[-1][1] = i + 1
+                else:
+                    runs.append([i, i + 1])
+            chunk, numel = self._vmm.chunk, self.cache_tensor.numel()
+            for first, end in runs:
+                self.cache_tensor[first * chunk : min(end * chunk, numel)].zero_()
+            torch.accelerator.synchronize()
+            return True
         self.cache_tensor.untyped_storage().resize_(self.cache_tensor.numel())
         if _RELEASE_LIVE_ONLY:
             # what was not kept comes back as zeros, as the cache was created: the read trash must be zeros, and no
