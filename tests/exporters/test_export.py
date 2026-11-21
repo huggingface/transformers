@@ -24,6 +24,7 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
+from transformers.exporters.decompose import decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
@@ -31,9 +32,7 @@ from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExp
 from transformers.exporters.utils import (
     cast_leaf_tensors,
     decompose_for_generation,
-    decompose_multimodal,
     get_leaf_tensors,
-    is_multimodal,
     module_device,
     module_dtype,
     openvino_feed,
@@ -915,8 +914,8 @@ class ExportTesterMixin:
         Returns:
             `(components, new_inputs)`: `{name: (model, inputs)}`, one entry per component (a whole model, or
             decomposed submodels for a multimodal model), each paired with the forward inputs to export it with; and
-            `{name: inputs}` (`None` for a multimodal split), new ones to run the export on, drawn again from the model
-            tester with the same sizes, or other sizes when `dynamic`.
+            `{name: inputs}`, new ones to run the export on, drawn again from the model tester with the same sizes, or
+            other sizes when `dynamic`.
         """
         config, inputs_dict = self._model_tester_inputs(model_class, self.model_tester)
 
@@ -925,11 +924,7 @@ class ExportTesterMixin:
         set_model_for_less_flaky_test(model)
 
         components = self._split_for_export(model, inputs_dict)
-        # The multimodal split precomputes some component inputs (`cu_seqlens`, M-RoPE positions) for the traced inputs
-        # only: new inputs check whole models.
-        new_inputs = None
-        if not is_multimodal(model):
-            new_inputs = {name: inputs for name, (_, inputs) in self._new_inputs(model_class, model, dynamic).items()}
+        new_inputs = {name: inputs for name, (_, inputs) in self._new_inputs(model_class, model, dynamic).items()}
         return components, new_inputs
 
     def _new_inputs(self, model_class, model, dynamic):
@@ -959,7 +954,8 @@ class ExportTesterMixin:
         """`{name: (model, inputs)}`: `model` on `inputs_dict`, decomposed into its components when multimodal."""
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
         if is_multimodal(model):
-            return decompose_multimodal(model, inputs_dict)
+            components = decompose_multimodal(model, inputs_dict)
+            return {name: (component.module, component.inputs) for name, component in components.items()}
         return {"model": (model, inputs_dict)}
 
     def _collect_eager_outputs(self, components, inputs=None):
@@ -1032,8 +1028,7 @@ class ExportTesterMixin:
 
             components, new_inputs = self._prepare_export_model_and_inputs(model_class, dynamic=dynamic)
             eager_outputs, eager_types = self._collect_eager_outputs(components)
-            if new_inputs is not None:
-                new_eager_outputs, new_eager_types = self._collect_eager_outputs(components, new_inputs)
+            new_eager_outputs, new_eager_types = self._collect_eager_outputs(components, new_inputs)
             check_exactness = not self._should_skip_exactness(model_class, dynamic=dynamic)
 
             for name, (model, inputs) in components.items():
@@ -1055,8 +1050,6 @@ class ExportTesterMixin:
                             msg=f"{name} differs from eager on the inputs it was exported with",
                         )
 
-                    if new_inputs is None:
-                        continue
                     set_seed(1234)
                     outputs = runtime(**copy.deepcopy(new_inputs[name]))
                     self.assertIs(type(outputs), new_eager_types[name])
