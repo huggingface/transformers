@@ -92,7 +92,7 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
         del self.topk_method
         self.num_experts = config.num_local_experts
         self.norm_topk_prob = config.norm_topk_prob
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -219,7 +219,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
         "attentions": DeepseekV3Attention,
         "router_logits": OutputRecorder(DeepseekV3TopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
     def _init_weights(self, module):

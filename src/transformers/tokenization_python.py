@@ -117,6 +117,10 @@ class Trie:
         ["[CLS]", " This is a ", "extra_id_100"]
         ```
         """
+        # No added token can match if none of their first characters appear in the text.
+        if not any(first_char in text for first_char in self.data):
+            return [text] if text else []
+
         # indexes are counted left of the chars index.
         # "hello", index 0, is left of h, index 1 is between h and e.
         # index 5 is right of the "o".

@@ -1173,7 +1173,15 @@ def merge_with_config_defaults(func):
             if arg_value is not None:
                 # Arg-specific handling
                 if arg_name == "use_cache":
-                    if getattr(self, "gradient_checkpointing", False) and self.training and arg_value:
+                    import torch
+
+                    # Same condition as in `GradientCheckpointingLayer`: without gradients, nothing is checkpointed
+                    if (
+                        getattr(self, "gradient_checkpointing", False)
+                        and self.training
+                        and torch.is_grad_enabled()
+                        and arg_value
+                    ):
                         logger.warning_once(
                             "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
                         )

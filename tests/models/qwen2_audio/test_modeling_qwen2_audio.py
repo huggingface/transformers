@@ -50,12 +50,17 @@ class Qwen2AudioModelTester(ALMModelTester):
 
     audio_mask_key = "feature_attention_mask"
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # feat_seq_length=60 → after conv2 s=2: 30 → after avg_pool s=2: 15 audio embed tokens.
-        kwargs.setdefault("feat_seq_length", 60)
+        "feat_seq_length": 60,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Encoder asserts input_features.shape[-1] == max_source_positions * conv1.stride * conv2.stride == 2 * max_source_positions.
-        kwargs.setdefault("max_source_positions", kwargs["feat_seq_length"] // 2)
-        super().__init__(parent, **kwargs)
+        values.setdefault("max_source_positions", values["feat_seq_length"] // 2)
+        return values
 
     def get_audio_embeds_mask(self, audio_mask):
         # Mirrors Qwen2AudioEncoder._get_feat_extract_output_lengths: conv2 (k=3,s=2,p=1) then avg_pool (k=2,s=2).

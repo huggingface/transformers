@@ -309,7 +309,6 @@ class GradiumPhononTTSPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     # the flow head runs as one unit per step: split across devices, its blocks would mix devices mid-computation
     _no_split_modules = ["GradiumPhononTTSDecoderLayer", "GradiumPhononTTSFlowHead"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -707,8 +706,8 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
         self.model = GradiumPhononTTSModel(config)
         self.flow_head = GradiumPhononTTSFlowHead(config.flow_head_config)
         self.eos_head = nn.Linear(config.hidden_size, 1)
-        self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim))
-        self.latent_std = nn.Buffer(torch.ones(config.latent_dim))
+        self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim, dtype=torch.float32))
+        self.latent_std = nn.Buffer(torch.ones(config.latent_dim, dtype=torch.float32))
 
         # training only, ~0.003% of the model weights: ok to always carry
         self.loss_weighting = GradiumPhononTTSFlowLossWeighting(config.flow_head_config)

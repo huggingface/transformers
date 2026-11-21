@@ -33,6 +33,7 @@ import transformers.modeling_flash_attention_utils as fa_utils
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
@@ -825,6 +826,39 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     slot_to_token[idx] = past_length + offset
             past_length += query_length
 
+    def test_generate_batch_under_inference_mode(self) -> None:
+        """The background generation thread runs in the caller's `torch.inference_mode()`."""
+        tokenizer, model = get_tokenizer_and_model(
+            "hf-internal-testing/tiny-random-LlamaForCausalLM", "sdpa", torch_device, dtype=torch.float32
+        )
+        input_ids = get_generation_inputs(["Where is Paris?"], tokenizer, for_continuous_batching=True)
+        generation_config = GenerationConfig(do_sample=False, max_new_tokens=5, eos_token_id=-1)
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=False,
+            use_async_batching=False,
+            auto_switch_to_flash=False,
+            num_blocks=16,
+            max_batch_tokens=256,
+        )
+
+        expected = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+        )
+        forward_in_inference_mode = []
+        model.register_forward_pre_hook(lambda *_: forward_in_inference_mode.append(torch.is_inference_mode_enabled()))
+        with torch.inference_mode():
+            outputs = model.generate_batch(
+                inputs=input_ids,
+                generation_config=generation_config,
+                continuous_batching_config=continuous_batching_config,
+            )
+        self.assertTrue(forward_in_inference_mode)
+        self.assertTrue(all(forward_in_inference_mode))
+        self.assertEqual(len(outputs["req_0"].generated_tokens), 5)
+        self.assertEqual(outputs["req_0"].generated_tokens, expected["req_0"].generated_tokens)
+
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
         environment by mocking all accelerator availability checks to return False"""
@@ -935,6 +969,21 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         reduce_tensor = torch.tensor([7, 3], dtype=torch.int64)
         self.assertIs(helper.tp_all_reduce_min(reduce_tensor), reduce_tensor)
         self.assertTrue(torch.equal(reduce_tensor, torch.tensor([7, 3], dtype=torch.int64)))
+
+    @parameterized.expand(
+        [
+            (AutoModelForCausalLM, "hf-tiny-v2/tiny-random-Qwen3ForCausalLM"),
+            (AutoModelForImageTextToText, "hf-tiny-v2/tiny-random-Gemma3ForConditionalGeneration"),
+        ]
+    )
+    def test_distributed_helper_finds_the_sharded_kv_heads(self, auto_class: type, model_id: str) -> None:
+        """The cache splits the key/value heads across ranks when the model's TP plan shards the key and value
+        projections, whatever the path to the decoder layers: `model.language_model.layers` in a vision-language
+        model."""
+        with torch.device("meta"):
+            model = auto_class.from_config(AutoConfig.from_pretrained(model_id))
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan=model.tp_plan)
+        self.assertTrue(helper.are_kv_heads_tp_ed())
 
     def test_distributed_helper_set_tp_seed_no_dist(self) -> None:
         """Test that set_tp_seed sets a torch seed without distributed initialized, both with and without a user seed."""
@@ -2455,9 +2504,9 @@ class ContinuousBatchingMemoryTests(unittest.TestCase):
             self.assertIsNone(_get_numa_nodes_memory({0, 2}))  # node 2 unreadable
 
 
-@require_torch_accelerator
 class TestMemoryHandlerPrediction(unittest.TestCase):
-    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real accelerator memory usage.
+    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches theoretical concerns or even real
+    accelerator memory usage.
 
     For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
     dtypes, no alignment padding) and compare the CUDA memory delta to the handler's prediction. The handler reserves
@@ -2480,7 +2529,49 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
     ]
     # fmt: on
 
+    def test_memory_prediction_under_tensor_parallelism(self) -> None:
+        """A rank holding 1 / tp_size of the heads predicts the footprint of a model with that many heads."""
+        head_dim, num_kv_heads, num_attention_heads, tp_size = 64, 4, 8, 2
+        dtype = torch.float16
+
+        def make_handler(kv_heads: int, attention_heads: int, tp: int) -> PagedAttentionMemoryHandler:
+            config = SimpleNamespace(
+                head_dim=head_dim,
+                num_key_value_heads=kv_heads,
+                num_attention_heads=attention_heads,
+                hidden_size=512,
+                vocab_size=32000,
+                _attn_implementation="sdpa",
+            )
+            cb_config = ContinuousBatchingConfig(page_size=32, num_blocks=self.NUM_BLOCKS, max_memory_percent=0.9)
+            # The cache geometry is built from the per-rank KV heads, as PagedAttentionCache does under TP
+            bytes_per_token = 2 * (kv_heads // tp) * head_dim * dtype.itemsize
+            bytes_per_block = bytes_per_token * 32 * 22
+            bytes_per_sector = math.lcm(bytes_per_block, 128)
+            return PagedAttentionMemoryHandler(
+                config=config,
+                cb_config=cb_config,
+                dtype=dtype,
+                bytes_per_sector=bytes_per_sector,
+                tokens_per_sector=bytes_per_sector // bytes_per_block * 32,
+                bytes_per_block=bytes_per_block,
+                attn_types=["full_attention"],
+                kv_tp_size=tp,
+            )
+
+        sharded = make_handler(num_kv_heads, num_attention_heads, tp_size)
+        reference = make_handler(num_kv_heads // tp_size, num_attention_heads // tp_size, 1)
+        unsharded = make_handler(num_kv_heads, num_attention_heads, 1)
+        M, num_sectors = self.MAX_BATCH_TOKENS, 4
+        self.assertEqual(
+            sharded.compute_memory_footprint(M, num_sectors), reference.compute_memory_footprint(M, num_sectors)
+        )
+        self.assertLess(
+            sharded.compute_memory_footprint(M, num_sectors), unsharded.compute_memory_footprint(M, num_sectors)
+        )
+
     @parameterized.expand(CONFIGS)
+    @require_torch_accelerator
     def test_memory_prediction(
         self,
         block_size: int,

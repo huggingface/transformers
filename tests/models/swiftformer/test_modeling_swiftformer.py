@@ -26,6 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -44,32 +45,25 @@ if is_vision_available():
     from transformers import ViTImageProcessorPil
 
 
-class SwiftFormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        image_size=224,
-        num_labels=3,
-        layer_depths=[1, 1, 1, 1],
-        embed_dims=[16, 16, 32, 32],
-    ):
+class SwiftFormerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "num_labels": 3,
+        "image_size": 224,
+        "layer_depths": [1, 1, 1, 1],
+        "embed_dims": [16, 16, 32, 32],
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_labels = num_labels
-        self.image_size = image_size
-        self.layer_depths = layer_depths
-        self.embed_dims = embed_dims
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -134,6 +128,8 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     Here we also overwrite some of the tests of test_modeling_common.py, as SwiftFormer does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = SwiftFormerModelTester
 
     all_model_classes = (SwiftFormerModel, SwiftFormerForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (

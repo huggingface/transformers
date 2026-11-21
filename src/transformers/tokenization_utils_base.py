@@ -67,6 +67,7 @@ from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
     _get_control_token_patterns,
     _get_template_literal_text,
+    _normalize_chat_messages,
     mark_control_tokens,
     render_jinja_template,
 )
@@ -2965,6 +2966,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Returns:
             `list[str]`: The list of decoded sentences.
         """
+        sequences = to_py_obj(sequences)
+        # An empty batch has no sequences to decode, `decode` would read it as a single empty sequence
+        if len(sequences) == 0:
+            return []
+
         # Forward to decode() which now handles batched input natively
         result = self.decode(
             token_ids=sequences,
@@ -2974,6 +2980,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         )
         # Ensure we always return a list for backwards compatibility
         if isinstance(result, str):
+            # See #41872: `batch_decode` expects a batch, single sequences belong to `decode`
+            logger.warning_once(
+                "Passing a single sequence to `batch_decode` is deprecated and will be removed in a future version, "
+                "use `decode` instead."
+            )
             return [result]
         return result
 
@@ -3146,12 +3157,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
-        # Normalize: drop the keys whose value is None.
-        # Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`, but many chat templates crash or
-        # produce wrong output (e.g. rendering literal "None") on them, while they handle a missing key.
-        conversations = [
-            [{k: v for k, v in msg.items() if v is not None} for msg in conversation] for conversation in conversations
-        ]
+        # Normalize: convert message objects to dicts and drop the keys whose value is None
+        conversations = [_normalize_chat_messages(conversation) for conversation in conversations]
 
         if continue_final_message:
             if add_generation_prompt:

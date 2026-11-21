@@ -32,6 +32,7 @@ from transformers.testing_utils import cleanup, is_diffusers_available, require_
 from transformers.trainer_utils import set_seed
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -71,15 +72,15 @@ class DummyNoiseScheduler:
         self.timesteps = torch.linspace(1000, 1, num_inference_steps).long()
 
 
-class VibeVoiceModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=3,
-        is_training=True,
-        use_cache=True,
-        text_config={
+class VibeVoiceModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 3,
+        "is_training": True,
+        "use_cache": True,
+        "text_config": {
             "model_type": "qwen2",
             "intermediate_size": 36,
             "initializer_range": 0.02,
@@ -95,7 +96,7 @@ class VibeVoiceModelTester:
             "eos_token_id": 0,  # same as pad_token for Vibevoice
             "bos_token_id": None,
         },
-        audio_config={
+        "audio_config": {
             "model_type": "vibevoice_acoustic_tokenizer",
             "hidden_size": 16,
             "kernel_size": 3,
@@ -103,7 +104,7 @@ class VibeVoiceModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        semantic_model_config={
+        "semantic_model_config": {
             "model_type": "vibevoice_acoustic_tokenizer_encoder",
             "channels": 1,
             "hidden_size": 32,
@@ -112,30 +113,31 @@ class VibeVoiceModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        diffusion_head_config={
+        "diffusion_head_config": {
             "num_hidden_layers": 2,
             "frequency_embedding_size": 8,
             "intermediate_size": 16,
             "hidden_size": 32,  # Should match text_config hidden_size
             "latent_size": 16,  # Should match audio_config hidden_size
         },
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_cache = use_cache
-        self.text_config = text_config
-        self.audio_config = audio_config
-        self.semantic_model_config = semantic_model_config
-        self.diffusion_head_config = diffusion_head_config
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Extract common attributes for testing
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.pad_token_id = text_config["pad_token_id"]
+        text_config = values["text_config"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self, audio_config=None):
         return VibeVoiceConfig(
@@ -222,6 +224,8 @@ class VibeVoiceModelTester:
 
 
 class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = VibeVoiceModelTester
+
     all_model_classes = (VibeVoiceForConditionalGeneration, VibeVoiceModel) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

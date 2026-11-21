@@ -68,7 +68,6 @@ class VideoLlama3Config(PreTrainedConfig):
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen2"),
         "vision_config": VideoLlama3VisionConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
