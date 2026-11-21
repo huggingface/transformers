@@ -50,6 +50,10 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
     - save_pretrained
     - from_pretrained
 
+## ExportedMultimodalModel
+
+[[autodoc]] exporters.multimodal.ExportedMultimodalModel
+
 ## ExportedComponent
 
 [[autodoc]] exporters.base.ExportedComponent
