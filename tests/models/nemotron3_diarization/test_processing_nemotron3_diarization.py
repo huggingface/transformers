@@ -182,3 +182,45 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
                 torch.testing.assert_close(
                     last.input_features[0], full.input_features[0, frame_idx:num_frames], atol=1e-4, rtol=1e-4
                 )
+
+    def test_short_last_chunk_without_look_ahead(self):
+        """
+        Without look-ahead, the chunk after the first can end the session with fewer than `n_fft` samples: the
+        streaming loop leaves as few as `num_samples_first_audio_chunk + 1 - audio_chunk_start(step)`. Its end is
+        padded as a full pass pads the end of the audio, so it has a window for the STFT and yields exactly the frames
+        the full pass has left.
+        """
+        processor = self.get_processor(streaming_modes={"no_look_ahead": (1, 0)}, streaming_mode="no_look_ahead")
+        feature_extractor = processor.feature_extractor
+        n_fft, hop_length = feature_extractor.n_fft, feature_extractor.hop_length
+        step = processor.num_mel_frames_per_step
+        start = processor.audio_chunk_start(step)
+        shortest = processor.num_samples_first_audio_chunk + 1 - start
+        # the shortest last chunk, the longest and the shortest without and with a valid frame, and one with two
+        for num_samples_last in (
+            shortest,
+            n_fft // 2 + hop_length - 1,
+            n_fft // 2 + hop_length,
+            n_fft // 2 + 2 * hop_length,
+        ):
+            with self.subTest(num_samples_last=num_samples_last):
+                audio = np.random.RandomState(num_samples_last).randn(start + num_samples_last).astype(np.float32)
+                # the streaming loop stops after the first chunk: a second full chunk does not fit
+                self.assertGreater(audio.shape[0], processor.num_samples_first_audio_chunk)
+                self.assertGreater(start + processor.num_samples_per_audio_chunk, audio.shape[0])
+                full = processor(audio, sampling_rate=16000)
+                num_frames = int(full.attention_mask.sum())
+
+                first = processor(
+                    audio[: processor.num_samples_first_audio_chunk], sampling_rate=16000, is_streaming=True
+                )
+                last = processor(
+                    audio[start:],
+                    sampling_rate=16000,
+                    is_streaming=True,
+                    is_first_audio_chunk=False,
+                    is_last_audio_chunk=True,
+                )
+                streamed = torch.cat([first.input_features[:, :step], last.input_features], dim=1)
+                self.assertEqual(streamed.shape[1], num_frames)
+                torch.testing.assert_close(streamed, full.input_features[:, :num_frames], atol=1e-4, rtol=1e-4)
