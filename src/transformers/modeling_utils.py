@@ -94,6 +94,7 @@ from .pytorch_utils import id_tensor_storage
 from .quantizers import HfQuantizer
 from .quantizers.auto import get_hf_quantizer
 from .quantizers.quantizers_utils import get_module_from_name
+from .quantizers.schema_readers import safetensors_dtypes
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -4314,7 +4315,15 @@ class PreTrainedModel(
             config._experts_implementation = kwargs.pop("experts_implementation")
 
         hf_quantizer, config, device_map = get_hf_quantizer(
-            config, quantization_config, device_map, weights_only, user_agent, gguf_file=gguf_file
+            config,
+            quantization_config,
+            device_map,
+            weights_only,
+            user_agent,
+            gguf_file=gguf_file,
+            checkpoint_dtypes=functools.partial(
+                safetensors_dtypes, pretrained_model_name_or_path, subfolder, revision=revision, token=token
+            ),
         )
 
         if kernel_config is not None and not use_kernels:

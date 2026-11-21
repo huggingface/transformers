@@ -416,6 +416,10 @@ class HfQuantizer(ABC):
     # `rename_layer`. E.g. `{"scale": "weight_scale_inv"}` renames `*.scale`
     checkpoint_renames: dict[str, str] = {}
 
+    def checkpoint_renames_for(self, model) -> dict[str, str]:
+        """`checkpoint_renames` for this model, which may own params under one of the checkpoint names"""
+        return self.checkpoint_renames
+
     def update_weight_conversions(self, weight_conversions, model):
         """A format may rewrite the model's conversions, e.g. GGUF replaces them with its own"""
         return weight_conversions

@@ -36,6 +36,15 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
 
+        from ..integrations.metal_quantization import metal_fp4_experts_available
+
+        # Apple Silicon: pre-quantized MXFP8 experts (e8m0 scales per 32) run on the `metal-moe-decode` kernels
+        config = self.quantization_config
+        mxfp8 = config.scale_fmt == "ue8m0" and tuple(config.weight_block_size or ()) == (1, 32)
+        self.metal = self.pre_quantized and mxfp8 and metal_fp4_experts_available(kwargs.get("device_map"))
+        if self.metal:
+            return
+
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             if self.pre_quantized:
                 logger.warning_once(
@@ -135,6 +144,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         config = self.quantization_config
         if config.dequantize:
             return None
+        if getattr(self, "metal", False):
+            from ..integrations.metal_quantization import metal_fp4_module
+
+            return metal_fp4_module(name, module, "mxfp8")
 
         kwargs = {
             "block_size": config.weight_block_size,
@@ -166,21 +179,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         new_module._hf_quantized_needs_local_tp = True  # ty: ignore[unresolved-attribute]
         return new_module
-
-    def _process_model_after_weight_loading(self, model, **kwargs):
-        # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
-        # context); route those models through Triton/grouped_mm instead.
-        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device, _get_ue8m0_dtype
-
-        _disable_deepgemm_on_multi_device(model)
-        # MXFP8 checkpoints (e.g. Inkling2) save their ue8m0 scales as bytes
-        if self.pre_quantized and self.quantization_config.scale_fmt == "ue8m0":
-            for module in model.modules():
-                for name, param in module.named_parameters(recurse=False):
-                    if name.endswith("scale_inv") and param.dtype == torch.uint8:
-                        scales = torch.nn.Parameter(param.data.view(_get_ue8m0_dtype()), requires_grad=False)
-                        setattr(module, name, scales)
-        return model
 
     def update_parallel_plan(self, model, parallel_plan):
         from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard

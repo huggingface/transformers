@@ -445,7 +445,7 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         # Each format's `checkpoint_renames` as one regex too, with our names in order, for `rename_layer`
         self.renamers = {}
         for quantizer in self.all_quantizers:
-            names = quantizer.checkpoint_renames
+            names = quantizer.checkpoint_renames_for(model)
             if quantizer.pre_quantized and names:
                 renamer = re.compile("|".join(f"(?P<p{i}>.*\\.{n.replace('*', '.*')})" for i, n in enumerate(names)))
                 self.renamers[quantizer] = (renamer, list(names.values()))
@@ -697,7 +697,9 @@ def is_quantization_plan(quantization_config) -> TypeGuard[dict]:
     )
 
 
-def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
+def get_hf_quantizer(
+    config, quantization_config, device_map, weights_only, user_agent, gguf_file=None, checkpoint_dtypes=None
+):
     if gguf_file is not None:
         if quantization_config is None:
             quantization_config = GgufConfig(gguf_file=gguf_file)
@@ -716,7 +718,7 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
     checkpoint_names = False
     if isinstance(quantization_params_from_config, dict) and not is_quantization_plan(quantization_params_from_config):
         # Saved formats quantizing per module, as a plan of checkpoint module names, see `schema_readers`
-        plan = read_quantization_schema(quantization_params_from_config)
+        plan = read_quantization_schema(quantization_params_from_config, checkpoint_dtypes)
         if plan is not None:
             quantization_params_from_config, checkpoint_names = plan, True
 
