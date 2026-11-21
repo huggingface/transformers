@@ -62,6 +62,7 @@ kernel void experts_down_sum(device const uint4* w, device const T* sc, device c
     if (h < H) {
         for (int p = t; p < total; p += LANES) {
             int r = p / blocks, blk = p % blocks;
+            if (wt[r] == 0.0f) continue;  // a masked route (streamed-experts sentinel): no read
             long row = (long)ids[r] * H + h;
             uint4 q = w[row * blocks + blk];
             device const vec<T, 4>* xr = (device const vec<T, 4>*)(act + r * I + blk * 32);
@@ -83,6 +84,48 @@ kernel void experts_down_sum(device const uint4* w, device const T* sc, device c
     threadgroup_barrier(mem_flags::mem_threadgroup);
     if (t == 0 && h < H) y[h] = T(partial[sg] + partial[sg + 1]);
 }
+
+// Experts decode, gathered gate/up for the routes with a nonzero weight (the others get zeros, nothing read): row n of
+// route r = n / N2 of matrix ids[r] of a [E, N2, K / 8] bank, 32 lanes per row over its uint4 blocks.
+template <typename T, int GS>
+kernel void experts_gate_up_masked(device const uint4* w, device const T* sc, device const T* bi, device const T* x,
+                                   device const int* ids, device const float* wt, device T* y, constant int& N2,
+                                   constant int& K, constant int& R, uint gid [[thread_position_in_grid]],
+                                   uint lane [[thread_index_in_simdgroup]]) {
+    int out_row = gid / 32;
+    if (out_row >= R * N2) return;
+    int r = out_row / N2;
+    if (wt[r] == 0.0f) {
+        if (lane == 0) y[out_row] = T(0);
+        return;
+    }
+    long row = (long)ids[r] * N2 + out_row % N2;
+    int blocks = K / 32, groups = K / GS;
+    device const vec<T, 4>* xv = (device const vec<T, 4>*)x;
+    float acc = 0.0f;
+    for (int blk = lane; blk < blocks; blk += 32) {
+        uint4 q = w[row * blocks + blk];
+        float dot = 0.0f, xsum = 0.0f;
+        for (int word = 0; word < 4; ++word) {
+            float4 x0 = float4(xv[blk * 8 + word * 2]), x1 = float4(xv[blk * 8 + word * 2 + 1]);
+            uint qw = q[word];
+            float4 q0 = float4(qw & 0xF, (qw >> 4) & 0xF, (qw >> 8) & 0xF, (qw >> 12) & 0xF);
+            float4 q1 = float4((qw >> 16) & 0xF, (qw >> 20) & 0xF, (qw >> 24) & 0xF, (qw >> 28) & 0xF);
+            dot += metal::dot(q0, x0) + metal::dot(q1, x1);
+            xsum += x0.x + x0.y + x0.z + x0.w + x1.x + x1.y + x1.z + x1.w;
+        }
+        int g = blk * 32 / GS;
+        acc += float(sc[row * groups + g]) * dot + float(bi[row * groups + g]) * xsum;
+    }
+    acc = simd_sum(acc);
+    if (lane == 0) y[out_row] = T(acc);
+}
+
+#define GATE_UP(T, GS) \
+template [[host_name("experts_gate_up_masked_" #T "_" #GS)]] kernel void experts_gate_up_masked<T, GS>( \
+    device const uint4*, device const T*, device const T*, device const T*, device const int*, device const float*, \
+    device T*, constant int&, constant int&, constant int&, uint, uint);
+GATE_UP(float, 32) GATE_UP(half, 32) GATE_UP(bfloat, 32) GATE_UP(float, 64) GATE_UP(half, 64) GATE_UP(bfloat, 64)
 
 #define DOWN(T, GS) \
 template [[host_name("experts_down_sum_" #T "_" #GS)]] kernel void experts_down_sum<T, GS>(device const uint4*, \
@@ -141,3 +184,24 @@ def experts_down_sum(
 @experts_down_sum.register_fake
 def _(act, down, scales, biases, ids, weights, group_size):
     return act.new_empty(1, down.shape[-2])
+
+
+@torch.library.custom_op("transformers::metal_experts_gate_up_masked", mutates_args=())
+def experts_gate_up_masked(
+    x: torch.Tensor, weight: torch.Tensor, scales: torch.Tensor, biases: torch.Tensor, ids: torch.Tensor,
+    weights: torch.Tensor, group_size: int,
+) -> torch.Tensor:  # fmt: skip
+    """One token's gate/up rows for the routes whose `weights` (float32) is nonzero, zeros for the others: `x` [1, K]
+    contiguous, `weight` [E, N2, K / 8], `ids` int32 [R] -> [R, N2]."""
+    routes, (rows, words) = ids.numel(), weight.shape[-2:]
+    out = torch.empty(routes, rows, dtype=x.dtype, device=x.device)
+    getattr(_lib(), f"experts_gate_up_masked_{_NAMES[x.dtype]}_{group_size}")(
+        weight, scales, biases, x, ids, weights, out, rows, words * 8, routes,
+        threads=-(-routes * rows * 32 // 256) * 256, group_size=256,
+    )  # fmt: skip
+    return out
+
+
+@experts_gate_up_masked.register_fake
+def _(x, weight, scales, biases, ids, weights, group_size):
+    return x.new_empty(ids.numel(), weight.shape[-2])

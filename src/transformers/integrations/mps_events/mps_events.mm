@@ -18,12 +18,21 @@ int64_t event_new() {
 // Queue a wait: work submitted to the stream after this runs once the event reaches `value`. Submits the buffer so the
 // device runs the work before the wait without waiting for a host sync.
 void gpu_wait(int64_t handle, int64_t value, bool commit) {
+  pybind11::gil_scoped_release release;  // a commit can block on the in-flight buffer limit: let the host thread run
   auto* stream = at::mps::getCurrentMPSStream();
   dispatch_sync(stream->queue(), ^() {
     stream->endKernelCoalescing();
     [stream->commandBuffer() encodeWaitForEvent:events[handle] value:(uint64_t)value];
   });
   if (commit) stream->synchronize(at::mps::SyncType::COMMIT);
+}
+
+// End the open compute encoder and submit: work queued so far (e.g. a routing copy) runs and its writes become visible.
+void flush() {
+  pybind11::gil_scoped_release release;
+  auto* stream = at::mps::getCurrentMPSStream();
+  dispatch_sync(stream->queue(), ^() { stream->endKernelCoalescing(); });
+  stream->synchronize(at::mps::SyncType::COMMIT);
 }
 
 void cpu_signal(int64_t handle, int64_t value) { events[handle].signaledValue = (uint64_t)value; }
@@ -95,6 +104,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("event_new", &event_new);
   m.def("gpu_wait", &gpu_wait);
   m.def("cpu_signal", &cpu_signal);
+  m.def("flush", &flush);
   m.def("signaled", &signaled);
   m.def("cpu_address", &cpu_address);
   m.def("storage_mode", &storage_mode);

@@ -31,6 +31,8 @@ with torch.inference_mode():
 events = [e for e in prof.events() if e.device_type == torch.autograd.DeviceType.CPU]
 floor_events = [e.cpu_time_total for e in events if e.name == "aten::add_"][:200]
 floor = sorted(floor_events)[len(floor_events) // 2]
+
+
 # Ops that dispatch Metal work: custom / hub kernels (whole op, children skipped) and leaf aten ops
 def custom(e):
     return not e.name.startswith("aten::") and "::" in e.name
@@ -46,7 +48,11 @@ for e in events:
             stack.extend(child.cpu_children)
 rows = collections.defaultdict(lambda: [0.0, 0])
 for e in events:
-    if id(e) in skip or (e.cpu_children and not custom(e)) or (e.name == "aten::add_" and e.input_shapes == [[16], []]):
+    if (
+        id(e) in skip
+        or (e.cpu_children and not custom(e))
+        or (e.name == "aten::add_" and e.input_shapes == [[16], []])
+    ):
         continue
     if not custom(e) and not e.name.startswith("aten::"):
         continue
@@ -55,6 +61,8 @@ for e in events:
     row[0] += max(e.cpu_time_total - floor, 0.0)
     row[1] += 1
 total = sum(r[0] for r in rows.values())
-print(f"sync floor {floor:.1f} us/op; attributed GPU time {total / steps / 1e3:.2f} ms/step over {sum(r[1] for r in rows.values()) // steps} ops/step")
+print(
+    f"sync floor {floor:.1f} us/op; attributed GPU time {total / steps / 1e3:.2f} ms/step over {sum(r[1] for r in rows.values()) // steps} ops/step"
+)
 for (name, shapes), (us, n) in sorted(rows.items(), key=lambda kv: -kv[1][0])[:30]:
     print(f"{us / steps / 1e3:6.3f} ms {n // steps:4d}/step {us / n:7.1f} us  {name:40s} {shapes}")

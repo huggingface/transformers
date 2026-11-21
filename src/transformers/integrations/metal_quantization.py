@@ -211,6 +211,20 @@ class MetalExperts(nn.Module):
                 tensor = torch.zeros(num_experts, rows, groups)
                 self.register_parameter(f"{name}_{suffix}", nn.Parameter(tensor, requires_grad=False))
 
+    def masked_decode(self, hidden_states, top_k_index, top_k_weights):
+        """One token through only its routes with an in-range id (`< num_experts`), reading nothing for the others:
+        a correction pass over a few routes (streamed misses)."""
+        from .metal_qmv import experts_down_sum, experts_gate_up_masked
+
+        ids = top_k_index.reshape(-1)
+        weights = (top_k_weights.reshape(-1) * (ids < self.num_experts)).float()
+        ids = ids.clamp(max=self.num_experts - 1).to(torch.int32).contiguous()
+        dtype, gs = hidden_states.dtype, self.group_size
+        up = (self.gate_up_proj, self.gate_up_proj_scales.to(dtype), self.gate_up_proj_qbiases.to(dtype))
+        act = self._apply_gate(experts_gate_up_masked(hidden_states.contiguous(), *up, ids, weights, gs))
+        down = (self.down_proj, self.down_proj_scales.to(dtype), self.down_proj_qbiases.to(dtype))
+        return experts_down_sum(act.contiguous(), *down, ids, weights, gs)
+
     def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
         return self._apply_gate_fn(self, gate_up_out)
 

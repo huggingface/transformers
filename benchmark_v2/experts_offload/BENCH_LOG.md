@@ -89,3 +89,4 @@ All-resident reference (64-expert synthetic): 48.1 tok/s.
 Gotchas found on the way: Metal stops a queue past ~64 committed-but-blocked command buffers (host throttled to 32 layers
 ahead); CPU writes into MPS memory race the caching allocator's queued writes of a previous owner (sync before the first
 CPU write into a new buffer / pool); a device fill of a fresh buffer runs after the host reads it (CPU memset instead).
+| S7 | 2026-11-21 | pass 1 (resident experts) before the wait, misses-only pass 2 (masked kernels), deferred table publication; wait op no longer declares the pool mutated (compile copied the whole pool around it per layer) | **37.0 / 38.5 / 40.2 / 40.7** (skew 0.6); 42.0 (skew 1.5, ~no misses) | exact (fp32 test); parallel `preadv` of misses tried: 34.5-35.7 (reader threads compete), reverted |
