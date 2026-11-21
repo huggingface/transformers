@@ -21,7 +21,8 @@ from torch import nn
 from ...distributed.parallel_utils import with_fast_tp_all_reduce
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
-from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
+from .cb_logits_processors import ContinuousBatchingLogitsProcessorList, ContinuousBatchingTemperatureLogitsWarper
+from .fused_sampler import FusedSampler
 from .input_outputs import (
     _CB_MTP_ASYNC,
     _CB_MTP_BT,
@@ -62,6 +63,13 @@ _CB_MTP = _glue_os.environ.get("CB_MTP", "")  # gap2-mtp prototype, see input_ou
 # "shadow" measurement: draft sampled from the MTP distribution instead of its argmax (the acceptance of a sampled
 # draft under the probability ratio test is sum(min(p, q)), estimated on the host from log p(draft) and log q(draft))
 _CB_MTP_DRAFT_SAMPLE = _glue_os.environ.get("CB_MTP_DRAFT", "greedy") == "sample"
+# [scratch, gap4 zssample] CB_FUSED_SAMPLE=1: sampled requests (with or without logprobs, with or without MTP
+# verification) go through `FusedSampler`, two kernels over the bf16 logits instead of an fp32 copy, softmax / log
+# softmax, multinomial or noise over the whole vocabulary. Temperature is applied in the kernel; other logits
+# processors keep the old path. CB_FUSED_SAMPLE_CHECK=1 also computes the old path's log softmax for the emitted tokens
+# and prints the largest difference at exit.
+_CB_FUSED_SAMPLE = _glue_os.environ.get("CB_FUSED_SAMPLE", "0") == "1"
+_CB_FUSED_SAMPLE_CHECK = _glue_os.environ.get("CB_FUSED_SAMPLE_CHECK", "0") == "1"
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -103,6 +111,15 @@ class ModelRunner:
         self.cache = cache
         self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
         self._proto_eager_seen: set[tuple[bool, int]] = set()  # (decode path, padded query tokens) that ran eagerly
+        self._fused_sampler = None
+        if _CB_FUSED_SAMPLE and do_sample and all(
+            isinstance(p, ContinuousBatchingTemperatureLogitsWarper) for p in logit_processor.logits_processor
+        ):
+            # the CB seed is the same on every TP rank (`set_tp_seed`), so every rank samples the same tokens
+            self._fused_sampler = FusedSampler(cache.device, torch.initial_seed())
+            if _CB_FUSED_SAMPLE_CHECK:
+                self._fused_check = torch.zeros(2, dtype=torch.float64, device=cache.device)  # max |dlogprob|, tokens
+                self._fused_check_calls = 0
 
         # Padding only happen when CUDA graphs or compile is used
         cuda_graph = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
@@ -167,6 +184,11 @@ class ModelRunner:
         and torch compile."""
         # These tensors are device-resident, this is just pointer retrieval
         carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
+        if _CB_FUSED_SAMPLE_CHECK and self._fused_sampler is not None:
+            self._fused_check_calls += 1
+            if self._fused_check_calls % 50 == 0:  # synchronizes: check mode only
+                err, n = self._fused_check.tolist()
+                print(f"FUSED_SAMPLE_CHECK calls={self._fused_check_calls} max_abs_dlogprob={err:.3e} rows={int(n)}", flush=True)
         # This is the stream on which the compute happens
         compute_stream = self.inputs_and_outputs.compute_stream
 
@@ -253,6 +275,16 @@ class ModelRunner:
         logits_indices = batch_data["logits_indices"]  # shape [num_logits]
         if "logits_to_keep" not in batch_data:
             logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
+        if self._fused_sampler is not None:
+            temperature = None
+            if self.logit_processor.do_processing:
+                temperature = batch_data["logits_processor_args"][0, : logits.shape[1]].view(dtype=torch.float32)
+            tokens, logprobs, _, _, _ = self._fused_sampler(logits[0], temperature)
+            self._maybe_check_fused(logits[0], temperature, tokens, logprobs)
+            output_ids[0, : tokens.size(0)].copy_(tokens)
+            if self.return_logprobs:
+                output_ids[1, : tokens.size(0)].copy_(logprobs.view(dtype=torch.int32))
+            return
         # Convert to fp32 to match generate
         logits = logits.float()  # shape [1, num_logits, vocab_size]
 
@@ -363,10 +395,21 @@ class ModelRunner:
         has_draft = mtp["has_draft"].bool()
         steps = torch.arange(k + 1, device=row0.device)
         rows = row0[None] + steps[:, None] * mtp["has_draft"].long()[None]  # [k + 1, R]
-        logits = model.lm_head(hidden_states[:, rows.reshape(-1)])[0].float()  # [(k + 1) * R, vocab], row-major in j
+        logits = model.lm_head(hidden_states[:, rows.reshape(-1)])[0]  # [(k + 1) * R, vocab], row-major in j
+        if self._fused_sampler is None:
+            logits = logits.float()
         drafts = input_ids[(row0[None] + steps[1:, None]).clamp(max=num_q - 1)].long()  # [k, R]
         logprobs = None
-        if self.do_sample:
+        if self._fused_sampler is not None:
+            # rows 0..k-1 verify their draft (ratio test, residual sample if rejected), row k samples the bonus token
+            verify = torch.cat([torch.where(has_draft[None], drafts, -1), torch.full_like(drafts[:1], -1)])
+            tokens, token_logprobs, _, _, accepted = self._fused_sampler(logits, None, verify.reshape(-1))
+            self._maybe_check_fused(logits, None, tokens, token_logprobs)
+            candidates = tokens.view(k + 1, num_rows)
+            accepted = accepted.view(k + 1, num_rows)[:k]
+            if self.return_logprobs:
+                logprobs = token_logprobs.view(k + 1, num_rows)
+        elif self.do_sample:
             logp = nn.functional.log_softmax(logits, dim=-1)
             draft_logp = logp.view(k + 1, num_rows, -1)[:k].gather(2, drafts[..., None]).squeeze(2)  # [k, R]
             accepted = has_draft[None] & (torch.empty_like(draft_logp).uniform_() < draft_logp.exp())
@@ -460,12 +503,25 @@ class ModelRunner:
         has_draft = mtp["has_draft"].bool()
         row_b = row_a + mtp["has_draft"]
         num_rows = row_a.shape[0]
-        logits = model.lm_head(hidden_states[:, torch.cat([row_a, row_b])])[0].float()  # [2 * num_rows, vocab]
+        logits = model.lm_head(hidden_states[:, torch.cat([row_a, row_b])])[0]  # [2 * num_rows, vocab]
+        if self._fused_sampler is None:
+            logits = logits.float()
         logits_a, logits_b = logits[:num_rows], logits[num_rows:]
         draft = batch_data["input_ids"][0, row_b].long()  # only a draft where has_draft
 
         logprobs_first = logprobs_bonus = None
-        if self.do_sample:
+        if self._fused_sampler is not None:
+            # row a verifies the draft (ratio test, residual sample if rejected), row b samples the bonus token
+            verify = torch.cat([torch.where(has_draft, draft, -1), torch.full_like(draft, -1)])
+            tokens, logprobs, logz, _, accepted = self._fused_sampler(logits, None, verify)
+            self._maybe_check_fused(logits, None, tokens, logprobs)
+            first_tokens, bonus_tokens, accepted = tokens[:num_rows], tokens[num_rows:], accepted[:num_rows]
+            if self.return_logprobs:
+                logprobs_first, logprobs_bonus = logprobs[:num_rows], logprobs[num_rows:]
+            # measurement: the target's logprob of the draft the previous step made for this position
+            prev_draft_logit = logits_a.gather(1, mtp["prev_draft"].long()[:, None]).squeeze(1).float()
+            output_ids[6, :num_rows].copy_((prev_draft_logit - logz[:num_rows]).view(dtype=torch.int32))
+        elif self.do_sample:
             logprobs_a = nn.functional.log_softmax(logits_a, dim=-1)
             draft_logprob = logprobs_a.gather(1, draft[:, None]).squeeze(1)
             uniform = torch.empty_like(draft_logprob).uniform_()
@@ -520,6 +576,16 @@ class ModelRunner:
         if logprobs_first is not None:
             output_ids[1, :num_rows].copy_(logprobs_first.view(dtype=torch.int32))
             output_ids[3, :num_rows].copy_(logprobs_bonus.view(dtype=torch.int32))
+
+    def _maybe_check_fused(self, logits, temperature, tokens, logprobs) -> None:
+        """CB_FUSED_SAMPLE_CHECK: largest |fused logprob - log_softmax(fp32 logits / T)[token]| so far, on device."""
+        if not _CB_FUSED_SAMPLE_CHECK:
+            return
+        scaled = logits.float() if temperature is None else logits.float() / temperature[:, None]
+        ref = nn.functional.log_softmax(scaled, dim=-1).gather(1, tokens[:, None]).squeeze(1)
+        diff = (ref - logprobs).abs().max().double()
+        torch.maximum(self._fused_check[:1], diff[None], out=self._fused_check[:1])
+        self._fused_check[1:].add_(tokens.numel())
 
     def _sample(self, scores: torch.Tensor, output_ids: torch.Tensor) -> None:
         """Private method to sample next tokens from the scores."""
