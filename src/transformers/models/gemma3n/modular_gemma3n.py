@@ -127,6 +127,8 @@ class Gemma3nTextConfig(Gemma3TextConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    # the decoder layers also take per-layer inputs of the whole sequence, which sequence parallelism does not cut
+    base_model_sp_plan = None
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 
     vocab_size: int = 262_400

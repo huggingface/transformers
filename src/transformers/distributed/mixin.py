@@ -36,6 +36,12 @@ from .expert_parallel import apply_expert_parallelism
 from .fsdp import ALL_FSDP_STYLES, _resolve_tied_embed_lm_head_plan, apply_fully_sharded_data_parallelism
 from .parallel_utils import ALL_PARALLEL_STYLES, _get_parameter_plan, replace_layer_number_by_wildcard
 from .pipeline_parallel import apply_pipeline_parallelism
+from .sequence_parallel import (
+    ALL_SP_STYLES,
+    SequenceParallelAttention,
+    SplitSequenceParallel,
+    apply_sequence_parallelism,
+)
 from .tensor_parallel import apply_tensor_parallelism, gather_state_dict_for_save
 from .utils import (
     TransformersDeviceMesh,
@@ -67,6 +73,7 @@ class DistributedMixin:
     _fsdp_size = None
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
+    _sp_plan: dict[str, str] | None = None
 
     @property
     def is_distributed_loading_by_transformers(self) -> bool:
@@ -83,12 +90,14 @@ class DistributedMixin:
         self._ep_plan = dict(getattr(model_cls, "_ep_plan", None) or {})
         self._pp_plan = dict(getattr(model_cls, "_pp_plan", None) or {})
         self._fsdp_plan = dict(getattr(model_cls, "_fsdp_plan", None) or {})
+        self._sp_plan = dict(getattr(model_cls, "_sp_plan", None) or {})
 
         if self.base_model is self:
             self._pp_plan.update(self.config.base_model_pp_plan or {})
             self._tp_plan.update(self.config.base_model_tp_plan or {})
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
+            self._sp_plan.update(self.config.base_model_sp_plan or {})
             # Shard the input embeddings on the vocabulary unless the plan already names them.
             if self._tp_plan and isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
                 self._tp_plan = {"embed_tokens": "embedding_rowwise", **self._tp_plan}
@@ -102,6 +111,10 @@ class DistributedMixin:
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_fsdp_plan", None):
                 self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_sp_plan", None):
+                self._sp_plan.update({f"{name}.{k}": v for k, v in plan.items() if k})
+        # the model itself, `""` always gets "sp_model" (refuses a cache, padding, label split, loss reduction)
+        self._sp_plan = {"": "sp_model", **self._sp_plan}
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -116,6 +129,11 @@ class DistributedMixin:
     @property
     def fsdp_plan(self) -> dict[str, str]:
         return self._fsdp_plan
+
+    @property
+    def sp_plan(self) -> dict[str, str]:
+        """The full sequence parallel plan for the model's modules, `""` being the model itself."""
+        return self._sp_plan
 
     @property
     def pp_plan(self) -> dict[str, tuple[str, str]]:
@@ -153,6 +171,17 @@ class DistributedMixin:
 
         self._validate_parallel_plan(plan, ALL_FSDP_STYLES, "fsdp_plan")
         self._fsdp_plan = plan
+
+    @sp_plan.setter
+    def sp_plan(self, plan: dict[str, str] | None):
+        if plan is None:
+            self._sp_plan = {}
+            return
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `sp_plan`")
+
+        self._validate_parallel_plan(plan, ALL_SP_STYLES, "sp_plan")
+        self._sp_plan = plan
 
     @pp_plan.setter
     def pp_plan(self, plan: dict[str, tuple[str, str]] | None):
@@ -215,8 +244,8 @@ class DistributedMixin:
         for module_name, module in self.named_modules():
             module_style = _get_parameter_plan(parameter_name=module_name, plan=plan, is_weight=False)
 
-            if module_style in ALL_FSDP_STYLES:
-                # FSDP: list the module to wrap.
+            if module_style in ALL_FSDP_STYLES or module_style in ALL_SP_STYLES:
+                # FSDP2 and sequence parallelism wrap the module itself.
                 expanded_plan[module_name] = module_style
             else:
                 # TP/EP: list the module's own parameters (to shard) before the module (to hook).
@@ -232,8 +261,8 @@ class DistributedMixin:
 
     def _resolve_parallel_plans(
         self, distributed_config: DistributedConfig
-    ) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
-        """Build the final TP, EP and FSDP plans: apply the config overrides, then replace `*` with the layer numbers.
+    ) -> tuple[dict[str, str], dict[str, str], dict[str, str], dict[str, str]]:
+        """Build the final TP, EP, FSDP and SP plans: apply the config overrides, then replace `*` by the layer numbers.
 
         Each returned plan maps one concrete module or parameter name to a style, e.g. `model.layers.3.mlp.up_proj`
         instead of `model.layers.*.mlp.up_proj`. A module that has an EP rule keeps no TP rule.
@@ -241,7 +270,7 @@ class DistributedMixin:
         module_names = {replace_layer_number_by_wildcard(n) for n, _ in self.named_modules()}
         param_names = {replace_layer_number_by_wildcard(n) for n, _ in self.named_parameters()}
         names = module_names | param_names
-        for plan_name in ("tp_plan", "ep_plan", "fsdp_plan"):
+        for plan_name in ("tp_plan", "ep_plan", "fsdp_plan", "sp_plan"):
             override = getattr(distributed_config, plan_name)
             if isinstance(override, dict):
                 plan = getattr(self, plan_name)
@@ -253,7 +282,9 @@ class DistributedMixin:
         ep_plan = dict(self.ep_plan) if distributed_config.ep_size > 1 else {}
         # HSDP shards each replica with the FSDP plan.
         fsdp_plan = dict(self.fsdp_plan) if distributed_config.dp_size > 1 else {}
+        sp_plan = dict(self.sp_plan) if distributed_config.sp_size > 1 else {}
 
+        # `sp_plan` always has its `""`: the check below asks for the two styles instead
         for kind, plan in (("tp", tp_plan), ("ep", ep_plan), ("fsdp", fsdp_plan)):
             size = distributed_config.dp_size if kind == "fsdp" else getattr(distributed_config, f"{kind}_size")
             if size > 1 and not plan:
@@ -281,6 +312,7 @@ class DistributedMixin:
         self._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan", names)
         self._validate_parallel_plan(ep_plan, ALL_PARALLEL_STYLES, "ep_plan", names)
         self._validate_parallel_plan(fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan", names)
+        self._validate_parallel_plan(sp_plan, ALL_SP_STYLES, "sp_plan", names)
         distributed_config._validate_resolved_ep_plan(ep_plan)
 
         # Tied embed/lm_head weights are wrapped once: fold the head's FSDP rule into the embedding's.
@@ -295,10 +327,27 @@ class DistributedMixin:
         tp_plan = self._expand_parallel_plan(tp_plan)
         ep_plan = self._expand_parallel_plan(ep_plan)
         fsdp_plan = self._expand_parallel_plan(fsdp_plan)
+        sp_plan = self._expand_parallel_plan(sp_plan)
         # FSDP2 needs a submodule sharded before the module containing it, e.g. `mlp.gate` before its layer.
         fsdp_plan = dict(sorted(fsdp_plan.items(), key=lambda item: item[0].count("."), reverse=True))
 
-        return tp_plan, ep_plan, fsdp_plan
+        if distributed_config.sp_size > 1:
+            styles = [ALL_SP_STYLES[style] for style in sp_plan.values()]
+            # a split style on the decoder layers, and an attention style (Ulysses, or another registered one)
+            for name, kind in (
+                ("sp_split_sequence", SplitSequenceParallel),
+                ("sp_ulysses", SequenceParallelAttention),
+            ):
+                if not any(isinstance(style, kind) for style in styles):
+                    raise ValueError(
+                        f"`sp_plan` has no `{name}` rule matching a module of {type(self).__name__}. Context "
+                        "parallelism needs `sp_split_sequence` on the decoder layers, to keep this rank's slice of the "
+                        "sequence, and an attention style such as `sp_ulysses` on their attention modules, to give "
+                        "attention the whole sequence. Add them to `base_model_sp_plan` of the model's config, pass "
+                        "`sp_plan`, or set `sp_size=1`."
+                    )
+
+        return tp_plan, ep_plan, fsdp_plan, sp_plan
 
     @classmethod
     def maybe_distribute_model(
@@ -307,7 +356,9 @@ class DistributedMixin:
         distributed_config: DistributedConfig | None,
         mesh_manager: TransformersDeviceMesh | None,
     ):
-        """Apply pipeline, tensor and expert parallelism, then FSDP2, after model init and before weight loading."""
+        """
+        Apply pipeline, tensor, expert and sequence parallelism, then FSDP2, after model init and before weight loading.
+        """
         if mesh_manager is None:
             return model
 
@@ -318,7 +369,7 @@ class DistributedMixin:
         model._tp_size = distributed_config.tp_size
         model._fsdp_size = distributed_config.fsdp_size
 
-        tp_plan, ep_plan, fsdp_plan = model._resolve_parallel_plans(distributed_config)
+        tp_plan, ep_plan, fsdp_plan, sp_plan = model._resolve_parallel_plans(distributed_config)
 
         if distributed_config.pp_size > 1:
             model = apply_pipeline_parallelism(model, mesh_manager.get_mesh("pp"))
@@ -336,6 +387,9 @@ class DistributedMixin:
                 model = apply_expert_parallelism(
                     model, ep_mesh, tp_mesh, ep_plan, ep_implementation=distributed_config.ep_implementation
                 )
+
+        if distributed_config.sp_size > 1:
+            model = apply_sequence_parallelism(model, mesh_manager.get_mesh("sp"), sp_plan)
 
         if distributed_config.dp_size > 1:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)
