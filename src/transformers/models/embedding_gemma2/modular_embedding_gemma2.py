@@ -582,7 +582,7 @@ class EmbeddingGemma2Model(Gemma4Model):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
@@ -597,11 +597,11 @@ class EmbeddingGemma2Model(Gemma4Model):
                 "Image features were requested, but the model was initialized without a vision_config. "
                 "Cannot process images without a vision tower and vision embedder."
             )
-        return super().get_image_features(pixel_values=pixel_values, image_position_ids=image_position_ids, **kwargs)
+        return super().get_image_embeddings(pixel_values=pixel_values, image_position_ids=image_position_ids, **kwargs)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
@@ -623,7 +623,7 @@ class EmbeddingGemma2Model(Gemma4Model):
                 "Video features were requested, but the model was initialized without a vision_config. "
                 "Cannot process video without a vision tower and vision embedder."
             )
-        return super().get_video_features(
+        return super().get_video_embeddings(
             pixel_values_videos=pixel_values_videos,
             video_position_ids=video_position_ids,
             num_frames_per_video=num_frames_per_video,
@@ -678,11 +678,9 @@ class EmbeddingGemma2Model(Gemma4Model):
 
         # Merge text and images
         if pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            image_outputs = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True)
             mm_encoder_outputs["image"] = image_outputs
-            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -698,13 +696,11 @@ class EmbeddingGemma2Model(Gemma4Model):
             )
 
         if pixel_values_videos is not None:
-            video_outputs = self.get_video_features(
+            video_outputs = self.get_video_embeddings(
                 pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
             )
             mm_encoder_outputs["video"] = video_outputs
-            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_features = video_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()

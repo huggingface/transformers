@@ -245,6 +245,23 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
             self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip(reason="PPFormulaNet encodes images in its encoder, it has no image features getter")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip(reason="PPFormulaNet encodes images in its encoder, it has no image features getter")
+    def test_get_image_features_attentions(self):
+        pass
+
+    @unittest.skip(reason="PPFormulaNet encodes images in its encoder, it has no image features getter")
+    def test_get_image_features_pooler_output(self):
+        pass
+
+    @parameterized.expand([True, False, None])
+    @unittest.skip(reason="PPFormulaNet encodes images in its encoder, it has no image features getter")
+    def test_get_image_features_output(self, return_dict):
+        pass
+
     @unittest.skip(reason="PPFormulaNet does not use inputs_embeds")
     def test_enable_input_require_grads(self):
         pass

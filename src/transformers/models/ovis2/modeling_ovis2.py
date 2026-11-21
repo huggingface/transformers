@@ -31,6 +31,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -445,7 +446,7 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
     The Ovis2 model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class Ovis2Model(Ovis2PreTrainedModel):
+class Ovis2Model(Ovis2PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.vision_tower = Ovis2VisionModel(config.vision_config)
@@ -461,7 +462,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
@@ -487,6 +488,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
         image_outputs.pooler_output = image_features
         image_outputs.visual_indicator_features = self.visual_embeddings_table(visual_indicator)
 
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
     def get_placeholder_mask(
@@ -516,6 +518,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -540,7 +543,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values=pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
@@ -579,7 +582,7 @@ class Ovis2Model(Ovis2PreTrainedModel):
 
 
 @auto_docstring
-class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
+class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -591,12 +594,6 @@ class Ovis2ForConditionalGeneration(Ovis2PreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
-        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

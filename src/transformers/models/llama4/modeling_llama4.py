@@ -29,6 +29,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -1138,7 +1139,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         )
 
 
-class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
+class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
     _tp_plan = {"lm_head": "colwise_gather_output"}
     base_model_prefix = "model"
@@ -1172,12 +1173,15 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring(custom_intro="Obtains image last hidden states from the vision tower and apply al projection.")
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.vision_model(pixel_values, **kwargs)
+        image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
+        image_features, image_outputs.split_sizes = flatten_items(image_outputs.last_hidden_state)
+        image_outputs.pooler_output = self.multi_modal_projector(image_features)
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -1206,6 +1210,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1271,14 +1276,11 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values=pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].last_hidden_state
-            vision_flat = image_features.view(-1, image_features.size(-1))
-            projected_vision_flat = self.multi_modal_projector(vision_flat).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            projected_vision_flat = mm_encoder_outputs["image"].pooler_output
+            projected_vision_flat = projected_vision_flat.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=projected_vision_flat
             )

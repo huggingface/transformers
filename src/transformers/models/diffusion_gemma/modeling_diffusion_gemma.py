@@ -38,6 +38,7 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -995,7 +996,7 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     assumes the MoE code path in the inner layers.
     """
 )
-class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
+class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
@@ -1015,27 +1016,6 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
-        """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values,
-            pixel_position_ids=image_position_ids,
-            **kwargs,
-        )
-        last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -1064,6 +1044,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @merge_mm_encoder_outputs
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -1145,6 +1126,28 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
 
     def set_per_layer_input_embeddings(self, value):
         self.language_model.embed_tokens_per_layer = value
+
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values,
+            pixel_position_ids=image_position_ids,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        return vision_outputs
+
+    def get_video_features(self, *args, **kwargs):
+        raise NotImplementedError("DiffusionGemma does not support video inputs.")
 
     @staticmethod
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

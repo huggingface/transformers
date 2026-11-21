@@ -21,6 +21,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
@@ -105,7 +106,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
     The Llava model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class LlavaModel(LlavaPreTrainedModel):
+class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -120,7 +121,7 @@ class LlavaModel(LlavaPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
@@ -154,14 +155,12 @@ class LlavaModel(LlavaPreTrainedModel):
         # If image_sizes is provided, we need to split the image features accordingly,
         # but only if the image_sizes is not None (the default in this and related architectures)
         if image_sizes is not None:
-            split_sizes = (
-                (torch.as_tensor(image_sizes, device=image_features.device) // self.vision_tower.patch_size)
-                .prod(dim=-1)
-                .tolist()
-            )
-            image_features = torch.split(image_features.squeeze(0), split_sizes)
+            image_outputs.split_sizes = (
+                torch.as_tensor(image_sizes, device=image_features.device) // self.vision_tower.patch_size
+            ).prod(dim=-1)
+            image_features = image_features.squeeze(0)
         else:
-            image_features = list(image_features)
+            image_features, image_outputs.split_sizes = flatten_items(image_features)
         image_outputs.pooler_output = image_features
 
         return image_outputs
@@ -193,6 +192,7 @@ class LlavaModel(LlavaPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -218,7 +218,7 @@ class LlavaModel(LlavaPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
@@ -229,7 +229,7 @@ class LlavaModel(LlavaPreTrainedModel):
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -251,7 +251,7 @@ class LlavaModel(LlavaPreTrainedModel):
     The LLAVA model which consists of a vision backbone and a language model.
     """
 )
-class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
+class LlavaForConditionalGeneration(LlavaPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -263,21 +263,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring

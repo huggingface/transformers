@@ -32,6 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MoeCausalLMOutputWithPast,
@@ -1328,7 +1329,7 @@ class MiniMaxM3VLCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL backbone (vision + projector + text), without LM head.")
-class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
+class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel, MultimodalMixin):
     config: MiniMaxM3VLConfig
 
     def __init__(self, config: MiniMaxM3VLConfig):
@@ -1343,7 +1344,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
@@ -1354,8 +1355,8 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
         # ready to scatter into the text embeddings — in `pooler_output`.
         vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
-        split_sizes = (image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(image_features, split_sizes)
+        vision_outputs.pooler_output = image_features
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1402,6 +1403,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1429,28 +1431,26 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_embeds = mm_encoder_outputs["video"].pooler_output
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1473,19 +1473,17 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
     )
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.Tensor,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
-        # Video frames flow through the same vision pipeline as images (the tower is
-        # grid-agnostic); only the placeholder token they scatter into differs.
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
-class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, GenerationMixin):
+class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     config: MiniMaxM3VLConfig
@@ -1498,10 +1496,6 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
-
-    @auto_docstring
-    def get_image_features(self, pixel_values, image_grid_thw, **kwargs) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1597,10 +1591,6 @@ class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, Genera
             image_outputs=outputs.image_outputs,
             video_outputs=outputs.video_outputs,
         )
-
-    @auto_docstring
-    def get_video_features(self, pixel_values_videos, video_grid_thw, **kwargs):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
 
 __all__ = [

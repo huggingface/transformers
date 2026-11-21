@@ -18,6 +18,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.auto.modeling_auto import AutoModel
@@ -48,7 +49,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     The Fuyu model which consists of a vision backbone and a language model, without a language modeling head.
     """
 )
-class FuyuModel(FuyuPreTrainedModel):
+class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
         self.padding_idx = config.text_config.pad_token_id
@@ -108,7 +109,7 @@ class FuyuModel(FuyuPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -116,7 +117,13 @@ class FuyuModel(FuyuPreTrainedModel):
             The tensors corresponding to the input images.
         """
         patch_embeddings = self.vision_embed_tokens(pixel_values)
-        return BaseModelOutputWithPooling(last_hidden_state=patch_embeddings)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=patch_embeddings,
+            pooler_output=patch_embeddings.reshape(-1, patch_embeddings.shape[-1]),
+            split_sizes=patch_embeddings.new_full(
+                patch_embeddings.shape[:-2] or (1,), patch_embeddings.shape[-2], dtype=torch.long
+            ),
+        )
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -134,7 +141,7 @@ class FuyuModel(FuyuPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0] * image_features.shape[1]
+        n_image_features = image_features.shape[:-1].numel()
         special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
             n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
@@ -146,6 +153,7 @@ class FuyuModel(FuyuPreTrainedModel):
     @auto_docstring
     @deprecate_kwarg("image_patches", version="v5.24", new_name="pixel_values")
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -175,12 +183,11 @@ class FuyuModel(FuyuPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            patch_embeddings = mm_encoder_outputs["image"].last_hidden_state.to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            patch_embeddings = mm_encoder_outputs["image"].pooler_output
+            patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
             )

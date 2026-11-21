@@ -353,7 +353,7 @@ class Lfm3VlModelOutputWithPast(MultimodalBaseModelOutputWithPast):
             "`image_pooler_output` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return torch.cat(self.image_outputs.pooler_output, dim=0)
+        return self.image_outputs.pooler_output
 
     @property
     def video_pooler_output(self):
@@ -361,7 +361,7 @@ class Lfm3VlModelOutputWithPast(MultimodalBaseModelOutputWithPast):
             "`video_pooler_output` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return torch.cat(self.video_outputs.pooler_output, dim=0)
+        return self.video_outputs.pooler_output
 
 
 @auto_docstring
@@ -373,7 +373,7 @@ class Lfm3VlCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`image_pooler_output` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
-        return torch.cat(self.image_outputs.pooler_output, dim=0)
+        return self.image_outputs.pooler_output
 
     @property
     def video_pooler_output(self):
@@ -381,7 +381,7 @@ class Lfm3VlCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`video_pooler_output` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
         )
-        return torch.cat(self.video_outputs.pooler_output, dim=0)
+        return self.video_outputs.pooler_output
 
 
 class Lfm3VlModel(Qwen2VLModel):
@@ -402,7 +402,7 @@ class Lfm3VlModel(Qwen2VLModel):
     def compute_3d_position_ids(self):
         raise AttributeError("Lfm3Vl uses 2D vision and 1D text positions")
 
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
@@ -410,17 +410,17 @@ class Lfm3VlModel(Qwen2VLModel):
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
-        split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
-        image_outputs.pooler_output = torch.split(image_features, split_sizes)
+        image_outputs.pooler_output = image_features
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return image_outputs
 
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -451,27 +451,25 @@ class Lfm3VlModel(Qwen2VLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(
+            mm_encoder_outputs["video"] = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_features = mm_encoder_outputs["image"].pooler_output
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_features = mm_encoder_outputs["video"].pooler_output
+            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )
@@ -499,26 +497,6 @@ class Lfm3VlModel(Qwen2VLModel):
     """
 )
 class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    @auto_docstring
-    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(num_patches, in_channels * temporal_patch_size * patch_size**2)`):
-            The flattened patches of every image, grouped by merge block.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-            The temporal, height and width dimensions of the patch grid of each image.
-        """
-        return super().get_image_features(**super_kwargs)
-
-    @auto_docstring
-    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(num_patches, in_channels * temporal_patch_size * patch_size**2)`):
-            The flattened patches of every video, grouped by merge block.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`):
-            The temporal, height and width dimensions of the patch grid of each video.
-        """
-        return super().get_video_features(**super_kwargs)
-
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,

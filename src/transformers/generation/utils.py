@@ -47,6 +47,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
+from ..modeling_outputs import BaseModelOutputWithPooling
 from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
@@ -975,6 +976,10 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: we need a single entrypoint for multimodal/text encoder-decoder models because some VLMs need to pass
         `mm_encoder_output` to the text encoder backbone, before feeding it to text-decoder (e.g. Florence2)
         """
+        # A dict of our own: the decoding loop clears it after the prefill to free the encoder outputs, and a dict
+        # passed by the user is left as it is
+        if model_kwargs.get("mm_encoder_outputs") is not None:
+            model_kwargs["mm_encoder_outputs"] = dict(model_kwargs["mm_encoder_outputs"])
         if self.config.is_encoder_decoder and model_kwargs.get("encoder_outputs") is None:
             return self._prepare_text_encoder_decoder_kwargs_for_generation(
                 inputs_tensor=inputs_tensor,
@@ -1038,10 +1043,8 @@ class GenerationMixin(ContinuousMixin):
         model_kwargs.setdefault("mm_encoder_outputs", {})
         keys_to_pop = set()
         for modality in ["image", "video"]:
-            if (
-                modality in self.input_modalities
-                and (encoder_fn := getattr(self.base_model, f"get_{modality}_features", None)) is not None
-            ):
+            encoder_fn = getattr(self.base_model, f"get_{modality}_embeddings", None)
+            if modality in self.input_modalities and encoder_fn is not None:
                 encoder_kwargs = {
                     key: model_kwargs[key]
                     for key in inspect.signature(encoder_fn).parameters
@@ -1124,6 +1127,10 @@ class GenerationMixin(ContinuousMixin):
 
         return decoder_input_ids, model_kwargs
 
+    def _placeholder_token_id(self: "GenerativePreTrainedModel", modality: str) -> int:
+        """The token whose positions in the text hold the features of `modality`."""
+        return getattr(self.config, f"{modality}_token_id")
+
     def _expand_multimodal_outputs(
         self: "GenerativePreTrainedModel",
         input_ids: torch.LongTensor,
@@ -1144,18 +1151,41 @@ class GenerationMixin(ContinuousMixin):
 
         for modality in ["image", "video"]:
             modalily_outputs = mm_encoder_output.get(modality)
-            if modalily_outputs is None or getattr(modalily_outputs, "pooler_output", None) is None:
+            if modalily_outputs is None:
+                continue
+            pooler_output = getattr(modalily_outputs, "pooler_output", None)
+            deepstack_features = getattr(modalily_outputs, "deepstack_features", None)
+            # Granite 4 Vision has only deepstack features
+            features = pooler_output if pooler_output is not None else (deepstack_features or [None])[0]
+            is_flat = isinstance(features, torch.Tensor) and getattr(modalily_outputs, "split_sizes", None) is not None
+            if not is_flat and pooler_output is None:
                 continue
 
             # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
-            token_id_key = f"{modality}_token_id"
+            token_id = self._placeholder_token_id(modality)
             if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.full((), getattr(self.config, token_id_key), dtype=torch.long, device=inputs_embeds.device)
+                    torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
                 num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
             else:
-                num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
+                num_image_tokens_in_text = (input_ids == token_id).sum(-1)
+
+            # Flat outputs from `get_*_embeddings`: each sample's rows are contiguous, one gather repeats them
+            if is_flat:
+                mm_encoder_output[modality] = _repeat_flat_outputs(
+                    modalily_outputs, num_image_tokens_in_text, expand_size
+                )
+                continue
+
+            # Per-item outputs: GLM-Image's feature maps, and `get_*_features` outputs passed by users (generate itself
+            # encodes flat), only kept for backward compatibility
+            if getattr(modalily_outputs, "split_sizes", None) is not None:
+                logger.warning_once(
+                    "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) to "
+                    "`generate` is deprecated and will be removed: pass the flat outputs of `get_image_embeddings` / "
+                    "`get_video_embeddings`."
+                )
             num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
             num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
             num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
@@ -1177,12 +1207,8 @@ class GenerationMixin(ContinuousMixin):
             if not is_split_images:
                 modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
 
-            # 4. If there are deepstack features, expand them as well. Most models have deeptack features
-            # per layer where each feature is a `list[torch.Tensor]`. GraniteVision has each feature as a
-            # `tuple(layer_idx, list[torch.Tensor])` and we skip it here. FIXME: we need a uniform deepstack layout
-            if getattr(modalily_outputs, "deepstack_features", None) is not None and isinstance(
-                modalily_outputs.deepstack_features[0][0], torch.Tensor
-            ):
+            # 4. If there are deepstack features, expand them as well: per layer, each feature is a `list[torch.Tensor]`
+            if getattr(modalily_outputs, "deepstack_features", None) is not None:
                 # Each deepstack feat is `(total_image_len, dim)` tensor
                 modalily_outputs.deepstack_features = [
                     [
@@ -1257,6 +1283,12 @@ class GenerationMixin(ContinuousMixin):
         # Add the cache as input if present in outputs
         if "cache" in outputs:
             model_kwargs["cache"] = outputs["cache"]
+
+        # With a cache, only the prefill reads the encoder outputs: free them for the decoding steps
+        if model_kwargs.get("use_cache", True) and (
+            mm_encoder_outputs := model_kwargs.pop("mm_encoder_outputs", None)
+        ):
+            mm_encoder_outputs.clear()
 
         # update token_type_ids with last value
         if (token_type_ids := model_kwargs.get("token_type_ids")) is not None:
@@ -4419,18 +4451,55 @@ class GenerationMixin(ContinuousMixin):
             return outputs
 
 
+def _repeat_index(counts: torch.LongTensor, repeats: int, total: int) -> torch.LongTensor:
+    """Index repeating each group of `counts` contiguous entries `repeats` times in a row, without a host sync."""
+    sizes = counts * repeats
+    group = torch.repeat_interleave(
+        torch.arange(len(counts), device=counts.device), sizes, output_size=total * repeats
+    )
+    offset = torch.arange(total * repeats, device=counts.device) - (sizes.cumsum(0) - sizes)[group]
+    return (counts.cumsum(0) - counts)[group] + offset % counts[group]
+
+
+def _repeat_flat_outputs(
+    outputs: BaseModelOutputWithPooling, rows_per_sample: torch.LongTensor, repeats: int
+) -> BaseModelOutputWithPooling:
+    """Repeats each sample's rows of flat `get_*_embeddings` outputs, as `input_ids.repeat_interleave` does its row."""
+    pooler_output = outputs.pooler_output
+    deepstack_features = getattr(outputs, "deepstack_features", None)
+    # Granite 4 Vision has only deepstack features
+    reference = pooler_output if isinstance(pooler_output, torch.Tensor) else deepstack_features[0]
+    rows = _repeat_index(rows_per_sample.to(reference.device), repeats, reference.shape[0])
+
+    def repeat(features: torch.Tensor) -> torch.Tensor:
+        return features[rows.to(features.device)]
+
+    expanded = {}
+    if isinstance(pooler_output, torch.Tensor):
+        expanded["pooler_output"] = repeat(pooler_output)
+    if deepstack_features is not None:
+        expanded["deepstack_features"] = [repeat(features) for features in deepstack_features]
+    # Nothing reads the item boundaries of the expanded rows
+    expanded["split_sizes"] = None
+    # A copy, as the outputs may be the user's (some getters set `split_sizes` on a vision tower's output class)
+    outputs = copy.copy(outputs)
+    for key, value in expanded.items():
+        setattr(outputs, key, value)
+    return outputs
+
+
 def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:
     """
     Keeps the given rows of the flattened `(num_placeholder_tokens, hidden_size)` features of a pre-encoded multimodal
-    output, in the container type the model expects: a single-item list, or a tensor with a batch of one. Only the
-    pooled and deepstack features are kept, as those are what the models read from pre-encoded outputs.
+    output, in the container type the model expects: a single-item list, a flat tensor, or a tensor with a batch of one.
+    Only the pooled and deepstack features are kept, as those are what the models read from pre-encoded outputs.
     """
 
     def slice_features(features):
-        rows_features = torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]
         if isinstance(features, torch.Tensor):
-            return rows_features.unsqueeze(0)
-        return [rows_features]
+            rows_features = features.reshape(-1, features.shape[-1])[rows]
+            return rows_features if features.ndim == 2 else rows_features.unsqueeze(0)
+        return [torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]]
 
     sliced = {"pooler_output": slice_features(output["pooler_output"])}
     deepstack_features = output.get("deepstack_features")

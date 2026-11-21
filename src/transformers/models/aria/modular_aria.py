@@ -34,6 +34,7 @@ from ...image_utils import (
 )
 from ...integrations import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalMoeBaseModelOutputWithPast,
@@ -819,7 +820,7 @@ class AriaModel(LlavaModel):
         )
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_mask: torch.Tensor | None = None,
@@ -841,6 +842,7 @@ class AriaModel(LlavaModel):
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
 
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -866,7 +868,7 @@ class AriaModel(LlavaModel):
         # 2. Merge text and images
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None and inputs_embeds.shape[1] != 1:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values=pixel_values,
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
@@ -904,21 +906,6 @@ class AriaModel(LlavaModel):
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_mask: torch.Tensor | None = None,
-        vision_feature_layer: int | list[int] = -1,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            pixel_mask=pixel_mask,
-            vision_feature_layer=vision_feature_layer,
-            **kwargs,
-        )
 
     @can_return_tuple
     @auto_docstring

@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from itertools import accumulate
-
 import torch
 from torch import nn
 
@@ -27,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalCausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -126,7 +125,7 @@ def compute_retention_mask(video_embeds: torch.Tensor, num_tubelets: int, q: flo
     return retention_mask
 
 
-class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, GenerationMixin):
+class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, MultimodalMixin, GenerationMixin):
     def __init__(self, config: NemotronH_Omni_Reasoning_V3_Config):
         super().__init__(config)
         self.image_token_id = config.image_token_id
@@ -189,7 +188,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
 
     @can_return_tuple
     @auto_docstring
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_hw: torch.LongTensor,
@@ -221,19 +220,17 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
                 for features, (grid_height, grid_width) in zip(image_features, image_grid_hw.tolist())
             ]
         )
-        split_sizes = (image_grid_hw.prod(-1) // 2**2).tolist()
-        pooler_output = torch.split(self.multi_modal_projector(image_features), split_sizes)
-
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=pooler_output,
+            pooler_output=self.multi_modal_projector(image_features),
+            split_sizes=image_grid_hw.prod(-1) // 2**2,
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
 
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
+    def get_video_embeddings(
         self, pixel_values_videos: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -265,7 +262,8 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         video_embeds = self.project_vision_features(vision_outputs.features, grid_height, grid_width)
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state.unflatten(0, (num_videos, num_tubelets)),
-            pooler_output=tuple(video_embeds.unflatten(0, (num_videos, num_tubelets)).flatten(1, 2)),
+            pooler_output=video_embeds.flatten(0, 1),
+            split_sizes=video_embeds.new_full((num_videos,), num_tubelets * video_embeds.shape[1], dtype=torch.long),
             hidden_states=vision_outputs.hidden_states,
             attentions=vision_outputs.attentions,
         )
@@ -336,52 +334,14 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         )
         return special_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
-    def _expand_multimodal_outputs(
-        self,
-        input_ids: torch.LongTensor,
-        mm_encoder_output: dict,
-        expand_size: int = 1,
-        inputs_embeds: torch.LongTensor | None = None,
-    ) -> dict[str, dict]:
-        # override -> video placeholders reuse the image token, so both modalities count `image_token_id`
-        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
-            # interleaving on the first dim matches `input_ids.repeat_interleave` on the batch dim
-            if isinstance(inputs, torch.Tensor):
-                return inputs.repeat_interleave(repeat_times, dim=0)
-            return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
-
-        for modality in ["image", "video"]:
-            modality_outputs = mm_encoder_output.get(modality)
-            if modality_outputs is None or getattr(modality_outputs, "pooler_output", None) is None:
-                continue
-
-            # 1. cumulative number of placeholder tokens per text sample and per encoded image/video
-            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
-                special_mask = inputs_embeds == self.get_input_embeddings()(
-                    torch.full((), self.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-                num_tokens_in_text = special_mask.all(-1).sum(-1)
-            else:
-                num_tokens_in_text = (input_ids == self.image_token_id).sum(-1)
-            num_tokens_in_text = list(accumulate(num_tokens_in_text))
-            num_tokens_in_encoder = list(accumulate(len(out) for out in modality_outputs.pooler_output))
-
-            # 2. split the encoder outputs into one group per text sample and repeat each group
-            offsets = [0] + [i + 1 for i, num in enumerate(num_tokens_in_encoder) if num in num_tokens_in_text]
-            is_split = not isinstance(modality_outputs.pooler_output, torch.Tensor)
-            modality_outputs.pooler_output = [
-                out
-                for start, end in zip(offsets[:-1], offsets[1:])
-                for out in repeat_tensor_or_list(modality_outputs.pooler_output[start:end], expand_size)
-            ]
-
-            if not is_split:
-                modality_outputs.pooler_output = torch.stack(modality_outputs.pooler_output, dim=0)
-        return mm_encoder_output
+    def _placeholder_token_id(self, modality: str) -> int:
+        # Video placeholders reuse the image token
+        return self.image_token_id
 
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -422,24 +382,22 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, image_grid_hw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_video_features(pixel_values_videos, return_dict=True, **kwargs)
+            mm_encoder_outputs["video"] = self.get_video_embeddings(pixel_values_videos, return_dict=True, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            image_embeds = mm_encoder_outputs["image"].pooler_output
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_embeds, self.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
+            video_embeds = mm_encoder_outputs["video"].pooler_output
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_embeds, self.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
@@ -447,10 +405,13 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
                 # the videos of one call are stacked, so they share the number of tubelets in `last_hidden_state`
                 video_outputs = mm_encoder_outputs["video"]
                 num_tubelets = video_outputs.last_hidden_state.shape[1]
+                video_features = video_outputs.pooler_output
+                if isinstance(video_features, torch.Tensor):
+                    video_features = video_features.unflatten(0, (len(video_outputs.split_sizes), -1))
                 evs_mask = torch.cat(
                     [
                         compute_retention_mask(features, num_tubelets, self.video_pruning_rate)
-                        for features in video_outputs.pooler_output
+                        for features in video_features
                     ]
                 )
                 retention_mask = torch.ones_like(input_ids, dtype=torch.bool)

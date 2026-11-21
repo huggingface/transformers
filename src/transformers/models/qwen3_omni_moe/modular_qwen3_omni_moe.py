@@ -1166,7 +1166,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
     }
 
-    def get_video_features(
+    def get_video_embeddings(
         self,
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
@@ -1174,14 +1174,10 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
-        ]
+        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
@@ -1189,11 +1185,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.deepstack_features = [
-            torch.split(feat, split_sizes) for feat in vision_outputs.deepstack_features
-        ]
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")
@@ -1274,17 +1266,17 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
+            mm_encoder_outputs["image"]: BaseModelOutputWithDeepstackFeatures = self.get_image_embeddings(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
+            mm_encoder_outputs["video"]: BaseModelOutputWithDeepstackFeatures = self.get_video_embeddings(
                 pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = mm_encoder_outputs["image"].pooler_output
             image_embeds_multiscale = mm_encoder_outputs["image"].deepstack_features
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
@@ -1293,7 +1285,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeds = mm_encoder_outputs["video"].pooler_output
             video_embeds_multiscale = mm_encoder_outputs["video"].deepstack_features
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
@@ -1309,8 +1301,6 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
             image_mask_joint = image_mask[visual_pos_masks]
             video_mask_joint = video_mask[visual_pos_masks]
             for img_embed, vid_embed in zip(image_embeds_multiscale, video_embeds_multiscale):
-                img_embed = torch.cat(img_embed, dim=0)
-                vid_embed = torch.cat(vid_embed, dim=0)
                 embed_joint = img_embed.new_zeros(visual_pos_masks.sum(), img_embed.shape[-1])
 
                 embed_joint[image_mask_joint, :] = img_embed
@@ -1319,11 +1309,11 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
             visual_embeds_multiscale = visual_embeds_multiscale_joint
         elif image_mask is not None:
             image_mask = image_mask[..., 0]
-            visual_embeds_multiscale = [torch.cat(feat, dim=0) for feat in image_embeds_multiscale]
+            visual_embeds_multiscale = image_embeds_multiscale
             visual_pos_masks = image_mask
         elif video_mask is not None:
             video_mask = video_mask[..., 0]
-            visual_embeds_multiscale = [torch.cat(feat, dim=0) for feat in video_embeds_multiscale]
+            visual_embeds_multiscale = video_embeds_multiscale
             visual_pos_masks = video_mask
 
         if feature_attention_mask is not None:
@@ -1365,14 +1355,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
-
-    @auto_docstring
-    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_image_features(**super_kwargs)
-
-    @auto_docstring
-    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithDeepstackFeatures:
-        return super().get_video_features(**super_kwargs)
 
     @can_return_tuple
     @auto_docstring

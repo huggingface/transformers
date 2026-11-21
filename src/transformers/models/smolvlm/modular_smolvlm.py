@@ -132,7 +132,7 @@ class SmolVLMModel(Idefics3Model):
     @auto_docstring(
         custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
@@ -154,7 +154,6 @@ class SmolVLMModel(Idefics3Model):
 
         # If no images, leave one empty image.
         real_images_inds[0] |= ~torch.any(real_images_inds)
-        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -181,10 +180,8 @@ class SmolVLMModel(Idefics3Model):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = [
-            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
-        ]
-
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
         return image_outputs
 
     @merge_with_config_defaults
@@ -229,7 +226,7 @@ class SmolVLMModel(Idefics3Model):
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("image")) or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
-                mm_encoder_outputs["image"] = self.get_image_features(
+                mm_encoder_outputs["image"] = self.get_image_embeddings(
                     pixel_values, pixel_attention_mask, return_dict=True
                 )
             image_hidden_states = mm_encoder_outputs["image"].pooler_output

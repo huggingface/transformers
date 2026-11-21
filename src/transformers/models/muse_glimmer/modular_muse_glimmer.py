@@ -1078,7 +1078,7 @@ class MuseGlimmerModel(Kimi_K25Model):
         self.vision_projection = nn.Linear(config.projector_hidden_size, config.text_config.hidden_size, bias=False)
         self.perception_emb_norm = MuseGlimmerRMSNorm(eps=config.text_config.rms_norm_eps, with_scale=False)
 
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
@@ -1092,8 +1092,8 @@ class MuseGlimmerModel(Kimi_K25Model):
         vision_features = self.vision_adapter(vision_outputs.last_hidden_state)
         vision_features = self.vision_projection(vision_features)
         vision_features = self.perception_emb_norm(vision_features)
-        split_sizes = (image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2).tolist()
-        vision_outputs.pooler_output = torch.split(vision_features, split_sizes)
+        vision_outputs.pooler_output = vision_features
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
         return vision_outputs
 
 

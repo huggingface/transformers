@@ -32,6 +32,7 @@ from ...generation import GenerationConfig, GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -426,7 +427,7 @@ class SmolVLMConnector(nn.Module):
     SmolVLM model consisting of a SIGLIP vision encoder and Llama3 language decoder
     """
 )
-class SmolVLMModel(SmolVLMPreTrainedModel):
+class SmolVLMModel(SmolVLMPreTrainedModel, MultimodalMixin):
     def __init__(self, config: SmolVLMConfig):
         super().__init__(config)
         self.padding_idx = self.config.text_config.pad_token_id
@@ -453,7 +454,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
     @auto_docstring(
         custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
     )
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
@@ -475,7 +476,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
         # If no images, leave one empty image.
         real_images_inds[0] |= ~torch.any(real_images_inds)
-        num_real_images_per_batch = real_images_inds.view(batch_size, num_images).sum(dim=1)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -502,10 +502,8 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = [
-            f.reshape(-1, f.shape[-1]) for f in image_features.split(num_real_images_per_batch.tolist())
-        ]
-
+        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
+        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
         return image_outputs
 
     @merge_with_config_defaults
@@ -554,7 +552,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("image")) or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
-                mm_encoder_outputs["image"] = self.get_image_features(
+                mm_encoder_outputs["image"] = self.get_image_embeddings(
                     pixel_values, pixel_attention_mask, return_dict=True
                 )
             image_hidden_states = mm_encoder_outputs["image"].pooler_output
@@ -630,7 +628,7 @@ class SmolVLMCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     The SmolVLM Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.
     """
 )
-class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
+class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -650,23 +648,6 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        pixel_attention_mask: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        pixel_attention_mask (`torch.LongTensor`, *optional*):
-            The attention mask indicating padded regions in the image.
-        """
-        return self.model.get_image_features(
-            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
-        )
 
     @can_return_tuple
     @auto_docstring

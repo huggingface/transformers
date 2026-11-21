@@ -26,6 +26,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
@@ -222,7 +223,7 @@ DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
 
 
 @auto_docstring
-class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
+class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel, MultimodalMixin):
     def __init__(self, config: DeepseekVLHybridConfig):
         super().__init__(config)
         self.output_size = config.vision_config.image_size // config.vision_config.patch_size
@@ -247,7 +248,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
-    def get_image_features(
+    def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
         high_res_pixel_values: torch.Tensor,
@@ -256,10 +257,12 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
         high_res_outputs = self.get_high_res_image_features(high_res_pixel_values, **kwargs)
         image_features = self.aligner(low_res_outputs.last_hidden_state, high_res_outputs.last_hidden_state)
+        pooler_output, split_sizes = flatten_items(image_features)
 
         return BaseModelOutputWithHighResVisionEncodings(
             last_hidden_state=low_res_outputs.last_hidden_state,
-            pooler_output=image_features,
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=low_res_outputs.hidden_states,
             attentions=low_res_outputs.attentions,
             high_res_vision_last_hidden_state=high_res_outputs.last_hidden_state,
@@ -294,6 +297,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
     @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -323,12 +327,12 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values, high_res_pixel_values, return_dict=True
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output.reshape(-1, inputs_embeds.shape[-1])
+            image_features = mm_encoder_outputs["image"].pooler_output
             image_attention_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = image_attention_mask.to(inputs_embeds.device)
@@ -377,7 +381,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         return high_res_outputs
 
 
-class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, GenerationMixin):
+class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = ("text",)
     _can_compile_fullgraph = True
