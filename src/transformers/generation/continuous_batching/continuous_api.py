@@ -316,7 +316,7 @@ _MTP_ORACLE: dict | None = None
 _MTP_ORACLE_MODE = os.environ.get("CB_MTP_ORACLE", "accept")
 # Test switch: hash blocks from the scheduler's count, which includes the row of a draft that may be rejected
 _MTP_UNSAFE_HASH = os.environ.get("CB_MTP_UNSAFE_HASH", "0") == "1"
-from .input_outputs import _CB_MTP_ASYNC  # noqa: E402  gap3-mtpa prototype
+from .input_outputs import _CB_MTP_ASYNC, _CB_MTP_K, _CB_MTP_MULTI  # noqa: E402  gap3-mtpa / gap3-mtpk prototypes
 
 
 def _mtp_oracle_draft(state: RequestState, draft: int) -> int:
@@ -693,8 +693,72 @@ class ContinuousBatchProcessor:
         if self.scheduler._requests_to_fork:
             raise NotImplementedError("CB_MTP prototype: forked requests are not supported")
 
+    def _update_batch_mtp_k(self) -> None:
+        """gap3-mtpk prototype: `update_batch` with k drafts per step (CB_MTP_K). A request emits its `n_acc` accepted
+        drafts and one more token. Its drafts' rows were not counted when the step was prepared; the accepted ones are
+        counted now. Blocks completed by decoding are not registered for prefix sharing."""
+        k = _CB_MTP_K
+        io = self.inputs_and_outputs
+        out = io.mtp_k_outputs()  # [rows, R] int32 on the host
+        candidates = out[: k + 1].tolist()
+        logprobs = out[k + 1 : 2 * k + 2].contiguous().view(torch.float32).tolist() if self.return_logprobs else None
+        num_accepted = out[2 * k + 2].tolist()
+        next_drafts = out[2 * k + 3 : 3 * k + 3].t().tolist()
+        stats = self.mtp_stats
+        stats["steps"] += 1
+        self.mtp_step_times.append(perf_counter())
+        if "accepted_at" not in stats or not stats["accepted_at"]:
+            stats["accepted_at"] = [0] * k
+        row = 0
+        pending_outputs = []
+        for future_state in io.requests_in_batch:
+            state = future_state.state
+            if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
+                if _CB_MTP_ASYNC:  # finished while this step was in flight, its outputs are dropped
+                    row += future_state.has_new_token
+                    continue
+                raise RuntimeError(f"Tried to update {state.status.name} request {state.request_id} in sync mode.")
+            if not future_state.has_new_token:
+                if state.status == RequestStatus.PREFILLING:
+                    self.cache.mark_complete_blocks(state, future_state.complete_blocks)
+                continue
+            if state.generated_len() == 0:
+                state.status = RequestStatus.DECODING
+            n_acc = num_accepted[row] if future_state.mtp_has_draft else 0
+            if future_state.mtp_has_draft:
+                stats["drafted"] += 1
+                stats["accepted"] += n_acc
+                for j in range(n_acc):
+                    stats["accepted_at"][j] += 1
+                state.position_offset += n_acc
+                state.mtp_pending_acc -= 1
+                future_state.complete_blocks = {}
+            is_finished = False
+            for j in range(n_acc + 1):
+                logprob = logprobs[j][row] if logprobs is not None else None
+                is_finished = state.update_and_check_completion(candidates[j][row], logprob)
+                stats["emitted"] += 1
+                if is_finished:
+                    break
+            self.cache.mark_complete_blocks(state, future_state.complete_blocks)
+            if is_finished:
+                self.scheduler.finish_request(state.request_id)
+                self.scheduler.block_new_requests = False
+            else:
+                state.tokens_to_process = [state.tokens_to_process[0]] + next_drafts[row]
+                state.mtp_has_draft = True
+            if state.streaming or state.status == RequestStatus.FINISHED:
+                pending_outputs.append(state.to_generation_output())
+            row += 1
+        if pending_outputs:
+            self.output_router.deliver_batch(pending_outputs)
+        if self.scheduler._requests_to_fork:
+            raise NotImplementedError("CB_MTP prototype: forked requests are not supported")
+
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
+        if self.mtp_mode and _CB_MTP_MULTI:
+            return self._update_batch_mtp_k()
         if self.mtp_mode:
             return self._update_batch_mtp()
         requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()

@@ -148,7 +148,11 @@ if _CB_MTP not in ("", "shadow", "spec"):
 # path too, with `_CB_MTP_QUERY` query tokens per request (the last token, then the draft); padded like the one-token
 # path (requests to a power of 2), so the graph key (query tokens, key bucket) also fixes the number of logits rows
 _CB_MTP_BT = _CB_MTP == "spec" and _PROTO_MLA_BLOCK_TABLE
-_CB_MTP_QUERY = 2
+# gap3-mtpk prototype: CB_MTP_K=k (block table path) drafts k tokens per step with the same MTP layer applied k times,
+# as vLLM and SGLang do with one MTP layer; unset keeps the 1-draft path above
+_CB_MTP_K = int(_mtp_os.environ.get("CB_MTP_K", "0"))
+_CB_MTP_MULTI = _CB_MTP_BT and _CB_MTP_K >= 1
+_CB_MTP_QUERY = 1 + _CB_MTP_K if _CB_MTP_MULTI else 2
 # gap3-mtpa prototype: MTP speculative decoding under asynchronous batching (CB_MTP_ASYNC=1, with CB_MTP=spec, the block
 # table decode path and "use_async_batching": true). Step N+1 is prepared before step N's outcome is known: the host
 # schedules every drafted request as if its draft were rejected (pessimistic length, one slack row allocated), and the
@@ -263,6 +267,10 @@ class ContinuousBatchingIOs:
             # rows: first token, its logprob, bonus token, its logprob, draft accepted, next draft, then two
             # measurement rows: target logprob of the previous step's draft, drafter logprob of the next draft
             num_output_rows = 8
+            if _CB_MTP_MULTI:
+                # gap3-mtpk: rows 0..k the candidate token of each verified row, k+1..2k+1 their logprobs, 2k+2 the
+                # number of accepted drafts, 2k+3..3k+2 the next drafts
+                num_output_rows = max(8, 3 * _CB_MTP_K + 3)
             # per query token: the token that follows it when it is already known (prompt tokens), and where to take
             # it from among the tokens sampled in the step otherwise (-1: use `mtp_shift_ids`)
             mtp_kwargs = {"dtype": torch.int32, "device": self.device, "pin_memory": pin_memory}
@@ -609,8 +617,12 @@ class ContinuousBatchingIOs:
                 src = [-1] * query_length
                 if future_state.has_new_token:
                     row = len(logits_indices)
-                    has_draft = state.mtp_has_draft and query_length == 2
-                    if has_draft:
+                    has_draft = state.mtp_has_draft and query_length == _CB_MTP_QUERY
+                    if has_draft and _CB_MTP_MULTI:
+                        # gap3-mtpk: query token j pairs with the candidate token of verified row j
+                        for j in range(_CB_MTP_QUERY):
+                            src[j - _CB_MTP_QUERY] = j * mtp_num_rows + row
+                    elif has_draft:
                         src[-2], src[-1] = row, mtp_num_rows + row  # first sampled token, then the bonus token
                     else:
                         src[-1] = row
@@ -623,9 +635,17 @@ class ContinuousBatchingIOs:
             if future_state.has_new_token:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
                 if self.mtp_mode and future_state.mtp_has_draft:
-                    logits_indices[-1] -= 1  # the row that verifies the draft; the draft's own row is the next one
+                    logits_indices[-1] -= _CB_MTP_QUERY - 1  # the row that verifies the first draft; the drafts' follow
                 state.tokens_to_process = [TMP_TOKEN_ID]
-                if _CB_MTP_ASYNC:
+                if _CB_MTP_MULTI:
+                    # gap3-mtpk: as below, for k drafts, in both batching modes: the drafts' rows are counted once the
+                    # host knows how many were accepted (asynchronous: the device takes the next query tokens)
+                    state.tokens_to_process = [0] * _CB_MTP_QUERY
+                    state.mtp_has_draft = True
+                    if future_state.mtp_has_draft:
+                        state.position_offset -= _CB_MTP_QUERY - 1
+                        state.mtp_pending_acc += 1
+                elif _CB_MTP_ASYNC:
                     # gap3-mtpa: the request's next query tokens (last token, new draft) are taken on the device from this
                     # step's outputs when it is scheduled in the next step; on the host they are placeholders (valid ids)
                     state.tokens_to_process = [0, 0]
@@ -681,6 +701,8 @@ class ContinuousBatchingIOs:
                 else:
                     self.block_table[allocator.index, : len(rows)].copy_(table, non_blocking=True)
             longest = max(self.max_length_k.values()) + (1 if _CB_MTP_ASYNC else 0)  # gap3-mtpa: a shift of +1
+            if _CB_MTP_MULTI:  # gap3-mtpk: a shift of up to k, and the k - 1 later draft passes
+                longest = max(self.max_length_k.values()) + 2 * _CB_MTP_K
             self._proto_len_k_bucket = pad_to_pow2(longest, self.cache.max_decode_fast_path_length, 1024)
 
         # If needed, build the attention mask with the un-padded sequence lengths
@@ -800,7 +822,7 @@ class ContinuousBatchingIOs:
                     self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
                     self.true_read_sizes[i] = len(group_read_indices)
 
-        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE_CHECK and not _CB_MTP_ASYNC:  # rows shift on the device
+        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE_CHECK and not (_CB_MTP_ASYNC or _CB_MTP_MULTI):  # rows shift on the device
             self._proto_check_block_table_rows(requests_in_batch, use_padding)
 
     def _proto_check_block_table_rows(self, requests_in_batch: list[FutureRequestState], use_padding: bool) -> None:
@@ -886,6 +908,10 @@ class ContinuousBatchingIOs:
         if self._proto_checked_steps in (1, 10, 100, 1000) or self._proto_checked_steps % 5000 == 0:
             print(f"BTCHECK mtp ok steps={self._proto_checked_steps} requests={len(requests_in_batch)} "
                   f"tokens={num_tokens} bucket={self._proto_len_k_bucket}", flush=True)
+
+    def mtp_k_outputs(self) -> torch.Tensor:
+        """gap3-mtpk prototype: the output rows of the step (see `num_output_rows`), on the host."""
+        return self.output_ids[:, : self.num_request_in_batch].cpu()
 
     def prepare_mtp_batch_update(self) -> tuple[list, ...]:
         """gap2-mtp prototype: per logits row, the first token and its logprob, the bonus token and its logprob,
@@ -1308,6 +1334,12 @@ class ContinuousBatchingAsyncIOs:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]
         return io_pair.host_io.prepare_mtp_batch_update()
+
+    def mtp_k_outputs(self) -> torch.Tensor:
+        """gap3-mtpk prototype: the output rows of the step whose outputs were just retrieved, on the host."""
+        io_pair = self.io_pairs[self.current_pair]
+        io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]
+        return io_pair.host_io.mtp_k_outputs()
 
     @property
     def requests_in_batch(self) -> list[FutureRequestState]:

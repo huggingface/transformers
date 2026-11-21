@@ -1623,9 +1623,12 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
         position_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
+        return_pre_norm: bool = False,
         **kwargs,
     ) -> torch.Tensor:
         """gap2-mtp prototype. One pass of the MTP module over the same positions as a main forward.
+        (gap3-mtpk: `return_pre_norm=True` also returns the module's output before `shared_head.norm`, the previous
+        hidden state of the next draft pass when the module is applied several times.)
 
         `last_hidden_state` `[B, S, H]` is the main model's output (after its final norm) at positions `p`,
         `input_ids` `[B, S]` holds the tokens at positions `p + 1`, `position_ids` are the main model's (`p`). The
@@ -1656,6 +1659,8 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
             cache=cache,
             **kwargs,
         )
+        if return_pre_norm:
+            return layer.shared_head.norm(hidden_states), hidden_states
         return layer.shared_head.norm(hidden_states)
 
 

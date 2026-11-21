@@ -25,6 +25,8 @@ from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import (
     _CB_MTP_ASYNC,
     _CB_MTP_BT,
+    _CB_MTP_K,
+    _CB_MTP_MULTI,
     _CB_MTP_QUERY,
     ContinuousBatchingAsyncIOs,
     ContinuousBatchingIOs,
@@ -175,7 +177,7 @@ class ModelRunner:
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)
         if _CB_MTP:
-            forward_fn = self._forward_verify_sample_and_draft
+            forward_fn = self._forward_verify_k if _CB_MTP_MULTI else self._forward_verify_sample_and_draft
 
         if _FUSE_WAIT_DEFAULT_STREAM and compute_stream is not None and compute_stream.device.type == "cuda":
             compute_stream.wait_stream(torch.cuda.default_stream(compute_stream.device))
@@ -300,6 +302,135 @@ class ModelRunner:
         request_shift = torch.where(cu_q[:-1] < num_tokens, torch.where(has_prev, accepted, 0)[first], 0)
         for cu_k in batch_data["cu_seq_lens_k"].values():
             cu_k[1:].add_(torch.cumsum(request_shift, 0).to(cu_k.dtype))
+
+    @staticmethod
+    def _mtp_take_previous_step_k(batch_data: dict, carry_over_ids: torch.Tensor, prev_output_ids: torch.Tensor) -> None:
+        """gap3-mtpk prototype: `_mtp_take_previous_step` for k drafts. A request carried from the step in flight
+        takes its last emitted token (the candidate of verified row `n_acc`), its k new drafts, and moves its positions
+        and key length by `n_acc`. Output rows: see `ContinuousBatchingIOs.num_output_rows`."""
+        k = _CB_MTP_K
+        input_ids = batch_data["input_ids"][0]  # [Q]
+        num_tokens = input_ids.shape[0]
+        carry = carry_over_ids[:num_tokens].long()
+        has_prev = carry >= 0
+        prev_row = carry.clamp(0, prev_output_ids.shape[1] - 1)
+        n_acc = prev_output_ids[2 * k + 2, prev_row].long().clamp(0, k)
+        new_ids = torch.where(has_prev, prev_output_ids[n_acc, prev_row], input_ids)
+        first_shift = torch.where(has_prev, n_acc, 0)
+        shift = first_shift
+        for j in range(1, k + 1):  # the j-th token after a carried first token is the request's j-th draft
+            slot = torch.cat([has_prev[:j] & False, has_prev[:-j]])
+            draft = prev_output_ids[2 * k + 2 + j, prev_row]
+            new_ids = torch.where(slot, torch.cat([draft[:j] * 0, draft[:-j]]), new_ids)
+            shift = shift + torch.cat([first_shift[:j] * 0, first_shift[:-j]])
+        input_ids.copy_(new_ids)
+        position_ids = batch_data["position_ids"][0]
+        position_ids.add_(shift.to(position_ids.dtype))
+        cu_q = batch_data["cu_seq_lens_q"].long()
+        first = cu_q[:-1].clamp(max=num_tokens - 1)
+        request_shift = torch.where(cu_q[:-1] < num_tokens, first_shift[first], 0)
+        for cu_k in batch_data["cu_seq_lens_k"].values():
+            cu_k[1:].add_(torch.cumsum(request_shift, 0).to(cu_k.dtype))
+
+    def _forward_verify_k(
+        self,
+        model: nn.Module,
+        batch_data: dict,
+        carry_over_ids: torch.Tensor,
+        prev_output_ids: torch.Tensor,
+        output_ids: torch.Tensor,
+    ) -> None:
+        """gap3-mtpk prototype (CB_MTP_K=k): a decoding request brings its last token and k drafts. The target model
+        verifies them in one forward (rows 0..k of the request); drafts are accepted left to right, each with
+        probability p(draft) under the target distribution (point-mass drafts), the first rejected one replaced by a
+        sample of the target distribution without it, and if all are accepted, a bonus token comes from row k. Then
+        the MTP layer drafts the next k tokens: once over every query token (as with one draft), then k - 1 times on
+        one token per request, each pass taking the previous pass's output and draft, at the next position, through the
+        block table. Static shapes; rows without a draft (the step that ends a prefill) verify nothing."""
+        if self.logit_processor.do_processing:
+            raise NotImplementedError("CB_MTP prototype: logits processors are not supported")
+        k = _CB_MTP_K
+        mtp = batch_data["mtp"]
+        if _CB_MTP_ASYNC:
+            self._mtp_take_previous_step_k(batch_data, carry_over_ids, prev_output_ids)
+        model_kwargs = {key: v for key, v in batch_data.items() if key != "mtp"}
+        hidden_states = model.model(**model_kwargs).last_hidden_state  # [1, num_q_tokens, hidden], after the final norm
+
+        input_ids = batch_data["input_ids"][0]
+        num_q = input_ids.shape[0]
+        row0 = batch_data["logits_indices"].long()  # [R] the request's first query token
+        num_rows = row0.shape[0]
+        has_draft = mtp["has_draft"].bool()
+        steps = torch.arange(k + 1, device=row0.device)
+        rows = row0[None] + steps[:, None] * mtp["has_draft"].long()[None]  # [k + 1, R]
+        logits = model.lm_head(hidden_states[:, rows.reshape(-1)])[0].float()  # [(k + 1) * R, vocab], row-major in j
+        drafts = input_ids[(row0[None] + steps[1:, None]).clamp(max=num_q - 1)].long()  # [k, R]
+        logprobs = None
+        if self.do_sample:
+            logp = nn.functional.log_softmax(logits, dim=-1)
+            draft_logp = logp.view(k + 1, num_rows, -1)[:k].gather(2, drafts[..., None]).squeeze(2)  # [k, R]
+            accepted = has_draft[None] & (torch.empty_like(draft_logp).uniform_() < draft_logp.exp())
+            # a rejected draft is resampled from the target distribution without it (Gumbel-max); row k samples the
+            # bonus token from the full distribution, as do rows without a draft
+            view = logits.view(k + 1, num_rows, -1)
+            kept = torch.where(has_draft[None], float("-inf"), view[:k].gather(2, drafts[..., None]).squeeze(2))
+            view[:k].scatter_(2, drafts[..., None], kept[..., None])
+            noise = torch.empty_like(logits).exponential_().log_()
+            sampled = (logits - noise).argmax(-1).view(k + 1, num_rows)
+            candidates = torch.cat([torch.where(accepted, drafts, sampled[:k]), sampled[k:]])  # [k + 1, R]
+            if self.return_logprobs:
+                logprobs = logp.gather(1, candidates.reshape(-1, 1)).view(k + 1, num_rows)
+        elif self.return_logprobs:
+            # same operations as `_sample`, so tokens and logprobs compare bit for bit with the non-speculative path
+            probs = nn.functional.softmax(logits, dim=-1)
+            tokens = torch.argmax(probs, dim=-1, keepdim=True)
+            logprobs = probs.gather(dim=1, index=tokens).squeeze(-1).log().view(k + 1, num_rows)
+            candidates = tokens.view(k + 1, num_rows)
+            accepted = has_draft[None] & (candidates[:k] == drafts)
+        else:
+            candidates = torch.argmax(logits, dim=-1).view(k + 1, num_rows)
+            accepted = has_draft[None] & (candidates[:k] == drafts)
+        num_accepted = accepted.int().cumprod(0).sum(0)  # [R] leading accepted drafts
+
+        # Draft pass 1: the MTP layer over every query token, query token j paired with the candidate of row j
+        src = mtp["src"].long()
+        mtp_input_ids = torch.where(src < 0, mtp["shift_ids"].long(), candidates.reshape(-1)[src.clamp(min=0)])
+        mtp_kwargs = {key: v for key, v in model_kwargs.items() if key != "input_ids"}
+        mtp_normed, mtp_hidden = model.mtp_forward(hidden_states, mtp_input_ids[None], return_pre_norm=True, **mtp_kwargs)
+        last_rows = row0 + num_accepted  # the row of the last emitted token's predecessor: its draft comes next
+        draft = model.lm_head(mtp_normed[:, last_rows])[0].argmax(-1)  # [R]
+        next_drafts = [draft]
+        if k > 1 and batch_data.get("block_table") is None:
+            # varlen batch (a prefill in it): the later passes need the block table, so the request's next step gets
+            # its first draft only, repeated (valid tokens, verified like any other draft)
+            next_drafts = [draft] * k
+        elif k > 1:
+            # Passes 2..k: one token per request at the next position (the draft of the previous pass as input, its
+            # output as previous hidden state), its own key row written through the block table
+            prev_hidden = mtp_hidden[:, last_rows]
+            ((layer_type, cu_k_main),) = batch_data["cu_seq_lens_k"].items()
+            real = (cu_k_main[1:] - cu_k_main[:-1]) > 0
+            base = batch_data["position_ids"][0, row0].long() + num_accepted  # position before the last emitted token
+            step_kwargs = dict(mtp_kwargs)
+            step_kwargs["cu_seq_lens_q"] = torch.arange(num_rows + 1, device=row0.device, dtype=cu_k_main.dtype)
+            cache = batch_data["cache"]
+            for i in range(2, k + 1):
+                position = base + (i - 1)
+                seqlen = torch.where(real, position + 1, 0)
+                step_kwargs["cu_seq_lens_k"] = {
+                    layer_type: torch.cat([seqlen[:1] * 0, torch.cumsum(seqlen, 0)]).to(cu_k_main.dtype)
+                }
+                step_kwargs["position_ids"] = position[None].to(batch_data["position_ids"].dtype)
+                cache._proto_bt_state = None  # the block table rows of this pass, not the main forward's
+                normed, prev_hidden = model.mtp_forward(prev_hidden, draft[None], return_pre_norm=True, **step_kwargs)
+                draft = model.lm_head(normed)[0].argmax(-1)
+                next_drafts.append(draft)
+
+        output_ids[: k + 1, :num_rows].copy_(candidates)
+        if logprobs is not None:
+            output_ids[k + 1 : 2 * k + 2, :num_rows].copy_(logprobs.float().contiguous().view(dtype=torch.int32))
+        output_ids[2 * k + 2, :num_rows].copy_(num_accepted)
+        output_ids[2 * k + 3 : 3 * k + 3, :num_rows].copy_(torch.stack(next_drafts))
 
     def _forward_verify_sample_and_draft(
         self,
