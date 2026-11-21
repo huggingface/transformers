@@ -346,14 +346,18 @@ class ExpertsOffloadStore:
                         out = torch.empty(
                             (1, *bank.get_shape()[1:]), dtype=str_to_torch_dtype[bank.get_dtype()], device=self.device
                         )
-                        parts.append((param, dtype, out, self.reader.read(key, rows, out)))
+                        parts.append((param, dtype, out, key, rows))
+            # one request per expert, so each is handed out as soon as its own params have landed
+            requests = {
+                expert: self.reader.read_many([(key, rows, out) for _, _, out, key, rows in parts])
+                for expert, parts in started.items()
+            }
             for expert, parts in started.items():
-                for *_, request in parts:
-                    request.wait()
+                requests[expert].wait()
                 if not futures[expert].cancelled():
                     self.reads += 1
-                    self._mark("take_end", layer, expert=expert, bytes=sum(out.nbytes for _, _, out, _ in parts))
-                    futures[expert].set_result({param: out[0].to(dtype) for param, dtype, out, _ in parts})
+                    self._mark("take_end", layer, expert=expert, bytes=sum(part[2].nbytes for part in parts))
+                    futures[expert].set_result({param: out[0].to(dtype) for param, dtype, out, _, _ in parts})
         except BaseException as error:
             for future in futures.values():
                 if not future.done():
@@ -726,13 +730,12 @@ class _MPSHostRouter:
                 from safetensors import Reader
 
                 self.reader = Reader(sorted(set(self.store.key_files.values())), threads=8)
-            requests = []
+            reads = []
             for param in pool.layout:
                 _, key = self.keys[(layer, param)]
                 bank = pool.banks[param]
-                requests += [self.reader.read(key, slice(e, e + 1), bank[slots[e] : slots[e] + 1]) for e in experts]
-            for request in requests:
-                request.wait()
+                reads += [(key, slice(e, e + 1), bank[slots[e] : slots[e] + 1]) for e in experts]
+            self.reader.read_many(reads).wait()  # one call and one wait: the GIL changes hands twice
         else:
             for param in pool.layout:
                 fd, base, row_bytes = self.layout[(layer, param)]
