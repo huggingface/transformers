@@ -650,7 +650,10 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
         # a prefill chunk has N ~ 500k: 16 GB per layer, and int32 offsets past 2^31 faulted on B300, job 467381)
         index_scores = mqa_logits_window(q.contiguous(), keys, weights, lo, hi, max_k)  # -inf outside [lo, hi)
         # the kernel takes an unordered list; PROTO_PREFILL_MQA_SORTED=1 keeps the order of the torch path (checks)
-        top = index_scores.topk(num_selected, dim=-1, sorted=_PROTO_PREFILL_MQA_SORTED).indices
+        if _PROTO_PAGED_TOPK == "vllm" and num_selected == 2048 and not _PROTO_PREFILL_MQA_SORTED:
+            top = _proto_vllm_topk(index_scores, n_visible, num_selected, max_k)  # longctx WP
+        else:
+            top = index_scores.topk(num_selected, dim=-1, sorted=_PROTO_PREFILL_MQA_SORTED).indices
         return _proto_selected(pos, visible, top, n_visible, num_selected, lengths)
     if _PROTO_TF32_SCOPED:
         scores = F.relu(_proto_scores_bf16(q, keys[pos]) * indexer.softmax_scale)
@@ -825,12 +828,28 @@ def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_stat
 # query's own context, instead of gathering [M, bucket, D] keys and building [M, H, bucket] fp32 scores. Same values
 # up to the fp32 summation order (the softmax scale is folded into the head weights), same top-k sets.
 # PROTO_PAGED_TOPK: `torch` (default, torch.topk unsorted), `sorted` (check only: torch.topk sorted, the list order of
-# the gather path, so outputs can be compared bit for bit) or `vllm` (vLLM's persistent radix top-k).
+# the gather path, so outputs can be compared bit for bit) or `vllm` (vLLM's persistent radix top-k, also on the
+# varlen path of PROTO_PREFILL_MQA).
 # PROTO_PAGED_FUSE=0 (check only): long-context batches leave the fused layer loop (FUSE_KERNELS) as without the flag.
 _PROTO_PAGED_INDEXER = _os.environ.get("PROTO_PAGED_INDEXER", "0") == "1"
 _PROTO_PAGED_TOPK = _os.environ.get("PROTO_PAGED_TOPK", "torch")
 _PROTO_PAGED_FUSE = _os.environ.get("PROTO_PAGED_FUSE", "1") == "1"
 _proto_topk_workspace = {}
+
+
+def _proto_vllm_topk(logits, n_visible, num_selected, max_k):
+    """longctx WP: vLLM's persistent radix top-k of every row of `logits` ([M, max_k] fp32, row m valid up to
+    n_visible[m]): the unordered top `num_selected` offsets as torch.topk's indices would give them."""
+    import vllm._C_stable_libtorch  # noqa: F401  (registers torch.ops._C.persistent_topk)
+
+    workspace = _proto_topk_workspace.get(logits.device)
+    if workspace is None:
+        workspace = _proto_topk_workspace[logits.device] = torch.empty(1 << 20, dtype=torch.uint8, device=logits.device)
+    top = torch.empty(logits.shape[0], num_selected, dtype=torch.int32, device=logits.device)
+    torch.ops._C.persistent_topk(logits, n_visible.to(torch.int32), top, workspace, num_selected, max_k)
+    # -1 fills the lists of queries that see fewer than `num_selected` tokens: point those slots past the context
+    # (offset max_k - 1 >= n_visible there), so they come out invalid like torch.topk's -inf picks
+    return torch.where(top >= 0, top, max_k - 1).long()
 
 
 def _proto_paged_request_ids(kwargs, num_tokens, num_requests, device):
@@ -856,16 +875,7 @@ def _proto_paged_top(q, weights, indexer, key_cache, kwargs, allocator, n_visibl
     logits = paged_mqa_logits(q.contiguous(), w.contiguous(), key_cache, table, req, n_visible.to(torch.int32),
                               max_k, page)
     if _PROTO_PAGED_TOPK == "vllm" and num_selected in (512, 1024, 2048):
-        import vllm._C_stable_libtorch  # noqa: F401  (registers torch.ops._C.persistent_topk)
-
-        workspace = _proto_topk_workspace.get(q.device)
-        if workspace is None:
-            workspace = _proto_topk_workspace[q.device] = torch.empty(1 << 20, dtype=torch.uint8, device=q.device)
-        top = torch.empty(q.shape[0], num_selected, dtype=torch.int32, device=q.device)
-        torch.ops._C.persistent_topk(logits, n_visible.to(torch.int32), top, workspace, num_selected, max_k)
-        # -1 fills the lists of queries that see fewer than `num_selected` tokens: point those slots past the context
-        # (offset max_k - 1 >= n_visible there), so they come out invalid like torch.topk's -inf picks
-        return torch.where(top >= 0, top, max_k - 1).long()
+        return _proto_vllm_topk(logits, n_visible, num_selected, max_k)
     return logits.topk(num_selected, dim=-1, sorted=_PROTO_PAGED_TOPK == "sorted").indices
 
 
