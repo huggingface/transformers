@@ -87,7 +87,9 @@ class Lfm3RotaryEmbedding(nn.Module):
         config: Lfm3Config, device=None, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
-        Computes the inverse frequencies according to the original RoPE implementation
+        Computes the inverse frequencies according to the original RoPE implementation. The released LFM3 checkpoints
+        declare `default` RoPE with a `partial_rotary_factor` below 1 on their full-attention layers: there, the first
+        frequencies follow the progression of the full head dimension and the rest are zero, as in `proportional` RoPE.
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
@@ -99,6 +101,9 @@ class Lfm3RotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
+        # diff -> a partial rotary factor leaves the tail of the head unrotated (released LFM3 configs)
+        if config.rope_parameters[layer_type].get("partial_rotary_factor", 1.0) < 1.0:
+            return ROPE_INIT_FUNCTIONS["proportional"](config, device, layer_type=layer_type)
         # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
         base = config.rope_parameters[layer_type]["rope_theta"]
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
