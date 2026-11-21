@@ -1061,7 +1061,10 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             implementation = torch_function if implementation is None else implementation
 
         # Make it "frozen" like to let dynamo not try to look into any ordering
-        applicable_params = tuple(inspect.signature(implementation).parameters)
+        parameters = inspect.signature(implementation).parameters
+        applicable_params = tuple(parameters)
+        # An implementation taking `**kwargs` receives every keyword argument
+        takes_var_kwargs = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values())
         # A boolean to track if the implementation is new, i.e. not the original torch function
         is_new_implementation = implementation is not torch_function
         metal = metal_kernel("metal-moe-decode") if func_name in _METAL_FUNCTIONS else None
@@ -1093,7 +1096,8 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
                     f"`{distribution}` for the optimized kernel."
                 )
 
-            kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
+            if not takes_var_kwargs:
+                kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
             return implementation(*args, **kwargs)
 
         return kernel_wrapper_decorator(wrapped)
