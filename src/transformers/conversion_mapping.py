@@ -24,6 +24,9 @@ from .core_model_loading import (
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     Inkling2IndexOffsetWeightRename,
+    Inkling2LoopDequantizeExperts,
+    Inkling2LoopMergeMessageQueries,
+    Inkling2UnpadVocab,
     Interleave,
     LayerPairCollapse,
     MergeModulelist,
@@ -297,6 +300,11 @@ def _build_checkpoint_conversion_mapping():
         ],
         "inkling2": [
             WeightRenaming(source_patterns=r"model\.llm\.unembed\.", target_patterns=r"lm_head."),
+            WeightConverter(
+                source_patterns=r"lm_head\.weight",
+                target_patterns=r"lm_head.weight",
+                operations=[Inkling2UnpadVocab()],
+            ),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model.language_model."),
             WeightRenaming(source_patterns=r"model\.visual\.", target_patterns=r"model.vision_tower."),
             WeightRenaming(
@@ -344,6 +352,11 @@ def _build_checkpoint_conversion_mapping():
         ],
         "inkling2_text": [
             WeightRenaming(source_patterns=r"model\.llm\.unembed\.", target_patterns=r"lm_head."),
+            WeightConverter(
+                source_patterns=r"lm_head\.weight",
+                target_patterns=r"lm_head.weight",
+                operations=[Inkling2UnpadVocab()],
+            ),
             WeightRenaming(source_patterns=r"model\.llm\.", target_patterns=r"model."),
             WeightRenaming(source_patterns=r"embed\.weight", target_patterns=r"embed_tokens.weight"),
             WeightRenaming(source_patterns=r"embed_norm\.", target_patterns=r"embed_tokens.embed_norm."),
@@ -363,12 +376,23 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"mlp.gate.bias", target_patterns=r"mlp.gate.e_score_correction_bias"),
             WeightRenaming(source_patterns=r"\.attn\.", target_patterns=r".self_attn."),
-            WeightRenaming(source_patterns=r"self_attn\.wq_du", target_patterns=r"self_attn.q_proj"),
-            WeightRenaming(source_patterns=r"self_attn\.wk_dv", target_patterns=r"self_attn.k_proj"),
-            WeightRenaming(source_patterns=r"self_attn\.wv_dv", target_patterns=r"self_attn.v_proj"),
-            WeightRenaming(source_patterns=r"self_attn\.wr_du", target_patterns=r"self_attn.r_proj"),
-            WeightRenaming(source_patterns=r"self_attn\.wo_ud", target_patterns=r"self_attn.o_proj"),
-            WeightRenaming(source_patterns=r"self_attn\.gate_attn", target_patterns=r"self_attn.gate_proj"),
+            WeightRenaming(source_patterns=r"self_attn\.wq_du", target_patterns=r"self_attn.q_proj.linear"),
+            WeightRenaming(source_patterns=r"self_attn\.wk_dv", target_patterns=r"self_attn.k_proj.linear"),
+            WeightRenaming(source_patterns=r"self_attn\.wv_dv", target_patterns=r"self_attn.v_proj.linear"),
+            WeightRenaming(source_patterns=r"self_attn\.k_sconv\.", target_patterns=r"self_attn.k_proj.sconv."),
+            WeightRenaming(source_patterns=r"self_attn\.v_sconv\.", target_patterns=r"self_attn.v_proj.sconv."),
+            WeightRenaming(
+                source_patterns=r"self_attn\.rel_logits_proj\.", target_patterns=r"self_attn.relative_position_bias."
+            ),
+            WeightRenaming(
+                source_patterns=r"self_attn\.wr_du", target_patterns=r"self_attn.relative_position_bias.linear"
+            ),
+            WeightRenaming(source_patterns=r"self_attn\.q_l2_clip\.", target_patterns=r"self_attn.q_proj.norm."),
+            WeightRenaming(
+                source_patterns=r"self_attn\.rel_l2_clip\.", target_patterns=r"self_attn.relative_position_bias.norm."
+            ),
+            WeightRenaming(source_patterns=r"self_attn\.wo_ud", target_patterns=r"self_attn.o_proj.linear"),
+            WeightRenaming(source_patterns=r"self_attn\.gate_attn", target_patterns=r"self_attn.o_proj.gate_proj"),
             WeightRenaming(source_patterns=r"self_attn\.attn_sink_proj", target_patterns=r"self_attn.sink_proj"),
             WeightRenaming(source_patterns=r"attn_sconv\.", target_patterns=r"post_attention_convolution."),
             WeightRenaming(source_patterns=r"mlp_sconv\.", target_patterns=r"post_mlp_convolution."),
@@ -2626,6 +2650,62 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0)],
         ),
     ]
+
+    mapping["inkling2_loop"] = mapping["inkling2"].copy()
+    # Temporary: the original Inkling2Loop checkpoints store NVFP4 and MXFP8 experts. They are dequantized on load and
+    # replace the Inkling2 expert transforms, which keep MXFP8 experts quantized.
+    inkling2_loop_experts = [
+        WeightConverter(
+            source_patterns=[
+                r"mlp\.experts\.w13_weight",
+                r"mlp\.experts\.w13_weight_scale",
+                r"mlp\.experts\.w13_weight_amax",
+                r"mlp\.experts\.w13_weight_outer_scale_denominator",
+            ],
+            target_patterns=r"mlp.experts.gate_up_proj",
+            operations=[Inkling2LoopDequantizeExperts(), Interleave(dim=1)],
+        ),
+        WeightConverter(
+            source_patterns=[
+                r"mlp\.experts\.w2_weight",
+                r"mlp\.experts\.w2_weight_scale",
+                r"mlp\.experts\.w2_weight_amax",
+                r"mlp\.experts\.w2_weight_outer_scale_denominator",
+            ],
+            target_patterns=r"mlp.experts.down_proj",
+            operations=[Inkling2LoopDequantizeExperts()],
+        ),
+    ]
+    inkling2_text = [
+        transform
+        for transform in mapping["inkling2_text"]
+        if not transform._original_source_patterns[0].startswith(r"mlp\.experts\.w")
+    ]
+    mapping["inkling2_loop_text"] = [
+        WeightRenaming(source_patterns=r"controllers\.attn\.", target_patterns=r"q_message_gate."),
+        WeightRenaming(source_patterns=r"controllers\.k\.", target_patterns=r"k_message_gate."),
+        WeightRenaming(source_patterns=r"controllers\.v\.", target_patterns=r"v_message_gate."),
+        WeightRenaming(source_patterns=r"controllers\.mlp\.", target_patterns=r"mlp_message_gate."),
+        WeightRenaming(
+            source_patterns=r"_message_gate\.down_weight", target_patterns=r"_message_gate.down_proj.weight"
+        ),
+        WeightRenaming(
+            source_patterns=r"_message_gate\.gain_weight", target_patterns=r"_message_gate.message_gate_proj.weight"
+        ),
+        WeightRenaming(
+            source_patterns=r"_message_gate\.forget_weight", target_patterns=r"_message_gate.forget_gate_proj.weight"
+        ),
+        # The original checkpoint stores two (2 * num_loop_layers, hidden_size) query parameters:
+        # - middle_cycle_cross_pass_queries: the query and mlp queries of each loop layer
+        # - middle_cycle_cross_pass_kv_queries: the key and value queries of each loop layer
+        # We merge them into a single (num_loop_layers, 4, hidden_size) query param.
+        WeightConverter(
+            source_patterns=[r"middle_cycle_cross_pass_queries", r"middle_cycle_cross_pass_kv_queries"],
+            target_patterns=r"message_input.query",
+            operations=[Inkling2LoopMergeMessageQueries()],
+        ),
+        *inkling2_loop_experts,
+    ] + inkling2_text
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
