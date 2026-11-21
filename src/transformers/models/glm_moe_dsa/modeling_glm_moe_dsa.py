@@ -1237,6 +1237,16 @@ class GlmMoeDsaExperts(nn.Module):
         return final_hidden_states
 
 
+# [gap3 sglang, bench only] MOE_SHARED_STREAM=1 (no-grad forwards, not inside torch.compile): the shared expert runs on
+# a side stream while the routed experts run on the current one, as SGLang's DeepseekV2MoE.forward_normal_dual_stream
+# (and vLLM's shared-experts stream up to 256 tokens) do. Fork after the router: the side stream waits for the current
+# one, the routed experts are issued first, the shared expert after them on the side stream, and the current stream
+# waits for the side stream before the sum, so the block's single all-reduce (HF_TP_SINGLE_MLP_ALL_REDUCE) sees both.
+# Captured as is by CUDA graphs (fork / join through stream waits). Same kernels and inputs: outputs bit-identical.
+_MOE_SHARED_STREAM = _glue_os.environ.get("MOE_SHARED_STREAM", "0") == "1"
+_SHARED_STREAMS = {}  # device -> side stream, created once per process
+
+
 class GlmMoeDsaMoE(nn.Module):
     """
     A mixed expert module containing shared experts.
@@ -1263,6 +1273,22 @@ class GlmMoeDsaMoE(nn.Module):
             return hidden_states + self.shared_experts(residuals)
         _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        if (
+            _MOE_SHARED_STREAM
+            and hidden_states.is_cuda
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+        ):
+            device = hidden_states.device
+            if device not in _SHARED_STREAMS:
+                _SHARED_STREAMS[device] = torch.cuda.Stream(device)
+            side, current = _SHARED_STREAMS[device], torch.cuda.current_stream(device)
+            side.wait_stream(current)
+            hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+            with torch.cuda.stream(side):
+                shared = self.shared_experts(residuals)
+            current.wait_stream(side)
+            return hidden_states + shared
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
