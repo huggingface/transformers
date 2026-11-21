@@ -96,6 +96,8 @@ class MetalHfQuantizer(HfQuantizer):
 
         if self.quantization_config.dequantize or not isinstance(module, torch.nn.Linear):
             return None
+        if module.in_features % self.quantization_config.group_size:  # the packing needs whole groups
+            return None
         return MetalLinear(
             in_features=module.in_features,
             out_features=module.out_features,

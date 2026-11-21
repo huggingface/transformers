@@ -1949,7 +1949,7 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
                 # Skip params quantized on load. Casting them first would zero int8 storage or round fp8 twice.
                 _dtype = empty_param.dtype
-            if hf_quantizer and hf_quantizer.pre_quantized:
+            if hf_quantizer and getattr(hf_quantizer, "has_pre_quantized", hf_quantizer.pre_quantized):
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 
             # A converter collects its checkpoint tensors into lists (e.g. one tensor per expert); the position in

@@ -64,7 +64,10 @@ def _get_metal_kernel():
         try:
             from .hub_kernels import get_kernel
 
-            _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=1)
+            try:  # v2 has the builds for recent torch versions
+                _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=2)
+            except Exception:
+                _metal_kernel = get_kernel("kernels-community/mlx-quantization-metal-kernels", version=1)
         except Exception as e:
             raise ImportError(
                 f"Failed to load the quantization-mlx kernel from the Hub: {e}. "
@@ -124,6 +127,18 @@ class MetalLinear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.dtype != torch.uint32:
             return nn.functional.linear(input, self.weight, self.bias)
+
+        if (
+            self.bits == 4
+            and input.numel() == self.in_features
+            and input.device.type == "mps"
+            and (decode := _decode_kernel()) is not None
+        ):
+            # One token (decode): `qmv4` reads the 4-bit rows at bandwidth with a layout per shape
+            dtype = input.dtype if input.dtype in (torch.float16, torch.bfloat16) else torch.bfloat16
+            scales, biases = self.scales.to(dtype), self.qbiases.to(dtype)  # no-op once loaded in the model dtype
+            output = decode.qmv4(input.to(dtype), self.weight, scales, biases, self.group_size).to(input.dtype)
+            return output if self.bias is None else output + self.bias
 
         kernel = _get_metal_kernel()
 

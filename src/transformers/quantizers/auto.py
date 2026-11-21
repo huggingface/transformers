@@ -211,6 +211,11 @@ class AutoHfQuantizer:
         Loading a saved plan, the `quantization_config` passed to `from_pretrained` brings loading attributes: for
         every pattern (one config or dict, e.g. `{"dequantize": True}`), or per pattern (a plan of them).
         """
+        # A passed plan's patterns the saved one doesn't have quantize the modules the checkpoint left in full precision,
+        # e.g. `{"*": MetalConfig()}` on a checkpoint storing only its experts quantized
+        added = {}
+        if pre_quantized and is_quantization_plan(loading):
+            added = {p: c for p, c in loading.items() if p not in plan and (c is None or isinstance(c, QuantizationConfigMixin))}
         if not is_quantization_plan(loading):
             loading = dict.fromkeys(plan, loading)
 
@@ -252,6 +257,14 @@ class AutoHfQuantizer:
                         f"`dequantize=True` only applies to pre-quantized checkpoints: it is ignored for {pattern}."
                     )
                 shared[key] = cls.from_config(config, pre_quantized=pre_quantized)
+            quantizers[pattern] = shared[key]
+        for pattern, config in added.items():
+            if config is None:
+                quantizers[pattern] = None
+                continue
+            key = f"on the fly: {config!r}"
+            if key not in shared:
+                shared[key] = cls.from_config(config, pre_quantized=False)
             quantizers[pattern] = shared[key]
 
         return QuantizationPlanHfQuantizer(quantizers, checkpoint_names)
@@ -377,6 +390,8 @@ class QuantizationPlanHfQuantizer(HfQuantizer):
         self.patterns = None
         self.set_quantizers(quantizers)
         self.pre_quantized = all(quantizer.pre_quantized for quantizer in self.all_quantizers)
+        # A saved plan extended by on-the-fly patterns (see `from_plan`) still loads its stored tensors as they are
+        self.has_pre_quantized = any(quantizer.pre_quantized for quantizer in self.all_quantizers)
         # Mixed, each format swaps the modules the plan gives it (`quantized_module`): one swapping all of a model's
         # linears itself would take the others' too
         own_swaps = [type(q).__name__ for q in self.all_quantizers if not q.replaces_modules]
