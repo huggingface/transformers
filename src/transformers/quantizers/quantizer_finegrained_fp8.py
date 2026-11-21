@@ -146,6 +146,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         _disable_deepgemm_on_multi_device(model)
         _proto_convert_fp8_linears(model)  # prototype, no-op unless PROTO_FP8_LINEAR is set
         _proto_prepare_fp8_experts(model)  # prototype, no-op unless PROTO_EXPERTS_TRTLLM is set
+        if model.config.model_type == "glm_moe_dsa":  # gap3 gemm WP prototype, no-op unless GEMM_FUSE_* is set
+            from ..models.glm_moe_dsa.modeling_glm_moe_dsa import _gemm_fuse_projections
+
+            fused = _gemm_fuse_projections(model)
+            if fused:
+                logger.warning(f"GEMM_FUSE: {fused} fused projection groups")
         # MXFP8 checkpoints (e.g. Inkling2) save their ue8m0 scales as bytes
         if self.pre_quantized and self.quantization_config.scale_fmt == "ue8m0":
             for module in model.modules():

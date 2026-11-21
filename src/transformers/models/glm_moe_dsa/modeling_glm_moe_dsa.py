@@ -58,6 +58,94 @@ _GLUE_ROUTER = _glue_os.environ.get("GLUE_ROUTER", "0") == "1"  # no group selec
 # in-place write into a view of the cache pool is functionalized into a copy of the whole view
 _GLUE_OPAQUE_CACHE_WRITE = _glue_os.environ.get("GLUE_OPAQUE_CACHE_WRITE", "0") == "1"
 
+# --- gap3 gemm WP (bench only, off by default): fewer, larger dense GEMMs in decode ---------------------------------
+# GEMM_FUSE_QKV_A=1    q_a_proj + kv_a_proj_with_mqa (+ indexer.wk on the layers with their own indexer) in one GEMM
+# GEMM_FUSE_GATE_UP=1  gate_proj + up_proj of the shared experts and of the dense MLPs in one GEMM
+#   The weights become row views of one [sum of out, hidden] buffer per layer, built once at load (one copy, no extra
+#   memory), so in-place updates of the parameters (optimizer step, in-place LoRA merge, load_state_dict) reach the
+#   fused GEMM. The fused GEMM only runs without autograd: training keeps the per-module path, its TP hooks
+#   (MlaKvAProjParallel's gradient all-reduce of k_rot) and any PEFT wrapper. A module replaced after load (PEFT
+#   wrapping) or a weight no longer a view of the buffer turns the fused path off for that layer.
+# GEMM_ROUTER_BF16=1   router logits as bf16 x bf16 -> fp32 (`torch.mm(..., out_dtype=float32)`) instead of an fp32
+#   GEMM on fp32 copies of the hidden states and of the bf16 weight, made on every call: same products (bf16 values
+#   are exact in fp32 and in TF32), only the summation order changes.
+_GEMM_FUSE_QKV_A = _glue_os.environ.get("GEMM_FUSE_QKV_A", "0") == "1"
+_GEMM_FUSE_GATE_UP = _glue_os.environ.get("GEMM_FUSE_GATE_UP", "0") == "1"
+_GEMM_ROUTER_BF16 = _glue_os.environ.get("GEMM_ROUTER_BF16", "0") == "1"
+
+
+def _gemm_local(tensor):
+    from torch.distributed.tensor import DTensor
+
+    return tensor.to_local() if isinstance(tensor, DTensor) else tensor
+
+
+@torch.no_grad()
+def _gemm_fuse_rows(linears):
+    """Turns the weights of `linears` (same input size, no bias, 16-bit) into row views of one new [sum of out, in]
+    buffer and returns `(buffer, linears, weight objects)`, or None when they cannot be fused. Under tensor parallel
+    the buffer holds this rank's shards (row-sharded or replicated weights alike) and each DTensor parameter is
+    rebuilt around its view."""
+    from torch.distributed.tensor import DTensor
+
+    locals_ = [_gemm_local(lin.weight) for lin in linears]
+    if any(lin.bias is not None for lin in linears) or any(w.element_size() != 2 or not w.is_cuda for w in locals_):
+        return None
+    if len({w.dtype for w in locals_}) != 1 or len({w.shape[1] for w in locals_}) != 1:
+        return None
+    buffer = torch.cat(locals_)
+    offset = 0
+    for lin, local in zip(linears, locals_):
+        view = buffer[offset : offset + local.shape[0]]
+        offset += local.shape[0]
+        weight = lin.weight
+        if isinstance(weight, DTensor):
+            view = DTensor.from_local(
+                view, weight.device_mesh, weight.placements, run_check=False, shape=weight.shape, stride=weight.stride()
+            )
+        lin.weight = nn.Parameter(view, requires_grad=weight.requires_grad)
+    return buffer, tuple(linears), tuple(lin.weight for lin in linears)
+
+
+def _gemm_fused_weight(module, key, current):
+    """The fused buffer of `module` if its fused GEMM may run now: no autograd, the `current` modules are the ones
+    fused at load (not wrapped since, by PEFT for instance), with the same weight objects, each still a view of the
+    buffer."""
+    fused = module.__dict__.get(key)
+    if fused is None or torch.is_grad_enabled():
+        return None
+    buffer, linears, weights = fused
+    offset = 0
+    for lin, now, weight in zip(linears, current, weights):
+        if now is not lin or lin.weight is not weight:
+            return None
+        local = _gemm_local(weight)
+        if local.data_ptr() != buffer.data_ptr() + offset * buffer.stride(0) * buffer.element_size():
+            return None
+        offset += local.shape[0]
+    return buffer
+
+
+def _gemm_fuse_projections(model) -> int:
+    """Load-time half of GEMM_FUSE_QKV_A / GEMM_FUSE_GATE_UP (called after the FP8 dense linears became bf16)."""
+    fused = 0
+    for module in model.modules():
+        if _GEMM_FUSE_QKV_A and isinstance(module, GlmMoeDsaAttention):
+            linears = [module.q_a_proj, module.kv_a_proj_with_mqa]
+            if module.indexer is not None:
+                linears.append(module.indexer.wk)
+            result = _gemm_fuse_rows(linears)
+            if result is not None:
+                module._gemm_qkv_a = result
+                module._gemm_qkv_a_sizes = [_gemm_local(lin.weight).shape[0] for lin in linears]
+                fused += 1
+        if _GEMM_FUSE_GATE_UP and isinstance(module, GlmMoeDsaMLP):
+            result = _gemm_fuse_rows([module.gate_proj, module.up_proj])
+            if result is not None:
+                module._gemm_gate_up = result
+                fused += 1
+    return fused
+
 
 @torch.compiler.disable
 def _glue_write_latents(kv_latent_cache, rotated_key_cache, write_index, k_pass, k_rot):
@@ -258,7 +346,8 @@ class GlmMoeDsaIndexer(nn.Module):
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
         q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        wk_out = self.__dict__.pop("_gemm_wk_out", None)
+        k = self.k_norm(self.wk(hidden_states) if wk_out is None else wk_out).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
         # GLM-MoE-DSA uses interleaved RoPE in the indexer
@@ -492,7 +581,8 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     skip_scoring = _PROTO_INDEXER_SKIP and max_k <= indexer.index_topk
     if _PROTO_PREFILL_NOSKIP and seq_len > 512:
         skip_scoring = False
-    k = indexer.k_norm(indexer.wk(hidden_states)).unsqueeze(2)
+    wk_out = indexer.__dict__.pop("_gemm_wk_out", None)
+    k = indexer.k_norm(indexer.wk(hidden_states) if wk_out is None else wk_out).unsqueeze(2)
     k_rot, k_pass = torch.split(k, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
     if skip_scoring:
         # rotate the keys alone (the query half of the rotation helper is discarded)
@@ -612,7 +702,8 @@ def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_stat
     cos, sin = position_embeddings
     # Same as `_proto_indexer_per_query`: when every request fits in index_topk, only the keys need caching
     skip_scoring = _PROTO_INDEXER_SKIP and rows_all.shape[1] <= indexer.index_topk
-    k = indexer.k_norm(indexer.wk(hidden_states)).unsqueeze(2)
+    wk_out = indexer.__dict__.pop("_gemm_wk_out", None)
+    k = indexer.k_norm(indexer.wk(hidden_states) if wk_out is None else wk_out).unsqueeze(2)
     k_rot_i, k_pass_i = torch.split(k, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
     if skip_scoring:
         _, k_rot_i = apply_rotary_pos_emb_interleave(k_rot_i, k_rot_i, cos, sin, unsqueeze_dim=2)
@@ -835,11 +926,24 @@ class GlmMoeDsaAttention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
+        fused_qkv_a = None
+        if _GEMM_FUSE_QKV_A:
+            current = (self.q_a_proj, self.kv_a_proj_with_mqa) + (() if self.indexer is None else (self.indexer.wk,))
+            fused_qkv_a = _gemm_fused_weight(self, "_gemm_qkv_a", current)
+        if fused_qkv_a is not None:
+            # one GEMM for every projection of the normed hidden states (gap3 gemm WP)
+            projections = F.linear(hidden_states, fused_qkv_a).split(self._gemm_qkv_a_sizes, dim=-1)
+            q_a, compressed_kv = projections[0], projections[1]
+            if self.indexer is not None:
+                self.indexer._gemm_wk_out = projections[2]
+        else:
+            q_a, compressed_kv = self.q_a_proj(hidden_states), None
+        q_resid = self.q_a_layernorm(q_a)
         q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
+        if compressed_kv is None:
+            compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
         k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
@@ -849,10 +953,13 @@ class GlmMoeDsaAttention(nn.Module):
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         if _PROTO_SPARSE_MLA and cache is not None and hasattr(cache, "layer_to_allocator"):
-            return _proto_sparse_mla_attention(
+            output = _proto_sparse_mla_attention(
                 self, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings, attention_mask,
                 position_ids, cache, prev_topk_indices, kwargs,
             )
+            if self.indexer is not None:  # GEMM_FUSE_QKV_A: never leave a fused wk output for a later call
+                self.indexer.__dict__.pop("_gemm_wk_out", None)
+            return output
 
         # Cache read / write is performed while latent KV is still compressed
         if cache is not None:
@@ -924,6 +1031,12 @@ class GlmMoeDsaMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
+        fused_gate_up = None
+        if _GEMM_FUSE_GATE_UP:
+            fused_gate_up = _gemm_fused_weight(self, "_gemm_gate_up", (self.gate_proj, self.up_proj))
+        if fused_gate_up is not None:
+            gate, up = F.linear(x, fused_gate_up).chunk(2, dim=-1)
+            return self.down_proj(self.act_fn(gate) * up)
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -943,7 +1056,11 @@ class GlmMoeDsaTopkRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        weight = _gemm_local(self.weight) if _GEMM_ROUTER_BF16 else None
+        if weight is not None and weight.dtype == hidden_states.dtype == torch.bfloat16 and not torch.is_grad_enabled():
+            router_logits = torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
+        else:
+            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         if _GLUE_ROUTER and self.num_group == 1 and self.topk_group == 1:
