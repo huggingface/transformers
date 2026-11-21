@@ -902,15 +902,28 @@ class Inkling2Experts(InklingExperts):
         return final_hidden_states.to(hidden_states.dtype)
 
 
+@use_kernel_func_from_hub_with_fallback("inkling2_router", "inkling2_router")
+def inkling2_router(hidden_states: torch.Tensor, module: nn.Module) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Routing in fp32, as in the original: logits, the top-k weights (normalized, scaled by `routed_scaling_factor`) and
+    expert indices. A hub kernel may replace it (on MPS: one dispatch per decode token).
+    """
+    flat = hidden_states.float().reshape(-1, module.hidden_dim)
+    logits = F.linear(flat, module.weight)
+    scores = module.score_fn(logits)
+    indices = torch.topk(scores + module.e_score_correction_bias, module.top_k, dim=-1, sorted=False).indices
+    weights = scores.gather(1, indices)
+    weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+    return logits, weights * module.routed_scaling_factor, indices
+
+
 class Inkling2TopKRouter(DeepseekV4TopKRouter):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__(config)
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # routing runs in fp32, as in the original
-        hidden_states = hidden_states.float()
-        return super().forward(hidden_states)
+        return inkling2_router(hidden_states, self)
 
 
 class Inkling2SparseMoeBlock(Qwen3MoeSparseMoeBlock):

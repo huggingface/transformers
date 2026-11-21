@@ -838,6 +838,21 @@ class Inkling2Experts(nn.Module):
         return self.act_fn(gate, up)
 
 
+@use_kernel_func_from_hub_with_fallback("inkling2_router", "inkling2_router")
+def inkling2_router(hidden_states: torch.Tensor, module: nn.Module) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Routing in fp32, as in the original: logits, the top-k weights (normalized, scaled by `routed_scaling_factor`) and
+    expert indices. A hub kernel may replace it (on MPS: one dispatch per decode token).
+    """
+    flat = hidden_states.float().reshape(-1, module.hidden_dim)
+    logits = F.linear(flat, module.weight)
+    scores = module.score_fn(logits)
+    indices = torch.topk(scores + module.e_score_correction_bias, module.top_k, dim=-1, sorted=False).indices
+    weights = scores.gather(1, indices)
+    weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+    return logits, weights * module.routed_scaling_factor, indices
+
+
 class Inkling2TopKRouter(nn.Module):
     def __init__(self, config: Inkling2TextConfig):
         super().__init__()
@@ -850,15 +865,7 @@ class Inkling2TopKRouter(nn.Module):
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # routing runs in fp32, as in the original
-        hidden_states = hidden_states.float()
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        logits = F.linear(flat, self.weight)
-        scores = self.score_fn(logits)
-        indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
-        weights = scores.gather(1, indices)
-        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
-        return logits, weights * self.routed_scaling_factor, indices
+        return inkling2_router(hidden_states, self)
 
 
 class Inkling2SparseMoeBlock(nn.Module):
