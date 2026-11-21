@@ -21,6 +21,14 @@
 #   holds this rank's local parameters and the classes' own forwards, and all-reduces explicitly where the tp_plan
 #   does (after `o_proj`, after the MLP block: needs HF_TP_SINGLE_MLP_ALL_REDUCE=1); `trace` = trace through the
 #   tp_plan forward wrappers installed on the modules (probe of what dynamo makes of them).
+#
+# [gap3 compile] On the stack S (CB_PROTO_MLA_BLOCK_TABLE=1): only block-table decode batches take this path (a varlen
+# batch's shapes follow CB's padded (q, kv) intervals: one artifact set per pair, compiled mid-serving). Their rows come
+# from CB's block table once per step (same arithmetic as `_proto_block_table_rows`), the top-k list width (CB's
+# power-of-2 bucket of the longest context) is a dynamic dim that only the opaque FlashMLA op sees, so one artifact
+# per layer kind and padded request count serves every bucket. PROTO_TOPK_LENGTH is followed. The TRT-LLM routed MoE
+# (PROTO_EXPERTS_TRTLLM=1) is an opaque op (`integrations/finegrained_fp8.py`), the TP all-reduce goes through the
+# inference reduce of the TP styles (NCCL, or flashinfer with HF_TP_ALL_REDUCE=flashinfer on CB's engine thread).
 import copy
 import os
 import time
@@ -44,6 +52,7 @@ TP_MODE = os.environ.get("FUSE_COMPILE_TP", "twin")
 #   PROTO_TOPK_LENGTH on the regular path) and the head-padded query is a zeroed buffer kept per step shape.
 KERNELS = os.environ.get("FUSE_KERNELS", "0") == "1"
 TOPK_LENGTH = os.environ.get("FUSE_TOPK_LENGTH", "0") == "1"
+BLOCK_TABLE_ONLY = os.environ.get("CB_PROTO_MLA_BLOCK_TABLE", "0") == "1"
 
 _flash_mla = None
 _rotary = None  # `apply_rotary_pos_emb_interleave` of the modeling file, set on first use (no circular import)
@@ -92,10 +101,13 @@ def _sparse_mla_fake(q, cache_rows, rows, counts, scale, d_qk, d_v):
 
 
 def _tp_all_reduce(x: torch.Tensor) -> None:
-    """Sums this rank's partial result with the other ranks', in place."""
-    import torch.distributed as dist
+    """Sums this rank's partial result with the other ranks', in place, through the inference reduce of the TP styles
+    (NCCL in place; flashinfer returns a new tensor, copied back)."""
+    from ...distributed.parallel_utils import _tp_inference_all_reduce
 
-    dist.all_reduce(x, group=_tp_group)
+    out = _tp_inference_all_reduce(x, _tp_group)
+    if out is not x:
+        x.copy_(out)
 
 
 def _localize(module):
@@ -244,7 +256,7 @@ def _layer_fn():
 
 def _prepare(model, cache):
     """Once per (model, cache): per-layer cache views that all have the same shape, the dequantized `kv_b_proj`."""
-    from .modeling_glm_moe_dsa import _proto_kv_b_dequantized, apply_rotary_pos_emb_interleave
+    from .modeling_glm_moe_dsa import apply_rotary_pos_emb_interleave
 
     global _rotary
     _rotary = apply_rotary_pos_emb_interleave
@@ -256,8 +268,9 @@ def _prepare(model, cache):
     position = {layer_idx: i for i, layer_idx in enumerate(allocator.layer_indices)}
     total = allocator.cache_tensor.shape[0]
     common = total - (len(allocator.layer_indices) - 1) * page  # rows every layer can address
+    if allocator.tokens_per_block != len(allocator.layer_indices) * page:
+        raise NotImplementedError("FUSE_COMPILE expects one page per layer in a block")
     views = [allocator.cache_tensor[position[i] * page : position[i] * page + common] for i in range(len(layers))]
-    weights = [_proto_kv_b_dequantized(layer.self_attn) for layer in layers]
     h_pad = 0 if torch.cuda.get_device_capability()[0] == 9 else 64
     tp, run_layers_on = False, list(layers)
     o_proj_weight = layers[0].self_attn.o_proj.weight
@@ -272,7 +285,7 @@ def _prepare(model, cache):
                 raise NotImplementedError("FUSE_COMPILE under TP expects bias-free row-parallel projections")
             tp, run_layers_on = True, [_localize(layer) for layer in layers]
     state = {
-        "cache": cache, "allocator": allocator, "views": views, "w_kv_b": weights, "h_pad": h_pad, "tp": tp,
+        "cache": cache, "allocator": allocator, "views": views, "h_pad": h_pad, "tp": tp,
         "layers": run_layers_on, "q_abs": {},
     }
     model._fuse_compile_state = state
@@ -288,8 +301,12 @@ def applies(model, hidden_states, cache, kwargs) -> bool:
         return False
     if cache is None or not hasattr(cache, "layer_to_allocator") or "read_index" not in kwargs:
         return False
-    if hidden_states.shape[1] > 512 or model.training:
+    if hidden_states.shape[1] > 512 or model.training or torch.is_grad_enabled():
         return False
+    if BLOCK_TABLE_ONLY and kwargs.get("block_table") is None:
+        return False
+    if m._TRAIN_FIX_KV_B == "delta" and any(m._train_kv_b_adapters(layer.self_attn) for layer in model.layers):
+        return False  # the adapters' low-rank terms of the absorbed attention are not in the compiled layer
     allocator = cache.layer_to_allocator[0]
     ok = kwargs["max_length_k"][allocator.layer_type] <= model.config.index_topk
     STATS["fallbacks"] += not ok
@@ -300,7 +317,74 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
     state = getattr(model, "_fuse_compile_state", None)
     if state is None or state["cache"] is not cache:
         state = _prepare(model, cache)
+    from . import modeling_glm_moe_dsa as m
+
     allocator = state["allocator"]
+    # kv_b_proj per step, not cached with the state: training may refresh or rebind it (TRAIN_FIX_KV_B)
+    w_kv_b = [m._proto_kv_b_dequantized(layer.self_attn) for layer in model.layers[: model.config.num_hidden_layers]]
+    topk_length = TOPK_LENGTH or m._PROTO_TOPK_LENGTH
+    if kwargs.get("block_table") is not None:
+        write_index, rows, counts = _block_table_rows(model, allocator, kwargs, topk_length)
+        STATS["bt_steps"] = STATS.get("bt_steps", 0) + 1
+    else:
+        write_index, rows, counts = _index_rows(hidden_states, allocator, kwargs, topk_length)
+    # the list width is CB's bucket of the longest context: only the opaque attention op reads it, so one artifact
+    # serves every bucket (shapes stay static otherwise)
+    torch._dynamo.mark_dynamic(rows, 1)
+
+    if KERNELS:
+        return _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts, w_kv_b)
+
+    cos, sin = position_embeddings
+    fn = _layer_fn()
+    tp = state["tp"]
+    timings = STATS.get("layer_seconds")  # set to a list by a benchmark to get the wall time of each layer call
+    ranges = STATS.get("ranges")  # set by a benchmark: one profiler range per layer call, for kernel attribution
+    for i, layer in enumerate(state["layers"]):
+        if timings is not None:
+            start = time.perf_counter()
+        if ranges:
+            with torch.autograd.profiler.record_function(f"M:L{i}:layer"):
+                hidden_states = fn(
+                    layer, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, w_kv_b[i],
+                    state["h_pad"], tp,
+                )
+            continue
+        hidden_states = fn(
+            layer, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, w_kv_b[i], state["h_pad"], tp
+        )
+        if timings is not None:
+            timings.append(round(time.perf_counter() - start, 3))
+    STATS["steps"] += 1
+    return hidden_states
+
+
+def _block_table_rows(model, allocator, kwargs, topk_length):
+    """[gap3] Rows of a block-table decode batch (one query token per request), once per step: the row each request
+    writes its new token to, the rows of its context (-1 = empty slot) and their count. Same arithmetic as
+    `_proto_block_table_rows` with the indexer scoring skipped."""
+    from .modeling_glm_moe_dsa import _proto_block_table_row_state
+
+    page = allocator.tokens_per_page
+    last_safe_row = allocator.cache_tensor.shape[0] - allocator.tokens_per_block + page - 1
+    write_rows, rows_all, visible = _proto_block_table_row_state(
+        kwargs["block_table"][allocator.index],
+        kwargs["cu_seq_lens_k"][allocator.layer_type],
+        kwargs["max_length_k"][allocator.layer_type],
+        page,
+        last_safe_row,
+        allocator.write_trash_index,
+    )
+    rows = torch.where(visible, rows_all, -1).to(torch.int32)
+    num_selected = min(model.config.index_topk, rows_all.shape[1])
+    counts = visible.sum(-1).clamp(max=num_selected).to(torch.int32) if topk_length else None
+    if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
+        rows = F.pad(rows, (0, 128 - rows.shape[-1] % 128), value=-1)
+    return write_rows, rows, counts
+
+
+def _index_rows(hidden_states, allocator, kwargs, topk_length):
+    """Rows of a batch on the index path (wp2-fuse, BASE)."""
     read_index = kwargs["read_index"][allocator.index]
     write_index = kwargs["write_index"][allocator.index]
     if read_index.numel() == 0:  # no past in the batch: the context is the new tokens
@@ -327,43 +411,17 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
     if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
         rows = F.pad(rows, (0, 128 - rows.shape[-1] % 128), value=-1)
     # the valid rows of a list are its first `n_visible` entries: the kernel stops there instead of walking the -1
-    counts = n_visible.clamp(min=1, max=rows.shape[-1]).to(torch.int32) if TOPK_LENGTH else None
-
-    if KERNELS:
-        return _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts)
-
-    cos, sin = position_embeddings
-    fn = _layer_fn()
-    tp = state["tp"]
-    timings = STATS.get("layer_seconds")  # set to a list by a benchmark to get the wall time of each layer call
-    ranges = STATS.get("ranges")  # set by a benchmark: one profiler range per layer call, for kernel attribution
-    for i, layer in enumerate(state["layers"]):
-        if timings is not None:
-            start = time.perf_counter()
-        if ranges:
-            with torch.autograd.profiler.record_function(f"M:L{i}:layer"):
-                hidden_states = fn(
-                    layer, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, state["w_kv_b"][i],
-                    state["h_pad"], tp,
-                )
-            continue
-        hidden_states = fn(
-            layer, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, state["w_kv_b"][i],
-            state["h_pad"], tp,
-        )
-        if timings is not None:
-            timings.append(round(time.perf_counter() - start, 3))
-    STATS["steps"] += 1
-    return hidden_states
+    counts = n_visible.clamp(min=1, max=rows.shape[-1]).to(torch.int32) if topk_length else None
+    return write_index, rows, counts
 
 
-def _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts):
+def _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts, w_kv_b):
     """Layer loop of FUSE_KERNELS=1: every layer hands the next one its output and that output already normed."""
     cos, sin = position_embeddings
     layers = state["layers"]
     attn = layers[0].self_attn
     num_tokens = hidden_states.shape[1]
-    num_heads = state["w_kv_b"][0].shape[0]
+    num_heads = w_kv_b[0].shape[0]
     key = (num_tokens, max(state["h_pad"], num_heads))
     q_abs = state["q_abs"].get(key)
     if q_abs is None:  # zeroed once and kept with the cache state: the padded heads stay zero, CUDA graphs keep its address
@@ -380,8 +438,8 @@ def _run_layers_fused(model, state, hidden_states, position_embeddings, write_in
         if timings is not None:
             start = time.perf_counter()
         args = (
-            layer, residual, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, state["w_kv_b"][i],
-            q_abs, norms[i].weight, norms[i].variance_epsilon, tp,
+            layer, residual, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, w_kv_b[i], q_abs,
+            norms[i].weight, norms[i].variance_epsilon, tp,
         )
         if ranges:
             with torch.autograd.profiler.record_function(f"M:L{i}:layer"):

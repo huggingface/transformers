@@ -780,6 +780,30 @@ def _proto_prepare_fp8_experts(model: nn.Module) -> None:
     logger.warning(f"PROTO_EXPERTS_TRTLLM: re-laid the weights of {prepared} FP8Experts modules for TRT-LLM")
 
 
+def _fuse_trtllm_routed_moe(
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    w13: torch.Tensor,
+    s13: torch.Tensor,
+    w2: torch.Tensor,
+    s2: torch.Tensor,
+) -> torch.Tensor:
+    from . import _proto_fp8_experts as proto
+
+    return proto.trtllm_experts_forward((w13, s13, w2, s2), hidden_states, top_k_index, top_k_weights)
+
+
+def _fuse_trtllm_routed_moe_fake(hidden_states, top_k_index, top_k_weights, w13, s13, w2, s2):
+    return torch.empty_like(hidden_states)
+
+
+# [gap3 compile, bench only] `PROTO_EXPERTS_TRTLLM` inside a torch.compile region (FUSE_COMPILE): the activation quant
+# and flashinfer's routed MoE as one op dynamo does not trace into
+torch.library.custom_op("transformers::fuse_trtllm_routed_moe", _fuse_trtllm_routed_moe, mutates_args=())
+torch.library.register_fake("transformers::fuse_trtllm_routed_moe", _fuse_trtllm_routed_moe_fake)
+
+
 def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     """The prototype forward selected by the flags, or `None` when the default path has to run."""
     if self._is_expert_parallel or (torch.is_grad_enabled() and hidden_states.requires_grad):
@@ -787,6 +811,10 @@ def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     from . import _proto_fp8_experts as proto
 
     if _PROTO_EXPERTS_TRTLLM and self._proto_trtllm is not None:
+        if torch.compiler.is_compiling():  # [gap3 compile] one opaque op inside a compiled region
+            return torch.ops.transformers.fuse_trtllm_routed_moe(
+                hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous(), *self._proto_trtllm
+            )
         return proto.trtllm_experts_forward(
             self._proto_trtllm, hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous()
         )
