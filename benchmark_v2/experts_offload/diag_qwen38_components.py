@@ -13,7 +13,9 @@ model, text = build()
 layers = model.model.layers
 targets = {f"model.layers.{i}": layers[i] for i in (0, 3)}  # a linear-attention and a full-attention layer
 targets |= {f"{p}.{n}": c for p, m in list(targets.items()) for n, c in m.named_children() if c is not None}
-targets |= {"model.layers.0.mlp.experts": layers[0].mlp.experts, "lm_head": model.lm_head} | {f"model.{n}": c for n, c in model.model.named_children() if n != "layers"}
+targets |= {"model.layers.0.mlp.experts": layers[0].mlp.experts, "lm_head": model.lm_head} | {
+    f"model.{n}": c for n, c in model.model.named_children() if n != "layers"
+}
 captured = {}
 
 

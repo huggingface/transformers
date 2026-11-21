@@ -63,4 +63,6 @@ def quantize_dense(model, spec):
                 q.bias = child.bias
             setattr(module, child_name, q.to(child.weight.device))
             count += 1
-    print(f"  quantized {count} nn.Linear: {spec}", flush=True)
+    from transformers.integrations.metal_quantization import fuse_sibling_linears
+
+    print(f"  quantized {count} nn.Linear: {spec}, fused {fuse_sibling_linears(model)} sibling groups", flush=True)

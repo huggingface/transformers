@@ -23,13 +23,19 @@ with torch.inference_mode():
         streamer = type("S", (), {"put": lambda s, _: stamps.append(time.perf_counter()), "end": lambda s: None})()
         model.generate(ids, max_new_tokens=64, min_new_tokens=64, streamer=streamer, **kwargs) if k == 1 else None
         if k > 1:  # streamers take batch 1: time the whole generate minus prefill instead
-            torch.mps.synchronize(); t0 = time.perf_counter()
-            model.generate(ids, max_new_tokens=1, min_new_tokens=1, **kwargs); torch.mps.synchronize()
+            torch.mps.synchronize()
+            t0 = time.perf_counter()
+            model.generate(ids, max_new_tokens=1, min_new_tokens=1, **kwargs)
+            torch.mps.synchronize()
             t1 = time.perf_counter()
-            model.generate(ids, max_new_tokens=65, min_new_tokens=65, **kwargs); torch.mps.synchronize()
+            model.generate(ids, max_new_tokens=65, min_new_tokens=65, **kwargs)
+            torch.mps.synchronize()
             ms = ((time.perf_counter() - t1) - (t1 - t0)) / 64 * 1e3
         else:
             steps = sorted(b - a for a, b in zip(stamps[2:], stamps[3:]))
             ms = steps[len(steps) // 2] * 1e3
         base = base or ms
-        print(f"verify {k} tokens: {ms:6.2f} ms ({ms / base:.2f}x one); 100 tok/s needs {ms / 10:.2f} accepted/step", flush=True)
+        print(
+            f"verify {k} tokens: {ms:6.2f} ms ({ms / base:.2f}x one); 100 tok/s needs {ms / 10:.2f} accepted/step",
+            flush=True,
+        )

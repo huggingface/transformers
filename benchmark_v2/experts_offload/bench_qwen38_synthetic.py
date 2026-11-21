@@ -17,7 +17,7 @@ from dense_quant import quantizable, quantize_dense
 from safetensors.torch import load_file, save_file
 
 from transformers import AutoConfig, AutoModelForCausalLM, CompileConfig
-from transformers.integrations.metal_quantization import MetalExperts, MetalLinear
+from transformers.integrations.metal_quantization import MetalExperts, MetalLinear, fuse_sibling_linears
 
 
 WEIGHTS = os.path.expanduser("~/.cache/qwen38-synthetic-{}e-all4bit.safetensors")
@@ -74,6 +74,8 @@ def build(num_experts=64):
             module.__init__(module.config)
             module.to("mps")
     assert not any(t.is_meta for t in (*model.parameters(), *model.buffers()))
+    if "--no-fuse" not in sys.argv:
+        print(f"fused {fuse_sibling_linears(model)} sibling projection groups", flush=True)
     print(f"loaded {path}, resident {torch.mps.current_allocated_memory() / 2**30:.1f} GiB", flush=True)
     return model, text
 

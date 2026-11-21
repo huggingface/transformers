@@ -54,3 +54,11 @@ Measured bandwidth: 250 GB/s read (`x.sum()`), so 4-bit single-token decode tops
 | Q6 | 2026-11-21 | vectorized `qmv4` (uint4 + float4) for thin linears; same for experts | 38.1 / 38.4 | | noise: thin matrices are latency-bound, MLX `gather_qmm` already at par |
 | Q7 | 2026-11-21 | fuse sibling projections sharing an input (180 groups: linear_attn qkv+z+b+a, hyper down+inject, shared gate+up) | 39.6 | 25.7 | noise; stubbing all 216 tiny dispatches only saves 0.94 ms |
 | Q8 | 2026-11-21 | speculative-verify proxy: decode step over a batch of k | k=4: 58.3 ms, k=8: 90.3 ms | | expert union grows with k: 100 tok/s would need 5.8 (k=4) / 9.0 (k=8) accepted per step |
+| Q9 | 2026-11-21 | experts decode: MLX gate/up + own down projection with the routing sum in one kernel (`experts_down_sum`) | 41.2 | 24.7 | MLX down at 176 GB/s (short rows), ours 217 GB/s |
+| Q10 | 2026-11-21 | short-side batch-1 `qmv4` (16/32 lanes per row, uint4 loads) for linears with a side <= 1024 | 42.5 | 24.0 | hyper up 22.3 -> 13.5 us, inject 42.2 -> 7.4 us |
+| Q11 | 2026-11-21 | `fuse_sibling_linears`: projections sharing an input as one `MetalLinear` (192 groups) | 43.2 | 23.6 | small dispatches are latency-bound |
+| Q12 | 2026-11-21 | gated delta rule advances the cache's float32 state in place (no clone, no copy back) | 44.4 | 22.5 | 12 MB/layer of state traffic gone |
+| Q13 | 2026-11-21 | + attention q/k/v/indexer fusion, 4 threads per state column, casts outside the custom ops | **45.4** (256 tok), 45.0 (512 tok) | 22.4 | greedy == unfused on a tiny model |
+
+Stub ablations of Q10 (24.15 ms): experts 6.81 ms, linear_attn proj 6.64, hyper-connections 3.08, self_attn+indexer 2.91,
+lm_head 1.82, shared expert 1.14, rest 3.46.

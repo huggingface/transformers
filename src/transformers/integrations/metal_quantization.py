@@ -392,3 +392,67 @@ class MetalDequantize(ConversionOps):
     @property
     def reverse_op(self) -> "ConversionOps":
         return _IdentityOp()
+
+
+# Sibling projections that read the same input, per parent module class: on Metal one token's small matvecs are
+# latency-bound (a few us per dispatch), so each group runs as one `MetalLinear` over the concatenated rows.
+SIBLING_LINEARS = {
+    "Qwen4ExpTextGatedDeltaNet": ["in_proj_qkv", "in_proj_z", "in_proj_b", "in_proj_a"],
+    "Qwen4ExpTextAttention": ["q_proj", "k_proj", "v_proj", "indexer.index_qk_proj"],
+    "Qwen4ExpTextGatedResidual": ["input_mix_weight_down", "block_inject_weight"],
+    "Qwen4ExpTextSparseMoeBlock": ["shared_expert.gate_proj", "shared_expert.up_proj", "shared_expert_gate"],
+}
+
+
+class _SiblingSlice(nn.Module):
+    """One member of a fused group: the first member called on an input computes the whole group, the others slice."""
+
+    def __init__(self, fused: MetalLinear, state: dict, start: int, end: int):
+        super().__init__()
+        self.fused, self.state, self.start, self.end = fused, state, start, end
+        self.in_features, self.out_features = fused.in_features, end - start
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.state.get("input") is not x:
+            self.state["input"], self.state["output"] = x, self.fused(x)
+        return self.state["output"][..., self.start : self.end]
+
+
+def fuse_sibling_linears(model: nn.Module, plan: dict | None = None) -> int:
+    """Replace each group of `plan` (default `SIBLING_LINEARS`) whose members are all bias-free `MetalLinear`s with the
+    same input size and quantization by slices of one fused `MetalLinear`. Returns the number of fused groups."""
+    plan = SIBLING_LINEARS if plan is None else plan
+    groups = 0
+    for module in list(model.modules()):
+        paths = plan.get(type(module).__name__)
+        if not paths:
+            continue
+        members = []
+        for path in paths:
+            try:
+                members.append((path, module.get_submodule(path)))
+            except AttributeError:  # absent child (e.g. a mixer without `block_inject_weight`)
+                pass
+        linears = [m for _, m in members]
+        same = {(m.in_features, m.bits, m.group_size) for m in linears if isinstance(m, MetalLinear)}
+        if (
+            len(linears) < 2
+            or len(same) != 1
+            or any(type(m) is not MetalLinear or m.bias is not None for m in linears)
+        ):
+            continue
+        first = linears[0]
+        fused = MetalLinear(
+            first.in_features, sum(m.out_features for m in linears), bits=first.bits, group_size=first.group_size
+        )
+        for name in ("weight", "scales", "qbiases"):
+            tensor = torch.cat([getattr(m, name) for m in linears])
+            setattr(fused, name, nn.Parameter(tensor, requires_grad=False))
+        state, start = {}, 0
+        for path, linear in members:
+            parent, _, child = path.rpartition(".")
+            owner = module.get_submodule(parent) if parent else module
+            owner.register_module(child, _SiblingSlice(fused, state, start, start + linear.out_features))
+            start += linear.out_features
+        groups += 1
+    return groups

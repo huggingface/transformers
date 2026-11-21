@@ -60,6 +60,9 @@ for i, name in enumerate(names, 1):
             patched.append(module)
     ms = timed()
     base = ms if base is None else base
-    print(f"[{i}/{len(names)}] {name:24s} {len(patched):4d} stubbed: {ms:6.2f} ms/token ({1e3 / ms:5.1f} tok/s), saves {base - ms:5.2f} ms", flush=True)
+    print(
+        f"[{i}/{len(names)}] {name:24s} {len(patched):4d} stubbed: {ms:6.2f} ms/token ({1e3 / ms:5.1f} tok/s), saves {base - ms:5.2f} ms",
+        flush=True,
+    )
     for module in patched:
         del module.forward
