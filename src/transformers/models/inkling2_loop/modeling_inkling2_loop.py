@@ -76,6 +76,19 @@ class Inkling2LoopUnweightedRMSNorm(nn.Module):
         return hidden_states.to(input_dtype)
 
 
+@use_kernel_func_from_hub_with_fallback("inkling2_loop_message_gate", "inkling2_loop_message_gate")
+def inkling2_loop_message_gate(hidden_states: torch.Tensor, message: torch.Tensor, module: nn.Module) -> torch.Tensor:
+    """`(1 - forget_gate) * hidden_states + message_gate * message` in float32, the gates computed from the normalized
+    pair through `module`'s low-rank projections. A hub kernel may replace it (on MPS: two dispatches)."""
+    hidden_states, message = hidden_states.float(), message.float()
+    gate_hidden_states = torch.cat([module.norm(hidden_states), module.norm(message)], dim=-1)
+    gate_hidden_states = module.down_proj(gate_hidden_states.to(module.down_proj.weight.dtype)).float()
+
+    forget_gate = torch.tanh(module.forget_gate_proj(gate_hidden_states))
+    message_gate = torch.tanh(module.message_gate_proj(gate_hidden_states))
+    return (1 - forget_gate) * hidden_states + message_gate * message
+
+
 class Inkling2LoopMessageGate(nn.Module):
     """Mixes hidden states and message as  `(1 - forget_gate) * hidden_states + message_gate * message`"""
 
@@ -87,13 +100,7 @@ class Inkling2LoopMessageGate(nn.Module):
         self.message_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False, dtype=torch.float32)
 
     def forward(self, hidden_states: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
-        hidden_states, message = hidden_states.float(), message.float()
-        gate_hidden_states = torch.cat([self.norm(hidden_states), self.norm(message)], dim=-1)
-        gate_hidden_states = self.down_proj(gate_hidden_states.to(self.down_proj.weight.dtype)).float()
-
-        forget_gate = torch.tanh(self.forget_gate_proj(gate_hidden_states))
-        message_gate = torch.tanh(self.message_gate_proj(gate_hidden_states))
-        return (1 - forget_gate) * hidden_states + message_gate * message
+        return inkling2_loop_message_gate(hidden_states, message, self)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:

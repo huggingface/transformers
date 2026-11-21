@@ -23,6 +23,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
+from ...integrations import use_kernel_func_from_hub_with_fallback
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
@@ -169,6 +170,19 @@ class Inkling2LoopUnweightedRMSNorm(Inkling2UnweightedRMSNorm):
     pass
 
 
+@use_kernel_func_from_hub_with_fallback("inkling2_loop_message_gate", "inkling2_loop_message_gate")
+def inkling2_loop_message_gate(hidden_states: torch.Tensor, message: torch.Tensor, module: nn.Module) -> torch.Tensor:
+    """`(1 - forget_gate) * hidden_states + message_gate * message` in float32, the gates computed from the normalized
+    pair through `module`'s low-rank projections. A hub kernel may replace it (on MPS: two dispatches)."""
+    hidden_states, message = hidden_states.float(), message.float()
+    gate_hidden_states = torch.cat([module.norm(hidden_states), module.norm(message)], dim=-1)
+    gate_hidden_states = module.down_proj(gate_hidden_states.to(module.down_proj.weight.dtype)).float()
+
+    forget_gate = torch.tanh(module.forget_gate_proj(gate_hidden_states))
+    message_gate = torch.tanh(module.message_gate_proj(gate_hidden_states))
+    return (1 - forget_gate) * hidden_states + message_gate * message
+
+
 class Inkling2LoopMessageGate(nn.Module):
     """Mixes hidden states and message as  `(1 - forget_gate) * hidden_states + message_gate * message`"""
 
@@ -180,13 +194,7 @@ class Inkling2LoopMessageGate(nn.Module):
         self.message_gate_proj = nn.Linear(config.loop_gate_rank, config.hidden_size, bias=False, dtype=torch.float32)
 
     def forward(self, hidden_states: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
-        hidden_states, message = hidden_states.float(), message.float()
-        gate_hidden_states = torch.cat([self.norm(hidden_states), self.norm(message)], dim=-1)
-        gate_hidden_states = self.down_proj(gate_hidden_states.to(self.down_proj.weight.dtype)).float()
-
-        forget_gate = torch.tanh(self.forget_gate_proj(gate_hidden_states))
-        message_gate = torch.tanh(self.message_gate_proj(gate_hidden_states))
-        return (1 - forget_gate) * hidden_states + message_gate * message
+        return inkling2_loop_message_gate(hidden_states, message, self)
 
 
 class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
