@@ -13,8 +13,10 @@
 # limitations under the License.
 import atexit
 import contextlib
+import functools
 import os
 import re
+import threading
 
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
@@ -97,14 +99,56 @@ def _use_local_dtensor_params(module):
                 )
 
 
+class _FastReduceScope(threading.local):
+    """[gap2 prototype] Whether the current thread may reduce through the fast (flashinfer) all-reduce. The fast
+    reduce keeps its protocol state on the device, one state per workspace, and tolerates a single stream of calls.
+    Only the continuous batching engine thread, which owns the compute stream, turns this on. Every other thread
+    (a trainer running forward and backward on the same model, an evaluation loop) keeps NCCL, whatever the tensor."""
+
+    enabled = False
+
+
+_FAST_REDUCE_THREAD = _FastReduceScope()
+
+
+@contextlib.contextmanager
+def _fast_reduce_on_this_thread(enabled: bool = True):
+    """[gap2 prototype] Lets the calling thread use the fast TP all-reduce for the duration of the block: for the
+    engine's own forwards run by another thread while the engine thread is not running (`warmup()`)."""
+    was_enabled = _FAST_REDUCE_THREAD.enabled
+    _FAST_REDUCE_THREAD.enabled = enabled or was_enabled
+    try:
+        yield
+    finally:
+        _FAST_REDUCE_THREAD.enabled = was_enabled
+
+
+def with_fast_tp_all_reduce(fn):
+    """[gap2 prototype] For a method `fn(self, model, ...)` that runs the engine's forward from a thread other than
+    the engine's while the engine is not running: the warm-up that captures the engine's CUDA graphs ahead
+    (`ModelRunner.run_one_warmup`, reached by `ContinuousBatchingManager.warmup()` and by harnesses that call it
+    directly). Creates the workspace if needed (a collective: every TP rank warms up at the same point) and lets the
+    call reduce through the fast path, so the graphs it captures are the ones the engine thread would capture."""
+
+    @functools.wraps(fn)
+    def wrapper(self, model, *args, **kwargs):
+        if is_torch_distributed_available() and dist.is_initialized():
+            prime_fast_tp_all_reduce(model.config.hidden_size, model.dtype, model.device)
+        with _fast_reduce_on_this_thread():
+            return fn(self, model, *args, **kwargs)
+
+    return wrapper
+
+
 if is_torch_distributed_available():
     # [gap2 prototype, bench only] Inference all-reduce of the TP styles through flashinfer's MNNVL kernels, the ones
     # vLLM runs (`flashinfer.comm.allreduce_fusion`, backend "mnnvl": a two-shot reduce over NVLink multicast memory,
     # 7 us at TP8 where NCCL's ring takes 24). `HF_TP_ALL_REDUCE=flashinfer` swaps the reduce of `rowwise`,
     # `all_reduce` and `moe_tp_experts`; `HF_TP_ALL_REDUCE=flashinfer_fused` also lets a model fuse the reduce with
     # the residual add and the RMSNorm that follow it (`tp_all_reduce_add_rms_norm`). One workspace per process,
-    # created by the first eligible call outside a graph capture and never reallocated: CUDA graphs record its
-    # pointers. A call that does not fit it (rows, dtype, layout) takes NCCL, on every rank alike.
+    # created once (`prime_fast_tp_all_reduce`, else by the first eligible call outside a graph capture) and never
+    # reallocated: CUDA graphs record its pointers. A call that does not fit it (rows, dtype, layout), or that comes
+    # from a thread other than the engine's (`_FAST_REDUCE_THREAD`), takes NCCL, on every rank alike.
     _TP_ALL_REDUCE = os.environ.get("HF_TP_ALL_REDUCE", "nccl")
     if _TP_ALL_REDUCE == "flashinfer_fused":
         # Hard guard. Before flashinfer 0.7.3 the fused kernel could die with Xid 13 ("CTA Not Present") on Blackwell
@@ -134,7 +178,8 @@ if is_torch_distributed_available():
         """The process-wide flashinfer workspace when `x` can be reduced through it, else `None`."""
         hidden = x.shape[-1]
         if (
-            x.dim() < 2
+            not _FAST_REDUCE_THREAD.enabled
+            or x.dim() < 2
             or not x.is_cuda
             or not x.is_contiguous()
             or x.dtype not in (torch.bfloat16, torch.float16, torch.float32)
@@ -168,9 +213,19 @@ if is_torch_distributed_available():
             atexit.register(workspace.destroy)  # unmap the shared memory while the CUDA context is alive, as vLLM does
             if dist.get_rank(process_group) == 0:
                 # which path the forwards took (Python calls: eager steps and graph captures, not replays)
-                atexit.register(lambda: print(f"TP_ALL_REDUCE {_TP_ALL_REDUCE} calls {_FLASHINFER['calls']}", flush=True))
+                atexit.register(
+                    lambda: print(
+                        f"TP_ALL_REDUCE {_TP_ALL_REDUCE} calls {_FLASHINFER['calls']} workspace created by "
+                        f"{_FLASHINFER['created_by']}, {workspace.buffer_size_bytes * 3 / 2**20:.0f} MiB per rank",
+                        flush=True,
+                    )
+                )
             _FLASHINFER.update(
-                workspace=workspace, comm=flashinfer_comm, cpu_group=cpu_group, group_name=process_group.group_name
+                workspace=workspace,
+                comm=flashinfer_comm,
+                cpu_group=cpu_group,
+                group_name=process_group.group_name,
+                created_by=threading.current_thread().name,
             )
         rows = x.numel() // hidden
         if not workspace.is_buffer_size_sufficient(
@@ -178,6 +233,23 @@ if is_torch_distributed_available():
         ):
             return None
         return workspace
+
+    def prime_fast_tp_all_reduce(hidden_size, dtype, device):
+        """[gap2 prototype] Create the fast all-reduce workspace from the calling thread. It is a collective: every TP
+        rank calls it at the same point (continuous batching does, in `start()`, before the engine thread exists),
+        outside any CUDA graph capture and outside the graphs' memory pool, so nothing of the workspace depends on
+        the life of a graph, of the pool or of the KV cache. No-op when the fast reduce is off."""
+        if _TP_ALL_REDUCE == "nccl" or _TP_GROUP is None or dist.get_world_size(_TP_GROUP) == 1:
+            return
+        if _FLASHINFER["workspace"] is not None or dtype not in (torch.bfloat16, torch.float16, torch.float32):
+            return
+        was_enabled = _FAST_REDUCE_THREAD.enabled
+        _FAST_REDUCE_THREAD.enabled = True
+        try:
+            with torch.cuda.device(device):
+                _flashinfer_workspace(torch.zeros(1, hidden_size, dtype=dtype, device=device), _TP_GROUP)
+        finally:
+            _FAST_REDUCE_THREAD.enabled = was_enabled
 
     def _tp_inference_all_reduce(x, process_group):
         """All-reduce (sum) of this rank's partial tensor on the inference path. Returns the reduced tensor: `x`

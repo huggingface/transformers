@@ -18,6 +18,7 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
+from ...distributed.parallel_utils import with_fast_tp_all_reduce
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
@@ -313,6 +314,7 @@ class ModelRunner:
         self.cache.reset()
         logger.info(f"Warmup completed in {total_duration:.2f}s")
 
+    @with_fast_tp_all_reduce  # [gap2 prototype] warm-up captures take the engine's fast TP all-reduce
     def run_one_warmup(self, model: nn.Module, num_q_tokens: int, max_kv_read: int | None) -> float:
         """Warms up the decode fast path (if max_kv_read is None) or varlen path (if max_kv_read is an int) for a
         specific number of query and cache-resident tokens. `max_kv_read` is the number of tokens already in cache,

@@ -832,6 +832,12 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
+        # [gap2 prototype] HF_TP_ALL_REDUCE=flashinfer*: the workspace is created here, by the caller's thread, on every
+        # TP rank (a collective), so it does not live in the graphs' memory pool and outlives graphs and KV cache
+        if dist.is_available() and dist.is_initialized():
+            from ...distributed.parallel_utils import prime_fast_tp_all_reduce
+
+            prime_fast_tp_all_reduce(self.model.config.hidden_size, self.model.dtype, self.model.device)
         self._generation_thread = threading.Thread(target=self._run_generation_loop)
         self._generation_thread.start()
 
@@ -1169,6 +1175,11 @@ class ContinuousBatchingManager:
             # Scope the device for the generation loop (thread-scoped)
             if self.model.device.type == "cuda" and self.model.device.index is not None:
                 torch.cuda.set_device(self.model.device)
+            # [gap2 prototype] this thread owns the compute stream: the only one whose TP all-reduces may take the fast
+            # (flashinfer) path. A trainer thread on the same model keeps NCCL for everything it runs
+            from ...distributed.parallel_utils import _FAST_REDUCE_THREAD
+
+            _FAST_REDUCE_THREAD.enabled = True
 
             # Start the generation loop
             batch_processor = self._create_batch_processor()
