@@ -97,20 +97,20 @@ Aplică `@auto_docstring` și la clasele care moștenesc din [`~utils.ModelOutpu
 @dataclass
 class MyModelOutput(ImageClassifierOutput):
     r"""
-    loss (`torch.FloatTensor`, *optional*):
+    loss (`torch.Tensor`, *optional*):
         Loss-ul modelului.
-    custom_field (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+    custom_field (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*):
         Un câmp de ieșire personalizat specific acestui model.
     """
 
     # Câmpurile standard (hidden_states, logits, attentions, etc.) sunt documentate automat când
     # descrierea corespunde textului standard. Loss-ul variază de obicei per model, deci documentează-l mai sus.
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: Optional[torch.Tensor] = None
+    logits: Optional[torch.Tensor] = None
+    hidden_states: Optional[tuple[torch.Tensor, ...]] = None
+    attentions: Optional[tuple[torch.Tensor, ...]] = None
     # Câmpurile personalizate trebuie documentate în docstring-ul de mai sus
-    custom_field: Optional[torch.FloatTensor] = None
+    custom_field: Optional[torch.Tensor] = None
 ```
 
 ### Clase de config
@@ -164,14 +164,22 @@ from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...utils import auto_docstring
 
 class MyModelProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {"text_kwargs": {"padding": False}}
+    """
+    custom_call_kwarg (`bool`, *optional*, defaults to `False`):
+        A parameter with a default that can passed to __call__ which is not
+        covered by the standard processor arguments (including each modality).
+    """
+    custom_call_kwarg: bool
 
 @auto_docstring
 class MyModelProcessor(ProcessorMixin):
+    valid_processor_kwargs = MyModelProcessorKwargs
+    custom_call_kwarg = False
+
     def __init__(self, image_processor=None, tokenizer=None, custom_param: int = 4, **kwargs):
         r"""
         custom_param (`int`, *optional*, defaults to 4):
-            Un parametru specific acestui procesor, neacoperit de ProcessorArgs standard.
+            A parameter specific to this processor not covered by the standard ProcessorArgs.
         """
         super().__init__(image_processor, tokenizer)
         self.custom_param = custom_param
@@ -180,10 +188,10 @@ class MyModelProcessor(ProcessorMixin):
     def __call__(self, images=None, text=None, **kwargs: Unpack[MyModelProcessorKwargs]):
         r"""
         Returns:
-            [`BatchFeature`]: Un [`BatchFeature`] cu următoarele câmpuri:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- Token ids de pasat modelului.
-            - **pixel_values** -- Valori pixel de pasat modelului.
+            - **input_ids** -- Token ids to be fed to the model.
+            - **pixel_values** -- Pixel values to be fed to the model.
         """
         # ...
 ```

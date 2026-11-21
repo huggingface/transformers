@@ -97,7 +97,6 @@ class EsmcConfig(LlamaConfig):
     rms_norm_eps = AttributeError()
     pretraining_tp = AttributeError()
     use_cache = AttributeError()
-    keys_to_ignore_at_inference = AttributeError()
 
     def __post_init__(self, **kwargs):
         # The special-token ids are fixed by the vocabulary every checkpoint shares (`<cls>`=0 doubles
@@ -221,7 +220,7 @@ class EsmcLayer(LlamaDecoderLayer):
 
 @auto_docstring
 class EsmcPreTrainedModel(NomicBertPreTrainedModel):
-    config_class = EsmcConfig
+    config: EsmcConfig
     base_model_prefix = "esmc"
     _no_split_modules = ["EsmcLayer"]
     _can_record_outputs = {

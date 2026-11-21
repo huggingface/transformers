@@ -14,8 +14,7 @@
 """
 Check that every model — and every rule in the reviewer file — can still reach a reviewer.
 
-The `Assign PR Reviewers` workflow (`.github/workflows/assign-reviewers.yml`) resolves reviewers from
-`.github/scripts/codeowners_for_review_action`, using the shared resolver in
+Reviewers are resolved from `.github/scripts/codeowners_for_review_action` by the shared resolver in
 `transformersci.reviewers` (huggingface/transformers-ci). Both failure modes it has had are silent:
 a rule whose pattern matches nothing looks fine forever, and a model nobody claims quietly falls to
 the `*` catch-all. This check makes both loud.
@@ -35,8 +34,7 @@ It reports:
   - one owner spelled two ways (`@ArthurZucker` and `@arthurzucker` tally separately);
   - a malformed `# Reviewers:` tag.
 
-Collaborator status is not checked here — it needs the API, and the workflow already warns and skips
-at request time.
+Collaborator status is not checked here — it needs the API.
 
 Usage:
 
@@ -102,8 +100,7 @@ INSTALL_RESOLVER = "pip install -r utils/checkers-requirements.txt"
 def load_resolver():
     """The shared resolver, or `None` if it is not installed.
 
-    It lives in huggingface/transformers-ci, alongside the workflow that resolves reviewers for
-    real, so the two cannot disagree. It is deliberately not in `setup.py`: that package has no
+    It lives in huggingface/transformers-ci. It is deliberately not in `setup.py`: that package has no
     release on PyPI, and a `git+` URL in the metadata is a direct reference, which PyPI refuses to
     accept when this one is uploaded. It is pinned in `utils/checkers-requirements.txt` instead, which `utils/checkers.py` installs for you.
     """

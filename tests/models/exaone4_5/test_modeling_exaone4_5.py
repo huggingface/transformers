@@ -39,39 +39,40 @@ if is_torch_available():
         Exaone4_5_ForConditionalGeneration,
         Exaone4_5_Model,
         Exaone4_5_Processor,
-        Exaone4_5_VisionConfig,
-        Exaone4Config,
     )
 
 
 class Exaone4_5_ModelTester(VLMModelTester):
     base_model_class = Exaone4_5_Model
     config_class = Exaone4_5_Config
-    text_config_class = Exaone4Config
-    vision_config_class = Exaone4_5_VisionConfig
+
     conditional_generation_class = Exaone4_5_ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("vision_start_token_id", 5)
-        kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("out_hidden_size", 32)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
+        "image_size": 32,
+        "patch_size": 16,
+        "num_image_tokens": 4,
+        "hidden_act": "silu",
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "depth": 2,
+        "num_heads": 4,
+        "spatial_merge_size": 1,
+        "temporal_patch_size": 2,
+        "out_hidden_size": 32,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Exaone4_5 vision config expects `in_channels` instead of `num_channels`.
-        self.in_channels = self.num_channels
+        values["in_channels"] = values["num_channels"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -86,7 +87,7 @@ class Exaone4_5_ModelTester(VLMModelTester):
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
-        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device)}
+        return {"image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device)}
 
     def get_config(self):
         config = super().get_config()

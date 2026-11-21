@@ -44,7 +44,6 @@ class TrOCRConfig(PreTrainedConfig):
     ```"""
 
     model_type = "trocr"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "decoder_attention_heads",
         "hidden_size": "d_model",

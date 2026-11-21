@@ -16,6 +16,7 @@ from itertools import zip_longest
 import torch
 
 from ..cache_utils import (
+    DummyLayer,
     DynamicCache,
     DynamicLayer,
     DynamicSlidingWindowLayer,
@@ -522,6 +523,9 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
                 self.static_cache.layers[i] = StaticLayer(max_cache_len)
+            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
+            elif isinstance(layer, DummyLayer):
+                self.static_cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
@@ -566,13 +570,13 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         for layer in self.static_cache.layers:
             layer.cumulative_length.copy_(cache_position[0])
 
-        past_key_values = self.static_cache
+        cache = self.static_cache
 
         outs = self.model(
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             attention_mask=None,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=True,
         )
         if hasattr(outs, "logits"):
@@ -700,6 +704,9 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         for i, layer in enumerate(self.cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
                 self.cache.layers[i] = StaticLayer(max_cache_len)
+            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
+            elif isinstance(layer, DummyLayer):
+                self.cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(config)
         dtype = self.model.dtype
         # We need this call to initialize all the layers (otherwise it's done lazily, which is not exportable)
@@ -739,7 +746,7 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             attention_mask=None,
-            past_key_values=self.cache,
+            cache=self.cache,
             use_cache=True,
         )
 
@@ -834,6 +841,9 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
                 self.static_cache.layers[i] = StaticLayer(max_static_cache_length)
+            # KV-sharing consumers never read from their cache, so back them by an empty (0-length) StaticLayer
+            elif isinstance(layer, DummyLayer):
+                self.static_cache.layers[i] = StaticLayer(0)
         num_heads, head_dim = get_head_shapes(self.config)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
         self.cache = EncoderDecoderCache(self.static_cache, DynamicCache(config=self.config))
@@ -857,7 +867,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=self.cache,
+            cache=self.cache,
             use_cache=True,
         )
 
@@ -1033,7 +1043,7 @@ def export_with_dynamic_cache(
             {
                 "input_ids": example_input_ids,
                 "attention_mask": example_attention_mask,
-                "past_key_values": DynamicCache(config=model.config),
+                "cache": DynamicCache(config=model.config),
                 "use_cache": True,
             },
             strict=False,
@@ -1077,9 +1087,9 @@ def _get_dynamic_cache_layout(cache: DynamicCache) -> list[int | None]:
 
 def _get_cache_dict(cache: DynamicCache):
     """Convert cache to dictionary format for pytree operations."""
-    if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer) for layer in cache.layers):
+    if any(type(layer) not in (DynamicLayer, DynamicSlidingWindowLayer, DummyLayer) for layer in cache.layers):
         raise RuntimeError(
-            "This pytree flattening function should be applied to DynamicCache containing only `DynamicLayer` and `DynamicSlidingWindowLayer`"
+            "This pytree flattening function should be applied to DynamicCache containing only `DynamicLayer`, `DynamicSlidingWindowLayer` and `DummyLayer`"
         )
 
     return {

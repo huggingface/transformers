@@ -31,6 +31,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -41,9 +42,9 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torchcodec_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -57,33 +58,36 @@ if is_vision_available():
     from PIL import Image
 
 
-if is_torchcodec_available():
-    import torchcodec
+class Phi4MultimodalModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 2,
+        # text tokens only: `get_small_config_defaults` adds the image and audio tokens
+        "seq_length": 12,
+        "image_seq_length": 275,
+        "audio_seq_length": 8,
+        "is_training": True,
+        "num_hidden_layers": 2,
+        "vocab_size": 49,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "max_position_embeddings": 4096,
+        "bos_token_id": 0,
+        "eos_token_id": 0,
+        "pad_token_id": 0,
+        "image_token_id": 1,
+        "audio_token_id": 2,
+        "image_size": 16,
+        "audio_size": 12,
+        "num_channels": 3,
+    }
 
-class Phi4MultimodalModelTester:
     def __init__(
         self,
         parent,
-        batch_size=2,
-        seq_length=12,
-        image_seq_length=275,
-        audio_seq_length=8,
-        is_training=True,
-        num_hidden_layers=2,
-        vocab_size=49,
-        hidden_size=32,
-        intermediate_size=64,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        max_position_embeddings=4096,
-        bos_token_id=0,
-        eos_token_id=0,
-        pad_token_id=0,
-        image_token_id=1,
-        audio_token_id=2,
-        image_size=16,
-        audio_size=12,
         audio_config=Phi4MultimodalAudioConfig(
             num_blocks=2,
             hidden_size=32,
@@ -101,31 +105,19 @@ class Phi4MultimodalModelTester:
             crop_size=16,
             initializer_range=1e-5,
         ),
+        **kwargs,
     ):
         self.parent = parent
-        self.num_hidden_layers = num_hidden_layers
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.image_token_id = image_token_id
-        self.audio_token_id = audio_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         self.audio_config = copy.deepcopy(audio_config)
         self.vision_config = copy.deepcopy(vision_config)
-        self.max_position_embeddings = max_position_embeddings
 
-        self.is_training = is_training
-        self.batch_size = batch_size
-        self.seq_length = seq_length + image_seq_length + audio_seq_length
-        self.image_seq_length = image_seq_length
-        self.audio_seq_length = audio_seq_length
-        self.image_size = image_size
-        self.audio_size = audio_size
-        self.num_channels = 3
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"] + values["audio_seq_length"]
+        return values
 
     def get_config(self):
         return Phi4MultimodalConfig(
@@ -205,6 +197,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     """
     Model tester for `Phi4Multimodal`.
     """
+
+    model_tester_class = Phi4MultimodalModelTester
 
     all_model_classes = (Phi4MultimodalForCausalLM, Phi4MultimodalModel) if is_torch_available() else ()
 
@@ -291,9 +285,8 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         self.assistant_token = "<|assistant|>"
         self.end_token = "<|end|>"
         self.image = Image.open(requests.get(self.image_url, stream=True).raw)
-        audio_bytes = requests.get(self.audio_url, stream=True).raw.data
-        samples = torchcodec.decoders.AudioDecoder(audio_bytes).get_all_samples()
-        self.audio, self.sampling_rate = samples.data, samples.sample_rate
+        self.sampling_rate = 16000
+        self.audio = load_audio(self.audio_url, sampling_rate=self.sampling_rate)
 
         cleanup(torch_device, gc_collect=True)
 
@@ -306,7 +299,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images=None, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=None, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -326,7 +319,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images=self.image, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=self.image, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -339,7 +332,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 7): 'The image shows a vibrant scene at a traditional Chinese-style street entrance, known as a "gate"',
                 ("cuda", 8): 'The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural',
-                ("xpu", 5): 'The image shows a vibrant street scene in a bustling city, likely in a region with a rich cultural',
+                ("xpu", 5): 'The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural',
             }
         )  # fmt: skip
         EXPECTED_RESPONSE = EXPECTED_RESPONSES.get_expectation()
@@ -360,7 +353,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             placeholder += "<|image|>"
 
         prompt = f"{self.user_token}{placeholder}Summarize the deck of slides.{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, images, return_tensors="pt").to(torch_device)
+        inputs = self.processor(text=prompt, images=images, return_tensors="pt").to(torch_device)
 
         output = model.generate(
             **inputs,
@@ -380,9 +373,9 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt").to(
-            torch_device
-        )
+        inputs = self.processor(
+            text=prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt"
+        ).to(torch_device)
 
         output = model.generate(
             **inputs,

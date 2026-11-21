@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -42,15 +43,14 @@ if is_torch_available():
     import torch
 
 
-class PerceptionLMVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_id=3,
-        video_token_id=2,
-        seq_length=7,
-        tie_word_embeddings=True,
-        text_config={
+class PerceptionLMVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 2,
+        "seq_length": 7,
+        "tie_word_embeddings": True,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -73,8 +73,8 @@ class PerceptionLMVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 0,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "architecture": "vit_pe_core_large_patch14_336",
             "model_args": {
                 "embed_dim": 64,
@@ -86,30 +86,32 @@ class PerceptionLMVisionText2TextModelTester:
                 "ref_feat_shape": (1, 1),
             },
         },
-    ):
+        "batch_size": 3,
+        "num_tiles": 1,
+        "num_frames": 1,
+        "num_channels": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["image_size"] = vision_config["model_args"]["img_size"][0]
+        values["num_image_tokens"] = (vision_config["model_args"]["img_size"][0] // 14) ** 2
+        values["num_video_tokens"] = (vision_config["model_args"]["img_size"][0] // 14) ** 2
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-        self.tie_word_embeddings = tie_word_embeddings
-
-        self.batch_size = 3
-        self.num_tiles = 1
-        self.num_frames = 1
-        self.num_channels = 3
-        self.image_size = self.vision_config["model_args"]["img_size"][0]
-        self.num_image_tokens = (self.vision_config["model_args"]["img_size"][0] // 14) ** 2
-        self.num_video_tokens = (self.vision_config["model_args"]["img_size"][0] // 14) ** 2
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return PerceptionLMConfig(
@@ -167,6 +169,8 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     """
     Model tester for `PerceptionLMForConditionalGeneration`.
     """
+
+    model_tester_class = PerceptionLMVisionText2TextModelTester
 
     all_model_classes = (
         (
