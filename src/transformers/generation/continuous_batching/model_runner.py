@@ -67,12 +67,12 @@ _CB_MTP_DRAFT_SAMPLE = _glue_os.environ.get("CB_MTP_DRAFT", "greedy") == "sample
 # verification) go through `FusedSampler`, two kernels over the bf16 logits instead of an fp32 copy, softmax / log
 # softmax, multinomial or noise over the whole vocabulary. Temperature is applied in the kernel; other logits
 # processors keep the old path. CB_FUSED_SAMPLE_CHECK=1 also computes the old path's log softmax for the emitted tokens
-# and prints the largest difference at exit.
+# and prints the largest difference so far every 50 steps.
 _CB_FUSED_SAMPLE = _glue_os.environ.get("CB_FUSED_SAMPLE", "0") == "1"
 _CB_FUSED_SAMPLE_CHECK = _glue_os.environ.get("CB_FUSED_SAMPLE_CHECK", "0") == "1"
-# CB_FUSED_SAMPLE_SHARDED=1 (with CB_FUSED_SAMPLE=1, MTP spec verification with one draft): when the lm_head is
-# vocabulary-sharded (TP plan `colwise_gather_output`), each rank samples its own shard of the logits and the ranks
-# all-gather 4 numbers per row instead of the [rows, vocab] logits; the next draft's argmax likewise
+# CB_FUSED_SAMPLE_SHARDED=1 (with CB_FUSED_SAMPLE=1; no MTP, or MTP spec verification with one draft): when the
+# lm_head is vocabulary-sharded (TP plan `colwise_gather_output`), each rank samples its own shard of the logits and
+# the ranks all-gather 4 numbers per row instead of the [rows, vocab] logits; the next draft's argmax likewise
 _CB_FUSED_SAMPLE_SHARDED = _glue_os.environ.get("CB_FUSED_SAMPLE_SHARDED", "0") == "1"
 
 
@@ -192,7 +192,8 @@ class ModelRunner:
             self._fused_check_calls += 1
             if self._fused_check_calls % 50 == 0:  # synchronizes: check mode only
                 err, n = self._fused_check.tolist()
-                print(f"FUSED_SAMPLE_CHECK calls={self._fused_check_calls} max_abs_dlogprob={err:.3e} rows={int(n)}", flush=True)
+                calls = self._fused_check_calls
+                print(f"FUSED_SAMPLE_CHECK calls={calls} max_abs_dlogprob={err:.3e} rows={int(n)}", flush=True)
         # This is the stream on which the compute happens
         compute_stream = self.inputs_and_outputs.compute_stream
 
@@ -271,6 +272,23 @@ class ModelRunner:
         and/or compiled."""
         # Perform carry-over (no-op for synchronous batching)
         self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
+
+        vocab_shard = self._vocab_shard(model)
+        if vocab_shard is not None:
+            # [gap4 zssample] vocabulary-parallel sampling: this rank's shard of the sampled rows' logits, no all-gather
+            kwargs = {k: v for k, v in batch_data.items() if k != "logits_to_keep"}
+            hidden_states = model.model(**kwargs).last_hidden_state[:, batch_data["logits_indices"]]
+            logits = nn.functional.linear(hidden_states, vocab_shard[0])[0]  # [num_logits, vocab / tp]
+            temperature = None
+            if self.logit_processor.do_processing:
+                temperature = batch_data["logits_processor_args"][0, : logits.shape[0]].view(dtype=torch.float32)
+            tokens, logprobs, _, _, _ = self._fused_sampler(logits, temperature, None, vocab_shard[1], vocab_shard[2])
+            if _CB_FUSED_SAMPLE_CHECK:
+                self._maybe_check_fused(model.lm_head(hidden_states)[0], temperature, tokens, logprobs)
+            output_ids[0, : tokens.size(0)].copy_(tokens)
+            if self.return_logprobs:
+                output_ids[1, : tokens.size(0)].copy_(logprobs.view(dtype=torch.int32))
+            return
 
         # Run model forward pass
         logits = model(**batch_data).logits  # shape [1, seq_len OR num_logits, vocab_size]
@@ -589,7 +607,8 @@ class ModelRunner:
             draft_logits = model.lm_head(mtp_hidden_states[:, draft_rows])[0]
             if _CB_MTP_DRAFT_SAMPLE and self.do_sample:
                 draft_logprobs = nn.functional.log_softmax(draft_logits.float(), dim=-1)
-                next_draft = torch.argmax(draft_logprobs - torch.empty_like(draft_logprobs).exponential_().log_(), dim=-1)
+                noise = torch.empty_like(draft_logprobs).exponential_().log_()
+                next_draft = torch.argmax(draft_logprobs - noise, dim=-1)
                 next_draft_logprob = draft_logprobs.gather(1, next_draft[:, None]).squeeze(1)
                 output_ids[7, :num_rows].copy_(next_draft_logprob.view(dtype=torch.int32))
             else:
