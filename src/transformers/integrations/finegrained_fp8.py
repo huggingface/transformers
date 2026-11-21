@@ -351,7 +351,38 @@ def _glue_memoize_tile_layout(grouped_matmul):
     kernel_module._grouped_tile_layout = memoized
 
 
+# [scratch, bench only] FUSE_COMPILE_OPAQUE_EXPERTS=1: under torch.compile the hub's grouped kernel stays one opaque op
+# with a fake implementation. As a `triton_op` it is inlined into every compiled artifact, where its autotuner
+# benchmarks its configs again (about 80 s per artifact at GLM-5.3's expert shapes)
+_FUSE_OPAQUE_GROUPED = os.environ.get("FUSE_COMPILE_OPAQUE_EXPERTS", "0") == "1"
+
+
+def _fuse_grouped_matmul(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    weight_scale_inv: torch.Tensor,
+    offsets: torch.Tensor,
+    tokens_per_expert: torch.Tensor,
+    block_size: list[int],
+) -> torch.Tensor:
+    return load_finegrained_fp8_kernel().grouped_matmul(
+        input, weight, weight_scale_inv, offsets=offsets, tokens_per_expert=tokens_per_expert, block_size=block_size
+    )
+
+
+def _fuse_grouped_matmul_fake(input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
+    return input.new_empty((input.shape[0], weight.shape[1]))
+
+
+torch.library.custom_op("transformers::fuse_fp8_grouped_matmul", _fuse_grouped_matmul, mutates_args=())
+torch.library.register_fake("transformers::fuse_fp8_grouped_matmul", _fuse_grouped_matmul_fake)
+
+
 def fp8_grouped_matmul(input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
+    if _FUSE_OPAQUE_GROUPED and block_size is not None:
+        return torch.ops.transformers.fuse_fp8_grouped_matmul(
+            input, weight, weight_scale_inv, offsets, tokens_per_expert, list(block_size)
+        )
     if _GLUE_EXPERTS:
         _glue_memoize_tile_layout(load_finegrained_fp8_kernel().grouped_matmul)
     return load_finegrained_fp8_kernel().grouped_matmul(
@@ -806,6 +837,30 @@ def _proto_relayout_fp8_experts(model: nn.Module, trtllm: bool) -> bool:
     return moved
 
 
+def _fuse_trtllm_routed_moe(
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    w13: torch.Tensor,
+    s13: torch.Tensor,
+    w2: torch.Tensor,
+    s2: torch.Tensor,
+) -> torch.Tensor:
+    from . import _proto_fp8_experts as proto
+
+    return proto.trtllm_experts_forward((w13, s13, w2, s2), hidden_states, top_k_index, top_k_weights)
+
+
+def _fuse_trtllm_routed_moe_fake(hidden_states, top_k_index, top_k_weights, w13, s13, w2, s2):
+    return torch.empty_like(hidden_states)
+
+
+# [gap3 compile, bench only] `PROTO_EXPERTS_TRTLLM` inside a torch.compile region (FUSE_COMPILE): the activation quant
+# and flashinfer's routed MoE as one op dynamo does not trace into
+torch.library.custom_op("transformers::fuse_trtllm_routed_moe", _fuse_trtllm_routed_moe, mutates_args=())
+torch.library.register_fake("transformers::fuse_trtllm_routed_moe", _fuse_trtllm_routed_moe_fake)
+
+
 def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     """The prototype forward selected by the flags, or `None` when the default path has to run."""
     if self._is_expert_parallel or (torch.is_grad_enabled() and hidden_states.requires_grad):
@@ -818,6 +873,10 @@ def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     from . import _proto_fp8_experts as proto
 
     if _PROTO_EXPERTS_TRTLLM and self._proto_trtllm is not None:
+        if torch.compiler.is_compiling():  # [gap3 compile] one opaque op inside a compiled region
+            return torch.ops.transformers.fuse_trtllm_routed_moe(
+                hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous(), *self._proto_trtllm
+            )
         return proto.trtllm_experts_forward(
             self._proto_trtllm, hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous()
         )
