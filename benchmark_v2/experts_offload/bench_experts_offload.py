@@ -50,6 +50,13 @@ parser.add_argument(
 )
 parser.add_argument("--cold", action="store_true", help="drop the checkpoint from the page cache before each config")
 parser.add_argument("--out", default="bench_results.jsonl")
+parser.add_argument(
+    "--router-skew",
+    type=float,
+    default=0.0,
+    help="synthetic weights: per-layer expert popularity on top of unit-std router logits (0.6: the best 25%% of "
+    "experts take ~88%% of picks), simulating real routing locality",
+)
 args = parser.parse_args()
 
 import torch  # noqa: E402
@@ -72,10 +79,13 @@ log(
 )
 log(f"device {device}: {torch.cuda.get_device_name() if device == 'cuda' else 'Apple GPU'}")
 
+
 start = time.perf_counter()
-path = snapshot_download(
-    args.model, allow_patterns=["*.json", "*.safetensors", "*.txt", "*.jinja", "*.model", "tokenizer*"]
-)
+path = os.path.expanduser(args.model)
+if not os.path.isdir(path):
+    path = snapshot_download(
+        args.model, allow_patterns=["*.json", "*.safetensors", "*.txt", "*.jinja", "*.model", "tokenizer*"]
+    )
 files = sorted(glob.glob(f"{path}/*.safetensors"))
 expert_bytes = rest_bytes = 0
 for file in files:
@@ -298,6 +308,10 @@ for index, config in enumerate(configs, 1):
             from dense_quant import quantize_dense  # this folder (on HF Jobs: mounted, on PYTHONPATH)
 
             quantize_dense(model, args.quantize_dense)
+        if args.router_skew:
+            from sim_routing import skew_routers  # this folder
+
+            log(f"  router skew {args.router_skew} on {skew_routers(model, args.router_skew)} routers")
         if compile_:  # `generate` compiles the decode step with a static cache (CUDA graphs: reduce-overhead)
             torch._inductor.config.graph_partition = True  # CUDA graphs split around `cudagraph_unsafe` ops
             model.compile_decode = True

@@ -37,6 +37,7 @@ The experts module's own forward (any `experts_implementation`) runs on the pool
 from __future__ import annotations
 
 import bisect
+import collections
 import fnmatch
 import itertools
 import threading
@@ -189,6 +190,8 @@ class ExpertsOffloadStore:
         self.pool_of: dict[str, _Pool] = {}  # module name -> its pool
         self.device_tables: dict[str, torch.Tensor] = {}  # module name -> expert -> slot, on the device
         self.pending = {}  # (layer, expert) -> Future of its device tensors
+        self.pending_experts = collections.defaultdict(set)  # layer -> its experts in `pending`
+        self.host_routes = {}  # layer -> (routing on the host, its copy's MPS event), from `start_routing`
         self.hits = self.misses = self.reads = self.covered = 0
         self.trace: list | None = None  # set to [] to record (time, thread, phase, layer, info) events, see `_mark`
         # Host time blocked on the routing copy (device sync) and on expert reads, see `stats`
@@ -296,10 +299,12 @@ class ExpertsOffloadStore:
         if self.device.type == "cuda" and new:
             futures = {e: Future() for e in new}
             self.pending.update({(layer, e): future for e, future in futures.items()})
+            self.pending_experts[layer].update(futures)
             self.executor.submit(self._prefetch_batch, layer, futures)
         else:
             for e in new:
                 self.pending[(layer, e)] = self.executor.submit(self._read, layer, e)
+                self.pending_experts[layer].add(e)
         return [self.pending[(layer, e)] for e in experts if (layer, e) in self.pending]
 
     def _handle(self, file):
@@ -360,7 +365,7 @@ class ExpertsOffloadStore:
             futures = self.fetch(name, range(module.offload_num_experts))
             for expert, future in enumerate(futures):
                 self._install(pool, pool.slot_for((name, expert), ()), future)
-                self.pending.pop((name, expert), None)
+                self._pop_pending(name, expert)
             self._refresh_tables(pool)
 
     def _install(self, pool, slot, future):
@@ -388,17 +393,20 @@ class ExpertsOffloadStore:
         if pool.complete(name):
             self.hits += top_k_index.numel()
             return
-        # 1. One host copy (pass 1 is already queued, the device works meanwhile): routing + next layers' guesses
-        routes = [top_k_index.reshape(-1)]
+        # 1. The routing + next layers' guesses, copied to the host by `start_routing` before pass 1 was queued: wait
+        # for that copy only, pass 1 keeps the device busy meanwhile
         ahead = self.next_layers(name)
         decode = top_k_index.numel() < num_experts
         guessed = [n for n in ahead if decode and self.routers[n] is not None]
-        for next_name in guessed:
-            logits = torch.nn.functional.linear(hidden_states, self.routers[next_name].weight)
-            routes.append(logits.topk(top_k_index.shape[-1], dim=-1).indices.flatten())
         self._mark("sync_start", name)
         start = time.perf_counter()
-        routes = torch.cat(routes).cpu()
+        routes = self.host_routes.pop(name, None)
+        if routes is None:  # `start_routing` did not run (e.g. a direct call): copy now
+            routes = self._routes(name, hidden_states, top_k_index).cpu()
+        else:
+            routes, event = routes
+            if event is not None:
+                event.synchronize()
         self.sync_seconds += time.perf_counter() - start
         self._mark("sync_end", name)
         routing = routes[: top_k_index.numel()].view(top_k_index.shape)
@@ -425,6 +433,7 @@ class ExpertsOffloadStore:
             self.fetch(next_name, torch.unique(guesses).tolist())
         if not decode and ahead:  # a prompt routes to nearly every expert: read the whole next layer
             self.fetch(ahead[0], range(self.layers[ahead[0]].offload_num_experts))
+        self._mark("guesses_fetched", name)
         # 3. Install the misses as their reads land, as many as fit at a time, and add their routes
         while misses:
             batch = []
@@ -433,22 +442,54 @@ class ExpertsOffloadStore:
                 if slot is None:
                     break
                 self._install(pool, slot, future)
-                self.pending.pop((name, expert), None)
+                self._pop_pending(name, expert)
                 if not decode:  # a prompt's experts go to the cold end, the decode set stays
                     pool.cache.move_to_end((name, expert), last=False)
                 batch.append(expert)
             table = torch.full((num_experts,), pool.num_slots, dtype=top_k_index.dtype)
             table[batch] = torch.tensor([pool.cache[(name, e)] for e in batch], dtype=top_k_index.dtype)
-            slots = table[routing].to(self.device, non_blocking=True)
             self._mark("pass2", name, experts=len(batch))
-            output.add_(_run_pool(module, original_forward, hidden_states, slots, top_k_weights, {}))
+            if decode and routing.shape[0] == 1:
+                # One token: only its routes to this batch's experts (the others are resident or later batches)
+                positions = [k for k, e in enumerate(routing[0].tolist()) if e in set(batch)]
+                index = torch.tensor(positions, device=top_k_weights.device)
+                slots = table[routing[:, positions]].to(self.device, non_blocking=True)
+                weights = top_k_weights.index_select(-1, index)
+            else:
+                slots, weights = table[routing].to(self.device, non_blocking=True), top_k_weights
+            output.add_(_run_pool(module, original_forward, hidden_states, slots, weights, {}))
             misses, futures = misses[len(batch) :], futures[len(batch) :]
+        self._mark("misses_done", name)
         self._refresh_tables(pool)
+        self._mark("tables_refreshed", name, dirty=len(pool.dirty))
         # Guesses for this layer that the routing did not pick
-        unused = [key for key in self.pending if key[0] == name]
-        for key in unused:
-            self.pending.pop(key).cancel()
+        unused = list(self.pending_experts.get(name, ()))
+        for expert in unused:
+            self._pop_pending(name, expert).cancel()
         self._mark("layer_end", name, unused_guesses=len(unused))
+
+    def _pop_pending(self, layer, expert):
+        self.pending_experts[layer].discard(expert)
+        return self.pending.pop((layer, expert), None)
+
+    def _routes(self, name, hidden_states, top_k_index):
+        """On the device: this layer's routing, then each next layer's guess (its router on this layer's input)."""
+        routes = [top_k_index.reshape(-1)]
+        if top_k_index.numel() < self.layers[name].offload_num_experts:  # decode: guesses for the lookahead
+            for next_name in self.next_layers(name):
+                if self.routers[next_name] is not None:
+                    routes.append(_route(self.routers[next_name], hidden_states, top_k_index.shape[-1]).flatten())
+        return torch.cat(routes)
+
+    def start_routing(self, name, hidden_states, top_k_index):
+        """Queue the routing's copy to the host before pass 1: on MPS an async copy + an event the misses wait on
+        (not a drain of the queue); elsewhere the misses copy it themselves, after pass 1 is queued."""
+        if self.device.type != "mps" or self.pool_of[name].complete(name):
+            return
+        routes = self._routes(name, hidden_states, top_k_index).to("cpu", non_blocking=True)
+        event = torch.mps.Event()
+        event.record()
+        self.host_routes[name] = (routes, event)
 
     def next_layers(self, layer):
         index = self.order.index(layer)
@@ -477,6 +518,7 @@ class ExpertsOffloadLayer(TensorParallelLayer):
                 raise RuntimeError("Streamed experts are inference-only: use torch.no_grad() / inference_mode()")
             if not hasattr(module, "offload_table"):  # first call only: no graph break once set up
                 setup(name)
+            torch.ops.transformers.experts_offload_route(handle, hidden_states, top_k_index)
             # Pass 1, all on the device (compilable): resident experts through the slot table, misses are sentinels
             slots = module.offload_table[top_k_index]
             output = _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwargs)
@@ -519,6 +561,18 @@ def _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwa
         for name, bank in banks.items():
             setattr(module, name, bank)
         module.num_experts = num_slots
+
+
+@torch.library.custom_op("transformers::experts_offload_route", mutates_args=(), tags=(torch.Tag.cudagraph_unsafe,))
+def experts_offload_route(handle: int, hidden_states: torch.Tensor, top_k_index: torch.Tensor) -> None:
+    """Start copying the layer's routing (and next-layer guesses) to the host, ahead of pass 1."""
+    module = _LAYERS[handle]
+    module.offload_store.start_routing(module.offload_name, hidden_states, top_k_index)
+
+
+@experts_offload_route.register_fake
+def _(handle, hidden_states, top_k_index) -> None:
+    return None
 
 
 @torch.library.custom_op(
@@ -623,6 +677,17 @@ def _streamed_embedding_forward(store, name, module, model_dtype):
         return rows[inverse].view(*input_ids.shape, -1)
 
     return forward
+
+
+def _route(router: nn.Module, hidden_states: torch.Tensor, top_k: int) -> torch.Tensor:
+    """The experts `router` picks for `hidden_states`: its own routing (the integer output of its forward), else the
+    top-k of its logits."""
+    out = router(hidden_states)
+    for tensor in out if isinstance(out, (tuple, list)) else (out,):
+        if isinstance(tensor, torch.Tensor) and not tensor.is_floating_point():
+            return tensor
+    logits = out[0] if isinstance(out, (tuple, list)) else out
+    return logits.topk(top_k, dim=-1).indices
 
 
 def _find_router(parent: nn.Module, experts: nn.Module):
