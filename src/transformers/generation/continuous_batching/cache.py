@@ -579,15 +579,22 @@ class PagedAttentionCache:
         # by the caching allocator, so once the caller freed what it allocated the cache gets it back (same address, no
         # cudaFree / cudaMalloc, ~6 ms/GiB at TP8 as the ranks' driver calls serialize); if something the caller kept
         # sits in it, the allocator takes new memory, and frees its unused cached segments first if it runs out
-        keep_cached = self._vmm is None and os.environ.get("CB_RESTORE_KEEP_CACHED", "0") == "1"
+        keep_cached = os.environ.get("CB_RESTORE_KEEP_CACHED", "0") == "1"
         if not keep_cached and hasattr(device_module := torch.get_device_module(), "empty_cache"):
             device_module.empty_cache()
         t1 = perf_counter()
         if self._vmm is not None:
             # [scratch, gap4 pause] new physical memory at the same addresses, zeroed as the cache was created (the
-            # read trash must be zeros, and no bytes of the caller's use of the memory may sit in the cache)
+            # read trash must be zeros, and no bytes of the caller's use of the memory may sit in the cache). With
+            # CB_RESTORE_KEEP_CACHED=1 the caller's cached segments are only handed back if the device runs short
             chunks = self._vmm.unmapped_chunks()
-            self._vmm.map_chunks(chunks)
+            try:
+                self._vmm.map_chunks(chunks)
+            except RuntimeError:
+                if not keep_cached:
+                    raise
+                torch.get_device_module().empty_cache()
+                self._vmm.map_chunks(self._vmm.unmapped_chunks())
             t2 = perf_counter()
             runs = []  # [first, last + 1) runs of consecutive chunks, one memset each
             for i in chunks:
