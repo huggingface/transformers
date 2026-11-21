@@ -989,7 +989,7 @@ def get_kernel(
 
 # Metal kernels for Apple Silicon, pinned
 _METAL_KERNELS = {
-    "metal-moe-decode": ("ArthurZ/metal-moe-decode", "d13fe8353f16e9cbaa7684920672e6819cbf28f5"),
+    "metal-moe-decode": ("ArthurZ/metal-moe-decode", "930f9e096e30dfdb4a8ed5110f5d2c14233b528a"),
 }
 
 
