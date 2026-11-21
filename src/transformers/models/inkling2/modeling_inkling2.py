@@ -217,10 +217,15 @@ class Inkling2RelativePositionBias(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, relative_distance: torch.Tensor, position_ids: torch.Tensor
     ) -> torch.Tensor:
-        relative_states = self.linear(hidden_states).view(*hidden_states.shape[:-1], self.num_heads, -1)
-        relative_states = self.norm(relative_states, position_ids)
+        return self.bias(self.relative_states(hidden_states, position_ids), relative_distance)
 
-        # relative_states: [batch, q_len, num_heads, d_rel] -> bias: [batch, num_heads, q_len, kv_len]
+    def relative_states(self, hidden_states: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+        """Per-head relative states `[batch, q_len, num_heads, d_rel]` of each token."""
+        relative_states = self.linear(hidden_states).view(*hidden_states.shape[:-1], self.num_heads, -1)
+        return self.norm(relative_states, position_ids)
+
+    def bias(self, relative_states: torch.Tensor, relative_distance: torch.Tensor) -> torch.Tensor:
+        """The bias `[batch, num_heads, q_len, kv_len]` the relative states give at each distance."""
         rel_logits = (relative_states @ self.proj).transpose(1, 2)
         gather_index = relative_distance.clamp(0, self.rel_extent - 1).expand(*rel_logits.shape[:2], -1, -1)
         position_bias = rel_logits.gather(-1, gather_index)
@@ -568,6 +573,33 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub_with_fallback("inkling2_attention_inputs", "inkling2_attention_inputs")
+def inkling2_attention_inputs(
+    hidden_states: torch.Tensor,
+    key_hidden_states: torch.Tensor,
+    value_hidden_states: torch.Tensor,
+    module: nn.Module,
+    cache: Cache | None,
+    cache_offset: int,
+    conv_mask: torch.Tensor | None,
+    **kwargs,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    The query, key and value states (heads first) and the relative states of `module`'s attention, the key / value
+    convolution states advanced. A hub kernel may replace it (on MPS: the projection tails of a decode token in one
+    dispatch).
+    """
+    query_states = module.q_proj(hidden_states, kwargs["position_ids"])
+    key_states = module.k_proj(
+        key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
+    )
+    value_states = module.v_proj(
+        value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
+    )
+    relative_states = module.relative_position_bias.relative_states(hidden_states, kwargs["position_ids"])
+    return query_states, key_states, value_states, relative_states
+
+
 @use_kernel_func_from_hub_with_fallback("inkling2_attention", "inkling2_attention")
 def inkling2_attention(
     query: torch.Tensor,
@@ -577,12 +609,13 @@ def inkling2_attention(
     hidden_states: torch.Tensor,
     attention_mask: torch.Tensor | None,
     relative_distance: torch.Tensor,
+    relative_states: torch.Tensor,
     attention_interface: Callable,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """The attention of `module` with its relative position bias and sinks, through `attention_interface`. A hub kernel
     may replace it (on MPS: one dispatch per decode step)."""
-    position_bias = module.relative_position_bias(hidden_states, relative_distance, kwargs["position_ids"])
+    position_bias = module.relative_position_bias.bias(relative_states, relative_distance)
     sinks = module.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
     return attention_interface(
         module,
@@ -656,12 +689,8 @@ class Inkling2SlidingAttention(nn.Module):
         value_hidden_states = hidden_states if value_hidden_states is None else value_hidden_states
         input_shape = hidden_states.shape[:-1]
 
-        query_states = self.q_proj(hidden_states, kwargs["position_ids"])
-        key_states = self.k_proj(
-            key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
-        )
-        value_states = self.v_proj(
-            value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
+        query_states, key_states, value_states, relative_states = inkling2_attention_inputs(
+            hidden_states, key_hidden_states, value_hidden_states, self, cache, cache_offset, conv_mask, **kwargs
         )
 
         if cache is not None:
@@ -679,6 +708,7 @@ class Inkling2SlidingAttention(nn.Module):
             hidden_states,
             attention_mask,
             relative_distance,
+            relative_states,
             attention_interface,
             **kwargs,
         )
@@ -743,12 +773,8 @@ class Inkling2FullAttention(nn.Module):
         cache_layer_idx = self.layer_idx + cache_offset
         input_shape = hidden_states.shape[:-1]
 
-        query_states = self.q_proj(hidden_states, kwargs["position_ids"])
-        key_states = self.k_proj(
-            key_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
-        )
-        value_states = self.v_proj(
-            value_hidden_states, cache=cache, conv_mask=conv_mask, cache_offset=cache_offset, **kwargs
+        query_states, key_states, value_states, relative_states = inkling2_attention_inputs(
+            hidden_states, key_hidden_states, value_hidden_states, self, cache, cache_offset, conv_mask, **kwargs
         )
 
         if cache is not None:
@@ -766,6 +792,7 @@ class Inkling2FullAttention(nn.Module):
             hidden_states,
             attention_mask,
             relative_distance,
+            relative_states,
             attention_interface,
             **kwargs,
         )

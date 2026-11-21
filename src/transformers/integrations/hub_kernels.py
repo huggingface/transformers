@@ -989,7 +989,7 @@ def get_kernel(
 
 # Metal kernels for Apple Silicon, pinned
 _METAL_KERNELS = {
-    "metal-moe-decode": ("ArthurZ/metal-moe-decode", "bbea9863c5cc22916a528a213005d1580747f425"),
+    "metal-moe-decode": ("ArthurZ/metal-moe-decode", "8d84318f15ece7e2334a89573dcbeac1952b37e4"),
 }
 
 
@@ -1027,6 +1027,8 @@ _METAL_FUNCTIONS = {
     "inkling2_loop_router": "inkling2_router",
     "inkling2_short_convolution_step": "inkling2_short_convolution_step",
     "inkling2_loop_short_convolution_step": "inkling2_short_convolution_step",
+    "inkling2_attention_inputs": "inkling2_attention_inputs",
+    "inkling2_loop_attention_inputs": "inkling2_attention_inputs",
 }
 
 
