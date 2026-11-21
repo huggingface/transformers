@@ -1399,6 +1399,10 @@ class LinearAttentionAndStaticFullAttentionLayer(LinearAttentionLayer, StaticLay
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         StaticLayer.reorder_cache(self, beam_idx)
 
+    def crop(self, tokens_to_remove: int) -> None:
+        LinearAttentionLayer.crop(self, tokens_to_remove)
+        StaticLayer.crop(self, tokens_to_remove)
+
 
 class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, StaticSlidingWindowLayer):
     def __init__(self, max_cache_len: int, sliding_window: int, number_of_states: int = 1, **kwargs):
@@ -1422,6 +1426,10 @@ class LinearAttentionAndStaticSlidingWindowAttentionLayer(LinearAttentionLayer, 
         """Reorders the cache for beam search, given the selected beam indices."""
         LinearAttentionLayer.reorder_cache(self, beam_idx)
         StaticSlidingWindowLayer.reorder_cache(self, beam_idx)
+
+    def crop(self, tokens_to_remove: int) -> None:
+        LinearAttentionLayer.crop(self, tokens_to_remove)
+        StaticSlidingWindowLayer.crop(self, tokens_to_remove)
 
 
 class DummyLayer:
