@@ -25,12 +25,12 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.moe import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3MoE,
@@ -53,6 +53,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
     Qwen3NextPreTrainedModel,
     apply_mask_to_padding_states,
 )
+from ...models.step3p7.modeling_step3p7 import Step3p7Experts
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
@@ -85,6 +86,10 @@ class BailingHybridConfig(DeepseekV3Config):
         Lower bound of the KDA forget gate in log space.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
+    expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for routed experts. Zero disables clipping.
+    share_expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for shared experts. Zero disables clipping.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
         Scaling factor used for the auxiliary multi-token-prediction loss during pretraining.
     """
@@ -119,6 +124,8 @@ class BailingHybridConfig(DeepseekV3Config):
         "num_experts_per_tok": "num_experts_per_token",
         "n_shared_experts": "num_shared_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
+        "experts_swiglu_limits": "expert_swiglu_limit_list",
+        "shared_experts_swiglu_limits": "share_expert_swiglu_limit_list",
     }
 
     vocab_size: int = 157184
@@ -163,6 +170,8 @@ class BailingHybridConfig(DeepseekV3Config):
     kda_lower_bound: float = -5.0
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
+    expert_swiglu_limit_list: list[float | int] | None = None
+    share_expert_swiglu_limit_list: list[float | int] | None = None
 
     mtp_loss_scaling_factor: float | int = 0.0
 
@@ -190,6 +199,13 @@ class BailingHybridConfig(DeepseekV3Config):
 
         super().__post_init__(**kwargs)
 
+        for name in ("experts_swiglu_limits", "shared_experts_swiglu_limits"):
+            limits = getattr(self, name)
+            if limits is None:
+                setattr(self, name, [0] * self.num_hidden_layers)
+            elif len(limits) != self.num_hidden_layers:
+                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
+
 
 class BailingHybridRMSNorm(LlamaRMSNorm):
     pass
@@ -203,12 +219,23 @@ class BailingHybridRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-class BailingHybridExperts(DeepseekV3Experts):
+@use_experts_implementation
+class BailingHybridExperts(Step3p7Experts):
     pass
 
 
 class BailingHybridMLP(DeepseekV3MLP):
-    pass
+    def __init__(self, config, intermediate_size=None):
+        super().__init__(config, intermediate_size)
+        self.limit = 0
+
+    def forward(self, x):
+        gate = self.act_fn(self.gate_proj(x))
+        up = self.up_proj(x)
+        if self.limit is not None and self.limit > 0:
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
+        return self.down_proj(gate * up)
 
 
 class BailingHybridAttention(DeepseekV3Attention):
@@ -397,11 +424,20 @@ class BailingHybridTopkRouter(DeepseekV3TopkRouter):
 
 
 class BailingHybridMoE(DeepseekV3MoE):
-    pass
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+        super().__init__(config)
+        self.experts.limit = config.experts_swiglu_limits[layer_idx]
+        self.shared_experts.limit = config.shared_experts_swiglu_limits[layer_idx]
 
 
 class BailingHybridDecoderLayer(KimiLinearDecoderLayer):
-    pass
+    def __init__(self, config: BailingHybridConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.mlp = (
+            BailingHybridMoE(config, layer_idx)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else BailingHybridMLP(config)
+        )
 
 
 @auto_docstring

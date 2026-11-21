@@ -525,21 +525,22 @@ class Step3p7MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
         # CODEPATH: stepfun-ai/Step-3.7-Flash clamps layers 43-44 (bound 16) via `swiglu_limits_shared`;
-        # a `0.0` entry or no list at all means "no clamp", hence the `or float("inf")`.
-        self.limit = (config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0) or float("inf")
+        # a `0.0` entry or no list at all means "no clamp".
+        self.limit = config.swiglu_limits_shared[layer_idx] if config.swiglu_limits_shared else 0
 
     def forward(self, x) -> torch.Tensor:
-        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
-        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
+        gate = self.act_fn(self.gate_proj(x))
+        up = self.up_proj(x)
+        if self.limit is not None and self.limit > 0:
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
         return self.down_proj(gate * up)
 
 
 class Step3p7Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    _fp8_experts_clamp_after_activation = True
-
-    def __init__(self, config, swiglu_limit=None):
+    def __init__(self, config, swiglu_limit=0):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -547,7 +548,9 @@ class Step3p7Experts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = float("inf") if swiglu_limit is None else swiglu_limit
+        self.limit = swiglu_limit
+        # Declare the clipping order for replacement expert implementations.
+        self.limit_after_act = True
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -568,8 +571,10 @@ class Step3p7Experts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = self.act_fn(gate).clamp(max=self.limit)
-        up = up.clamp(min=-self.limit, max=self.limit)
+        gate = self.act_fn(gate)
+        if self.limit is not None and self.limit > 0:
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
         return gate * up
 
 
@@ -599,7 +604,7 @@ class Step3p7SparseMoeBlock(nn.Module):
         super().__init__()
         # CODEPATH: stepfun-ai/Step-3.7-Flash clamps the routed experts on layers 43-44 (bound 7) via
         # `swiglu_limits`; a `0.0` entry or no list at all means "no clamp".
-        swiglu_limit = (config.swiglu_limits[layer_idx] or None) if config.swiglu_limits else None
+        swiglu_limit = config.swiglu_limits[layer_idx] if config.swiglu_limits else 0
         self.gate = Step3p7TopKRouter(config)
         self.experts = Step3p7Experts(config, swiglu_limit=swiglu_limit)
         self.shared_experts = Step3p7MLP(config, layer_idx, is_shared_expert=True)

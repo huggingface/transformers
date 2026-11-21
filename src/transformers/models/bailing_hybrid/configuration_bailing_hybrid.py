@@ -52,6 +52,10 @@ class BailingHybridConfig(PreTrainedConfig):
         Lower bound of the KDA forget gate in log space.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP types. Derived from `first_k_dense_replace` when omitted.
+    expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for routed experts. Zero disables clipping.
+    share_expert_swiglu_limit_list (`list[float]`, *optional*):
+        Per-layer SwiGLU clipping limits for shared experts. Zero disables clipping.
     mtp_loss_scaling_factor (`float`, *optional*, defaults to 0.0):
         Scaling factor used for the auxiliary multi-token-prediction loss during pretraining.
     """
@@ -86,6 +90,8 @@ class BailingHybridConfig(PreTrainedConfig):
         "num_experts_per_tok": "num_experts_per_token",
         "n_shared_experts": "num_shared_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
+        "experts_swiglu_limits": "expert_swiglu_limit_list",
+        "shared_experts_swiglu_limits": "share_expert_swiglu_limit_list",
     }
 
     vocab_size: int = 157184
@@ -133,6 +139,8 @@ class BailingHybridConfig(PreTrainedConfig):
     kda_lower_bound: float = -5.0
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
+    expert_swiglu_limit_list: list[float | int] | None = None
+    share_expert_swiglu_limit_list: list[float | int] | None = None
 
     mtp_loss_scaling_factor: float | int = 0.0
 
@@ -159,6 +167,13 @@ class BailingHybridConfig(PreTrainedConfig):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
+
+        for name in ("experts_swiglu_limits", "shared_experts_swiglu_limits"):
+            limits = getattr(self, name)
+            if limits is None:
+                setattr(self, name, [0] * self.num_hidden_layers)
+            elif len(limits) != self.num_hidden_layers:
+                raise ValueError(f"`{name}` must contain one limit per decoder layer.")
 
 
 __all__ = ["BailingHybridConfig"]

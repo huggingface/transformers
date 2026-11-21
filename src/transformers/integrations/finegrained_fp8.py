@@ -723,6 +723,8 @@ class FP8Experts(nn.Module):
         has_bias: bool = False,
         has_gate: bool = True,
         expert_dtype: str = "fp8",
+        limit: float | None = None,
+        limit_after_act: bool = False,
     ):
         super().__init__()
 
@@ -741,7 +743,8 @@ class FP8Experts(nn.Module):
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
-        self.limit = getattr(config, "swiglu_limit", None)
+        self.limit_after_act = limit_after_act
+        self.limit = limit
         self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
         self.up_softcap = getattr(config, "mlp_up_softcap", None)
 
@@ -802,9 +805,15 @@ class FP8Experts(nn.Module):
             up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
             glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
             return (up + 1.0) * glu
-        elif self.limit is not None:
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+        elif self.limit_after_act:
+            gate = self.act_fn(gate)
+            if self.limit is not None and self.limit > 0:
+                gate = gate.clamp(max=self.limit)
+                up = up.clamp(min=-self.limit, max=self.limit)
+            return gate * up
+        elif self.swiglu_limit is not None:
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         return self.act_fn(gate) * up
 
     def forward(
@@ -977,6 +986,8 @@ def replace_with_fp8_linear(
                     has_bias=has_bias,
                     has_gate=has_gate,
                     expert_dtype=quantization_config.expert_dtype,
+                    limit=getattr(module, "limit", None),
+                    limit_after_act=getattr(module, "limit_after_act", False),
                 )
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FP8Linear swap.

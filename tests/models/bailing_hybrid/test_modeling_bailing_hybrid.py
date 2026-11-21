@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Ling 3 / Bailing MoE V3 model."""
 
+import json
 import re
 import tempfile
 import unittest
@@ -21,9 +22,11 @@ from unittest import mock
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_cuda_capability_at_least,
     require_kernels,
     require_torch,
     require_torch_accelerator_memory,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -38,7 +41,9 @@ if is_torch_available():
 
     from transformers import BailingHybridConfig, BailingHybridForCausalLM, BailingHybridModel, FineGrainedFP8Config
     from transformers.generation.utils import ALL_CACHE_NAMES
-    from transformers.integrations.finegrained_fp8 import FP8Linear
+    from transformers.integrations.finegrained_fp8 import FP8Experts, FP8Linear
+    from transformers.models.bailing_hybrid.modeling_bailing_hybrid import BailingHybridExperts, BailingHybridMLP
+    from transformers.models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts, DeepseekV3MLP
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
@@ -116,6 +121,115 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertListEqual(
                 list(outputs.attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len]
             )
+
+    def test_swiglu_config_defaults_and_aliases(self):
+        config = self.model_tester.get_config()
+        for alias, name in (
+            ("experts_swiglu_limits", "expert_swiglu_limit_list"),
+            ("shared_experts_swiglu_limits", "share_expert_swiglu_limit_list"),
+        ):
+            with self.subTest(alias=alias):
+                self.assertEqual(getattr(config, alias), [0] * config.num_hidden_layers)
+                values = config.to_dict()
+                values.pop(name)
+                values[alias] = [0, 2.5]
+                aliased = BailingHybridConfig.from_dict(values)
+                self.assertEqual(getattr(aliased, name), [0, 2.5])
+                self.assertEqual(aliased.to_dict()[name], [0, 2.5])
+                self.assertNotIn(alias, aliased.to_dict())
+                values[alias] = [1]
+                with self.assertRaisesRegex(ValueError, "one limit per decoder layer"):
+                    BailingHybridConfig.from_dict(values)
+
+    def test_swiglu_limits_per_layer_and_round_trip(self):
+        config = self.model_tester.get_config()
+        config.first_k_dense_replace = 0
+        config.mlp_layer_types = ["sparse"] * config.num_hidden_layers
+        config.experts_swiglu_limits = [0, 2.5]
+        config.shared_experts_swiglu_limits = [1.5, 0]
+        config = BailingHybridConfig.from_dict(config.to_dict())
+        model = BailingHybridForCausalLM(config)
+        for layer, expert_limit, shared_limit in zip(model.model.layers, [0, 2.5], [1.5, 0]):
+            self.assertEqual(layer.mlp.experts.limit, expert_limit)
+            self.assertEqual(layer.mlp.shared_experts.limit, shared_limit)
+
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            with open(f"{directory}/config.json", encoding="utf-8") as file:
+                saved_config = json.load(file)
+            self.assertEqual(saved_config["expert_swiglu_limit_list"], [0, 2.5])
+            self.assertEqual(saved_config["share_expert_swiglu_limit_list"], [1.5, 0])
+            self.assertNotIn("experts_swiglu_limits", saved_config)
+            self.assertNotIn("shared_experts_swiglu_limits", saved_config)
+            reloaded = BailingHybridForCausalLM.from_pretrained(directory)
+        self.assertEqual(reloaded.config.experts_swiglu_limits, [0, 2.5])
+        self.assertEqual(reloaded.config.shared_experts_swiglu_limits, [1.5, 0])
+        self.assertEqual(reloaded.model.layers[1].mlp.experts.limit, 2.5)
+        self.assertEqual(reloaded.model.layers[0].mlp.shared_experts.limit, 1.5)
+
+        for name in ("expert_swiglu_limit_list", "share_expert_swiglu_limit_list"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "one limit per decoder layer"):
+                BailingHybridConfig.from_dict({**config.to_dict(), name: [1]})
+
+    def test_swiglu_clipping_after_activation(self):
+        config = self.model_tester.get_config()
+        config.hidden_size = config.intermediate_size = config.moe_intermediate_size = 4
+        config.num_local_experts = 2
+        experts = BailingHybridExperts(config, swiglu_limit=1.5).to(torch_device)
+        shared = BailingHybridMLP(config).to(torch_device)
+        shared.limit = 2.5
+        with torch.no_grad():
+            for module in (experts, shared):
+                for parameter in module.parameters():
+                    parameter.fill_(0.5)
+        inputs = torch.tensor(
+            [[3.0, 3.0, 3.0, 3.0], [-3.0, -3.0, -3.0, -3.0]], device=torch_device, requires_grad=True
+        )
+        indices = torch.tensor([[0, 1], [1, 0]], device=torch_device)
+        weights = torch.tensor([[0.25, 0.75], [0.75, 0.25]], device=torch_device)
+
+        gate_up = torch.nn.functional.linear(inputs, experts.gate_up_proj[0])
+        gate, up = gate_up.chunk(2, dim=-1)
+        expected = torch.nn.functional.linear(
+            torch.nn.functional.silu(gate).clamp(max=1.5) * up.clamp(-1.5, 1.5), experts.down_proj[0]
+        )
+        expected_gradient = torch.autograd.grad(expected.sum(), inputs, retain_graph=True)[0]
+        for implementation in ("eager", "batched_mm", "grouped_mm"):
+            with self.subTest(implementation=implementation):
+                config._experts_implementation = implementation
+                output = experts(inputs, indices, weights)
+                torch.testing.assert_close(output, expected)
+                torch.testing.assert_close(torch.autograd.grad(output.sum(), inputs)[0], expected_gradient)
+
+        expected_shared = shared.down_proj(
+            torch.nn.functional.silu(shared.gate_proj(inputs)).clamp(max=2.5) * shared.up_proj(inputs).clamp(-2.5, 2.5)
+        )
+        torch.testing.assert_close(shared(inputs), expected_shared)
+        self.assertFalse(
+            torch.equal(torch.nn.functional.silu(gate).clamp(max=1.5), torch.nn.functional.silu(gate.clamp(max=1.5)))
+        )
+
+    def test_swiglu_disabled_matches_unclipped_experts(self):
+        config = self.model_tester.get_config()
+        config._experts_implementation = "eager"
+        inputs = torch.randn(3, config.hidden_size, device=torch_device)
+        indices = torch.tensor([[0, 1], [1, 2], [2, 3]], device=torch_device)
+        weights = torch.rand(3, 2, device=torch_device)
+        for new_class, reference_class in (
+            (BailingHybridMLP, DeepseekV3MLP),
+            (BailingHybridExperts, DeepseekV3Experts),
+        ):
+            with self.subTest(module=new_class.__name__):
+                reference = reference_class(config).to(torch_device)
+                candidate = new_class(config).to(torch_device)
+                for parameter in reference.parameters():
+                    nn.init.normal_(parameter, std=0.2)
+                candidate.load_state_dict(reference.state_dict())
+                args = (inputs, indices, weights) if new_class is BailingHybridExperts else (inputs,)
+                for limit in (0, None, float("inf")):
+                    with self.subTest(limit=limit):
+                        candidate.limit = limit
+                        torch.testing.assert_close(candidate(*args), reference(*args), rtol=0, atol=0)
 
     def test_reverse_loading_mapping(self):
         """Exercise the two-stage Ling key mapping as an end-to-end exact round trip."""
@@ -289,6 +403,50 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("MLA uses different query/key and value head dimensions, so Flash SDPA cannot dispatch.")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+
+@require_torch_gpu
+@require_kernels
+@require_cuda_capability_at_least(9, 0)
+class BailingHybridFp8IntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_fp8_expert_clipping(self):
+        config = BailingHybridModelTester(self).get_config()
+        config.hidden_size = config.intermediate_size = config.moe_intermediate_size = 128
+        config.first_k_dense_replace = 0
+        config.mlp_layer_types = ["sparse"] * config.num_hidden_layers
+        config.experts_swiglu_limits = [0, 1.5]
+        model = BailingHybridForCausalLM(config).to(dtype=torch.bfloat16)
+        with torch.no_grad():
+            for layer in model.model.layers:
+                layer.mlp.experts.gate_up_proj.fill_(0.5)
+                layer.mlp.experts.down_proj.fill_(0.5)
+        excluded = ["lm_head"]
+        for i in range(config.num_hidden_layers):
+            excluded.extend(f"model.layers.{i}.{name}" for name in ("attention", "mlp.gate", "mlp.shared_experts"))
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            model = BailingHybridForCausalLM.from_pretrained(
+                directory,
+                quantization_config=FineGrainedFP8Config(modules_to_not_convert=excluded),
+                device_map=torch_device,
+                dtype=torch.bfloat16,
+                experts_implementation="batched_mm",
+                attn_implementation="eager",
+            ).eval()
+        inputs = torch.ones(2, config.hidden_size, device=torch_device, dtype=torch.bfloat16)
+        indices = torch.tensor([[0, 1], [1, 0]], device=torch_device)
+        weights = torch.full((2, 2), 0.5, device=torch_device, dtype=torch.bfloat16)
+        for layer, expected in zip(model.model.layers, (262144.0, 144.0)):
+            experts = layer.mlp.experts
+            self.assertIsInstance(experts, FP8Experts)
+            self.assertEqual(experts.gate_up_proj.dtype, torch.float8_e4m3fn)
+            with torch.inference_mode():
+                output = experts(inputs, indices, weights)
+            # Gate/up are 64 before clipping; the down projection sums 128 values weighted by 0.5.
+            torch.testing.assert_close(output, torch.full_like(output, expected), rtol=1e-2, atol=0.5)
 
 
 @slow
