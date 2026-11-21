@@ -188,6 +188,77 @@ def trtllm_experts_forward(prepared, hidden_states, top_k_index, top_k_weights):
     return out
 
 
+def trtllm_experts_forward_routing(
+    prepared, hidden_states, router_logits, routing_bias, top_k, n_group, topk_group, routed_scaling_factor,
+    norm_topk_prob,
+):  # fmt: skip
+    """`PROTO_EXPERTS_TRTLLM_ROUTING`: the same MoE with the routing inside flashinfer's kernel, as vLLM and SGLang call it
+    (DeepSeekV3 routing: sigmoid of the fp32 logits, bias added for the choice only, group-limited top-k, the chosen
+    sigmoid scores normalized and scaled). Replaces the router's own top-k and weights."""
+    import flashinfer
+    from flashinfer.fused_moe import Fp8QuantizationType, WeightLayout
+
+    CALLS["trtllm"] += 1
+    w13, s13, w2, s2 = prepared
+    num_experts, _, two_i, _ = w13.shape
+    num_tokens, hidden = hidden_states.shape
+    x_q, x_s = act_quant(hidden_states, scales_group_major=True)
+    out = torch.empty(num_tokens, hidden, dtype=hidden_states.dtype, device=hidden_states.device)
+    flashinfer.fused_moe.trtllm_fp8_block_scale_moe(
+        routing_logits=router_logits,
+        routing_bias=routing_bias,
+        hidden_states=x_q,
+        hidden_states_scale=x_s,
+        gemm1_weights=w13,
+        gemm1_weights_scale=s13,
+        gemm2_weights=w2,
+        gemm2_weights_scale=s2,
+        num_experts=num_experts,
+        top_k=top_k,
+        n_group=n_group,
+        topk_group=topk_group,
+        intermediate_size=two_i // 2,
+        local_expert_offset=0,
+        local_num_experts=num_experts,
+        routed_scaling_factor=routed_scaling_factor,
+        routing_method_type=2,  # DeepSeekV3
+        use_shuffled_weight=True,
+        weight_layout=WeightLayout.BlockMajorK,
+        do_finalize=True,
+        tune_max_num_tokens=8192,
+        fp8_quantization_type=Fp8QuantizationType.DeepSeekFp8,
+        norm_topk_prob=norm_topk_prob,
+        output=out,
+    )
+    return out
+
+
+def trtllm_autotune(prepared, hidden, top_k, routing: dict | None, group=None):
+    """`PROTO_EXPERTS_TRTLLM_AUTOTUNE`, at warm-up only: flashinfer's autotuner measures the TRT-LLM MoE tactics of every
+    power-of-2 token count up to 8192 (`tune_max_num_tokens`) for this rank's expert shapes and keeps the fastest in its
+    process-wide cache, which every later call (and CUDA graph capture) reads. One eager call per form of the op
+    (precomputed top-k, and routing inside when `routing` gives its arguments). `group` (a gloo group of the TP ranks)
+    averages the timings across ranks so they all pick the same tactics."""
+    from flashinfer.autotuner import autotune, set_autotune_process_group
+
+    w13 = prepared[0]
+    num_experts, device = w13.shape[0], w13.device
+    g = torch.Generator(device=device).manual_seed(0)
+    n = 8192
+    x = torch.randn(n, hidden, device=device, dtype=torch.bfloat16, generator=g)
+    logits = torch.randn(n, num_experts, device=device, dtype=torch.float32, generator=g)
+    top_k_weights, top_k_index = torch.topk(logits.sigmoid(), top_k, dim=-1)
+    set_autotune_process_group(group)
+    try:
+        with torch.no_grad(), autotune(True):
+            trtllm_experts_forward(prepared, x, top_k_index, top_k_weights)
+            if routing is not None:
+                trtllm_experts_forward_routing(prepared, x, logits, top_k=top_k, **routing)
+    finally:
+        set_autotune_process_group(None)
+    torch.cuda.synchronize(device)
+
+
 # ---- track 2: Triton kernel pair, dispatch fused, one program per (expert, N tile) -------------------------------------
 #
 #   route    (1 launch): counting sort of the S = tokens * top_k routed slots by expert, without atomics
