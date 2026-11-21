@@ -296,10 +296,12 @@ def _prepare(model, cache):
                 raise NotImplementedError("FUSE_COMPILE under TP expects bias-free row-parallel projections")
             tp, run_layers_on = True, [_localize(layer) for layer in layers]
     state = {
-        "cache": cache, "allocator": allocator, "views": views, "h_pad": h_pad, "tp": tp,
+        "views": views, "h_pad": h_pad, "tp": tp,
         "layers": run_layers_on, "q_abs": {},
     }
-    model._fuse_compile_state = state
+    # [gap3] kept on the cache, not on the model: the state holds views of the cache tensor, and a reference from the
+    # model kept a finished manager's cache alive while the next manager sized its own (KV blocks 1447 -> 553)
+    cache._fuse_compile_state = state
     return state
 
 
@@ -325,12 +327,12 @@ def applies(model, hidden_states, cache, kwargs) -> bool:
 
 
 def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
-    state = getattr(model, "_fuse_compile_state", None)
-    if state is None or state["cache"] is not cache:
+    state = getattr(cache, "_fuse_compile_state", None)
+    if state is None:
         state = _prepare(model, cache)
     from . import modeling_glm_moe_dsa as m
 
-    allocator = state["allocator"]
+    allocator = cache.layer_to_allocator[0]
     # kv_b_proj per step, not cached with the state: training may refresh or rebind it (TRAIN_FIX_KV_B)
     w_kv_b = [m._proto_kv_b_dequantized(layer.self_attn) for layer in model.layers[: model.config.num_hidden_layers]]
     topk_length = TOPK_LENGTH or m._PROTO_TOPK_LENGTH
