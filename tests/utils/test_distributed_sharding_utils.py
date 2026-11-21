@@ -11,9 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tempfile
 import unittest
+from pathlib import Path
 
 import torch
+from safetensors import safe_open
+from safetensors.torch import save_file
 
 from transformers.distributed.sharding_utils import DtensorShardOperation
 
@@ -155,6 +159,22 @@ class TestDtensorShardOperation(unittest.TestCase):
                 mesh, [_StridedShard(dim=0, split_factor=2)], param_shape=(4, 4), local_shape=(2, 4)
             )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    def test_1D_strided_shard_reads_packed_safetensors_rows(self):
+        tensor = torch.arange(16).reshape(4, 4).float()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "packed.safetensors"
+            save_file({"weight": tensor}, path)
+            with safe_open(path, framework="pt", device="cpu") as checkpoint:
+                for rank in range(2):
+                    op = _make_dtensor_shard_op(
+                        FakeMesh(shape=(2,), rank=rank),
+                        [_StridedShard(dim=0, split_factor=2)],
+                        param_shape=(4, 4),
+                        local_shape=(2, 4),
+                    )
+                    actual = op.shard_tensor(checkpoint.get_slice("weight"))
+                    torch.testing.assert_close(actual, tensor[[rank, rank + 2]], msg=f"rank {rank}")
 
     def test_2D_shard_different_dims(self):
         tensor = torch.arange(64).reshape(8, 8).float()
