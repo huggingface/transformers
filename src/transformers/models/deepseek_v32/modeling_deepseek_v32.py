@@ -444,7 +444,7 @@ class DeepseekV32Attention(nn.Module):
         )  # [B, S, topk]
 
         sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
+        if self.config._attn_implementation in ("eager", "paged|eager", "sdpa"):
             # Boolean mask: `True` at keys *not* selected by the indexer (to be masked out).
             index_mask = (
                 topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)

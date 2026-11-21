@@ -11,8 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import atexit
 import contextlib
+import functools
+import os
 import re
+import threading
 
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
@@ -95,10 +99,237 @@ def _use_local_dtensor_params(module):
                 )
 
 
+class _FastReduceScope(threading.local):
+    """[gap2 prototype] Whether the current thread may reduce through the fast (flashinfer) all-reduce. The fast
+    reduce keeps its protocol state on the device, one state per workspace, and tolerates a single stream of calls.
+    Only the continuous batching engine thread, which owns the compute stream, turns this on. Every other thread
+    (a trainer running forward and backward on the same model, an evaluation loop) keeps NCCL, whatever the tensor."""
+
+    enabled = False
+
+
+_FAST_REDUCE_THREAD = _FastReduceScope()
+
+
+@contextlib.contextmanager
+def _fast_reduce_on_this_thread(enabled: bool = True):
+    """[gap2 prototype] Lets the calling thread use the fast TP all-reduce for the duration of the block: for the
+    engine's own forwards run by another thread while the engine thread is not running (`warmup()`)."""
+    was_enabled = _FAST_REDUCE_THREAD.enabled
+    _FAST_REDUCE_THREAD.enabled = enabled or was_enabled
+    try:
+        yield
+    finally:
+        _FAST_REDUCE_THREAD.enabled = was_enabled
+
+
+def with_fast_tp_all_reduce(fn):
+    """[gap2 prototype] For a method `fn(self, model, ...)` that runs the engine's forward from a thread other than
+    the engine's while the engine is not running: the warm-up that captures the engine's CUDA graphs ahead
+    (`ModelRunner.run_one_warmup`, reached by `ContinuousBatchingManager.warmup()` and by harnesses that call it
+    directly). Creates the workspace if needed (a collective: every TP rank warms up at the same point) and lets the
+    call reduce through the fast path, so the graphs it captures are the ones the engine thread would capture."""
+
+    @functools.wraps(fn)
+    def wrapper(self, model, *args, **kwargs):
+        if is_torch_distributed_available() and dist.is_initialized():
+            prime_fast_tp_all_reduce(model.config.hidden_size, model.dtype, model.device)
+        with _fast_reduce_on_this_thread():
+            return fn(self, model, *args, **kwargs)
+
+    return wrapper
+
+
 if is_torch_distributed_available():
+    # [gap2 prototype, bench only] Inference all-reduce of the TP styles through flashinfer's MNNVL kernels, the ones
+    # vLLM runs (`flashinfer.comm.allreduce_fusion`, backend "mnnvl": a two-shot reduce over NVLink multicast memory,
+    # 7 us at TP8 where NCCL's ring takes 24). `HF_TP_ALL_REDUCE=flashinfer` swaps the reduce of `rowwise`,
+    # `all_reduce` and `moe_tp_experts`; `HF_TP_ALL_REDUCE=flashinfer_fused` also lets a model fuse the reduce with
+    # the residual add and the RMSNorm that follow it (`tp_all_reduce_add_rms_norm`). One workspace per process,
+    # created once (`prime_fast_tp_all_reduce`, else by the first eligible call outside a graph capture) and never
+    # reallocated: CUDA graphs record its pointers. A call that does not fit it (rows, dtype, layout), or that comes
+    # from a thread other than the engine's (`_FAST_REDUCE_THREAD`), takes NCCL, on every rank alike.
+    _TP_ALL_REDUCE = os.environ.get("HF_TP_ALL_REDUCE", "nccl")
+    if _TP_ALL_REDUCE == "flashinfer_fused":
+        # Hard guard. Before flashinfer 0.7.3 the fused kernel could die with Xid 13 ("CTA Not Present") on Blackwell
+        # under CUDA graphs when other streams were busy, which is what continuous batching does
+        # (vllm-project/vllm#64327, fixed by flashinfer-ai/flashinfer#7782). The prebuilt kernels must be as recent.
+        import importlib.metadata
+
+        from packaging import version
+
+        for _dist_name in ("flashinfer-python", "flashinfer-jit-cache"):
+            try:
+                _installed = version.parse(importlib.metadata.version(_dist_name))
+            except importlib.metadata.PackageNotFoundError:
+                continue
+            if _installed < version.parse("0.7.3"):
+                raise RuntimeError(
+                    f"HF_TP_ALL_REDUCE=flashinfer_fused needs flashinfer >= 0.7.3, found {_dist_name} {_installed}: "
+                    "older fused all-reduce + RMSNorm kernels can fault the GPU."
+                )
+    _TP_GROUP = None  # the TP process group, recorded by `apply_tensor_parallelism`
+    # Programmatic dependent launch, as vLLM launches these kernels. "0" is the configuration that was clean before
+    # flashinfer-ai/flashinfer#7782 fixed the fused kernel's cluster barrier (shipped in flashinfer 0.7.3).
+    _FLASHINFER_PDL = os.environ.get("HF_TP_FLASHINFER_PDL", "1") == "1"
+    _FLASHINFER = {"workspace": None, "calls": {"flashinfer": 0, "flashinfer_fused": 0, "nccl": 0}}
+
+    def _flashinfer_workspace(x, process_group):
+        """The process-wide flashinfer workspace when `x` can be reduced through it, else `None`."""
+        hidden = x.shape[-1]
+        if (
+            not _FAST_REDUCE_THREAD.enabled
+            or x.dim() < 2
+            or not x.is_cuda
+            or not x.is_contiguous()
+            or x.dtype not in (torch.bfloat16, torch.float16, torch.float32)
+            or (hidden * x.element_size()) % 16 != 0  # the kernels load a row as 16-byte vectors
+            or dist.get_world_size(process_group) not in (2, 4, 8, 16, 32, 64)  # the kernels exist for these only
+        ):
+            return None
+        workspace = _FLASHINFER["workspace"]
+        if workspace is not None and process_group.group_name != _FLASHINFER["group_name"]:
+            return None  # one workspace, for the first group that reduces through it (the TP group)
+        if workspace is None:
+            if torch.cuda.is_current_stream_capturing():
+                return None  # creating the workspace is a collective: the warm-up forward before a capture does it
+            import flashinfer.comm as flashinfer_comm
+            from flashinfer.comm.mnnvl import TorchDistBackend
+
+            # the memory handles are exchanged over a CPU group, as vLLM does
+            cpu_group = dist.new_group(ranks=dist.get_process_group_ranks(process_group), backend="gloo")
+            workspace = flashinfer_comm.create_allreduce_fusion_workspace(
+                backend="mnnvl",
+                world_size=dist.get_world_size(process_group),
+                rank=dist.get_rank(process_group),
+                max_token_num=int(os.environ.get("HF_TP_FLASHINFER_MAX_TOKENS", "16384")),
+                hidden_dim=hidden,
+                dtype=x.dtype,
+                comm_backend=TorchDistBackend(group=cpu_group),
+                group=cpu_group,
+            )
+            if not workspace.mc_ptr:
+                raise RuntimeError("flashinfer's MNNVL workspace has no multicast pointer on this topology")
+            atexit.register(workspace.destroy)  # unmap the shared memory while the CUDA context is alive, as vLLM does
+            if dist.get_rank(process_group) == 0:
+                # which path the forwards took (Python calls: eager steps and graph captures, not replays)
+                atexit.register(
+                    lambda: print(
+                        f"TP_ALL_REDUCE {_TP_ALL_REDUCE} calls {_FLASHINFER['calls']} workspace created by "
+                        f"{_FLASHINFER['created_by']}, {workspace.buffer_size_bytes * 3 / 2**20:.0f} MiB per rank",
+                        flush=True,
+                    )
+                )
+            _FLASHINFER.update(
+                workspace=workspace,
+                comm=flashinfer_comm,
+                cpu_group=cpu_group,
+                group_name=process_group.group_name,
+                created_by=threading.current_thread().name,
+            )
+        rows = x.numel() // hidden
+        if not workspace.is_buffer_size_sufficient(
+            tp_size=dist.get_world_size(process_group), num_tokens=rows, hidden_dim=hidden, dtype=x.dtype
+        ):
+            return None
+        return workspace
+
+    def prime_fast_tp_all_reduce(hidden_size, dtype, device):
+        """[gap2 prototype] Create the fast all-reduce workspace from the calling thread. It is a collective: every TP
+        rank calls it at the same point (continuous batching does, in `start()`, before the engine thread exists),
+        outside any CUDA graph capture and outside the graphs' memory pool, so nothing of the workspace depends on
+        the life of a graph, of the pool or of the KV cache. No-op when the fast reduce is off."""
+        if _TP_ALL_REDUCE == "nccl" or _TP_GROUP is None or dist.get_world_size(_TP_GROUP) == 1:
+            return
+        if _FLASHINFER["workspace"] is not None or dtype not in (torch.bfloat16, torch.float16, torch.float32):
+            return
+        was_enabled = _FAST_REDUCE_THREAD.enabled
+        _FAST_REDUCE_THREAD.enabled = True
+        try:
+            with torch.cuda.device(device):
+                _flashinfer_workspace(torch.zeros(1, hidden_size, dtype=dtype, device=device), _TP_GROUP)
+        finally:
+            _FAST_REDUCE_THREAD.enabled = was_enabled
+
+    def _tp_inference_all_reduce(x, process_group):
+        """All-reduce (sum) of this rank's partial tensor on the inference path. Returns the reduced tensor: `x`
+        itself, reduced in place, with NCCL; a new tensor with flashinfer."""
+        if _TP_ALL_REDUCE != "nccl" and (workspace := _flashinfer_workspace(x, process_group)) is not None:
+            comm = _FLASHINFER["comm"]
+            x2d = x.view(-1, x.shape[-1])
+            # the arguments of vLLM's `FlashInferAllReduce.all_reduce`
+            out = comm.allreduce_fusion(
+                input=x2d,
+                workspace=workspace,
+                pattern=comm.AllReduceFusionPattern.kAllReduce,
+                launch_with_pdl=_FLASHINFER_PDL,
+                trigger_completion_at_end=x2d.shape[0] > 16,
+            )
+            _FLASHINFER["calls"]["flashinfer"] += 1
+            return out.view(x.shape)
+        dist.all_reduce(x, group=process_group)
+        _FLASHINFER["calls"]["nccl"] += 1
+        return x
+
+    def tp_all_reduce_add_rms_norm(partial, residual, norm):
+        """[gap2 prototype] `residual + all_reduce(partial)` and its RMSNorm, for a block whose TP plan leaves its
+        output partial. Returns `(normed, new_residual)`. One fused flashinfer call when the tensors fit the
+        workspace (the arguments of vLLM's `call_trtllm_fused_allreduce_norm`, with fresh outputs); otherwise the
+        reduce, the add and `norm` one after the other. Without tensor parallelism `partial` is the block's full
+        output and nothing is reduced."""
+        process_group = _TP_GROUP
+        if process_group is None or dist.get_world_size(process_group) == 1:
+            hidden_states = residual + partial
+            return norm(hidden_states), hidden_states
+        fused = _TP_ALL_REDUCE == "flashinfer_fused" and not torch.is_grad_enabled() and residual.is_contiguous()
+        if fused and (workspace := _flashinfer_workspace(partial, process_group)) is not None:
+            comm = _FLASHINFER["comm"]
+            hidden = partial.shape[-1]
+            x2d = partial.view(-1, hidden)
+            normed = torch.empty_like(x2d)
+            new_residual = torch.empty_like(x2d)
+            comm.allreduce_fusion(
+                input=x2d,
+                workspace=workspace,
+                pattern=comm.AllReduceFusionPattern.kARResidualRMSNorm,
+                launch_with_pdl=_FLASHINFER_PDL,
+                output=None,
+                residual_out=new_residual,
+                norm_out=normed,
+                quant_out=None,
+                scale_out=None,
+                residual_in=residual.view(-1, hidden),
+                rms_gamma=norm.weight,
+                rms_eps=norm.variance_epsilon,
+                scale_factor=None,
+                layout_code=comm.QuantizationSFLayout.SWIZZLED_128x4,
+                use_oneshot=None,
+                fp32_acc=True,
+                weight_bias=0.0,
+                trigger_completion_at_end=x2d.shape[0] > 16,
+            )
+            _FLASHINFER["calls"]["flashinfer_fused"] += 1
+            return normed.view(partial.shape), new_residual.view(partial.shape)
+        if torch.is_grad_enabled() and partial.requires_grad:
+            partial = _AllReduceForward.apply(partial, process_group)
+        else:
+            partial = _tp_inference_all_reduce(partial, process_group)
+        hidden_states = residual + partial
+        return norm(hidden_states), hidden_states
 
     class _AllReduceForward(torch.autograd.Function):
-        """Allreduce-sum forward, identity backward."""
+        """Allreduce-sum forward, identity backward.
+
+        `apply` reduces directly when no gradient can flow, like `_AllReduceBackward.apply`: that is the inference
+        path, where the reduce can go through `_tp_inference_all_reduce`."""
+
+        @classmethod
+        def apply(cls, x, process_group):
+            if torch.is_grad_enabled() and x.requires_grad:
+                return super().apply(x, process_group)
+            if dist.get_world_size(process_group) > 1:
+                x = _tp_inference_all_reduce(x, process_group)
+            return x
 
         @staticmethod
         def forward(ctx, x, process_group):

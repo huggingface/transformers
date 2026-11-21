@@ -11,13 +11,67 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import threading
 from abc import ABC, abstractmethod
 from collections import deque
 
 from .cache import PagedAttentionCache
+from .cache_allocators.compressed_latents import _PROTO_MLA_BLOCK_TABLE
 from .requests import FutureRequestState, RequestState, RequestStatus
 from .utils import logger
+
+
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_PREFILLS_APART=<n>: the FIFO scheduler
+# never mixes decoding requests with requests that still have a prompt to prefill. While some requests decode, it runs
+# decode-only batches (which take the block table path) and, every n decode-only batches at most, one batch with only
+# the waiting or prefilling requests. Unset: today's behaviour, where one waiting request turns the batch into a varlen
+# batch for every request in it.
+_PROTO_PREFILLS_APART = int(os.environ.get("CB_PROTO_PREFILLS_APART", "-1"))
+# gap3-mtp prototype: with CB_MTP=spec and the block table decode path, a decoding request brings its last token and
+# its draft (2 query tokens) and still takes the decode fast path
+_MTP_BT_QUERY = 2 if os.environ.get("CB_MTP", "") == "spec" and _PROTO_MLA_BLOCK_TABLE else 1
+# gap3-mtpa prototype (CB_MTP_ASYNC=1): a request whose last drafted step is in flight may hold one more token than the
+# host counts (accepted draft), so it gets one slack row; a request whose prefill ended in the step in flight already
+# counts as decoding (its two next tokens come from the device); prefills and decodes are kept in separate batches
+_MTP_ASYNC = _MTP_BT_QUERY > 1 and os.environ.get("CB_MTP_ASYNC", "0") == "1"
+# gap3-mtpk prototype (CB_MTP_K=k): k drafts per step, so k + 1 query tokens per decoding request
+_MTP_K = int(os.environ.get("CB_MTP_K", "0"))
+_MTP_MULTI = _MTP_BT_QUERY > 1 and _MTP_K >= 1
+if _MTP_MULTI:
+    _MTP_BT_QUERY = 1 + _MTP_K
+
+
+def _mtp_slack(state: RequestState) -> int:
+    """Rows a decoding request may use beyond its query tokens: the shift of drafts accepted in the step in flight
+    (asynchronous batching), and with k drafts, the rows of the k - 1 later draft passes."""
+    if _MTP_MULTI:
+        return _MTP_K - 1 + (_MTP_K if state.mtp_pending_acc else 0)
+    return min(state.mtp_pending_acc, 1) if _MTP_ASYNC else 0
+
+
+def _mtp_async_decoding(state: RequestState) -> bool:
+    """gap3-mtpa: a request that decodes in the next step (its prefill may have ended in the step in flight)."""
+    return state.status == RequestStatus.DECODING or (
+        state.status == RequestStatus.PREFILLING and not state.remaining_prefill_tokens and state.mtp_has_draft
+    )
+
+
+def _decode_eligible(state: RequestState, request_len: int, max_length: int) -> bool:
+    """Whether a request of `request_len` query tokens can take the decode fast path (block table)."""
+    if _MTP_BT_QUERY > 1:  # gap3-mtp prototype: only a decoding request with its draft, as a whole
+        if _MTP_ASYNC:
+            return (
+                request_len == _MTP_BT_QUERY
+                and _mtp_async_decoding(state)
+                and state.position_offset + request_len + _mtp_slack(state) <= max_length
+            )
+        return (
+            request_len == _MTP_BT_QUERY
+            and state.status == RequestStatus.DECODING
+            and state.position_offset + request_len + _mtp_slack(state) <= max_length
+        )
+    return request_len == 1 and state.position_offset < max_length
 
 
 class Scheduler(ABC):
@@ -52,6 +106,7 @@ class Scheduler(ABC):
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
         self.block_new_requests = False
+        self._proto_decode_only_batches = 0  # PROTOTYPE: decode-only batches since the last prefill-only one
         # Active requests that failed cache allocation in the last scheduled batch w/ the length that was denied
         self.starved_requests: list[tuple[RequestState, int]] = []
 
@@ -224,13 +279,16 @@ class Scheduler(ABC):
 
             # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
+            # gap2-mtp prototype: a decoding request that carries a draft takes its two tokens together or waits
+            if state.status == RequestStatus.DECODING and len(request_tokens) > token_budget:
+                continue
             # Account for token budget
             request_len = min(len(request_tokens), token_budget)
 
             # This block checks cache budget: decode batches have infinite budget, but varlen batches don't, because KV
             # cache is read through a fixed-sized index tensor. We keep track of the current budget in case the batch
             # goes from decode to varlen
-            is_decode_eligible = request_len == 1 and state.position_offset < self.cache.max_decode_fast_path_length
+            is_decode_eligible = _decode_eligible(state, request_len, self.cache.max_decode_fast_path_length)
             read_cache_needed = state.current_len()
             if self.cache.read_cache_limit is not None:
                 read_cache_needed = min(read_cache_needed, self.cache.read_cache_limit)
@@ -239,7 +297,10 @@ class Scheduler(ABC):
                 continue
 
             # Final check before we schedule the request: can the cache handle it, or is the request starved?
-            request_fits = self.cache.can_store_request_tokens(state, request_len)
+            # gap3-mtpa: one slack row while the outcome of the request's last draft is unknown
+            request_fits = self.cache.can_store_request_tokens(
+                state, request_len + (_mtp_slack(state) if _MTP_BT_QUERY > 1 else 0)
+            )
             if not request_fits:
                 one_allocation_failed = True
                 # If the request is active and cannot be scheduled, we mark it as starved
@@ -252,7 +313,7 @@ class Scheduler(ABC):
             request_len = len(state.tokens_to_process)  # it may change after scheduling
 
             # The decode fast path is only used if the request is a single token and its length is less than the max blocks per request
-            decode_fast_path &= request_len == 1 and state.position_offset < self.cache.max_decode_fast_path_length
+            decode_fast_path &= _decode_eligible(state, request_len, self.cache.max_decode_fast_path_length)
 
             # Update the token and cache budgets
             token_budget -= request_len
@@ -322,7 +383,7 @@ class FIFOScheduler(Scheduler):
         second_priority_states: list[RequestState] = []
 
         for state in self.active_requests.values():
-            if state.status == RequestStatus.DECODING:
+            if state.status == RequestStatus.DECODING or (_MTP_ASYNC and _mtp_async_decoding(state)):
                 priority_states.append(state)
             elif state.status == RequestStatus.PREFILLING:
                 second_priority_states.append(state)
@@ -333,6 +394,23 @@ class FIFOScheduler(Scheduler):
 
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
+        # PROTOTYPE: prefills apart from decodes
+        # gap3-mtpa: with CB_MTP_ASYNC, prefills are always apart from decodes (every other batch when both wait)
+        prefills_apart = _PROTO_PREFILLS_APART if _PROTO_PREFILLS_APART >= 0 or not _MTP_ASYNC else 1
+        if prefills_apart >= 0 and priority_states and second_priority_states:
+            if self._proto_decode_only_batches >= prefills_apart:
+                self._proto_decode_only_batches = 0
+                prefill_batch = self._process_candidates(
+                    second_priority_states, token_budget, cache_budget, request_ids_to_remove_from_waiting
+                )
+                if prefill_batch[0]:
+                    self._cleanup_waiting_queue(request_ids_to_remove_from_waiting)
+                    scheduled_requests, _, decode_fast_path, num_q_tokens, max_kv_read = prefill_batch
+                    return scheduled_requests, decode_fast_path, num_q_tokens, max_kv_read
+                # Nothing could be admitted (cache full): the decoding requests run instead
+            else:
+                self._proto_decode_only_batches += 1
+            candidates = priority_states
         scheduled_requests, one_allocation_failed, decode_fast_path, num_q_tokens, max_kv_read = (
             self._process_candidates(
                 candidates,

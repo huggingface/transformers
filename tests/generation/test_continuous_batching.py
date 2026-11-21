@@ -37,6 +37,8 @@ from transformers import (
     AutoTokenizer,
     CompileConfig,
     ContinuousBatchingConfig,
+    DeepseekV3ForCausalLM,
+    DeepseekV32ForCausalLM,
     GenerationConfig,
     GenerationMixin,
     StaticCache,
@@ -50,6 +52,7 @@ from transformers.generation.continuous_batching.cache_allocators import (
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    MLACacheAllocator,
     SlidingAttentionCacheAllocator,
 )
 from transformers.generation.continuous_batching.continuous_api import (
@@ -93,6 +96,8 @@ from transformers.utils import (
 from transformers.utils.generic import is_flash_attention_requested
 
 from ..distributed_testing_utils import run_distributed
+from ..models.deepseek_v3.test_modeling_deepseek_v3 import DeepseekV3ModelTester
+from ..models.deepseek_v32.test_modeling_deepseek_v32 import DeepseekV32ModelTester
 
 
 # Constants for tests
@@ -316,6 +321,29 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
         self.assertEqual(second_output.generated_tokens, [101, 102])
         self.assertEqual(second_output.logprobs, [-1.01, -1.02])
         self.assertEqual(len(second_output.timestamps), 2)
+
+    def test_mla_allocator_returns_contiguous_latents(self):
+        """The latents read back from the cache go through the projections of the model, and some linear layers
+        (the fp8 ones for instance) only accept contiguous inputs."""
+        config = SimpleNamespace(kv_lora_rank=6, qk_rope_head_dim=2)
+        allocator = MLACacheAllocator(
+            index=0,
+            config=config,  # type: ignore
+            num_key_value_heads=1,
+            cache_dtype=torch.float16,
+            page_size=4,
+            layer_indices=[0, 1],
+            allow_block_sharing=True,
+        )
+        _setup_cache_pool([allocator], num_sectors=2)
+        kv_latent = torch.randn(3, 1, 6, dtype=torch.float16)
+        rotated_key = torch.randn(3, 1, 2, dtype=torch.float16)
+        index = 2 * allocator.write_trash_index + torch.arange(3)  # the first rows after the two trash sectors
+        for layer_idx in (0, 1):
+            cached_kv_latent, cached_rotated_key = allocator.update(kv_latent, rotated_key, layer_idx, index, index)
+            self.assertTrue(cached_kv_latent.is_contiguous() and cached_rotated_key.is_contiguous())
+            torch.testing.assert_close(cached_kv_latent, kv_latent)
+            torch.testing.assert_close(cached_rotated_key, rotated_key)
 
     def test_streaming_output_after_soft_reset_does_not_shorten_generation(self):
         state = RequestState(request_id="r", initial_tokens=[10, 11], max_new_tokens=5, streaming=True)
@@ -918,6 +946,53 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             # Clear the caches again so the mocked availabilities do not leak into subsequent tests.
             for check in cached_availability_checks:
                 check.cache_clear()
+
+    @parameterized.expand(
+        [
+            (f"{name}_{attn_implementation}", tester_class, tester_kwargs, model_class, attn_implementation)
+            for name, tester_class, tester_kwargs, model_class in [
+                # The default tester config has latents of the same shape, so we make them ragged like real checkpoints
+                ("mla", DeepseekV3ModelTester, {"qk_rope_head_dim": 8}, DeepseekV3ForCausalLM),
+                # MLA layers with a sparse attention indexer, which also cache the indexer keys
+                ("indexed_mla", DeepseekV32ModelTester, {}, DeepseekV32ForCausalLM),
+            ]
+            for attn_implementation in ("eager", "sdpa")
+        ]
+    )
+    def test_continuous_batching_mla(
+        self, _, tester_class, tester_kwargs: dict, model_class, attn_implementation: str
+    ) -> None:
+        """Test continuous batching on models with MLA layers: they cache two latents of different shapes rather than
+        keys and values of shape [num_key_value_heads, head_dim], plus the indexer keys for indexed layers."""
+        torch.manual_seed(0)
+        config = tester_class(self, **tester_kwargs).get_config()
+        model = model_class(config).to(torch_device).eval()
+        model.set_attn_implementation(attn_implementation)
+        generation_config = GenerationConfig(max_new_tokens=10, do_sample=False, pad_token_id=config.pad_token_id)
+        # Prompts both shorter and longer than max_batch_tokens, so the prefill of the long one reads from the cache
+        input_ids = [torch.randint(1, config.vocab_size, (length,)).tolist() for length in (5, 23, 70)]
+
+        continuous_batching_config = ContinuousBatchingConfig(
+            auto_switch_to_flash=False, page_size=16, num_blocks=64, max_batch_tokens=64, return_logprobs=True
+        )
+        outputs = model.generate_batch(
+            inputs=input_ids,
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+        )
+
+        # The logprobs of the generated tokens have to match those of a plain forward over each whole sequence. Greedy
+        # tokens alone tell little on a tiny random model: a lost cache row can leave the argmax unchanged
+        self.assertEqual(len(outputs), len(input_ids))
+        for output in outputs.values():
+            self.assertIsNone(output.error)
+            self.assertEqual(len(output.generated_tokens), generation_config.max_new_tokens)
+            sequence = torch.tensor([output.prompt_ids + output.generated_tokens], device=torch_device)
+            with torch.no_grad():
+                logprobs = model(sequence).logits[0].float().log_softmax(dim=-1)
+            generated = torch.tensor(output.generated_tokens, device=torch_device)
+            expected = logprobs[len(output.prompt_ids) - 1 : -1].gather(-1, generated[:, None])[:, 0]
+            torch.testing.assert_close(torch.tensor(output.logprobs, device=torch_device), expected, rtol=0, atol=1e-4)
 
     def test_output_router_deliver_to_queue(self):
         """Test that OutputRouter.deliver places outputs on the queue when no handler is registered."""
@@ -2053,6 +2128,47 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             manager.current_batch, batches_at_pause, "the loop did not resume after the last holder left"
         )
         self.assertEqual(len(outputs), num_requests, "some requests did not complete")
+
+    @parameterized.expand([("eager", False, False), ("cuda_graphs", True, False), ("async", True, True)])
+    @with_flush_memory
+    def test_release_memory_during_generation(self, _, use_cuda_graph: bool, use_async_batching: bool) -> None:
+        """Frees the KV cache while requests are in flight, like a trainer that needs the memory for its step would,
+        then brings it back. The memory must really be freed, and every request must finish with the tokens it gets
+        without the release, since its cache went to host memory and back."""
+        tokenizer, model = get_tokenizer_and_model("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "sdpa", torch_device)
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=use_cuda_graph,
+            use_async_batching=use_async_batching,
+            auto_switch_to_flash=False,
+            max_memory_percent=0.3,  # the cache is copied to host memory, keep it small
+        )
+
+        def generate(release: bool) -> list[list[int]]:
+            manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+            manager.logit_processor.clear()
+            manager.warmup()
+            manager.start()
+            request_ids = [manager.add_request(ids, max_new_tokens=100) for ids in input_ids]
+            try:
+                if release:
+                    self._wait_until_generating(manager)
+                    with self.assertRaises(RuntimeError):  # the loop is running
+                        manager.release_memory()
+                    with manager.pause():
+                        self.assertTrue(manager.batch_processor.scheduler.active_requests, "no request in flight")
+                        allocated = backend_memory_allocated(torch_device)
+                        released_bytes = manager.release_memory()
+                        self.assertGreater(released_bytes, 0)
+                        self.assertGreaterEqual(allocated - backend_memory_allocated(torch_device), released_bytes)
+                        manager.restore_memory()
+                outputs = self._collect_finished(manager, len(input_ids))
+            finally:
+                manager.stop(block=True)
+            self.assertEqual(len(outputs), len(input_ids), "some requests did not complete")
+            return [outputs[request_id].generated_tokens for request_id in request_ids]
+
+        self.assertEqual(generate(release=True), generate(release=False))
 
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import functools
 import os
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -322,7 +323,69 @@ class FP8LinearFunction(torch.autograd.Function):
         return grad_output @ weight, None, None, None, None, None, None
 
 
+# WP glue (bench only), off by default: the grouped kernel's tile layout (7 tiny kernels) is computed once per
+# `tokens_per_expert` tensor instead of once per call (the up and down projections of a layer share it), and the
+# expert outputs are scattered back to token order instead of building the inverse permutation and gathering
+_GLUE_EXPERTS = os.environ.get("GLUE_EXPERTS", "0") == "1"
+_GLUE_TILE_LAYOUT = {}
+
+
+def _glue_memoize_tile_layout(grouped_matmul):
+    import sys
+
+    kernel_module = sys.modules[grouped_matmul.__module__]
+    original = kernel_module._grouped_tile_layout
+    if getattr(original, "_glue_memoized", False):
+        return
+
+    def memoized(tokens_per_expert, block_size_m, S, num_experts):
+        if not _GLUE_EXPERTS:
+            return original(tokens_per_expert, block_size_m, S, num_experts)
+        key = (id(tokens_per_expert), block_size_m, S, num_experts)
+        if _GLUE_TILE_LAYOUT.get("key") != key:
+            _GLUE_TILE_LAYOUT["key"] = key
+            _GLUE_TILE_LAYOUT["ref"] = tokens_per_expert  # keeps the id from being reused
+            _GLUE_TILE_LAYOUT["value"] = original(tokens_per_expert, block_size_m, S, num_experts)
+        return _GLUE_TILE_LAYOUT["value"]
+
+    memoized._glue_memoized = True
+    kernel_module._grouped_tile_layout = memoized
+
+
+# [scratch, bench only] FUSE_COMPILE_OPAQUE_EXPERTS=1: under torch.compile the hub's grouped kernel stays one opaque op
+# with a fake implementation. As a `triton_op` it is inlined into every compiled artifact, where its autotuner
+# benchmarks its configs again (about 80 s per artifact at GLM-5.3's expert shapes)
+_FUSE_OPAQUE_GROUPED = os.environ.get("FUSE_COMPILE_OPAQUE_EXPERTS", "0") == "1"
+
+
+def _fuse_grouped_matmul(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    weight_scale_inv: torch.Tensor,
+    offsets: torch.Tensor,
+    tokens_per_expert: torch.Tensor,
+    block_size: list[int],
+) -> torch.Tensor:
+    return load_finegrained_fp8_kernel().grouped_matmul(
+        input, weight, weight_scale_inv, offsets=offsets, tokens_per_expert=tokens_per_expert, block_size=block_size
+    )
+
+
+def _fuse_grouped_matmul_fake(input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
+    return input.new_empty((input.shape[0], weight.shape[1]))
+
+
+torch.library.custom_op("transformers::fuse_fp8_grouped_matmul", _fuse_grouped_matmul, mutates_args=())
+torch.library.register_fake("transformers::fuse_fp8_grouped_matmul", _fuse_grouped_matmul_fake)
+
+
 def fp8_grouped_matmul(input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
+    if _FUSE_OPAQUE_GROUPED and block_size is not None:
+        return torch.ops.transformers.fuse_fp8_grouped_matmul(
+            input, weight, weight_scale_inv, offsets, tokens_per_expert, list(block_size)
+        )
+    if _GLUE_EXPERTS:
+        _glue_memoize_tile_layout(load_finegrained_fp8_kernel().grouped_matmul)
     return load_finegrained_fp8_kernel().grouped_matmul(
         input,
         weight,
@@ -385,11 +448,88 @@ def _apply_if_grad(function, direct, input, *args):
     return direct(input, *args)
 
 
+# --- PROTOTYPE (bench only, not for upstream): faster dense FP8 linears, off unless PROTO_FP8_LINEAR is set -----------
+# PROTO_FP8_LINEAR=bf16      dequantize the dense FP8 linears to bf16 once at load, then plain `F.linear` (cuBLAS)
+# PROTO_FP8_LINEAR=deepgemm  requantize them to power-of-two (UE8M0) block scales at load, as vLLM does, then one Triton
+#                            activation-quant launch + one DeepGEMM launch per call, weight scales laid out once
+# PROTO_FP8_LINEAR=splitk    keep the checkpoint's weights and fp32 scales, split-K Triton GEMM on pre-quantized activations
+_PROTO_FP8_LINEAR = os.environ.get("PROTO_FP8_LINEAR", "")
+_proto_deepgemm = None
+
+
+def _proto_convert_fp8_linears(model: nn.Module) -> None:
+    """Load-time half of the `PROTO_FP8_LINEAR` prototypes. Only plain block-128 `FP8Linear` modules with dynamic
+    activations are touched; experts and grouped linears keep their path."""
+    global _proto_deepgemm
+    if _PROTO_FP8_LINEAR not in ("bf16", "deepgemm"):
+        return
+    from ..distributed.parallel_utils import _use_local_dtensor_params
+
+    if _PROTO_FP8_LINEAR == "deepgemm":
+        import importlib
+
+        _proto_deepgemm = importlib.import_module(os.environ.get("PROTO_DEEPGEMM_MODULE", "vllm.third_party.deep_gemm"))
+        if os.environ.get("PROTO_DEEPGEMM_PDL", "0") == "1":
+            _proto_deepgemm.set_pdl(True)
+    converted = 0
+    with torch.no_grad():
+        for module in model.modules():
+            if type(module) is not FP8Linear or module.block_size is None or tuple(module.block_size) != (128, 128):
+                continue
+            # under tensor parallel the parameters are DTensors: work on this rank's shard. The context wraps the
+            # parameters replaced inside it back into DTensors with their placements.
+            with _use_local_dtensor_params(module):
+                weight, scale = module.weight, module.weight_scale_inv
+                if weight.dtype != _FP8_DTYPE or scale.dtype != torch.float32 or module.activation_scale is not None:
+                    continue
+                if weight.device.type != "cuda":
+                    continue
+                rows, cols = weight.shape
+                if _PROTO_FP8_LINEAR == "bf16":
+                    expanded = scale.repeat_interleave(128, dim=0)[:rows].repeat_interleave(128, dim=1)[:, :cols]
+                    module.weight = nn.Parameter((weight.float() * expanded).to(torch.bfloat16), requires_grad=False)
+                    converted += 1
+                    continue
+                # DeepGEMM's own limits for the plain fp8 GEMM (same gate as vLLM's `should_use_deepgemm_for_fp8_linear`)
+                if not is_sm100() or rows % 64 != 0 or cols % 128 != 0:
+                    continue
+                # round every block scale up to a power of two and re-round the e4m3 values on the new grid (lossy)
+                bits = scale.contiguous().view(torch.int32)
+                scale_pow2 = ((bits + ((1 << 23) - 1)) & ~((1 << 23) - 1)).view(torch.float32)
+                ratio = (scale / scale_pow2).repeat_interleave(128, dim=0)[:rows].repeat_interleave(128, dim=1)[:, :cols]
+                module.weight = nn.Parameter((weight.float() * ratio).to(_FP8_DTYPE), requires_grad=False)
+                module.weight_scale_inv = nn.Parameter(scale_pow2.to(_get_ue8m0_dtype()), requires_grad=False)
+                # per-row packed UE8M0 scales in DeepGEMM's MN-major TMA-aligned layout, built once
+                module._proto_sfb = _proto_deepgemm.transform_sf_into_required_layout(
+                    scale_pow2, rows, cols, [1, 128, 128], None, False, False
+                )
+                converted += 1
+    logger.warning(f"PROTO_FP8_LINEAR={_PROTO_FP8_LINEAR}: converted {converted} FP8Linear modules")
+
+
+def _proto_fp8_linear_forward(module: "FP8Linear", input: torch.Tensor) -> torch.Tensor:
+    from ._proto_fp8_kernels import act_quant_packed_ue8m0, triton_splitk_linear
+
+    input_2d = input.reshape(-1, input.shape[-1])
+    out_features = module.weight.shape[0]  # this rank's shard under tensor parallel, not `module.out_features`
+    if module._proto_sfb is not None:
+        quantized, scales = act_quant_packed_ue8m0(input_2d)
+        output = torch.empty(input_2d.shape[0], out_features, dtype=input.dtype, device=input.device)
+        _proto_deepgemm.fp8_fp4_gemm_nt((quantized, scales), (module.weight, module._proto_sfb), output)
+    else:
+        output = triton_splitk_linear(input_2d, module.weight, module.weight_scale_inv)
+    output = output.view(*input.shape[:-1], out_features)
+    if module.bias is not None:
+        output = output + module.bias
+    return output
+
+
 class FP8Linear(nn.Linear):
     # Internal, temporary flag — not public API, don't set it directly. `_disable_deepgemm_on_multi_device`
     # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
     # kernels corrupt across devices); removable once the kernel ships a context-free loader.
     _deepgemm_disabled = False
+    _proto_sfb = None  # PROTO_FP8_LINEAR=deepgemm: packed UE8M0 weight scales in DeepGEMM's layout
 
     def __init__(
         self,
@@ -432,6 +572,17 @@ class FP8Linear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
+
+        if (self._proto_sfb is not None and input.dtype == torch.bfloat16) or (
+            _PROTO_FP8_LINEAR == "splitk"
+            and type(self) is FP8Linear
+            and self.block_size is not None
+            and tuple(self.block_size) == (128, 128)
+            and self.weight_scale_inv.dtype == torch.float32
+            and self.activation_scale is None
+        ):
+            if not (torch.is_grad_enabled() and input.requires_grad):
+                return _proto_fp8_linear_forward(self, input)
 
         return _apply_if_grad(
             FP8LinearFunction,
@@ -535,6 +686,302 @@ class FP8GroupedLinear(FP8Linear):
         return y
 
 
+# [gap prototype] HF_FP8_FUSED_EXPERTS=1: at inference, `grouped_mm` and `batched_mm` call the hub kernel's fused MoE
+# entry points (routing, gate_up + SiLU + requant, down + weighting, top-k sum in 8 and 3 kernels) instead of doing
+# the routing and the combine in torch around two matmul kernels.
+_FP8_FUSED_EXPERTS = os.environ.get("HF_FP8_FUSED_EXPERTS", "0") == "1"
+# WP prefill (bench only): fused entry points only above this many routed rows per expert on average
+# (tokens * top_k > rows * num_experts, the criterion of WP experts' decode schedule, so the two cannot overlap). The
+# fused grouped kernel (one persistent program per SM) is 2.3x today's path at ~150 rows per expert (prefill) and no
+# better at 2 rows per expert (decode)
+_FP8_FUSED_EXPERTS_MIN_ROWS = int(os.environ.get("HF_FP8_FUSED_EXPERTS_MIN_ROWS", "0"))
+
+
+def _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped: bool):
+    kernel = lazy_load_kernel("finegrained-fp8")
+    fused = kernel.moe_fused_grouped if grouped else kernel.moe_fused_batched
+    out = fused(
+        hidden_states,
+        top_k_index,
+        top_k_weights,
+        self.gate_up_proj,
+        self.down_proj,
+        self.gate_up_proj_scale_inv,
+        self.down_proj_scale_inv,
+        list(self.block_size),
+    )
+    return out.to(hidden_states.dtype)
+
+
+def _can_use_fp8_fused_experts(self, hidden_states, top_k_index) -> bool:
+    return (
+        _FP8_FUSED_EXPERTS
+        and top_k_index.numel() > _FP8_FUSED_EXPERTS_MIN_ROWS * self.num_experts
+        and not (torch.is_grad_enabled() and hidden_states.requires_grad)
+        and self.has_gate
+        and self.gate_softcap is None
+        and self.swiglu_alpha is None
+        and self.limit is None
+        and not self._is_expert_parallel
+        and not self._proto_trtllm_laid
+        and self.gate_up_proj.dtype == _FP8_DTYPE
+        and self.block_size is not None
+    )
+
+
+# --- PROTOTYPE (bench only, not for upstream as is): routed-experts forwards for inference, off unless a flag is set ---
+# PROTO_EXPERTS_TRTLLM=1  flashinfer's TRT-LLM routed FP8 MoE, as vLLM calls it, on weights re-laid once at load
+# PROTO_EXPERTS_DECODE=1  Triton kernel pair with the dispatch fused, one program per (expert, N tile)
+# PROTO_EXPERTS_DECODE=fold  the same with one activation scale per (routed row, weight tile) in the first kernel
+# Both replace the `grouped_mm` and `batched_mm` forwards of `FP8Experts` when no gradient is needed.
+_PROTO_EXPERTS_TRTLLM = os.environ.get("PROTO_EXPERTS_TRTLLM", "0") == "1"
+# PROTO_EXPERTS_TRTLLM_INPLACE=1 (with PROTO_EXPERTS_TRTLLM=1): no copy, the parameters are re-laid in place while the
+# continuous batching loop runs (`_proto_relayout_fp8_experts`)
+_PROTO_EXPERTS_TRTLLM_INPLACE = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_INPLACE", "0") == "1"
+# PROTO_EXPERTS_TRTLLM_ROUTING=1 (with PROTO_EXPERTS_TRTLLM=1): the MoE block hands the fp32 router logits and the score
+# correction bias to the TRT-LLM kernel, which routes inside (DeepSeekV3 routing), instead of the router's own top-k
+# (`proto_trtllm_moe_routing`, called from the model's MoE block)
+_PROTO_EXPERTS_TRTLLM_ROUTING = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_ROUTING", "0") == "1"
+# PROTO_EXPERTS_TRTLLM_AUTOTUNE=1 (with PROTO_EXPERTS_TRTLLM=1): flashinfer's autotuner picks the TRT-LLM MoE tactics
+# once per process, when the first CB batch processor is created (`_proto_autotune_fp8_experts`), never in band
+_PROTO_EXPERTS_TRTLLM_AUTOTUNE = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_AUTOTUNE", "0") == "1"
+_proto_trtllm_tuned = False
+_PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") in ("1", "fold")
+_PROTO_EXPERTS_DECODE_FOLD = os.environ.get("PROTO_EXPERTS_DECODE", "0") == "fold"
+
+
+def _proto_experts_supported(module: "FP8Experts") -> bool:
+    return (
+        module.has_gate
+        and module.block_size is not None
+        and tuple(module.block_size) == (128, 128)
+        and module.activation_scheme == "dynamic"
+        and _first_attr(module.config, "hidden_activation", "hidden_act") == "silu"
+        and module.gate_softcap is None
+        and module.swiglu_alpha is None
+        and module.limit is None
+        and module.gate_up_proj.dtype == _FP8_DTYPE
+        and module.gate_up_proj_scale_inv.dtype == torch.float32
+        and module.hidden_dim % 128 == 0
+        and module.gate_up_proj.shape[1] % 256 == 0
+    )
+
+
+def _proto_prepare_fp8_experts(model: nn.Module) -> None:
+    """Load-time half of `PROTO_EXPERTS_TRTLLM`: every rank re-lays its own shard of the expert weights for the
+    TRT-LLM kernels. The original parameters are kept (the default path, saving and training still see them)."""
+    if not _PROTO_EXPERTS_TRTLLM or _PROTO_EXPERTS_TRTLLM_INPLACE:
+        return
+    from ..distributed.parallel_utils import _use_local_dtensor_params
+    from . import _proto_fp8_experts as proto
+
+    prepared = 0
+    with torch.no_grad():
+        for module in model.modules():
+            if not isinstance(module, FP8Experts):
+                continue
+            with _use_local_dtensor_params(module):
+                if not _proto_experts_supported(module) or not proto.trtllm_supported(module.gate_up_proj.device):
+                    continue
+                module._proto_trtllm = proto.trtllm_prepare(
+                    module.gate_up_proj.detach(),
+                    module.gate_up_proj_scale_inv.detach(),
+                    module.down_proj.detach(),
+                    module.down_proj_scale_inv.detach(),
+                )
+                prepared += 1
+    logger.warning(f"PROTO_EXPERTS_TRTLLM: re-laid the weights of {prepared} FP8Experts modules for TRT-LLM")
+
+
+def _proto_relayout_fp8_experts(model: nn.Module, trtllm: bool) -> bool:
+    """`PROTO_EXPERTS_TRTLLM_INPLACE`: re-lays the expert weights of every rank in place, for the TRT-LLM kernels
+    (`trtllm=True`) or back to the checkpoint's layout. The continuous batching manager keeps TRT-LLM's layout while its
+    generation loop runs and gives the checkpoint's back whenever anything else may read the weights (pause, stop).
+    The storage does not move, so CUDA graphs captured on it stay valid. Idempotent. Returns whether a weight changed
+    address since the previous re-layout (replaced rather than updated in place): graphs captured before then are stale.
+    """
+    if not _PROTO_EXPERTS_TRTLLM_INPLACE:
+        return False
+    from ..distributed.parallel_utils import _use_local_dtensor_params
+    from . import _proto_fp8_experts as proto
+
+    moved, count = False, 0
+    torch.accelerator.synchronize()  # the generation loop reads the weights on its own stream
+    with torch.no_grad():
+        for module in model.modules():
+            if not isinstance(module, FP8Experts) or module._proto_trtllm_laid == trtllm or module._is_expert_parallel:
+                continue
+            if module.config._experts_implementation not in ("grouped_mm", "batched_mm"):
+                continue
+            with _use_local_dtensor_params(module):
+                if not _proto_experts_supported(module) or not proto.trtllm_supported(module.gate_up_proj.device):
+                    continue
+                gate_up, down = module.gate_up_proj.data, module.down_proj.data
+                proto.trtllm_relayout_(gate_up, swap_halves=True, inverse=not trtllm)
+                proto.trtllm_relayout_(down, swap_halves=False, inverse=not trtllm)
+                module._proto_trtllm_laid = trtllm
+                count += 1
+                if not trtllm:
+                    module._proto_trtllm = None
+                    continue
+                if module._proto_trtllm_scales is None:
+                    module._proto_trtllm_scales = (
+                        torch.empty_like(module.gate_up_proj_scale_inv.data),
+                        torch.empty_like(module.down_proj_scale_inv.data),
+                    )
+                s13, s2 = module._proto_trtllm_scales
+                proto.trtllm_scales_(s13, s2, module.gate_up_proj_scale_inv.data, module.down_proj_scale_inv.data)
+                num_experts, two_i, hidden = gate_up.shape
+                ptrs = (gate_up.data_ptr(), down.data_ptr())
+                moved |= module._proto_trtllm_ptrs is not None and module._proto_trtllm_ptrs != ptrs
+                module._proto_trtllm_ptrs = ptrs
+                module._proto_trtllm = (
+                    gate_up.view(num_experts, hidden // 128, two_i, 128),
+                    s13,
+                    down.view(num_experts, two_i // 256, hidden, 128),
+                    s2,
+                )
+    torch.accelerator.synchronize()
+    logger.warning_once(f"PROTO_EXPERTS_TRTLLM_INPLACE: {count} FP8Experts modules re-laid in place")
+    return moved
+
+
+def _fuse_trtllm_routed_moe(
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+    w13: torch.Tensor,
+    s13: torch.Tensor,
+    w2: torch.Tensor,
+    s2: torch.Tensor,
+) -> torch.Tensor:
+    from . import _proto_fp8_experts as proto
+
+    return proto.trtllm_experts_forward((w13, s13, w2, s2), hidden_states, top_k_index, top_k_weights)
+
+
+def _fuse_trtllm_routed_moe_fake(hidden_states, top_k_index, top_k_weights, w13, s13, w2, s2):
+    return torch.empty_like(hidden_states)
+
+
+# [gap3 compile, bench only] `PROTO_EXPERTS_TRTLLM` inside a torch.compile region (FUSE_COMPILE): the activation quant
+# and flashinfer's routed MoE as one op dynamo does not trace into
+torch.library.custom_op("transformers::fuse_trtllm_routed_moe", _fuse_trtllm_routed_moe, mutates_args=())
+torch.library.register_fake("transformers::fuse_trtllm_routed_moe", _fuse_trtllm_routed_moe_fake)
+
+
+def _fuse_trtllm_routing_moe(
+    hidden_states: torch.Tensor,
+    router_logits: torch.Tensor,
+    routing_bias: torch.Tensor,
+    w13: torch.Tensor,
+    s13: torch.Tensor,
+    w2: torch.Tensor,
+    s2: torch.Tensor,
+    top_k: int,
+    n_group: int,
+    topk_group: int,
+    routed_scaling_factor: float,
+    norm_topk_prob: bool,
+) -> torch.Tensor:
+    from . import _proto_fp8_experts as proto
+
+    return proto.trtllm_experts_forward_routing(
+        (w13, s13, w2, s2), hidden_states, router_logits, routing_bias, top_k, n_group, topk_group,
+        routed_scaling_factor, norm_topk_prob,
+    )  # fmt: skip
+
+
+def _fuse_trtllm_routing_moe_fake(hidden_states, router_logits, routing_bias, w13, s13, w2, s2, *args):
+    return torch.empty_like(hidden_states)
+
+
+# [gap3 experts, bench only] PROTO_EXPERTS_TRTLLM_ROUTING inside a torch.compile region (FUSE_COMPILE): one opaque op
+torch.library.custom_op("transformers::fuse_trtllm_routing_moe", _fuse_trtllm_routing_moe, mutates_args=())
+torch.library.register_fake("transformers::fuse_trtllm_routing_moe", _fuse_trtllm_routing_moe_fake)
+
+
+def proto_trtllm_moe_routing(experts: nn.Module, router: nn.Module, hidden_states, router_logits):
+    """PROTO_EXPERTS_TRTLLM_ROUTING: the routed experts of a MoE block from its fp32 router logits, routed inside the
+    TRT-LLM kernel. `router` gives the routing parameters (`top_k`, `num_group`, `topk_group`, `routed_scaling_factor`,
+    `norm_topk_prob`, `e_score_correction_bias`). Returns this rank's partial sum, as the experts module does under
+    `moe_tp_experts_partial`."""
+    if (
+        torch.distributed.is_initialized()
+        and torch.distributed.get_world_size() > 1
+        and os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") != "1"
+        and os.environ.get("HF_TP_ALL_REDUCE", "nccl") != "flashinfer_fused"
+    ):
+        raise NotImplementedError("PROTO_EXPERTS_TRTLLM_ROUTING under TP needs the experts' partial sums reduced by the MLP block")
+    args = (
+        router.e_score_correction_bias, *experts._proto_trtllm, router.top_k, router.num_group, router.topk_group,
+        float(router.routed_scaling_factor), bool(router.norm_topk_prob),
+    )  # fmt: skip
+    if torch.compiler.is_compiling():
+        return torch.ops.transformers.fuse_trtllm_routing_moe(hidden_states.contiguous(), router_logits, *args)
+    return _fuse_trtllm_routing_moe(hidden_states.contiguous(), router_logits, *args)
+
+
+def _proto_autotune_fp8_experts(model: nn.Module, group=None) -> None:
+    """PROTO_EXPERTS_TRTLLM_AUTOTUNE: flashinfer's autotuner, once per process, on the shapes of the first FP8Experts
+    module that holds TRT-LLM weights (every MoE layer of a rank has the same shapes). Called when the CB batch
+    processor is created, after the re-layout and before the cache is sized and any graph is captured. Every TP rank
+    must call it (`group`: the TP ranks' gloo group, so they pick the same tactics)."""
+    global _proto_trtllm_tuned
+    if not _PROTO_EXPERTS_TRTLLM_AUTOTUNE or _proto_trtllm_tuned:
+        return
+    from . import _proto_fp8_experts as proto
+
+    experts = next((m for m in model.modules() if isinstance(m, FP8Experts) and m._proto_trtllm is not None), None)
+    if experts is None:
+        return
+    router = next(m for m in model.modules() if "e_score_correction_bias" in m._buffers)
+    routing = None
+    if _PROTO_EXPERTS_TRTLLM_ROUTING:
+        routing = {
+            "routing_bias": router.e_score_correction_bias, "n_group": router.num_group,
+            "topk_group": router.topk_group, "routed_scaling_factor": float(router.routed_scaling_factor),
+            "norm_topk_prob": bool(router.norm_topk_prob),
+        }  # fmt: skip
+    t = time.perf_counter()
+    proto.trtllm_autotune(experts._proto_trtllm, experts.hidden_dim, router.top_k, routing, group)
+    _proto_trtllm_tuned = True
+    logger.warning(f"PROTO_EXPERTS_TRTLLM_AUTOTUNE: tactics chosen in {time.perf_counter() - t:.1f}s")
+
+
+def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
+    """The prototype forward selected by the flags, or `None` when the default path has to run."""
+    if self._is_expert_parallel or (torch.is_grad_enabled() and hidden_states.requires_grad):
+        if self._proto_trtllm_laid:
+            raise RuntimeError(
+                "The expert weights hold TRT-LLM's layout while the continuous batching loop runs: use the model "
+                "inside `manager.pause()` or after `manager.stop()`."
+            )
+        return None
+    from . import _proto_fp8_experts as proto
+
+    if _PROTO_EXPERTS_TRTLLM and self._proto_trtllm is not None:
+        if torch.compiler.is_compiling():  # [gap3 compile] one opaque op inside a compiled region
+            return torch.ops.transformers.fuse_trtllm_routed_moe(
+                hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous(), *self._proto_trtllm
+            )
+        return proto.trtllm_experts_forward(
+            self._proto_trtllm, hidden_states.contiguous(), top_k_index.contiguous(), top_k_weights.contiguous()
+        )
+    if _PROTO_EXPERTS_DECODE and _proto_experts_supported(self):
+        return proto.decode_experts_forward(
+            hidden_states.contiguous(),
+            top_k_index.contiguous(),
+            top_k_weights.contiguous(),
+            self.gate_up_proj,
+            self.gate_up_proj_scale_inv,
+            self.down_proj,
+            self.down_proj_scale_inv,
+            fold=_PROTO_EXPERTS_DECODE_FOLD,
+        )
+    return None
+
+
 def fp8_batched_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -546,6 +993,12 @@ def fp8_batched_mm_experts_forward(
             "batched_mm experts dispatch does not support activation_scheme='static'. "
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
+    if _can_use_fp8_fused_experts(self, hidden_states, top_k_index):
+        return _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped=False)
+    if _PROTO_EXPERTS_TRTLLM or _PROTO_EXPERTS_DECODE:
+        proto_out = _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+        if proto_out is not None:
+            return proto_out
 
     finegrained_fp8 = load_finegrained_fp8_kernel()
 
@@ -621,6 +1074,12 @@ def fp8_grouped_mm_experts_forward(
             "grouped_mm experts dispatch does not support activation_scheme='static'. "
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
+    if _can_use_fp8_fused_experts(self, hidden_states, top_k_index):
+        return _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped=True)
+    if _PROTO_EXPERTS_TRTLLM or _PROTO_EXPERTS_DECODE:
+        proto_out = _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights)
+        if proto_out is not None:
+            return proto_out
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -699,9 +1158,15 @@ def fp8_grouped_mm_experts_forward(
         weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
-    inv_perm = torch.empty_like(perm)
-    inv_perm[perm] = torch.arange(perm.size(0), device=device)
-    weighted_out = weighted_out[inv_perm]
+    if _GLUE_EXPERTS:
+        # `perm` is a permutation, so scattering row i to row perm[i] is the same reordering, in one kernel
+        restored = torch.empty_like(weighted_out)
+        restored[perm] = weighted_out
+        weighted_out = restored
+    else:
+        inv_perm = torch.empty_like(perm)
+        inv_perm[perm] = torch.arange(perm.size(0), device=device)
+        weighted_out = weighted_out[inv_perm]
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
@@ -713,6 +1178,12 @@ def fp8_grouped_mm_experts_forward(
 class FP8Experts(nn.Module):
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
+    _proto_trtllm = None  # PROTO_EXPERTS_TRTLLM: this rank's weights in TRT-LLM's layout, built once at load
+    # PROTO_EXPERTS_TRTLLM_INPLACE: the parameters hold TRT-LLM's layout (then `_proto_trtllm` views them), the block
+    # scale buffers in TRT-LLM's order, and the weights' addresses at the last re-layout
+    _proto_trtllm_laid = False
+    _proto_trtllm_scales = None
+    _proto_trtllm_ptrs = None
 
     def __init__(
         self,

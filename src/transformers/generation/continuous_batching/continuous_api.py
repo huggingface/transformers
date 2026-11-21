@@ -12,8 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import asyncio
 import gc
+import math
 import queue
 import threading
 from abc import abstractmethod
@@ -295,9 +297,41 @@ class BackgroundThreadStatus:
 
 
 # Continuous Batch Processor (Internal Logic)
+# PROTOTYPE of the engine work package (bench only, off by default). CB_PROTO_TP_STATE_OVERLAP=1: in synchronous mode,
+# the per-step exchange with the TP group (new requests, cancellations, stop and pause signals) happens right after the
+# step is launched, while the device computes it, instead of before the next batch is prepared.
+_PROTO_TP_STATE_OVERLAP = os.environ.get("CB_PROTO_TP_STATE_OVERLAP", "0") == "1"
+_PROTO_IDLE_DRIVER_WAIT = os.environ.get("CB_PROTO_IDLE_DRIVER_WAIT", "0") == "1"
+_PROTO_UPLOADS_ON_COMPUTE_STREAM = os.environ.get("CB_PROTO_UPLOADS_ON_COMPUTE_STREAM", "0") == "1"
+# WP train prototypes, see `ContinuousBatchingManager._proto_after_pause`
+_TRAIN_FIX_KV_B = os.environ.get("TRAIN_FIX_KV_B", "")
+_TRAIN_FIX_PREFIX = os.environ.get("TRAIN_FIX_PREFIX", "0") == "1"
+# gap2-mtp prototype (bench only), see input_outputs.py
+_CB_MTP = os.environ.get("CB_MTP", "")
+# Test hooks. `_MTP_TRACE`: when set to a dict, every draft the MTP module makes is recorded per request.
+# `_MTP_ORACLE`: when set to a dict {prompt tokens (tuple): reference continuation}, the drafts fed to the model come
+# from the reference instead: all correct ("accept"), all wrong ("reject") or a fixed mix ("mix").
+_MTP_TRACE: dict | None = None
+_MTP_ORACLE: dict | None = None
+_MTP_ORACLE_MODE = os.environ.get("CB_MTP_ORACLE", "accept")
+# Test switch: hash blocks from the scheduler's count, which includes the row of a draft that may be rejected
+_MTP_UNSAFE_HASH = os.environ.get("CB_MTP_UNSAFE_HASH", "0") == "1"
+from .input_outputs import _CB_MTP_ASYNC, _CB_MTP_K, _CB_MTP_MULTI  # noqa: E402  gap3-mtpa / gap3-mtpk prototypes
+
+
+def _mtp_oracle_draft(state: RequestState, draft: int) -> int:
+    reference = _MTP_ORACLE.get(tuple(state.initial_tokens))
+    index = state.generated_len()
+    if reference is None or index >= len(reference):
+        return draft
+    correct = _MTP_ORACLE_MODE == "accept" or (_MTP_ORACLE_MODE == "mix" and (index * 2654435761 >> 7) % 3 != 0)
+    return reference[index] if correct else (reference[index] + 1) % 1000
+
+
 class ContinuousBatchProcessor:
     inputs_and_outputs: ContinuousBatchingIOs | ContinuousBatchingAsyncIOs
     scheduler: Scheduler
+    _proto_relayout_experts = None  # WP experts: set by the manager, called by the loop thread around a pause window
 
     def __init__(
         self,
@@ -368,6 +402,7 @@ class ContinuousBatchProcessor:
         }
         self.use_async_batching = self.cb_config.use_async_batching
 
+        self._proto_tp_state_done: bool | None = None
         if self.use_async_batching:
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
@@ -382,6 +417,15 @@ class ContinuousBatchProcessor:
             compute_stream=self.inputs_and_outputs.compute_stream,
             distributed_helper=self.distributed_helper,
         )
+
+        # gap2-mtp prototype
+        self.mtp_mode = _CB_MTP
+        self.mtp_stats = {"steps": 0, "emitted": 0, "drafted": 0, "accepted": 0}
+        self.mtp_step_times: list[float] = []
+        if self.mtp_mode and self.use_async_batching and not _CB_MTP_ASYNC:
+            raise NotImplementedError("CB_MTP prototype: asynchronous batching needs CB_MTP_ASYNC=1 (gap3-mtpa)")
+        if _CB_MTP_ASYNC and (not self.use_async_batching or _MTP_ORACLE is not None):
+            raise NotImplementedError("CB_MTP_ASYNC=1 needs asynchronous batching and takes the drafts of the device")
 
         # Setup the model runner
         self.model_runner = ModelRunner(
@@ -408,6 +452,7 @@ class ContinuousBatchProcessor:
 
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
+        self._proto_tp_state_done = None
         self.offloading_manager.reset()
         self.scheduler.reset()
         self.inputs_and_outputs.reset()
@@ -442,6 +487,8 @@ class ContinuousBatchProcessor:
             # Wait for the work on the compute stream to be done before pausing
             if self.inputs_and_outputs.compute_stream is not None:
                 self.inputs_and_outputs.compute_stream.synchronize()
+            if self._proto_relayout_experts is not None:  # WP experts: the checkpoint's layout during the window
+                self._proto_relayout_experts(trtllm=False)
             self.background_thread_status.pause_and_wait()
             if self.distributed_helper.cpu_comm_group is not None:
                 timeout = self.cb_config.cpu_group_timeout
@@ -450,6 +497,8 @@ class ContinuousBatchProcessor:
                     timeout=timedelta(seconds=timeout) if timeout is not None else None,
                     wait_all_ranks=True,
                 )
+            if self._proto_relayout_experts is not None:
+                self._proto_relayout_experts(trtllm=True)
 
         # After the pause window is done, we can still exit early if there is no payload
         if payload_size == 0:
@@ -484,7 +533,10 @@ class ContinuousBatchProcessor:
         False otherwise."""
 
         # Communicate with the TP driver to retrieve new requests, cancellations and an eventual stop signal
-        hard_stopping = self._update_tp_group_state()
+        if self._proto_tp_state_done is not None:  # PROTOTYPE: already exchanged during the previous step
+            hard_stopping, self._proto_tp_state_done = self._proto_tp_state_done, None
+        else:
+            hard_stopping = self._update_tp_group_state()
         if hard_stopping:
             return False
 
@@ -525,18 +577,190 @@ class ContinuousBatchProcessor:
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
         num_q_tokens, max_kv_read = self.model_runner.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
 
-        self.inputs_and_outputs.prepare_batch_tensors(
-            requests_in_batch=requests_in_batch,
-            logits_processors=self.logit_processor,
-            use_decode_fast_path=use_decode_fast_path,
-            num_q_tokens=num_q_tokens,
-            max_kv_read=max_kv_read,
-            use_padding=self.model_runner.pad_inputs,
-        )
+        # PROTOTYPE (CB_PROTO_UPLOADS_ON_COMPUTE_STREAM=1): in synchronous mode the inputs are written to device tensors
+        # here, on the thread's current stream, while the step is launched on the compute stream: nothing orders the last
+        # copy kernel before the step. Issuing the uploads on the compute stream does (no-op for asynchronous batching,
+        # whose host tensors are transferred on a dedicated stream with events).
+        upload_stream = self.inputs_and_outputs.compute_stream if _PROTO_UPLOADS_ON_COMPUTE_STREAM else None
+        with stream_context(upload_stream):
+            self.inputs_and_outputs.prepare_batch_tensors(
+                requests_in_batch=requests_in_batch,
+                logits_processors=self.logit_processor,
+                use_decode_fast_path=use_decode_fast_path,
+                num_q_tokens=num_q_tokens,
+                max_kv_read=max_kv_read,
+                use_padding=self.model_runner.pad_inputs,
+            )
         return True
+
+    def _update_batch_mtp(self) -> None:
+        """gap2-mtp prototype: `update_batch` when the step verified drafts ("spec") or only produced them ("shadow").
+        A request emits one token, or two when its draft was accepted. The cache row of a rejected draft is given back
+        by not counting it in the request's length: the next step writes that position again."""
+        io = self.inputs_and_outputs
+        (first_tokens, first_logprobs, bonus_tokens, bonus_logprobs, accepted, next_drafts, prev_draft_logprobs,
+         next_draft_logprobs) = io.prepare_mtp_batch_update()
+        stats = self.mtp_stats
+        stats["steps"] += 1
+        self.mtp_step_times.append(perf_counter())
+        row = 0
+        pending_outputs = []
+        for future_state in io.requests_in_batch:
+            state = future_state.state
+            if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
+                if _CB_MTP_ASYNC:
+                    # gap3-mtpa: finished while this step was in flight, its outputs are dropped
+                    row += future_state.has_new_token
+                    continue
+                raise RuntimeError(f"Tried to update {state.status.name} request {state.request_id} in sync mode.")
+            if not future_state.has_new_token:
+                if state.status == RequestStatus.PREFILLING:
+                    self.cache.mark_complete_blocks(state, future_state.complete_blocks)
+                continue
+            if state.generated_len() == 0:
+                state.status = RequestStatus.DECODING
+            had_draft, is_accepted = future_state.mtp_has_draft, bool(accepted[row])
+            token = first_tokens[row]
+            if had_draft and _CB_MTP_ASYNC:
+                # gap3-mtpa: the step was prepared with the draft's row not counted; it is counted once accepted. Blocks
+                # completed by decoding are not registered for prefix sharing (the host length lags one step)
+                stats["drafted"] += 1
+                stats["accepted"] += is_accepted
+                state.position_offset += is_accepted
+                state.mtp_pending_acc -= 1
+                future_state.complete_blocks = {}
+            elif had_draft:
+                stats["drafted"] += 1
+                stats["accepted"] += is_accepted
+                if not is_accepted:
+                    state.position_offset -= 1  # the draft's row is not part of the request
+                # Only the positions that are now trusted can complete a block: the scheduler counted the draft's row
+                past_length = state.position_offset - (2 if is_accepted else 1)
+                if not _MTP_UNSAFE_HASH:
+                    future_state.complete_blocks = {
+                        name: new_blocks
+                        for name, allocator in self.cache.cache_allocators.items()
+                        if self.cache.use_prefix_sharing
+                        and (
+                            new_blocks := state.position_offset // allocator.tokens_per_page
+                            - past_length // allocator.tokens_per_page
+                        )
+                    }
+            elif self.mtp_mode == "shadow" and state.mtp_draft is not None:
+                stats["drafted"] += 1
+                stats["accepted"] += token == state.mtp_draft
+                if self.do_sample:
+                    # probability that the ratio test accepts the draft: min(1, p(draft) / q(draft)), q = 1 for an
+                    # argmax draft. Its mean is the acceptance rate, without the noise of the match count
+                    ratio = math.exp(min(0.0, prev_draft_logprobs[row] - state.mtp_draft_logprob))
+                    stats["accept_prob"] = stats.get("accept_prob", 0.0) + ratio
+            logprob = first_logprobs[row] if self.return_logprobs else None
+            is_finished = state.update_and_check_completion(token, logprob)
+            stats["emitted"] += 1
+            if had_draft and is_accepted and not is_finished:
+                logprob = bonus_logprobs[row] if self.return_logprobs else None
+                is_finished = state.update_and_check_completion(bonus_tokens[row], logprob)
+                stats["emitted"] += 1
+            self.cache.mark_complete_blocks(state, future_state.complete_blocks)
+            if _MTP_TRACE is not None:
+                # test invariant: a block is only hashed (shareable) once every one of its rows is trusted
+                for allocator in self.cache.cache_allocators.values():
+                    hashed = sum(b in allocator.ledger.block_to_hash for b in allocator.block_table[state.request_id])
+                    stats["hash_violations"] = stats.get("hash_violations", 0) + (
+                        hashed > state.position_offset // allocator.tokens_per_page
+                    )
+            if is_finished:
+                self.scheduler.finish_request(state.request_id)
+                self.scheduler.block_new_requests = False
+            else:
+                draft = next_drafts[row]
+                if _MTP_TRACE is not None:
+                    # (index of the generated token the draft is for, draft) of every draft the module made
+                    _MTP_TRACE.setdefault(state.request_id, []).append((state.generated_len(), draft))
+                if _MTP_ORACLE is not None:
+                    draft = _mtp_oracle_draft(state, draft)
+                if self.mtp_mode == "spec":
+                    state.tokens_to_process = [state.tokens_to_process[0], draft]
+                    state.mtp_has_draft = True
+                else:
+                    state.mtp_draft = draft
+                    state.mtp_draft_logprob = next_draft_logprobs[row]  # 0 for an argmax draft
+            if state.streaming or state.status == RequestStatus.FINISHED:
+                pending_outputs.append(state.to_generation_output())
+            row += 1
+        if pending_outputs:
+            self.output_router.deliver_batch(pending_outputs)
+        if self.scheduler._requests_to_fork:
+            raise NotImplementedError("CB_MTP prototype: forked requests are not supported")
+
+    def _update_batch_mtp_k(self) -> None:
+        """gap3-mtpk prototype: `update_batch` with k drafts per step (CB_MTP_K). A request emits its `n_acc` accepted
+        drafts and one more token. Its drafts' rows were not counted when the step was prepared; the accepted ones are
+        counted now. Blocks completed by decoding are not registered for prefix sharing."""
+        k = _CB_MTP_K
+        io = self.inputs_and_outputs
+        out = io.mtp_k_outputs()  # [rows, R] int32 on the host
+        candidates = out[: k + 1].tolist()
+        logprobs = out[k + 1 : 2 * k + 2].contiguous().view(torch.float32).tolist() if self.return_logprobs else None
+        num_accepted = out[2 * k + 2].tolist()
+        next_drafts = out[2 * k + 3 : 3 * k + 3].t().tolist()
+        stats = self.mtp_stats
+        stats["steps"] += 1
+        self.mtp_step_times.append(perf_counter())
+        if "accepted_at" not in stats or not stats["accepted_at"]:
+            stats["accepted_at"] = [0] * k
+        row = 0
+        pending_outputs = []
+        for future_state in io.requests_in_batch:
+            state = future_state.state
+            if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
+                if _CB_MTP_ASYNC:  # finished while this step was in flight, its outputs are dropped
+                    row += future_state.has_new_token
+                    continue
+                raise RuntimeError(f"Tried to update {state.status.name} request {state.request_id} in sync mode.")
+            if not future_state.has_new_token:
+                if state.status == RequestStatus.PREFILLING:
+                    self.cache.mark_complete_blocks(state, future_state.complete_blocks)
+                continue
+            if state.generated_len() == 0:
+                state.status = RequestStatus.DECODING
+            n_acc = num_accepted[row] if future_state.mtp_has_draft else 0
+            if future_state.mtp_has_draft:
+                stats["drafted"] += 1
+                stats["accepted"] += n_acc
+                for j in range(n_acc):
+                    stats["accepted_at"][j] += 1
+                state.position_offset += n_acc
+                state.mtp_pending_acc -= 1
+                future_state.complete_blocks = {}
+            is_finished = False
+            for j in range(n_acc + 1):
+                logprob = logprobs[j][row] if logprobs is not None else None
+                is_finished = state.update_and_check_completion(candidates[j][row], logprob)
+                stats["emitted"] += 1
+                if is_finished:
+                    break
+            self.cache.mark_complete_blocks(state, future_state.complete_blocks)
+            if is_finished:
+                self.scheduler.finish_request(state.request_id)
+                self.scheduler.block_new_requests = False
+            else:
+                state.tokens_to_process = [state.tokens_to_process[0]] + next_drafts[row]
+                state.mtp_has_draft = True
+            if state.streaming or state.status == RequestStatus.FINISHED:
+                pending_outputs.append(state.to_generation_output())
+            row += 1
+        if pending_outputs:
+            self.output_router.deliver_batch(pending_outputs)
+        if self.scheduler._requests_to_fork:
+            raise NotImplementedError("CB_MTP prototype: forked requests are not supported")
 
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
+        if self.mtp_mode and _CB_MTP_MULTI:
+            return self._update_batch_mtp_k()
+        if self.mtp_mode:
+            return self._update_batch_mtp()
         requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
         pending_outputs = []
@@ -641,6 +865,10 @@ class ContinuousBatchProcessor:
         # This takes care of the forward pass, logits processing, and sampling. After this returns, the compute is
         # scheduled on the device's compute stream, but may not have finished yet.
         self.model_runner.compute_batch(model, batch_data)
+
+        # PROTOTYPE: the step is in flight on the device, exchange the TP group state now
+        if _PROTO_TP_STATE_OVERLAP and not self.use_async_batching:
+            self._proto_tp_state_done = self._update_tp_group_state()
 
         # This initiates the transfer of the outputs to the host. It is blocking in sync mode and non-blocking in async
         # mode.
@@ -808,6 +1036,12 @@ class ContinuousBatchingManager:
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
+        # [gap2 prototype] HF_TP_ALL_REDUCE=flashinfer*: the workspace is created here, by the caller's thread, on every
+        # TP rank (a collective), so it does not live in the graphs' memory pool and outlives graphs and KV cache
+        if dist.is_available() and dist.is_initialized():
+            from ...distributed.parallel_utils import prime_fast_tp_all_reduce
+
+            prime_fast_tp_all_reduce(self.model.config.hidden_size, self.model.dtype, self.model.device)
         # Inference mode is thread-local: run the generation loop with the same inference mode as the caller
         use_inference_mode = torch.is_inference_mode_enabled()
         self._generation_thread = threading.Thread(
@@ -911,7 +1145,102 @@ class ContinuousBatchingManager:
         try:
             yield
         finally:
-            self.background_thread_status.release_pause()
+            try:
+                self._proto_after_pause()
+            finally:
+                self.background_thread_status.release_pause()
+
+    def _proto_relayout_experts(self, trtllm: bool) -> None:
+        """WP experts prototype (PROTO_EXPERTS_TRTLLM_INPLACE=1, no-op otherwise): the routed-expert weights hold
+        TRT-LLM's layout, in place, from the creation of the batch processor until the generation loop exits, and the
+        checkpoint's layout during a pause window and after the loop, when anything else may read them. The loop thread
+        switches them when it parks and when it wakes up, so a window held by several threads switches once each way."""
+        from ...integrations.finegrained_fp8 import _proto_relayout_fp8_experts
+
+        moved = _proto_relayout_fp8_experts(self.model, trtllm)
+        if moved and self.batch_processor is not None:  # a weight changed address: graphs replay the old one
+            self.batch_processor.inputs_and_outputs.clear_graphs()
+
+    def _proto_after_pause(self) -> None:
+        """WP train prototypes (off by default): what has to follow the weights when a pause ends, since the thread
+        that held it may have updated them. TRAIN_FIX_KV_B=refresh rewrites, in place, the merged kv_b_proj weights of
+        the absorbed attention; TRAIN_FIX_PREFIX=1 stops new requests from reusing prefix blocks computed before the
+        pause."""
+        if _TRAIN_FIX_KV_B == "refresh":
+            from ...models.glm_moe_dsa.modeling_glm_moe_dsa import _proto_refresh_derived_weights
+
+            _proto_refresh_derived_weights(self.model)
+            moved = [m.__dict__.pop("_train_kv_b_moved", False) for m in self.model.modules()]
+            if any(moved) and self.batch_processor is not None:  # a buffer changed address: graphs replay the old one
+                self.batch_processor.inputs_and_outputs.clear_graphs()
+            torch.accelerator.synchronize()  # the generation loop reads the weights on its own stream
+        if _TRAIN_FIX_PREFIX and self.batch_processor is not None:
+            self.reset_prefix_cache()
+
+    def reset_prefix_cache(self) -> None:
+        """WP train: forgets the blocks kept for prefix sharing, so no request submitted from now on reuses keys and
+        values computed before this call. To call after the weights changed, inside `pause()` (the generation loop owns
+        the block ledgers), and on every rank of a TP group, which must all agree on what a request prefills. Requests
+        in flight keep their blocks."""
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `reset_prefix_cache` inside the `pause` context, the generation loop uses it.")
+        self.batch_processor.cache.invalidate_prefix_cache()
+
+    def release_memory(self) -> int:
+        """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
+        of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
+        copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
+        inside `pause()`, and on every rank of a TP group.
+
+        ```python
+        with manager.pause():
+            released_bytes = manager.release_memory()
+            ...  # the memory is free for something else, a training step for instance
+            manager.restore_memory()
+        ```
+        """
+        # The generation loop reads and writes the cache, so it can only lose its memory while the loop is paused (a
+        # paused loop always has its batch processor)
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `release_memory` inside the `pause` context, the generation loop uses the cache.")
+        return self.batch_processor.cache.release_memory()
+
+    def restore_memory(self) -> None:
+        """Brings back the KV cache freed by `release_memory`. CUDA graphs replay the addresses they were captured
+        with, so they are dropped and captured again if the cache came back elsewhere."""
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `restore_memory` inside the `pause` context, the generation loop uses the cache.")
+        if not self.batch_processor.cache.restore_memory():
+            self.batch_processor.inputs_and_outputs.clear_graphs()
+            logger.info("The KV cache moved while it was released, so the captured CUDA graphs were dropped")
+
+    def release_memory(self) -> int:
+        """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
+        of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
+        copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
+        inside `pause()`, and on every rank of a TP group.
+
+        ```python
+        with manager.pause():
+            released_bytes = manager.release_memory()
+            ...  # the memory is free for something else, a training step for instance
+            manager.restore_memory()
+        ```
+        """
+        # The generation loop reads and writes the cache, so it can only lose its memory while the loop is paused (a
+        # paused loop always has its batch processor)
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `release_memory` inside the `pause` context, the generation loop uses the cache.")
+        return self.batch_processor.cache.release_memory()
+
+    def restore_memory(self) -> None:
+        """Brings back the KV cache freed by `release_memory`. CUDA graphs replay the addresses they were captured
+        with, so they are dropped and captured again if the cache came back elsewhere."""
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `restore_memory` inside the `pause` context, the generation loop uses the cache.")
+        if not self.batch_processor.cache.restore_memory():
+            self.batch_processor.inputs_and_outputs.clear_graphs()
+            logger.info("The KV cache moved while it was released, so the captured CUDA graphs were dropped")
 
     # ---------------------------- REQUEST SUBMISSION, CANCELLATION AND RETRIEVAL METHODS ---------------------------- #
 
@@ -1103,6 +1432,11 @@ class ContinuousBatchingManager:
             return False
         # Otherwise, we wait for new requests and retry
         else:
+            # PROTOTYPE (CB_PROTO_IDLE_DRIVER_WAIT=1): only the TP driver sleeps until a request arrives. The other ranks
+            # go straight back to the state exchange, which blocks until the driver joins it, so a request that
+            # arrives on an idle engine no longer waits for their 0.1 s sleeps to expire
+            if _PROTO_IDLE_DRIVER_WAIT and not self.is_tp_driver:
+                return True
             self._wake_up_loop.wait(timeout=0.1)  # wait for new requests instead of busy-spinning.
             self._wake_up_loop.clear()
             return True
@@ -1117,6 +1451,11 @@ class ContinuousBatchingManager:
                 # Scope the device for the generation loop (thread-scoped)
                 if self.model.device.type == "cuda" and self.model.device.index is not None:
                     torch.cuda.set_device(self.model.device)
+                # [gap2 prototype] this thread owns the compute stream: the only one whose TP all-reduces may take the
+                # fast (flashinfer) path. A trainer thread on the same model keeps NCCL for everything it runs
+                from ...distributed.parallel_utils import _FAST_REDUCE_THREAD
+
+                _FAST_REDUCE_THREAD.enabled = True
 
                 # Start the generation loop
                 batch_processor = self._create_batch_processor()
@@ -1151,6 +1490,7 @@ class ContinuousBatchingManager:
                 self._handle_critical_error(e, batch_processor)
             finally:
                 self.background_thread_status.mark_as_stopped()
+                self._proto_relayout_experts(trtllm=False)  # still inside the thread: `join` and `is_running` wait for it
                 logger.info("Generation loop finished and background thread exited successfully.")
 
     def _generation_step(self) -> None:
@@ -1161,6 +1501,11 @@ class ContinuousBatchingManager:
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
         """Create a new batch processor. If an already initialized batch processor exists, it is reset and returned."""
+        self._proto_relayout_experts(trtllm=True)  # before any graph capture and before the cache is sized
+        # WP experts (PROTO_EXPERTS_TRTLLM_AUTOTUNE=1, no-op otherwise): TRT-LLM MoE tactics, once per process, on every rank
+        from ...integrations.finegrained_fp8 import _proto_autotune_fp8_experts
+
+        _proto_autotune_fp8_experts(self.model, self.distributed_helper.cpu_comm_group)
         # Early return if a batch processor exists already
         batch_processor = getattr(self, "batch_processor", None)
         if isinstance(batch_processor, ContinuousBatchProcessor):
@@ -1219,6 +1564,8 @@ class ContinuousBatchingManager:
             scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
+        if os.environ.get("PROTO_EXPERTS_TRTLLM_INPLACE", "0") == "1":
+            batch_processor._proto_relayout_experts = self._proto_relayout_experts
         return batch_processor
 
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:

@@ -26,7 +26,8 @@ from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
-from .utils import WorkloadHints, get_accelerator_graph_name, logger
+from .cache_allocators.compressed_latents import _PROTO_MLA_BLOCK_TABLE
+from .utils import WorkloadHints, get_accelerator_graph_name, logger, proto_no_mask
 
 
 FALLBACK_DEFAULTS = {
@@ -80,7 +81,7 @@ def resolve_continuous_batching_config(
     )
 
     # Decide if CUDA graphs should be used. Should happen after compile configs are decided.
-    is_attn_mask_needed = not is_flash_attention_requested(config)
+    is_attn_mask_needed = not is_flash_attention_requested(config) and not proto_no_mask(config)
     decide_use_cuda_graphs(
         cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed, cuda_graph_requested=cuda_graph_requested
     )
@@ -141,6 +142,10 @@ def ensure_decode_fast_path_is_available(
                 "some of the model's attention types do not support kernel block tables."
             )
         cb_config.max_blocks_per_request = 0
+
+    # PROTOTYPE: the MLA prototype attention reads the cache through the block table itself, no flash kernel needed
+    if cb_config.max_blocks_per_request != 0 and _PROTO_MLA_BLOCK_TABLE and getattr(config, "kv_lora_rank", None):
+        return
 
     # Then, if the decode fast path is not turned off, check if it is available
     if cb_config.max_blocks_per_request != 0:

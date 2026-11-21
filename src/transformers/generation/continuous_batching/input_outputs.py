@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 from functools import partial
 from itertools import repeat
 from typing import TypedDict
@@ -22,19 +23,76 @@ from transformers.generation.configuration_utils import ContinuousBatchingConfig
 
 from ...utils import get_available_devices
 from .cache import PagedAttentionCache
-from .cache_allocators import FULL_ATTENTION, SLIDING_ATTENTION
+from .cache_allocators import FULL_ATTENTION, INDEXED_ATTENTION, SLIDING_ATTENTION, FullAttentionCacheAllocator
+from .cache_allocators.compressed_latents import (
+    _PROTO_MLA_BLOCK_TABLE,
+    _PROTO_MLA_BLOCK_TABLE_CHECK,
+    MLACacheAllocator,
+)
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState
 from .utils import (
     CudaGraphBuffer,
     aligned_divide,
     attn_mask_is_needed,
+    proto_no_mask,
     build_attention_mask,
     create_device_stream,
     logger,
+    pad_to_interval,
     pad_to_pow2,
     stream_context,
 )
+
+
+# --- PROTOTYPES of the engine work package (bench only, all off by default) ---------------------------------------
+# CB_PROTO_DEVICE_INDEX=1: the read index of full-attention-like allocators is expanded on the device from the block
+# ids of the requests (O(requests x blocks) host work) instead of built token by token on the host. "check" also
+# builds the host version and asserts both are equal.
+_PROTO_DEVICE_INDEX = os.environ.get("CB_PROTO_DEVICE_INDEX", "0")
+# CB_PROTO_SKIP_MASK_MAX_Q=<n>: the attention mask is neither reset nor built for batches of at most n query tokens.
+# Only valid with a model that does not read the mask on such batches (the GLM prototype with the per-query indexer).
+_PROTO_SKIP_MASK_MAX_Q = int(os.environ.get("CB_PROTO_SKIP_MASK_MAX_Q", "0"))
+# CB_PROTO_DEVICE_MASK=1: the attention mask is built by one broadcasted comparison on the device instead of one
+# fill_ + triu_ per request. "check" also builds the per-request version and asserts both are equal.
+_PROTO_DEVICE_MASK = os.environ.get("CB_PROTO_DEVICE_MASK", "0")
+# CB_PROTO_ONE_UPLOAD=1 (with CB_PROTO_MLA_BLOCK_TABLE): a block-table decode batch writes its small inputs with one
+# host buffer and one copy instead of five, and uploads the block table only when the batch's requests or their block
+# lists changed since the previous decode batch.
+_PROTO_ONE_UPLOAD = os.environ.get("CB_PROTO_ONE_UPLOAD", "0") == "1"
+
+
+def _proto_build_attention_mask_on_device(
+    attention_mask: torch.Tensor,  # [1, 1, M, N + M], only [:q_len, :k_len] is written
+    cumulative_seqlens_q: list[int],
+    cumulative_seqlens_k: list[int],
+    q_len: int,
+    k_len: int,
+    arange: torch.Tensor,
+) -> None:
+    """Same mask as `_reset_static_tensors` + `build_attention_mask` (no sliding window), from the cumulative
+    sequence lengths alone: a query attends a key when both belong to the same request and the key is not after it."""
+    device = attention_mask.device
+    num_requests = len(cumulative_seqlens_q) - 1
+    cu_q = torch.tensor(cumulative_seqlens_q, dtype=torch.int64, device=device)
+    cu_k = torch.tensor(cumulative_seqlens_k, dtype=torch.int64, device=device)
+    q_pos, k_pos = arange[:q_len], arange[:k_len]
+    q_req = torch.searchsorted(cu_q[1:], q_pos, right=True)  # num_requests for the padding tokens
+    k_req = torch.searchsorted(cu_k[1:], k_pos, right=True)
+    q_req_real = q_req.clamp(max=num_requests - 1)
+    past = (cu_k[1:] - cu_k[:-1]) - (cu_q[1:] - cu_q[:-1])  # cached tokens of each request
+    last_visible = past[q_req_real] + (q_pos - cu_q[q_req_real])  # per query, as an offset in its request's keys
+    k_offset = k_pos - cu_k[k_req.clamp(max=num_requests - 1)]
+    q_req = q_req.masked_fill(q_req == num_requests, -1)  # padding queries see nothing
+    allowed = q_req[:, None] == k_req[None, :]
+    allowed &= k_offset[None, :] <= last_visible[:, None]
+    block = attention_mask[0, 0, :q_len, :k_len]
+    block.fill_(torch.finfo(attention_mask.dtype).min)
+    block.masked_fill_(allowed, 0)
+
+
+# WP prefill (bench only): smallest key-length bucket of prefill batches under CUDA graphs (0: the default 1024)
+_PROTO_PREFILL_MIN_LEN_K = int(os.environ.get("CB_PROTO_PREFILL_MIN_LEN_K", "0"))
 
 
 class PagedAttentionArgs(TypedDict):
@@ -76,6 +134,31 @@ class PagedAttentionArgs(TypedDict):
     logits_processor_args: torch.Tensor
     use_cache: bool
     is_causal: bool
+
+
+# gap2-mtp prototype (bench only): speculative decoding with the model's MTP module. "shadow" drafts one token per
+# step without using it (acceptance statistics only), "spec" feeds the draft back as a second query token and
+# verifies it. Off by default.
+import os as _mtp_os
+
+_CB_MTP = _mtp_os.environ.get("CB_MTP", "")
+if _CB_MTP not in ("", "shadow", "spec"):
+    raise ValueError(f"CB_MTP must be 'shadow' or 'spec', got {_CB_MTP!r}")
+# gap3-mtp prototype: with the block table decode path (CB_PROTO_MLA_BLOCK_TABLE=1), "spec" decode batches take that
+# path too, with `_CB_MTP_QUERY` query tokens per request (the last token, then the draft); padded like the one-token
+# path (requests to a power of 2), so the graph key (query tokens, key bucket) also fixes the number of logits rows
+_CB_MTP_BT = _CB_MTP == "spec" and _PROTO_MLA_BLOCK_TABLE
+# gap3-mtpk prototype: CB_MTP_K=k (block table path) drafts k tokens per step with the same MTP layer applied k times,
+# as vLLM and SGLang do with one MTP layer; unset keeps the 1-draft path above
+_CB_MTP_K = int(_mtp_os.environ.get("CB_MTP_K", "0"))
+_CB_MTP_MULTI = _CB_MTP_BT and _CB_MTP_K >= 1
+_CB_MTP_QUERY = 1 + _CB_MTP_K if _CB_MTP_MULTI else 2
+# gap3-mtpa prototype: MTP speculative decoding under asynchronous batching (CB_MTP_ASYNC=1, with CB_MTP=spec, the block
+# table decode path and "use_async_batching": true). Step N+1 is prepared before step N's outcome is known: the host
+# schedules every drafted request as if its draft were rejected (pessimistic length, one slack row allocated), and the
+# step itself takes the request's last token (bonus or first token), its new draft and the +1 shift of an accepted
+# draft from step N's outputs on the device. The host learns the accepted counts when it updates step N, one step later.
+_CB_MTP_ASYNC = _CB_MTP_BT and _mtp_os.environ.get("CB_MTP_ASYNC", "0") == "1"
 
 
 class ContinuousBatchingIOs:
@@ -122,6 +205,7 @@ class ContinuousBatchingIOs:
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer()
+        self._proto_block_table_signature: dict[int, tuple] = {}  # last uploaded block table, per allocator
         # Setup static tensors
         self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
@@ -172,9 +256,30 @@ class ContinuousBatchingIOs:
             self.cumulative_seqlens_k["full_attention"] = full_attention_cumulative_seqlens_k
         if SLIDING_ATTENTION in self.cache.cache_allocators:
             self.cumulative_seqlens_k["sliding_attention"] = sliding_attention_cumulative_seqlens_k
+        # Indexed attention layers read their keys like full attention ones, the indexer only narrows the attention
+        if INDEXED_ATTENTION in self.cache.cache_allocators:
+            self.cumulative_seqlens_k["indexed_attention"] = full_attention_cumulative_seqlens_k
 
         # Output tensor and scalars
         num_output_rows = 2 if self.return_logprobs else 1
+        self.mtp_mode = _CB_MTP
+        if self.mtp_mode:
+            # rows: first token, its logprob, bonus token, its logprob, draft accepted, next draft, then two
+            # measurement rows: target logprob of the previous step's draft, drafter logprob of the next draft
+            num_output_rows = 8
+            if _CB_MTP_MULTI:
+                # gap3-mtpk: rows 0..k the candidate token of each verified row, k+1..2k+1 their logprobs, 2k+2 the
+                # number of accepted drafts, 2k+3..3k+2 the next drafts
+                num_output_rows = max(8, 3 * _CB_MTP_K + 3)
+            # per query token: the token that follows it when it is already known (prompt tokens), and where to take
+            # it from among the tokens sampled in the step otherwise (-1: use `mtp_shift_ids`)
+            mtp_kwargs = {"dtype": torch.int32, "device": self.device, "pin_memory": pin_memory}
+            self.mtp_shift_ids = torch.zeros(max_batch_tokens, **mtp_kwargs)
+            self.mtp_src = torch.full((max_batch_tokens,), -1, **mtp_kwargs)
+            # per logits row: 1 when the request's last query token is a draft to verify
+            self.mtp_has_draft = torch.zeros(max_requests_per_batch, **mtp_kwargs)
+            # per logits row: the draft made for this position by the previous step ("shadow" measurement only)
+            self.mtp_prev_draft = torch.zeros(max_requests_per_batch, **mtp_kwargs)
         # output_ids are sized to the input_ids to perform carry over, + 1 to have a static 0 at the end for carry over
         self.output_ids = torch.empty(
             (num_output_rows, max_batch_tokens + 1), dtype=torch.int32, device=self.device, pin_memory=pin_memory
@@ -197,6 +302,9 @@ class ContinuousBatchingIOs:
                 )
         else:
             self.attention_mask = None
+        # PROTOTYPE (CB_PROTO_NO_MASK=1): the model gets one `None` mask per layer type, as a dict, so that it does not
+        # build a causal mask of its own
+        self._proto_no_mask_kwarg = dict.fromkeys(self.cumulative_seqlens_k, None) if proto_no_mask(self.config) else None
 
         # No block table == No elements in the block table tensor
         num_attn_types = len(self.cache.cache_allocators)
@@ -219,6 +327,8 @@ class ContinuousBatchingIOs:
             pin_memory=pin_memory,
         )
         # For read index, the +T is because there are sentinel indices for seqlen_q when model uses a sliding window
+        if _PROTO_DEVICE_INDEX != "0" or _PROTO_DEVICE_MASK != "0":
+            self._proto_arange = torch.arange(self.read_index_storage.size(-1), dtype=torch.int64, device=self.device)
 
     def _transfer_inputs(
         self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream, non_blocking: bool = False
@@ -235,8 +345,15 @@ class ContinuousBatchingIOs:
         other.total_seqlen_k = dict(self.total_seqlen_k)
         other.max_length_q = self.max_length_q
         other.max_length_k = dict(self.max_length_k)
+        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+            other._proto_len_k_bucket = self._proto_len_k_bucket
         # Transfer static tensors
         with stream_context(stream):
+            if self.mtp_mode:  # gap3-mtpa prototype: the MTP inputs of the step
+                other.mtp_shift_ids.copy_(self.mtp_shift_ids, non_blocking=non_blocking)
+                other.mtp_src.copy_(self.mtp_src, non_blocking=non_blocking)
+                other.mtp_has_draft.copy_(self.mtp_has_draft, non_blocking=non_blocking)
+                other.mtp_prev_draft.copy_(self.mtp_prev_draft, non_blocking=non_blocking)
             other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             # Only transfer block_table for decode-only batches (when it's actually used)
             if self.use_block_table:
@@ -262,21 +379,34 @@ class ContinuousBatchingIOs:
         kv_len = self.read_index_storage.size(-1) if full_reset else self.max_kv_read
         b_size = self.max_requests_per_batch + 1 if full_reset else min(self.num_q_tokens, self.max_requests_per_batch)
 
+        # PROTOTYPE: on the one-upload decode path, the upload overwrites the whole padded region of the small inputs
+        # and of the block table, so only the outputs are reset
+        proto_one_upload = self._proto_one_upload() and not full_reset
+        if full_reset:
+            self._proto_block_table_signature = {}
+
         # Reset the attributes part of the bulk input tensor in one kernel
-        self._bulk_input_tensor[: self.static_inputs, : q_len + 1].zero_()
+        if not proto_one_upload:
+            self._bulk_input_tensor[: self.static_inputs, : q_len + 1].zero_()
         if full_reset:
             self._bulk_input_tensor[self.static_inputs :] = self.logits_processors_defaults
         self.max_length_q = 0
 
         # Reset the logits indices and output ids
-        self.logits_indices[:b_size].zero_()
+        if not proto_one_upload:
+            self.logits_indices[:b_size].zero_()
         self.output_ids[:, :b_size].zero_()
+        if self.mtp_mode:
+            self.mtp_shift_ids[:q_len].zero_()
+            self.mtp_src[:q_len].fill_(-1)
+            self.mtp_has_draft[:b_size].zero_()
+            self.mtp_prev_draft[:b_size].zero_()
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
             self.max_length_k[layer_type] = 0
             self.total_seqlen_k[layer_type] = 0
-            if self.attention_mask is not None:
+            if self.attention_mask is not None and (full_reset or not self._proto_skip_mask_work()):
                 self.attention_mask[layer_type][:, :, :q_len, : q_len + kv_len].fill_(
                     torch.finfo(self.model_dtype).min
                 )
@@ -287,10 +417,50 @@ class ContinuousBatchingIOs:
             self._reset_read_and_write_indices(q_len, kv_len)
         # If this is not a full reset, and we are going to use the block table, we only reset it
         elif self.use_block_table:
-            self.block_table[:, :b_size].fill_(-1)
+            if not proto_one_upload:
+                self.block_table[:, :b_size].fill_(-1)
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
             self._reset_read_and_write_indices(q_len, kv_len)
+
+    def _proto_one_upload(self) -> bool:
+        """PROTOTYPE: True when the current batch takes the one-upload decode path."""
+        return (
+            _PROTO_ONE_UPLOAD
+            and _PROTO_MLA_BLOCK_TABLE
+            and self.use_block_table
+            and len(self.cumulative_seqlens_k) == 1
+            and self._bulk_input_tensor.shape[0] == self.static_inputs  # no logits processor rows
+        )
+
+    def _proto_skip_mask_work(self) -> bool:
+        """PROTOTYPE: True when the per-step mask reset and build are skipped (mask not read by the model, or built
+        in one go on the device, which also resets it)."""
+        if 0 < self.num_q_tokens <= _PROTO_SKIP_MASK_MAX_Q:
+            return True
+        if _PROTO_MLA_BLOCK_TABLE and self.use_block_table:
+            return True
+        return _PROTO_DEVICE_MASK == "1" and getattr(self.config, "sliding_window", None) is None
+
+    def _proto_expand_read_index(
+        self, group: int, allocator, blocks: list[int], block_starts: list[int], cumulative_seqlens_k: list[int]
+    ) -> int:
+        """PROTOTYPE: writes the read index of an allocator group on the device, from the block ids of the requests
+        (flattened, with the offset of each request's first block) and their cumulative key lengths. Returns its size.
+        Token `o` of a request lives at row `block[o // page] * stride + o % page`."""
+        num_tokens = cumulative_seqlens_k[-1]
+        if num_tokens > self.read_index_storage.size(-1) or len(block_starts) != len(cumulative_seqlens_k) - 1:
+            raise RuntimeError("Inconsistent inputs for the device-side read index expansion")
+        cu_k = torch.tensor(cumulative_seqlens_k, dtype=torch.int64, device=self.device)
+        blocks_t = torch.tensor(blocks, dtype=torch.int64, device=self.device)
+        starts_t = torch.tensor(block_starts, dtype=torch.int64, device=self.device)
+        position = self._proto_arange[:num_tokens]
+        request = torch.searchsorted(cu_k[1:], position, right=True)
+        offset = position - cu_k[request]
+        page = allocator.tokens_per_page
+        rows = blocks_t[starts_t[request] + offset // page] * allocator.block_physical_stride + offset % page
+        self.read_index_storage[group, :num_tokens] = rows
+        return num_tokens
 
     def _reset_read_and_write_indices(self, q_len: int, kv_len: int) -> None:
         """Resets each allocator's row of the index storages to its own trash indices."""
@@ -379,6 +549,18 @@ class ContinuousBatchingIOs:
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(num_attn_types)]
         read_index = None if self.max_kv_read == 0 else [[] for _ in range(num_attn_types)]
+        # PROTOTYPE: groups whose read index is expanded on the device only accumulate the block ids of the requests
+        allocators = list(self.cache.cache_allocators.values())
+        proto_device_index = (
+            _PROTO_DEVICE_INDEX != "0"
+            and read_index is not None
+            and all(type(a).get_read_indices is FullAttentionCacheAllocator.get_read_indices for a in allocators)
+        )
+        proto_blocks = [[] for _ in range(num_attn_types)]
+        proto_block_starts = [[] for _ in range(num_attn_types)]
+        host_read_index = read_index if (not proto_device_index or _PROTO_DEVICE_INDEX == "check") else None
+        mtp_shift_ids, mtp_src, mtp_has_draft, mtp_prev_draft = [], [], [], []
+        mtp_num_rows = self._get_num_sequences(use_padding=use_padding)  # logits rows of the step, padding included
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -386,6 +568,11 @@ class ContinuousBatchingIOs:
             state = future_state.state
             past_length = state.position_offset
             query_length = future_state.query_length
+
+            # gap3-mtp prototype: a block-table decode batch is all requests with their draft (host-side check: the rows
+            # and the padding of the step follow from it)
+            if self.use_block_table and _CB_MTP_BT and query_length != _CB_MTP_QUERY:
+                raise RuntimeError(f"CB_MTP block table path: request {state.request_id} has {query_length} tokens")
 
             # Update the internal state of the request
             state.position_offset += query_length
@@ -404,17 +591,69 @@ class ContinuousBatchingIOs:
 
             # We extend the read and write indices for the cache, or fill the block table if the kernel can read and
             # write the cache itself
-            if self.use_block_table:
+            if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+                pass  # uploaded once for the whole batch after the loop
+            elif self.use_block_table:
                 self.cache.fill_block_table(state.request_id, past_length, query_length, self.block_table[:, i])
             else:
                 self.cache.extend_read_and_write_indices(
-                    state.request_id, past_length, query_length, read_index, write_index
+                    state.request_id, past_length, query_length, host_read_index, write_index
                 )
+                if proto_device_index:
+                    for group, allocator in enumerate(allocators):
+                        num_blocks = -(-(past_length + query_length) // allocator.tokens_per_page)
+                        request_blocks = allocator.block_table[state.request_id]
+                        # Host-side bound check: the device expansion indexes these lists without one
+                        if len(request_blocks) < num_blocks:
+                            raise RuntimeError(f"Request {state.request_id} holds fewer blocks than its length needs")
+                        proto_block_starts[group].append(len(proto_blocks[group]))
+                        proto_blocks[group].extend(request_blocks[:num_blocks])
+
+            if self.mtp_mode:
+                # The MTP module pairs the hidden state of position p with the token at p + 1: the next query token
+                # of the request, the next prompt token of a split prefill, or a token sampled in this step
+                next_prompt_token = state.remaining_prefill_tokens[0] if state.remaining_prefill_tokens else 0
+                mtp_shift_ids.extend(state.tokens_to_process[1:] + [next_prompt_token])
+                src = [-1] * query_length
+                if future_state.has_new_token:
+                    row = len(logits_indices)
+                    has_draft = state.mtp_has_draft and query_length == _CB_MTP_QUERY
+                    if has_draft and _CB_MTP_MULTI:
+                        # gap3-mtpk: query token j pairs with the candidate token of verified row j
+                        for j in range(_CB_MTP_QUERY):
+                            src[j - _CB_MTP_QUERY] = j * mtp_num_rows + row
+                    elif has_draft:
+                        src[-2], src[-1] = row, mtp_num_rows + row  # first sampled token, then the bonus token
+                    else:
+                        src[-1] = row
+                    mtp_has_draft.append(int(has_draft))
+                    mtp_prev_draft.append(state.mtp_draft if state.mtp_draft is not None else 0)
+                    future_state.mtp_has_draft = has_draft
+                mtp_src.extend(src)
 
             # If the request has no remaining prefill tokens, it means the next token prediction is relevant
             if future_state.has_new_token:
                 logits_indices.append(cumulative_seqlens_q[-1] - 1)
+                if self.mtp_mode and future_state.mtp_has_draft:
+                    logits_indices[-1] -= _CB_MTP_QUERY - 1  # the row that verifies the first draft; the drafts' follow
                 state.tokens_to_process = [TMP_TOKEN_ID]
+                if _CB_MTP_MULTI:
+                    # gap3-mtpk: as below, for k drafts, in both batching modes: the drafts' rows are counted once the
+                    # host knows how many were accepted (asynchronous: the device takes the next query tokens)
+                    state.tokens_to_process = [0] * _CB_MTP_QUERY
+                    state.mtp_has_draft = True
+                    if future_state.mtp_has_draft:
+                        state.position_offset -= _CB_MTP_QUERY - 1
+                        state.mtp_pending_acc += 1
+                elif _CB_MTP_ASYNC:
+                    # gap3-mtpa: the request's next query tokens (last token, new draft) are taken on the device from this
+                    # step's outputs when it is scheduled in the next step; on the host they are placeholders (valid ids)
+                    state.tokens_to_process = [0, 0]
+                    state.mtp_has_draft = True
+                    if future_state.mtp_has_draft:
+                        # pessimistic: the draft's row is not counted until the host knows it was accepted
+                        state.position_offset -= 1
+                        state.mtp_pending_acc += 1
                 self.req_id_to_new_token_position[state.request_id] = logits_indices[-1]
 
             self.requests_in_batch.append(future_state)
@@ -428,8 +667,60 @@ class ContinuousBatchingIOs:
         # Scalar attribute update
         self.total_seqlen_q = cumulative_seqlens_q[-1]
 
+        # PROTOTYPE: one block table upload for the batch, and the bucket of the longest request (the prototype
+        # attention sizes its per-request key window with it, so it is part of the graph key)
+        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+            width = self.block_table.shape[-1]
+            proto_one_upload = self._proto_one_upload()
+            for allocator in allocators:
+                if not isinstance(allocator, MLACacheAllocator):
+                    raise RuntimeError("CB_PROTO_MLA_BLOCK_TABLE only handles MLA allocators")
+                pages_stride = allocator.block_physical_stride // allocator.tokens_per_page
+                request_blocks = [allocator.block_table[fs.state.request_id] for fs in requests_in_batch]
+                if proto_one_upload:
+                    # Same requests holding as many blocks as in the previous decode batch: the table is up to date
+                    padded_rows = self._get_num_sequences(use_padding=use_padding)
+                    signature = (padded_rows, [fs.state.request_id for fs in requests_in_batch], list(map(len, request_blocks)))
+                    if self._proto_block_table_signature.get(allocator.index) == signature:
+                        continue
+                    self._proto_block_table_signature[allocator.index] = signature
+                rows = []
+                for block_ids in request_blocks:
+                    if len(block_ids) > width:
+                        raise RuntimeError("A request holds more blocks than the block table is wide")
+                    rows.append([b * pages_stride for b in block_ids] + [-1] * (width - len(block_ids)))
+                if proto_one_upload:  # the padding requests too, so nothing has to be reset beforehand
+                    rows.extend([[-1] * width] * (padded_rows - len(rows)))
+                table = torch.tensor(rows, dtype=self.block_table.dtype)
+                if proto_one_upload and os.environ.get("CB_PROTO_ONE_UPLOAD_DEBUG") == "bt_blocking":
+                    self.block_table[allocator.index, : len(rows)].copy_(table)
+                elif proto_one_upload:
+                    # On the compute stream, so the step launched on that stream is ordered after the copy
+                    with stream_context(self.compute_stream):
+                        self.block_table[allocator.index, : len(rows)].copy_(table, non_blocking=True)
+                else:
+                    self.block_table[allocator.index, : len(rows)].copy_(table, non_blocking=True)
+            longest = max(self.max_length_k.values()) + (1 if _CB_MTP_ASYNC else 0)  # gap3-mtpa: a shift of +1
+            if _CB_MTP_MULTI:  # gap3-mtpk: a shift of up to k, and the k - 1 later draft passes
+                longest = max(self.max_length_k.values()) + 2 * _CB_MTP_K
+            self._proto_len_k_bucket = pad_to_pow2(longest, self.cache.max_decode_fast_path_length, 1024)
+
         # If needed, build the attention mask with the un-padded sequence lengths
-        if self.attention_mask is not None:
+        proto_device_mask = _PROTO_DEVICE_MASK != "0" and getattr(self.config, "sliding_window", None) is None
+        if self.attention_mask is not None and proto_device_mask and not 0 < self.num_q_tokens <= _PROTO_SKIP_MASK_MAX_Q:
+            k_len = self.num_q_tokens + self.max_kv_read
+            for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
+                if _PROTO_DEVICE_MASK == "check":
+                    build_attention_mask(self.attention_mask[layer_type], cumulative_seqlens_q, layer_type_seqlens_k, 1)
+                    expected = self.attention_mask[layer_type][0, 0, : self.num_q_tokens, :k_len].clone()
+                _proto_build_attention_mask_on_device(
+                    self.attention_mask[layer_type], cumulative_seqlens_q, layer_type_seqlens_k,
+                    self.num_q_tokens, k_len, self._proto_arange,
+                )
+                if _PROTO_DEVICE_MASK == "check":
+                    built = self.attention_mask[layer_type][0, 0, : self.num_q_tokens, :k_len]
+                    assert torch.equal(built, expected), "device-built attention mask differs from the per-request one"
+        elif self.attention_mask is not None and not self._proto_skip_mask_work():
             for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
                 sliding_window = (
                     getattr(self.config, "sliding_window", None) if layer_type == "sliding_attention" else 1
@@ -454,18 +745,61 @@ class ContinuousBatchingIOs:
         # tensors inside the loop.
         to_tensor = partial(torch.tensor, dtype=torch.int32, device=self.device)
 
-        # Those kwargs always have the same type regardless of the model
-        self.input_ids[: len(input_ids)] = to_tensor(input_ids)
-        self.position_ids[: len(position_ids)] = to_tensor(position_ids)
-        self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
-        self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
+        if self.mtp_mode:
+            # a placeholder token (-1) must never reach an embedding lookup: fail on the host, not on the device
+            if min(input_ids) < 0 or min(mtp_shift_ids) < 0:
+                raise RuntimeError("CB_MTP prototype: a request was scheduled with a placeholder token")
+            self.mtp_shift_ids[: len(mtp_shift_ids)] = to_tensor(mtp_shift_ids)
+            self.mtp_src[: len(mtp_src)] = to_tensor(mtp_src)
+            self.mtp_has_draft[: len(mtp_has_draft)] = to_tensor(mtp_has_draft)
+            self.mtp_prev_draft[: len(mtp_prev_draft)] = to_tensor(mtp_prev_draft)
 
-        # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
-        for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
+        if self.use_block_table and self._proto_one_upload():
+            # PROTOTYPE: the five small inputs of a decode batch as one host buffer and one copy. Rows follow the layout
+            # of the bulk tensor: input ids, position ids, cumulative query lengths, logits indices, cumulative key
+            # lengths. Everything is padded to the padded request count + 1, so no reset is needed beforehand.
+            ((layer_type, layer_type_seqlens_k),) = cumulative_seqlens_k.items()
             total_seqlen_k = layer_type_seqlens_k[-1]
             self.total_seqlen_k[layer_type] = total_seqlen_k
             layer_type_seqlens_k.extend(repeat(total_seqlen_k, fake_sequences))
-            self.cumulative_seqlens_k[layer_type][: len(layer_type_seqlens_k)] = to_tensor(layer_type_seqlens_k)
+            width = self.num_q_tokens + 1
+            if max(len(input_ids), len(cumulative_seqlens_q), len(layer_type_seqlens_k)) > width:
+                raise RuntimeError("Inconsistent sizes for the one-upload decode path")
+            if self.cumulative_seqlens_k[layer_type].data_ptr() != self._bulk_input_tensor[4].data_ptr():
+                raise RuntimeError("The one-upload decode path expects the key lengths in row 4 of the bulk tensor")
+            rows = [input_ids, position_ids, cumulative_seqlens_q, logits_indices, layer_type_seqlens_k]
+            bulk = torch.tensor([row + [0] * (width - len(row)) for row in rows], dtype=torch.int32)
+            # On the compute stream: the step is launched on that stream, so it is ordered after the copy. Issued on
+            # the current stream instead, the copy kernel races with the step (seen: stale inputs on a shared GPU)
+            if os.environ.get("CB_PROTO_ONE_UPLOAD_DEBUG") in ("sync", "verify", "bt_blocking"):
+                self._bulk_input_tensor[:5, :width].copy_(bulk)
+            else:
+                with stream_context(self.compute_stream):
+                    self._bulk_input_tensor[:5, :width].copy_(bulk, non_blocking=True)
+            if os.environ.get("CB_PROTO_ONE_UPLOAD_DEBUG") == "sync" and self.device.type == "cuda":
+                torch.cuda.current_stream(self.device).synchronize()
+            if os.environ.get("CB_PROTO_ONE_UPLOAD_DEBUG") == "verify" and self.device.type == "cuda":
+                torch.cuda.synchronize()
+                got = self._bulk_input_tensor[:5, :width].cpu()
+                assert torch.equal(got, bulk), "one-upload: device rows differ from the host buffer"
+                assert self.input_ids[: len(input_ids)].tolist() == input_ids
+                assert self.position_ids[: len(position_ids)].tolist() == position_ids
+                assert self.cumulative_seqlens_q[: len(cumulative_seqlens_q)].tolist() == cumulative_seqlens_q
+                assert self.logits_indices[: len(logits_indices)].tolist() == logits_indices
+                assert self.cumulative_seqlens_k[layer_type][: len(layer_type_seqlens_k)].tolist() == layer_type_seqlens_k
+        else:
+            # Those kwargs always have the same type regardless of the model
+            self.input_ids[: len(input_ids)] = to_tensor(input_ids)
+            self.position_ids[: len(position_ids)] = to_tensor(position_ids)
+            self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
+            self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
+
+            # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
+            for layer_type, layer_type_seqlens_k in cumulative_seqlens_k.items():
+                total_seqlen_k = layer_type_seqlens_k[-1]
+                self.total_seqlen_k[layer_type] = total_seqlen_k
+                layer_type_seqlens_k.extend(repeat(total_seqlen_k, fake_sequences))
+                self.cumulative_seqlens_k[layer_type][: len(layer_type_seqlens_k)] = to_tensor(layer_type_seqlens_k)
 
         # If we are not using the block table, we populate the write indices (and maybe the read indices)
         if not self.use_block_table:
@@ -473,14 +807,140 @@ class ContinuousBatchingIOs:
             for i, group_write_indices in enumerate(write_index):
                 self.write_index_storage[i, : len(group_write_indices)] = to_index_tensor(group_write_indices)
                 self.true_write_sizes[i] = len(group_write_indices)
-            if read_index is not None:
+            if read_index is not None and proto_device_index:
+                for i, allocator in enumerate(allocators):
+                    seqlens_k = cumulative_seqlens_k[allocator.layer_type][: self.num_request_in_batch + 1]
+                    self.true_read_sizes[i] = self._proto_expand_read_index(
+                        i, allocator, proto_blocks[i], proto_block_starts[i], seqlens_k
+                    )
+                    if _PROTO_DEVICE_INDEX == "check":
+                        expected = to_index_tensor(read_index[i])
+                        built = self.read_index_storage[i, : self.true_read_sizes[i]]
+                        assert torch.equal(built, expected), "device-built read index differs from the host one"
+            elif read_index is not None:
                 for i, group_read_indices in enumerate(read_index):
                     self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
                     self.true_read_sizes[i] = len(group_read_indices)
 
+        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE_CHECK and not (_CB_MTP_ASYNC or _CB_MTP_MULTI):  # rows shift on the device
+            self._proto_check_block_table_rows(requests_in_batch, use_padding)
+
+    def _proto_check_block_table_rows(self, requests_in_batch: list[FutureRequestState], use_padding: bool) -> None:
+        """PROTOTYPE, check mode: runs the attention's own row computation on the tensors the step will read (block
+        table, cumulative key lengths, length bucket) and asserts that every request writes to and reads from the rows
+        the allocator's index path would have used, and that every row is inside the smallest layer view."""
+        from ...models.glm_moe_dsa.modeling_glm_moe_dsa import _proto_block_table_row_state
+
+        num_sequences = self._get_num_sequences(use_padding=use_padding)
+        if _CB_MTP_BT:
+            return self._proto_check_block_table_token_rows(requests_in_batch, num_sequences)
+        for allocator in self.cache.cache_allocators.values():
+            page = allocator.tokens_per_page
+            last_safe_row = allocator.cache_tensor.shape[0] - allocator.tokens_per_block + page - 1
+            write_rows, rows_all, visible = _proto_block_table_row_state(
+                self.block_table[allocator.index, :num_sequences].to(self.cache.device),
+                self.cumulative_seqlens_k[allocator.layer_type][: num_sequences + 1].to(self.cache.device),
+                self._proto_len_k_bucket,
+                page,
+                last_safe_row,
+                allocator.write_trash_index,
+            )
+            write_rows, rows_all, visible = write_rows.cpu(), rows_all.cpu(), visible.cpu()
+            assert write_rows.shape[0] == num_sequences and rows_all.shape == (num_sequences, self._proto_len_k_bucket)
+            assert int(rows_all.min()) >= 0 and int(rows_all.max()) <= last_safe_row, "row outside the cache"
+            assert int(write_rows.min()) >= 0 and int(write_rows.max()) <= last_safe_row, "write row outside the cache"
+            for i, future_state in enumerate(requests_in_batch):
+                state = future_state.state
+                past_length = state.position_offset - 1  # the offset was already advanced by the query token
+                expected_write = allocator.get_write_indices(state.request_id, past_length, 1)
+                expected_read = allocator.get_read_indices(state.request_id, past_length, 1)
+                assert [int(write_rows[i])] == expected_write, f"write row of request {i} differs from the index path"
+                assert int(visible[i].sum()) == len(expected_read) and bool(visible[i, : len(expected_read)].all())
+                assert rows_all[i, : len(expected_read)].tolist() == expected_read, (
+                    f"read rows of request {i} differ from the index path"
+                )
+            # Padding requests see nothing and write to the trash row
+            assert not bool(visible[len(requests_in_batch) :].any())
+            assert bool((write_rows[len(requests_in_batch) :] == allocator.write_trash_index).all())
+        self._proto_checked_steps = getattr(self, "_proto_checked_steps", 0) + 1
+        if self._proto_checked_steps in (1, 10, 100, 1000) or self._proto_checked_steps % 5000 == 0:
+            print(f"BTCHECK ok steps={self._proto_checked_steps} requests={len(requests_in_batch)} "
+                  f"bucket={self._proto_len_k_bucket}", flush=True)
+    def _proto_check_block_table_token_rows(self, requests_in_batch: list[FutureRequestState], num_sequences: int):
+        """gap3-mtp prototype, check mode: `_proto_check_block_table_rows` when every request brings 1 + k query
+        tokens. Every query token must write to the row the allocator's index path gives it and see exactly the rows
+        of its request up to itself; padding tokens write to the trash row and see nothing."""
+        from ...models.glm_moe_dsa.modeling_glm_moe_dsa import _proto_block_table_token_state
+
+        num_tokens = self.num_q_tokens
+        cu_q = self.cumulative_seqlens_q[: num_sequences + 1]
+        for allocator in self.cache.cache_allocators.values():
+            page = allocator.tokens_per_page
+            last_safe_row = allocator.cache_tensor.shape[0] - allocator.tokens_per_block + page - 1
+            write_rows, rows_all, visible = _proto_block_table_token_state(
+                self.block_table[allocator.index, :num_sequences].to(self.cache.device),
+                cu_q.to(self.cache.device),
+                self.cumulative_seqlens_k[allocator.layer_type][: num_sequences + 1].to(self.cache.device),
+                self._proto_len_k_bucket,
+                page,
+                last_safe_row,
+                allocator.write_trash_index,
+                num_tokens,
+            )
+            write_rows, rows_all, visible = write_rows.cpu(), rows_all.cpu(), visible.cpu()
+            assert write_rows.shape[0] == num_tokens and rows_all.shape == (num_tokens, self._proto_len_k_bucket)
+            assert int(rows_all.min()) >= 0 and int(rows_all.max()) <= last_safe_row, "row outside the cache"
+            assert int(write_rows.min()) >= 0 and int(write_rows.max()) <= last_safe_row, "write row outside the cache"
+            t = 0
+            for future_state in requests_in_batch:
+                state, q = future_state.state, future_state.query_length
+                past_length = state.position_offset - q  # the offset was already advanced by the query tokens
+                expected_write = allocator.get_write_indices(state.request_id, past_length, q)
+                expected_read = allocator.get_read_indices(state.request_id, past_length, q)
+                assert write_rows[t : t + q].tolist() == expected_write, f"write rows of {state.request_id} differ"
+                for j in range(q):
+                    n = past_length + j + 1
+                    assert int(visible[t + j].sum()) == n and bool(visible[t + j, :n].all()), "causal visibility"
+                    assert rows_all[t + j, :n].tolist() == expected_read[:n], f"read rows of {state.request_id} differ"
+                t += q
+            assert not bool(visible[t:].any()) and bool((write_rows[t:] == allocator.write_trash_index).all())
+        self._proto_checked_steps = getattr(self, "_proto_checked_steps", 0) + 1
+        if self._proto_checked_steps in (1, 10, 100, 1000) or self._proto_checked_steps % 5000 == 0:
+            print(f"BTCHECK mtp ok steps={self._proto_checked_steps} requests={len(requests_in_batch)} "
+                  f"tokens={num_tokens} bucket={self._proto_len_k_bucket}", flush=True)
+
+    def mtp_k_outputs(self) -> torch.Tensor:
+        """gap3-mtpk prototype: the output rows of the step (see `num_output_rows`), on the host."""
+        return self.output_ids[:, : self.num_request_in_batch].cpu()
+
+    def prepare_mtp_batch_update(self) -> tuple[list, ...]:
+        """gap2-mtp prototype: per logits row, the first token and its logprob, the bonus token and its logprob,
+        whether the draft was accepted, the draft for the next step, the target logprob of the previous step's draft
+        and the drafter's logprob of the next draft."""
+        out = self.output_ids[:, : self.num_request_in_batch].cpu()
+        return (
+            out[0].tolist(),
+            out[1].contiguous().view(torch.float32).tolist(),
+            out[2].tolist(),
+            out[3].contiguous().view(torch.float32).tolist(),
+            out[4].tolist(),
+            out[5].tolist(),
+            out[6].contiguous().view(torch.float32).tolist(),
+            out[7].contiguous().view(torch.float32).tolist(),
+        )
+
     def _get_num_sequences(self, use_padding: bool) -> int:
         """Get the number of sequences for the current batch, accounting for padding if there is any."""
         if use_padding:
+            if self.mtp_mode and self.use_block_table:
+                # gap3-mtp prototype, see `_CB_MTP_BT`; "shadow" decode batches have one token per request
+                if _CB_MTP_BT:
+                    return self.num_q_tokens // _CB_MTP_QUERY
+                return min(self.num_q_tokens, self.max_requests_per_batch)
+            if self.mtp_mode:
+                # gap2-mtp prototype: a decoding request takes two query tokens, so the logits rows follow the number
+                # of requests (padded), not the number of query tokens. It joins the graph key
+                return pad_to_interval(self.num_request_in_batch, 64, self.max_requests_per_batch)
             return min(self.num_q_tokens, self.max_requests_per_batch)
         return self.num_request_in_batch
 
@@ -501,7 +961,7 @@ class ContinuousBatchingIOs:
             logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :num_sequences],
             cu_seq_lens_k={},
             max_length_k={},
-            attention_mask=None if self.attention_mask is None else {},
+            attention_mask=self._proto_no_mask_kwarg if self.attention_mask is None else {},
             read_index=[],
             write_index=[],
             cache=self.cache,
@@ -510,14 +970,26 @@ class ContinuousBatchingIOs:
             is_causal=self.attention_mask is None,  # False for SDPA and eager, True for flash
         )
 
+        is_prefill_batch = any(fs.query_length > 1 for fs in self.requests_in_batch)
+        if self.mtp_mode:
+            kwargs["mtp"] = {
+                "shift_ids": self.mtp_shift_ids[:q_size],
+                "src": self.mtp_src[:q_size],
+                "has_draft": self.mtp_has_draft[:num_sequences],
+                "prev_draft": self.mtp_prev_draft[:num_sequences],
+            }
+
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:  # TODO: add per-path padding
             self.max_length_q = q_size  # keep max_length_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q
             # Additionally, if there are CUDA graphs, we need to pad max_length_k so graph capture will work regardless
             # of the future Q / KV lengths of the next batches
             if not self.use_block_table and self.use_cuda_graph_varlen:
+                # WP prefill (bench only), off by default: batches that hold a prefill (some request brings more than
+                # one token) get a finer key-length bucket, so short prompts do not attend through 1024-wide lists
+                min_length_k = _PROTO_PREFILL_MIN_LEN_K if is_prefill_batch and _PROTO_PREFILL_MIN_LEN_K else 1024
                 self.max_length_k = {
-                    layer_type: pad_to_pow2(self.max_length_k[layer_type], self.cache.max_tokens_read, 1024)
+                    layer_type: pad_to_pow2(self.max_length_k[layer_type], self.cache.max_tokens_read, min_length_k)
                     for layer_type in self.max_length_k.keys()
                 }
 
@@ -540,6 +1012,8 @@ class ContinuousBatchingIOs:
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
             kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: num_sequences + 1]
             kwargs["max_length_k"][layer_type] = 1 if self.use_block_table else self.max_length_k[layer_type]
+            if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+                kwargs["max_length_k"][layer_type] = self._proto_len_k_bucket
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
                 kwargs["attention_mask"][layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
@@ -558,9 +1032,13 @@ class ContinuousBatchingIOs:
 
     def _get_graph_key(self) -> tuple[int, ...]:
         # Keys for decode fast path
+        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+            return (self.num_q_tokens, self._proto_len_k_bucket)
         if self.use_block_table:
             return (self.num_q_tokens,)
         # Keys for varlen path
+        if self.mtp_mode:
+            return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values(), self._get_num_sequences(True))
         return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values())
 
     def get_graph(self, prefix: str = "") -> torch.cuda.CUDAGraph | None:
@@ -575,6 +1053,10 @@ class ContinuousBatchingIOs:
         key = self._get_graph_key()
         self.graphs.set_graph(key, graph)
         logger.info(f"Setting graph for {key = }")
+
+    def clear_graphs(self) -> None:
+        """Drops the captured CUDA graphs, so the next batches capture them again."""
+        self.graphs = CudaGraphBuffer()
 
 
 class HostDeviceIOPair:
@@ -731,7 +1213,15 @@ class ContinuousBatchingAsyncIOs:
         io_pair.host_io.prepare_batch_tensors(
             requests_in_batch, logits_processors, use_decode_fast_path, num_q_tokens, max_kv_read, use_padding
         )
-        io_pair.host_io.carry_over_ids.copy_(self.infer_carry_over_ids())
+        carry_over_ids = self.infer_carry_over_ids()
+        if _CB_MTP_ASYNC and not io_pair.host_io.use_block_table:
+            # gap3-mtpa: only the block table path takes the shift of an accepted draft on the device; a varlen batch must
+            # not hold a request whose last step is still in flight (the scheduler keeps prefills apart from decodes)
+            prev_positions = self.io_pairs[1 - self.current_pair].host_io.req_id_to_new_token_position
+            carried = [r for r in io_pair.host_io.req_id_to_new_token_position if r in prev_positions and not r.startswith("__warmup_")]
+            if carried:
+                raise RuntimeError(f"CB_MTP_ASYNC: varlen batch with {len(carried)} requests whose last step is in flight")
+        io_pair.host_io.carry_over_ids.copy_(carry_over_ids)
 
     def infer_carry_over_ids(self) -> torch.Tensor:
         """Infers the ids of the tokens to carry over from batch N to batch N+1. In asynchronous batching mode, we can
@@ -808,6 +1298,11 @@ class ContinuousBatchingAsyncIOs:
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
         self.io_pairs[self.current_pair].device_io.set_graph(graph)
 
+    def clear_graphs(self) -> None:
+        """Drops the CUDA graphs captured by both IO pairs, so the next batches capture them again."""
+        for io_pair in self.io_pairs:
+            io_pair.device_io.clear_graphs()
+
     @property
     def use_block_table(self) -> bool:
         return self.io_pairs[self.current_pair].host_io.use_block_table
@@ -833,6 +1328,23 @@ class ContinuousBatchingAsyncIOs:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()
+
+    def prepare_mtp_batch_update(self) -> tuple[list, ...]:
+        """gap3-mtpa prototype: the MTP output rows of the step whose outputs were just retrieved."""
+        io_pair = self.io_pairs[self.current_pair]
+        io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]
+        return io_pair.host_io.prepare_mtp_batch_update()
+
+    def mtp_k_outputs(self) -> torch.Tensor:
+        """gap3-mtpk prototype: the output rows of the step whose outputs were just retrieved, on the host."""
+        io_pair = self.io_pairs[self.current_pair]
+        io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]
+        return io_pair.host_io.mtp_k_outputs()
+
+    @property
+    def requests_in_batch(self) -> list[FutureRequestState]:
+        """gap3-mtpa prototype: the requests of the step whose outputs were just retrieved."""
+        return self.io_pairs[self.current_pair].host_io.requests_in_batch
 
     def reset(self) -> None:
         """Reset all state for a new generation session. Used in persistent mode between sessions."""

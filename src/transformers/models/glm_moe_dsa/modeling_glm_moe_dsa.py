@@ -41,7 +41,130 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from . import _fuse_compile
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
+
+
+# --- WP glue (bench only): fewer tiny kernels per decode step, each change behind an env var that defaults to off ------
+import os as _glue_os
+
+# [gap2 prototype] the decoder layer fuses each TP all-reduce with the residual add and the RMSNorm that follow it
+_TP_FUSED_ALL_REDUCE_NORM = _glue_os.environ.get("HF_TP_ALL_REDUCE", "nccl") == "flashinfer_fused"
+if _TP_FUSED_ALL_REDUCE_NORM:
+    from ...distributed.parallel_utils import tp_all_reduce_add_rms_norm
+_GLUE_RMSNORM = _glue_os.environ.get("GLUE_RMSNORM", "0") == "1"  # F.rms_norm: 1 kernel instead of 8
+_GLUE_ROPE = _glue_os.environ.get("GLUE_ROPE", "0") == "1"  # rotary written in place: 4 kernels per tensor instead of 7
+_GLUE_ROUTER = _glue_os.environ.get("GLUE_ROUTER", "0") == "1"  # no group selection when there is a single group
+# cache writes of the prototype kept out of torch.compile graphs, like `PagedAttentionCache.update` upstream: traced, an
+# in-place write into a view of the cache pool is functionalized into a copy of the whole view
+_GLUE_OPAQUE_CACHE_WRITE = _glue_os.environ.get("GLUE_OPAQUE_CACHE_WRITE", "0") == "1"
+
+# --- gap3 gemm WP (bench only, off by default): fewer, larger dense GEMMs in decode ---------------------------------
+# GEMM_FUSE_QKV_A=1    q_a_proj + kv_a_proj_with_mqa (+ indexer.wk on the layers with their own indexer) in one GEMM
+# GEMM_FUSE_GATE_UP=1  gate_proj + up_proj of the shared experts and of the dense MLPs in one GEMM
+#   The weights become row views of one [sum of out, hidden] buffer per layer, built once at load (one copy, no extra
+#   memory), so in-place updates of the parameters (optimizer step, in-place LoRA merge, load_state_dict) reach the
+#   fused GEMM. The fused GEMM only runs without autograd: training keeps the per-module path, its TP hooks
+#   (MlaKvAProjParallel's gradient all-reduce of k_rot) and any PEFT wrapper. A module replaced after load (PEFT
+#   wrapping) or a weight no longer a view of the buffer turns the fused path off for that layer.
+# GEMM_ROUTER_BF16=1   router logits as bf16 x bf16 -> fp32 (`torch.mm(..., out_dtype=float32)`) instead of an fp32
+#   GEMM on fp32 copies of the hidden states and of the bf16 weight, made on every call: same products (bf16 values
+#   are exact in fp32 and in TF32), only the summation order changes.
+_GEMM_FUSE_QKV_A = _glue_os.environ.get("GEMM_FUSE_QKV_A", "0") == "1"
+_GEMM_FUSE_GATE_UP = _glue_os.environ.get("GEMM_FUSE_GATE_UP", "0") == "1"
+_GEMM_ROUTER_BF16 = _glue_os.environ.get("GEMM_ROUTER_BF16", "0") == "1"
+
+
+def _gemm_local(tensor):
+    from torch.distributed.tensor import DTensor
+
+    return tensor.to_local() if isinstance(tensor, DTensor) else tensor
+
+
+def _router_weight_as(weight, dtype):
+    """[scratch, bench only] Upstream keeps the router weight in fp32 (`_keep_in_fp32_modules_strict`); the inference
+    fast paths run the router as a bf16 GEMM with fp32 output. GLM-5.3 ships the weight in bf16, so the cast is exact
+    until the weight is trained in fp32. Cast per call (6 MB per layer), never cached: a trainer's update is always seen."""
+    weight = _gemm_local(weight)
+    return weight if weight.dtype == dtype else weight.to(dtype)
+
+
+@torch.no_grad()
+def _gemm_fuse_rows(linears):
+    """Turns the weights of `linears` (same input size, no bias, 16-bit) into row views of one new [sum of out, in]
+    buffer and returns `(buffer, linears, weight objects)`, or None when they cannot be fused. Under tensor parallel
+    the buffer holds this rank's shards (row-sharded or replicated weights alike) and each DTensor parameter is
+    rebuilt around its view."""
+    from torch.distributed.tensor import DTensor
+
+    locals_ = [_gemm_local(lin.weight) for lin in linears]
+    if any(lin.bias is not None for lin in linears) or any(w.element_size() != 2 or not w.is_cuda for w in locals_):
+        return None
+    if len({w.dtype for w in locals_}) != 1 or len({w.shape[1] for w in locals_}) != 1:
+        return None
+    buffer = torch.cat(locals_)
+    offset = 0
+    for lin, local in zip(linears, locals_):
+        view = buffer[offset : offset + local.shape[0]]
+        offset += local.shape[0]
+        weight = lin.weight
+        if isinstance(weight, DTensor):
+            view = DTensor.from_local(
+                view, weight.device_mesh, weight.placements, run_check=False, shape=weight.shape, stride=weight.stride()
+            )
+        lin.weight = nn.Parameter(view, requires_grad=weight.requires_grad)
+    return buffer, tuple(linears), tuple(lin.weight for lin in linears)
+
+
+def _gemm_fused_weight(module, key, current):
+    """The fused buffer of `module` if its fused GEMM may run now: no autograd, the `current` modules are the ones
+    fused at load (not wrapped since, by PEFT for instance), with the same weight objects, each still a view of the
+    buffer."""
+    fused = module.__dict__.get(key)
+    if fused is None or torch.is_grad_enabled():
+        return None
+    buffer, linears, weights = fused
+    offset = 0
+    for lin, now, weight in zip(linears, current, weights):
+        if now is not lin or lin.weight is not weight:
+            return None
+        local = _gemm_local(weight)
+        if local.data_ptr() != buffer.data_ptr() + offset * buffer.stride(0) * buffer.element_size():
+            return None
+        offset += local.shape[0]
+    return buffer
+
+
+def _gemm_fuse_projections(model) -> int:
+    """Load-time half of GEMM_FUSE_QKV_A / GEMM_FUSE_GATE_UP (called after the FP8 dense linears became bf16)."""
+    fused = 0
+    for module in model.modules():
+        if _GEMM_FUSE_QKV_A and isinstance(module, GlmMoeDsaAttention):
+            linears = [module.q_a_proj, module.kv_a_proj_with_mqa]
+            if module.indexer is not None:
+                linears.append(module.indexer.wk)
+            result = _gemm_fuse_rows(linears)
+            if result is not None:
+                module._gemm_qkv_a = result
+                module._gemm_qkv_a_sizes = [_gemm_local(lin.weight).shape[0] for lin in linears]
+                fused += 1
+        if _GEMM_FUSE_GATE_UP and isinstance(module, GlmMoeDsaMLP):
+            result = _gemm_fuse_rows([module.gate_proj, module.up_proj])
+            if result is not None:
+                module._gemm_gate_up = result
+                fused += 1
+    return fused
+
+
+@torch.compiler.disable
+def _glue_write_latents(kv_latent_cache, rotated_key_cache, write_index, k_pass, k_rot):
+    kv_latent_cache.index_copy_(0, write_index, k_pass)
+    rotated_key_cache.index_copy_(0, write_index, k_rot)
+
+
+@torch.compiler.disable
+def _glue_update_indexer(cache, k, layer_idx):
+    return cache.update_indexer(k, layer_idx)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -55,6 +178,9 @@ class GlmMoeDsaRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if _GLUE_RMSNORM:
+            # fused native kernel, accumulates in fp32 and rounds once
+            return F.rms_norm(hidden_states, (hidden_states.shape[-1],), self.weight, self.variance_epsilon)
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
@@ -145,6 +271,19 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     q1, q2 = q[..., 0::2], q[..., 1::2]
     k1, k2 = k[..., 0::2], k[..., 1::2]
 
+    if _GLUE_ROPE:
+        # same rotation written straight into the output halves: no temporaries, no cat
+        half = cos.shape[-1]
+        embeds = []
+        for x1, x2, x in ((q1, q2, q), (k1, k2, k)):
+            out = x.new_empty(torch.broadcast_shapes(x1.shape, cos.shape)[:-1] + (2 * half,))
+            torch.mul(x1, cos, out=out[..., :half])
+            out[..., :half].addcmul_(x2, sin, value=-1)
+            torch.mul(x2, cos, out=out[..., half:])
+            out[..., half:].addcmul_(x1, sin)
+            embeds.append(out)
+        return embeds[0], embeds[1]
+
     q_embed = torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
     k_embed = torch.cat([k1 * cos - k2 * sin, k2 * cos + k1 * sin], dim=-1)
     return q_embed, k_embed
@@ -215,7 +354,8 @@ class GlmMoeDsaIndexer(nn.Module):
         q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
         q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
+        wk_out = self.__dict__.pop("_gemm_wk_out", None)
+        k = self.k_norm(self.wk(hidden_states) if wk_out is None else wk_out).unsqueeze(2)  # [B, S, 1, D]
         k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
         # GLM-MoE-DSA uses interleaved RoPE in the indexer
@@ -294,6 +434,491 @@ def yarn_apply_mscale(rope_parameters, scaling):
             scaling = scaling * mscale * mscale
     return scaling
 
+
+
+# --- PROTOTYPE (bench only, not for upstream): absorbed sparse MLA straight on CB's latent cache rows -------------------
+import os as _os
+
+_PROTO_SPARSE_MLA = _os.environ.get("PROTO_SPARSE_MLA", "1") == "1"  # on by default in this scratch tree
+_flash_mla = None
+
+
+# WP train (training with pause + release): how the absorbed attention gets kv_b_proj's weight. Unset: the phase-1
+# behaviour (a tensor cached on the module at first use: a view of a bf16 weight, a copy of an fp8 one; a PEFT adapter
+# on kv_b_proj is ignored and a parameter rebound to a new tensor is never seen). In every mode below a bf16 weight is
+# read live (a view, nothing kept across forwards) and an fp8 one, frozen, is dequantized once per parameter object.
+#   TRAIN_FIX_KV_B=delta    LoRA adapters enter as low-rank terms of the two absorbed products, inside the forward (so
+#                           inside CUDA graphs, which read A and B by address: in-place updates are seen without any
+#                           hook, and no merged weight is rounded to bf16):
+#                               q_abs += s (q B_uk) A          out += s (latent A^T) B_uv
+#   TRAIN_FIX_KV_B=merge    the merged weight W + s B A is recomputed inside every forward (2-4 kernels per layer on
+#                           [out, kv_lora], whatever the batch).
+#   TRAIN_FIX_KV_B=refresh  the merged weight lives in a buffer owned by the module, recomputed in place (same address,
+#                           captured graphs stay valid) by `_proto_refresh_derived_weights`, which CB calls when a pause
+#                           is released. Costs nothing per decode step.
+_TRAIN_FIX_KV_B = _os.environ.get("TRAIN_FIX_KV_B", "")
+
+
+def _train_kv_b_adapters(module):
+    """Active, unmerged LoRA adapters of kv_b_proj as (A [r, kv_lora], B [out, r], scaling)."""
+    lin = module.kv_b_proj
+    if not hasattr(lin, "base_layer") or lin.merged or lin.disable_adapters:
+        return []
+    adapters = []
+    for name in lin.active_adapters:
+        if name not in lin.lora_A:
+            continue
+        if lin.use_dora.get(name, False) or lin.lora_B[name].bias is not None:
+            raise RuntimeError("The absorbed attention only handles plain LoRA adapters on kv_b_proj")
+        a, b = lin.lora_A[name].weight, lin.lora_B[name].weight
+        # under tensor parallelism PEFT shards B like the base weight (rows, Shard(0)) and keeps A whole: this rank's
+        # rows of B are the ones of its heads. The local tensors share the parameters' storage (graphs read them live)
+        a = a.to_local() if hasattr(a, "to_local") else a
+        b = b.to_local() if hasattr(b, "to_local") else b
+        adapters.append((a, b, lin.scaling[name]))
+    return adapters
+
+
+def _train_kv_b_effective(module, with_adapters=True):
+    """bf16 [out, kv_lora] effective weight of kv_b_proj on this rank, and whether it is the live parameter itself."""
+    lin = module.kv_b_proj
+    base = lin.base_layer if hasattr(lin, "base_layer") else lin  # PEFT wraps the linear and keeps it as base_layer
+    weight = base.weight.to_local() if hasattr(base.weight, "to_local") else base.weight
+    if weight.element_size() == 1:  # fp8: frozen, dequantized once per parameter object
+        cached = module.__dict__.get("_train_kv_b_fp8")
+        if cached is None or cached[0] is not base.weight:
+            s = base.weight_scale_inv
+            s = s.to_local() if hasattr(s, "to_local") else s
+            bn, bk = base.block_size
+            s = s.float().repeat_interleave(bn, 0)[: weight.shape[0]].repeat_interleave(bk, 1)[:, : weight.shape[1]]
+            cached = (base.weight, (weight.float() * s).to(torch.bfloat16))
+            module._train_kv_b_fp8 = cached
+        weight = cached[1]
+    live = weight.dtype == torch.bfloat16 and weight.element_size() > 1 and base.weight.element_size() > 1
+    effective = weight.to(torch.bfloat16)
+    if with_adapters:
+        for a, b, scaling in _train_kv_b_adapters(module):
+            if b.shape[0] != effective.shape[0]:
+                raise RuntimeError(
+                    f"LoRA B of kv_b_proj has {b.shape[0]} rows, this rank's weight {effective.shape[0]}: adapters on "
+                    "a tensor-parallel shard are not handled"
+                )
+            effective = effective + ((b @ a) * scaling).to(torch.bfloat16)
+            live = False
+    return effective, live
+
+
+@torch.no_grad()
+def _proto_refresh_derived_weights(model) -> int:
+    """TRAIN_FIX_KV_B=refresh: recompute, in place, every merged kv_b_proj buffer. Called outside the generation loop
+    (CB calls it when a pause is released). Returns the number of buffers rewritten."""
+    refreshed = 0
+    for module in model.modules():
+        if "_proto_w_kv_b" not in module.__dict__:
+            continue
+        effective, live = _train_kv_b_effective(module)
+        shape = (-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+        buffer = module._proto_w_kv_b
+        if live:
+            if buffer.data_ptr() != effective.data_ptr():  # the adapters are gone, or the parameter was rebound
+                module._proto_w_kv_b = effective.view(shape)
+                module._train_kv_b_moved = True
+        elif buffer.shape == effective.view(shape).shape and not module.__dict__.get("_train_kv_b_is_view", False):
+            buffer.copy_(effective.view(shape))
+            refreshed += 1
+        else:  # was a view of the parameter, now needs its own buffer: a new address, graphs must be dropped
+            module._proto_w_kv_b = effective.view(shape).clone()
+            module._train_kv_b_moved = True
+            refreshed += 1
+        module._train_kv_b_is_view = live
+    return refreshed
+
+
+def _proto_kv_b_dequantized(module):
+    """kv_b_proj as bf16 [heads, nope + v, kv_lora], dequantized once (fp8 block scales or plain weight)."""
+    if _TRAIN_FIX_KV_B in ("delta", "merge"):
+        effective, _ = _train_kv_b_effective(module, with_adapters=_TRAIN_FIX_KV_B == "merge")
+        return effective.view(-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+    if _TRAIN_FIX_KV_B == "refresh":
+        w = module.__dict__.get("_proto_w_kv_b")
+        if w is None:
+            effective, live = _train_kv_b_effective(module)
+            w = effective.view(-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+            w = w if live else w.clone()
+            module._proto_w_kv_b, module._train_kv_b_is_view = w, live
+        return w
+    w = getattr(module, "_proto_w_kv_b", None)
+    if w is None:
+        lin = module.kv_b_proj
+        weight = lin.weight.to_local() if hasattr(lin.weight, "to_local") else lin.weight
+        if weight.element_size() == 1:
+            s = lin.weight_scale_inv
+            s = s.to_local() if hasattr(s, "to_local") else s
+            bn, bk = lin.block_size
+            s = s.float().repeat_interleave(bn, 0)[: weight.shape[0]].repeat_interleave(bk, 1)[:, : weight.shape[1]]
+            weight = weight.float() * s
+        w = weight.to(torch.bfloat16).view(-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+        module._proto_w_kv_b = w
+    return w
+
+
+_PROTO_PER_QUERY_INDEXER = _os.environ.get("PROTO_PER_QUERY_INDEXER", "0") == "1"
+# When every request's context fits in index_topk, the indexer selects all visible tokens whatever the scores: only
+# its keys need caching (for later, longer contexts), the query projection, scoring and top-k are skipped
+_PROTO_INDEXER_SKIP = _os.environ.get("PROTO_INDEXER_SKIP", "0") == "1"
+# WP prefill (bench only): batches above 512 query tokens (prefill) also take the per-request path, so nothing reads
+# the engine's [M, N + M] mask any more and the indexer never scores a query against another request's keys
+_PROTO_PREFILL = _os.environ.get("PROTO_PREFILL", "0") == "1"
+# WP prefill (bench only): fp32 GEMMs on tensor cores (TF32). The fp32 GEMMs of this model (router, indexer scores) take
+# bf16 values cast to fp32, which TF32's 10-bit mantissa holds exactly, so only the summation order changes
+if _os.environ.get("PROTO_TF32", "0") == "1":
+    torch.backends.cuda.matmul.allow_tf32 = True
+# WP train: the same gain without the process-wide switch (which also reaches every fp32 matmul of a trainer in the
+# process, forward and backward). Forwards without gradients (the engine's) compute the router logits and the indexer
+# scores as bf16 GEMMs with fp32 output: the operands are bf16 values either way, the products are exact and the sum
+# accumulates in fp32, so only the summation order changes. Forwards with gradients keep the fp32 GEMMs.
+_PROTO_TF32_SCOPED = _os.environ.get("PROTO_TF32", "0") == "scoped"
+# [scratch, bench only] experts WP: PROTO_EXPERTS_TRTLLM_ROUTING=1 (see integrations/finegrained_fp8.py)
+from ...integrations.finegrained_fp8 import _PROTO_EXPERTS_TRTLLM_ROUTING  # noqa: E402
+from ...integrations.finegrained_fp8 import proto_trtllm_moe_routing as _proto_trtllm_moe_routing  # noqa: E402
+
+
+def _proto_scores_bf16(q, keys):
+    """[M, H, D] x [M, K, D] -> fp32 [M, H, K], bf16 operands, fp32 accumulation and output."""
+    return torch.bmm(q.to(torch.bfloat16), keys.to(torch.bfloat16).transpose(1, 2), out_dtype=torch.float32)
+# WP prefill (bench only): when a prefill batch has to score (some context longer than index_topk), one Triton launch
+# computes the masked scores of the packed batch (`integrations/_proto_mqa_kernels.py`) instead of gathering every
+# query's keys into [M, max_k, D] and scoring in fp32
+_PROTO_PREFILL_MQA = _os.environ.get("PROTO_PREFILL_MQA", "0") == "1"
+_PROTO_PREFILL_MQA_SORTED = _os.environ.get("PROTO_PREFILL_MQA_SORTED", "0") == "1"
+# WP prefill (bench only): give FlashMLA's sparse kernel the number of valid entries of every list (`topk_length`), so
+# its time follows the keys a query really attends to instead of the padded list width. Same output, bit for bit
+_PROTO_TOPK_LENGTH = _os.environ.get("PROTO_TOPK_LENGTH", "0") == "1"
+# check only: prefill batches score even when every context fits in index_topk, so (with sorted lists) their lists
+# come in the order of the packed indexer and outputs can be compared bit for bit with the unpatched prefill
+_PROTO_PREFILL_NOSKIP = _os.environ.get("PROTO_PREFILL_NOSKIP", "0") == "1"
+
+
+def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k):
+    """The indexer's scores, but each query only scores the keys of its own request it can see (causal), gathered
+    into [M, max_k] instead of scoring the whole packed batch. Returns top-k packed positions and their validity."""
+    batch_size, seq_len, _ = hidden_states.shape
+    cos, sin = position_embeddings
+    skip_scoring = _PROTO_INDEXER_SKIP and max_k <= indexer.index_topk
+    if _PROTO_PREFILL_NOSKIP and seq_len > 512:
+        skip_scoring = False
+    wk_out = indexer.__dict__.pop("_gemm_wk_out", None)
+    k = indexer.k_norm(indexer.wk(hidden_states) if wk_out is None else wk_out).unsqueeze(2)
+    k_rot, k_pass = torch.split(k, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
+    if skip_scoring:
+        # rotate the keys alone (the query half of the rotation helper is discarded)
+        _, k_rot = apply_rotary_pos_emb_interleave(k_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = None
+    else:
+        q = indexer.wq_b(q_resid).view(batch_size, seq_len, indexer.n_heads, indexer.head_dim)
+        q_rot, q_pass = torch.split(
+            q, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1
+        )
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot, q_pass], dim=-1)[0]  # [M, H, D]
+    k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [1, M, D]
+    if _GLUE_OPAQUE_CACHE_WRITE:
+        keys = _glue_update_indexer(cache, k, indexer.layer_idx)[0]
+    else:
+        keys = cache.update_indexer(k, indexer.layer_idx)[0]  # [N, D], the packed context (past + new)
+
+    num_tokens, device = seq_len, hidden_states.device
+    tok = torch.arange(num_tokens, device=device)
+    num_req = cu_q.shape[0] - 1
+    req = torch.searchsorted(cu_q[1:].contiguous(), tok, right=True)
+    real = req < num_req  # padded query tokens belong to no request
+    req = req.clamp(max=num_req - 1)
+    q_start, k_start = cu_q[req], cu_k[req]
+    past = (cu_k[req + 1] - k_start) - (cu_q[req + 1] - q_start)
+    n_visible = torch.where(real, past + (tok - q_start) + 1, 0)
+    offs = torch.arange(max_k, device=device)
+    pos = (k_start[:, None] + offs[None]).clamp(max=keys.shape[0] - 1)  # [M, max_k]
+    visible = offs[None] < n_visible[:, None]
+    num_selected = min(indexer.index_topk, max_k)
+    # valid entries of each query's list; with PROTO_TOPK_LENGTH they are always the first ones of the list
+    lengths = n_visible.clamp(min=0, max=num_selected).to(torch.int32)
+    if skip_scoring:
+        return pos, visible, lengths
+    if _PROTO_PREFILL_MQA and seq_len > 512:
+        from ...integrations._proto_mqa_kernels import mqa_logits_masked
+
+        # each query sees the packed keys [lo, hi) of its own request; padded queries see nothing
+        lo = torch.where(real, k_start, 0).to(torch.int32)
+        hi = (lo + n_visible).to(torch.int32)
+        weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
+        weights = weights * (indexer.n_heads**-0.5 * indexer.softmax_scale)
+        logits = mqa_logits_masked(q.contiguous(), keys, weights, lo, hi)  # [M, N], -inf outside [lo, hi)
+        index_scores = logits.gather(1, pos).masked_fill(~visible, float("-inf"))  # [M, max_k]
+        # the kernel takes an unordered list; PROTO_PREFILL_MQA_SORTED=1 keeps the order of the torch path (checks)
+        top = index_scores.topk(num_selected, dim=-1, sorted=_PROTO_PREFILL_MQA_SORTED).indices
+        return _proto_selected(pos, visible, top, n_visible, num_selected, lengths)
+    if _PROTO_TF32_SCOPED:
+        scores = F.relu(_proto_scores_bf16(q, keys[pos]) * indexer.softmax_scale)
+    else:
+        scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys[pos].float()) * indexer.softmax_scale)
+    weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
+    index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
+    index_scores = index_scores.masked_fill(~visible, float("-inf"))
+    top = index_scores.topk(num_selected, dim=-1).indices
+    return _proto_selected(pos, visible, top, n_visible, num_selected, lengths)
+
+
+def _proto_selected(pos, visible, top, n_visible, num_selected, lengths):
+    """Selected packed positions and their validity from the top-k of each query's window."""
+    positions, allowed = pos.gather(-1, top), visible.gather(-1, top)
+    if _PROTO_TOPK_LENGTH:
+        # a query that sees at most `num_selected` keys selects them all: list them in window order, so that the valid
+        # entries of every list are its first `lengths` ones (the top-k of a longer window has no invalid entry)
+        partial = (n_visible <= num_selected)[:, None]
+        positions = torch.where(partial, pos[:, :num_selected], positions)
+        allowed = torch.where(partial, visible[:, :num_selected], allowed)
+    return positions, allowed, lengths
+
+
+def _proto_block_table_row_state(table, cu_k, max_k, page, last_safe_row, write_trash_index):
+    """PROTOTYPE of the engine work package: the physical rows of a decode batch from CB's block table. Token `o` of a
+    request lives at row `block_table[request, o // page] * page + o % page` of the layer's view. Returns the row each
+    request writes its new token to ([R]), the rows of its first `max_k` tokens ([R, max_k]) and which of them exist.
+    Every row is clamped to [0, last_safe_row], so a wrong table can only give a wrong result."""
+    table = table.long()  # [R, max_blocks], -1 for unused entries
+    cu_k = cu_k.long()  # [R + 1]
+    seqlen_k = cu_k[1:] - cu_k[:-1]  # cached tokens + the new one, 0 for padding requests
+    new_offset = (seqlen_k - 1).clamp(min=0)
+    new_page = table.gather(1, (new_offset // page).clamp(max=table.shape[1] - 1)[:, None]).squeeze(1)
+    write_rows = torch.where(
+        (seqlen_k > 0) & (new_page >= 0), new_page * page + new_offset % page, write_trash_index
+    ).clamp(0, last_safe_row)
+    offsets = torch.arange(max_k, device=table.device)
+    pages = table[:, (offsets // page).clamp(max=table.shape[1] - 1)]  # [R, max_k]
+    visible = (offsets[None] < seqlen_k[:, None]) & (pages >= 0)
+    rows_all = torch.where(visible, pages * page + offsets % page, 0).clamp(0, last_safe_row)
+    return write_rows, rows_all, visible
+
+
+# gap3-mtp prototype (bench only): with CB_MTP=spec a block-table decode batch holds 1 + k query tokens per request (the
+# request's last token, then its drafts), so the rows are computed per query token instead of per request
+_CB_MTP_SPEC = _os.environ.get("CB_MTP", "") == "spec"
+
+
+def _proto_block_table_token_state(table, cu_q, cu_k, max_k, page, last_safe_row, write_trash_index, num_tokens):
+    """gap3-mtp prototype: `_proto_block_table_row_state` for a decode batch whose requests bring several query tokens
+    (`cu_q`). Query token `t` of request `r` sits at offset `seqlen_k[r] - q_len[r] + (t - cu_q[r])` of its request; it
+    writes its own row and sees the request's tokens up to itself (causal). Returns the write row of every query token
+    ([M]), the rows of the first `max_k` tokens of its request ([M, max_k]) and which of them it sees. Tokens past the
+    last request (padding) write to the trash row and see nothing. Every row is clamped to [0, last_safe_row]."""
+    table = table.long()  # [R, max_blocks], -1 for unused entries
+    cu_q, cu_k = cu_q.long(), cu_k.long()  # [R + 1]
+    num_requests = table.shape[0]
+    tok = torch.arange(num_tokens, device=table.device)
+    req = torch.searchsorted(cu_q[1:].contiguous(), tok, right=True)  # [M], num_requests past the last request
+    real = req < num_requests
+    req = req.clamp(max=num_requests - 1)
+    seqlen_k = cu_k[req + 1] - cu_k[req]
+    offset = seqlen_k - (cu_q[req + 1] - cu_q[req]) + (tok - cu_q[req])  # position of the token in its request
+    real = real & (seqlen_k > 0) & (offset >= 0)
+    offset = offset.clamp(min=0)
+    request_table = table[req]  # [M, max_blocks]
+    new_page = request_table.gather(1, (offset // page).clamp(max=table.shape[1] - 1)[:, None]).squeeze(1)
+    write_rows = torch.where(real & (new_page >= 0), new_page * page + offset % page, write_trash_index).clamp(
+        0, last_safe_row
+    )
+    offsets = torch.arange(max_k, device=table.device)
+    pages = request_table[:, (offsets // page).clamp(max=table.shape[1] - 1)]  # [M, max_k]
+    n_visible = torch.where(real, offset + 1, 0)
+    visible = (offsets[None] < n_visible[:, None]) & (pages >= 0)
+    rows_all = torch.where(visible, pages * page + offsets % page, 0).clamp(0, last_safe_row)
+    return write_rows, rows_all, visible
+
+
+def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
+                            prev_topk_indices, kwargs):
+    """PROTOTYPE of the engine work package: a decode batch (one query token per request, token j belongs to request
+    j; with CB_MTP=spec, 1 + k query tokens per request, see `_proto_block_table_token_state`) served from CB's block
+    table. Writes the new latents (and indexer keys), and returns the physical rows of the
+    top-k tokens of each query, -1 for empty slots. Neither the read index nor the mask is used."""
+    page = allocator.tokens_per_page
+    kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
+    state = getattr(cache, "_proto_bt_state", None)
+    if module.layer_idx == allocator.layer_indices[0] or state is None:
+        # the smallest layer view is the one of the group's last layer, which starts `tokens_per_block - page` rows
+        # later than the first
+        last_safe_row = allocator.cache_tensor.shape[0] - allocator.tokens_per_block + page - 1
+        if _CB_MTP_SPEC:  # gap3-mtp prototype: 1 + k query tokens per request
+            state = _proto_block_table_token_state(
+                kwargs["block_table"][allocator.index],
+                kwargs["cu_seq_lens_q"],
+                kwargs["cu_seq_lens_k"][allocator.layer_type],
+                kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
+                page,
+                last_safe_row,
+                allocator.write_trash_index,
+                hidden_states.shape[1],
+            )
+        else:
+            state = _proto_block_table_row_state(
+                kwargs["block_table"][allocator.index],
+                kwargs["cu_seq_lens_k"][allocator.layer_type],
+                kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
+                page,
+                last_safe_row,
+                allocator.write_trash_index,
+            )
+        cache._proto_bt_state = state
+    write_rows, rows_all, visible = state
+    kv_latent_cache.index_copy_(0, write_rows, k_pass.reshape(-1, module.kv_lora_rank))
+    rotated_key_cache.index_copy_(0, write_rows, k_rot.reshape(-1, module.qk_rope_head_dim))
+    if module.indexer is None:
+        return prev_topk_indices
+    indexer = module.indexer
+    batch_size, seq_len, _ = hidden_states.shape
+    cos, sin = position_embeddings
+    # Same as `_proto_indexer_per_query`: when every request fits in index_topk, only the keys need caching
+    skip_scoring = _PROTO_INDEXER_SKIP and rows_all.shape[1] <= indexer.index_topk
+    wk_out = indexer.__dict__.pop("_gemm_wk_out", None)
+    k = indexer.k_norm(indexer.wk(hidden_states) if wk_out is None else wk_out).unsqueeze(2)
+    k_rot_i, k_pass_i = torch.split(k, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
+    if skip_scoring:
+        _, k_rot_i = apply_rotary_pos_emb_interleave(k_rot_i, k_rot_i, cos, sin, unsqueeze_dim=2)
+        q = None
+    else:
+        q = indexer.wq_b(q_resid).view(batch_size, seq_len, indexer.n_heads, indexer.head_dim)
+        q_rot_i, q_pass_i = torch.split(
+            q, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1
+        )
+        q_rot_i, k_rot_i = apply_rotary_pos_emb_interleave(q_rot_i, k_rot_i, cos, sin, unsqueeze_dim=2)
+        q = torch.cat([q_rot_i, q_pass_i], dim=-1)[0]  # [M, H, D]
+    k = torch.cat([k_rot_i, k_pass_i], dim=-1).squeeze(2)[0]  # [M, D]
+    indexer_key_cache = allocator._indexer_token_views[module.layer_idx]
+    indexer_key_cache.index_copy_(0, write_rows, k)
+    # Valid entries of each query's list (with PROTO_TOPK_LENGTH they are always the first ones of the list): the
+    # request's context, capped at the list width
+    num_selected = min(indexer.index_topk, rows_all.shape[1])
+    n_visible = visible.sum(-1)
+    lengths = n_visible.clamp(max=num_selected).to(torch.int32)
+    if skip_scoring:
+        return torch.where(visible, rows_all, -1), None, lengths
+    keys = indexer_key_cache[rows_all]  # [M, max_k, D], the keys of each query's own request, straight from the cache
+    if _PROTO_TF32_SCOPED:
+        scores = F.relu(_proto_scores_bf16(q, keys) * indexer.softmax_scale)
+    else:
+        scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys.float()) * indexer.softmax_scale)
+    weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
+    index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
+    index_scores = index_scores.masked_fill(~visible, float("-inf"))
+    top = index_scores.topk(num_selected, dim=-1).indices
+    rows = torch.where(visible.gather(-1, top), rows_all.gather(-1, top), -1)
+    if _PROTO_TOPK_LENGTH:
+        # a query that sees at most `num_selected` keys selects them all: list them in window order, as the prefill
+        # tree does on the index path (the top-k of a longer window has no invalid entry)
+        partial = (n_visible <= num_selected)[:, None]
+        rows = torch.where(partial, torch.where(visible, rows_all, -1)[:, :num_selected], rows)
+    return rows, None, lengths
+
+
+def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
+                                attention_mask, position_ids, cache, prev_topk_indices, kwargs):
+    """Writes the new latents to CB's cache without reading the context back, selects top-k tokens (the indexer is
+    unchanged), maps them to physical cache rows through the read index, and attends to those rows with FlashMLA's
+    sparse kernel, queries absorbing kv_b_proj's key half and outputs its value half."""
+    global _flash_mla
+    if _flash_mla is None:
+        from vllm.third_party.flashmla import flash_mla_interface as _fm
+
+        _flash_mla = _fm
+    allocator = cache.layer_to_allocator[module.layer_idx]
+    if kwargs.get("block_table") is not None:  # PROTOTYPE of the engine work package: decode batch on the block table
+        if not _PROTO_PER_QUERY_INDEXER or _GLUE_OPAQUE_CACHE_WRITE:
+            raise RuntimeError(
+                "The block table prototype needs PROTO_PER_QUERY_INDEXER=1 and has no GLUE_OPAQUE_CACHE_WRITE variant"
+            )
+        topk_indices = _proto_block_table_rows(
+            module, allocator, cache, k_pass, k_rot, hidden_states, q_resid, position_embeddings, prev_topk_indices,
+            kwargs,
+        )
+        rows = topk_indices[0].to(torch.int32)
+        lengths = topk_indices[2] if _PROTO_TOPK_LENGTH else None  # [M] int32, <= list width
+        return _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices, lengths)
+    read_index = kwargs["read_index"][allocator.index]  # [N] physical rows of the packed context (past + new)
+    write_index = kwargs["write_index"][allocator.index]  # [M]
+    kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
+    if _GLUE_OPAQUE_CACHE_WRITE:
+        _glue_write_latents(
+            kv_latent_cache, rotated_key_cache, write_index, k_pass.reshape(-1, module.kv_lora_rank),
+            k_rot.reshape(-1, module.qk_rope_head_dim),
+        )
+    else:
+        kv_latent_cache.index_copy_(0, write_index, k_pass.reshape(-1, module.kv_lora_rank))
+        rotated_key_cache.index_copy_(0, write_index, k_rot.reshape(-1, module.qk_rope_head_dim))
+    allocator._last_indices[module.layer_idx] = (read_index, write_index)
+    if read_index.numel() == 0:  # CB skips the read-back when the batch has no past: the context is the new tokens
+        read_index = write_index
+
+    batch_size, num_heads, seq_length, _ = q_pass.shape  # batch_size is 1 under CB
+    if module.indexer is not None:
+        # engine WP: without a mask (CB_PROTO_NO_MASK=1) every batch size takes the per-request indexer; prefill WP:
+        # with PROTO_PREFILL=1 too
+        if _PROTO_PER_QUERY_INDEXER and (seq_length <= 512 or attention_mask is None or _PROTO_PREFILL):
+            cu_q = kwargs["cu_seq_lens_q"]
+            cu_k = kwargs["cu_seq_lens_k"][allocator.layer_type]
+            max_k = kwargs["max_length_k"][allocator.layer_type]
+            topk_indices = _proto_indexer_per_query(
+                module.indexer, hidden_states, q_resid, position_embeddings, cache, cu_q, cu_k, max_k
+            )  # (positions [M, topk] in the packed context, validity [M, topk])
+        else:
+            positions = module.indexer(
+                hidden_states, q_resid, position_embeddings, attention_mask[:, 0, :, :], position_ids, cache=cache
+            )[0].long()  # [M, topk] positions in the packed context
+            allowed = attention_mask[0, 0].gather(-1, positions)  # the packed mask keeps each query to its request
+            topk_indices = (positions, allowed if allowed.dtype == torch.bool else allowed == 0)
+    else:
+        topk_indices = prev_topk_indices
+    positions, allowed = topk_indices[0], topk_indices[1]
+    lengths = topk_indices[2] if _PROTO_TOPK_LENGTH and len(topk_indices) > 2 else None  # [M] int32, <= list width
+    rows = torch.where(allowed, read_index[positions], -1).to(torch.int32)  # [M, topk]
+    return _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices, lengths)
+
+
+def _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, topk_indices, lengths=None):
+    """Tail of the prototype attention: FlashMLA's sparse kernel on the cache rows `rows` ([M, topk], -1 = empty).
+    `lengths` ([M] int32), when given, is the number of valid entries at the start of each list."""
+    kv_latent_cache, _ = allocator._latent_token_views[module.layer_idx]
+    batch_size, num_heads, seq_length, _ = q_pass.shape
+    if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
+        rows = F.pad(rows, (0, 128 - rows.shape[-1] % 128), value=-1)
+
+    w = _proto_kv_b_dequantized(module)
+    w_uk, w_uv = w[:, : module.qk_nope_head_dim], w[:, module.qk_nope_head_dim :]
+    h_pad = num_heads if torch.cuda.get_device_capability()[0] == 9 else max(64, num_heads)
+    q_abs = q_pass.new_zeros(seq_length, h_pad, module.kv_lora_rank + module.qk_rope_head_dim)
+    q_latent = torch.einsum("hsn,hnc->shc", q_pass[0], w_uk)
+    adapters = _train_kv_b_adapters(module) if _TRAIN_FIX_KV_B == "delta" else []
+    for a, b, scaling in adapters:  # q W_uk with W = W_base + s B A: the adapter's part, never materialized
+        if b.shape[0] != w.shape[0] * w.shape[1]:
+            raise RuntimeError("LoRA adapters on a tensor-parallel shard of kv_b_proj are not handled")
+        b_uk = b.view(w.shape[0], w.shape[1], -1)[:, : module.qk_nope_head_dim]
+        low_rank = torch.einsum("hsn,hnr->shr", q_pass[0].to(b.dtype), b_uk)
+        q_latent = q_latent + (torch.matmul(low_rank, a) * scaling).to(q_latent.dtype)
+    q_abs[:, :num_heads, : module.kv_lora_rank] = q_latent
+    q_abs[:, :num_heads, module.kv_lora_rank :] = q_rot[0].transpose(0, 1)
+    latent_rows = kv_latent_cache.as_strided(
+        (kv_latent_cache.shape[0], 1, module.kv_lora_rank + module.qk_rope_head_dim),
+        (kv_latent_cache.stride(0), 0, 1),
+    )
+    out_latent = _flash_mla.flash_mla_sparse_fwd(
+        q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank, topk_length=lengths
+    )[0][:, :num_heads]  # [M, H, kv_lora]
+    attn_output = torch.einsum("shc,hvc->shv", out_latent, w_uv)
+    for a, b, scaling in adapters:
+        b_uv = b.view(w.shape[0], w.shape[1], -1)[:, module.qk_nope_head_dim :]
+        low_rank = torch.matmul(out_latent.to(a.dtype), a.t())
+        attn_output = attn_output + (torch.einsum("shr,hvr->shv", low_rank, b_uv) * scaling).to(attn_output.dtype)
+    attn_output = attn_output.reshape(batch_size, seq_length, -1)
+    return module.o_proj(attn_output), None, topk_indices
 
 class GlmMoeDsaAttention(nn.Module):
     """
@@ -381,11 +1006,24 @@ class GlmMoeDsaAttention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        q_resid = self.q_a_layernorm(self.q_a_proj(hidden_states))
+        fused_qkv_a = None
+        if _GEMM_FUSE_QKV_A:
+            current = (self.q_a_proj, self.kv_a_proj_with_mqa) + (() if self.indexer is None else (self.indexer.wk,))
+            fused_qkv_a = _gemm_fused_weight(self, "_gemm_qkv_a", current)
+        if fused_qkv_a is not None:
+            # one GEMM for every projection of the normed hidden states (gap3 gemm WP)
+            projections = F.linear(hidden_states, fused_qkv_a).split(self._gemm_qkv_a_sizes, dim=-1)
+            q_a, compressed_kv = projections[0], projections[1]
+            if self.indexer is not None:
+                self.indexer._gemm_wk_out = projections[2]
+        else:
+            q_a, compressed_kv = self.q_a_proj(hidden_states), None
+        q_resid = self.q_a_layernorm(q_a)
         q_states = self.q_b_proj(q_resid).view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-        compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
+        if compressed_kv is None:
+            compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         kv_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         # Both latents are viewed as single-head, 4D tensors, as expected by `expand_kv`
         k_pass = self.kv_a_layernorm(kv_pass).view(batch_size, 1, seq_length, self.kv_lora_rank)
@@ -393,6 +1031,15 @@ class GlmMoeDsaAttention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
+
+        if _PROTO_SPARSE_MLA and cache is not None and hasattr(cache, "layer_to_allocator"):
+            output = _proto_sparse_mla_attention(
+                self, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings, attention_mask,
+                position_ids, cache, prev_topk_indices, kwargs,
+            )
+            if self.indexer is not None:  # GEMM_FUSE_QKV_A: never leave a fused wk output for a later call
+                self.indexer.__dict__.pop("_gemm_wk_out", None)
+            return output
 
         # Cache read / write is performed while latent KV is still compressed
         if cache is not None:
@@ -418,7 +1065,7 @@ class GlmMoeDsaAttention(nn.Module):
             topk_indices = prev_topk_indices
 
         sparse_indices = None
-        if self.config._attn_implementation in ("eager", "sdpa"):
+        if self.config._attn_implementation in ("eager", "paged|eager", "sdpa"):
             index_mask = (
                 topk_indices.new_ones((batch_size, seq_length, key_states.shape[2]), dtype=torch.bool)
                 .scatter(-1, topk_indices.long(), False)
@@ -464,6 +1111,21 @@ class GlmMoeDsaMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
+        fused_gate_up = None
+        if _GEMM_FUSE_GATE_UP:
+            fused_gate_up = _gemm_fused_weight(self, "_gemm_gate_up", (self.gate_proj, self.up_proj))
+        if fused_gate_up is not None:
+            gate, up = F.linear(x, fused_gate_up).chunk(2, dim=-1)
+        elif _fuse_compile.KERNELS and not torch.is_grad_enabled() and x.is_cuda and x.dtype == torch.bfloat16:
+            gate, up = self.gate_proj(x), self.up_proj(x)
+        if fused_gate_up is not None or (
+            _fuse_compile.KERNELS and not torch.is_grad_enabled() and x.is_cuda and x.dtype == torch.bfloat16
+        ):
+            # [scratch, bench only] FUSE_KERNELS: silu(gate) * up in one kernel (inference only; gate and up may be the
+            # two halves of the fused gate_up GEMM's output, rows strided)
+            if _fuse_compile.KERNELS and type(gate) is torch.Tensor and self.config.hidden_act == "silu":
+                return self.down_proj(torch.ops.transformers.fuse_silu_mul(gate, up))
+            return self.down_proj(self.act_fn(gate) * up)
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -481,11 +1143,52 @@ class GlmMoeDsaTopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
         self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
+    def proto_logits(self, hidden_states):
+        """[scratch, bench only] PROTO_EXPERTS_TRTLLM_ROUTING: the fp32 router logits alone, as `forward` computes them
+        under the same flags (no-grad forwards only)."""
+        if (_fuse_compile.KERNELS or _GEMM_ROUTER_BF16 or _PROTO_TF32_SCOPED) and hidden_states.dtype == torch.bfloat16:
+            weight = _router_weight_as(self.weight, hidden_states.dtype)
+            return torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
+        return F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        if (
+            _fuse_compile.KERNELS
+            and self.num_group == 1
+            and self.topk_group == 1
+            and not torch.is_grad_enabled()
+            and hidden_states.is_cuda
+            and hidden_states.dtype == torch.bfloat16
+        ):
+            # [scratch, bench only] FUSE_KERNELS (inference only): the bf16 GEMM accumulates and returns fp32 (no fp32
+            # copy of the input per call), then one kernel does sigmoid, bias, top-k, gather, normalize and scale
+            router_logits = torch.mm(
+                hidden_states, _router_weight_as(self.weight, hidden_states.dtype).t(), out_dtype=torch.float32
+            )
+            topk_indices, topk_weights = torch.ops.transformers.fuse_router(
+                router_logits, self.e_score_correction_bias, self.top_k, self.routed_scaling_factor, self.norm_topk_prob
+            )
+            return router_logits, topk_weights, topk_indices
+        # GEMM_ROUTER_BF16=1 (gemm WP) and PROTO_TF32=scoped (train WP) are the same change: bf16 GEMM with fp32 output
+        if (
+            (_GEMM_ROUTER_BF16 or _PROTO_TF32_SCOPED)
+            and hidden_states.dtype == torch.bfloat16
+            and not torch.is_grad_enabled()
+        ):
+            weight = _router_weight_as(self.weight, hidden_states.dtype)
+            router_logits = torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
+        else:
+            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
+        if _GLUE_ROUTER and self.num_group == 1 and self.topk_group == 1:
+            # a single group is always selected: the group top-k and its mask select every expert
+            topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+            topk_weights = scores.gather(1, topk_indices)
+            if self.norm_topk_prob:
+                topk_weights /= topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            return router_logits, topk_weights * self.routed_scaling_factor, topk_indices
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
@@ -549,6 +1252,16 @@ class GlmMoeDsaExperts(nn.Module):
         return final_hidden_states
 
 
+# [gap3 sglang, bench only] MOE_SHARED_STREAM=1 (no-grad forwards, not inside torch.compile): the shared expert runs on
+# a side stream while the routed experts run on the current one, as SGLang's DeepseekV2MoE.forward_normal_dual_stream
+# (and vLLM's shared-experts stream up to 256 tokens) do. Fork after the router: the side stream waits for the current
+# one, the routed experts are issued first, the shared expert after them on the side stream, and the current stream
+# waits for the side stream before the sum, so the block's single all-reduce (HF_TP_SINGLE_MLP_ALL_REDUCE) sees both.
+# Captured as is by CUDA graphs (fork / join through stream waits). Same kernels and inputs: outputs bit-identical.
+_MOE_SHARED_STREAM = _glue_os.environ.get("MOE_SHARED_STREAM", "0") == "1"
+_SHARED_STREAMS = {}  # device -> side stream, created once per process
+
+
 class GlmMoeDsaMoE(nn.Module):
     """
     A mixed expert module containing shared experts.
@@ -566,8 +1279,31 @@ class GlmMoeDsaMoE(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
+        if _PROTO_EXPERTS_TRTLLM_ROUTING and not torch.is_grad_enabled() and self.experts.__dict__.get("_proto_trtllm"):
+            # [scratch, bench only] PROTO_EXPERTS_TRTLLM_ROUTING: the TRT-LLM kernel routes from the fp32 logits itself
+            hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+            hidden_states = _proto_trtllm_moe_routing(
+                self.experts, self.gate, hidden_states, self.gate.proto_logits(hidden_states)
+            ).view(*orig_shape)
+            return hidden_states + self.shared_experts(residuals)
         _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        if (
+            _MOE_SHARED_STREAM
+            and hidden_states.is_cuda
+            and not torch.is_grad_enabled()
+            and not torch.compiler.is_compiling()
+        ):
+            device = hidden_states.device
+            if device not in _SHARED_STREAMS:
+                _SHARED_STREAMS[device] = torch.cuda.Stream(device)
+            side, current = _SHARED_STREAMS[device], torch.cuda.current_stream(device)
+            side.wait_stream(current)
+            hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+            with torch.cuda.stream(side):
+                shared = self.shared_experts(residuals)
+            current.wait_stream(side)
+            return hidden_states + shared
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
@@ -594,8 +1330,31 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         prev_topk_indices: torch.Tensor | None = None,  # MAIN DIFF with DSV3.2
+        normed_hidden_states: torch.Tensor | None = None,
+        next_norm: nn.Module | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        if next_norm is not None:
+            # [gap2 prototype] HF_TP_ALL_REDUCE=flashinfer_fused: both blocks return this rank's partial sum, and
+            # each reduce is fused with the residual add and the norm that follows it. The norm after the MLP block
+            # belongs to the next layer (or is the model's final norm), so its output is handed over.
+            residual = hidden_states
+            if normed_hidden_states is None:
+                normed_hidden_states = self.input_layernorm(hidden_states)
+            hidden_states, _, topk_indices = self.self_attn(
+                hidden_states=normed_hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                cache=cache,
+                use_cache=use_cache,
+                position_embeddings=position_embeddings,
+                prev_topk_indices=prev_topk_indices,
+                **kwargs,
+            )
+            hidden_states, residual = tp_all_reduce_add_rms_norm(hidden_states, residual, self.post_attention_layernorm)
+            hidden_states = self.mlp(hidden_states)
+            normed_hidden_states, hidden_states = tp_all_reduce_add_rms_norm(hidden_states, residual, next_norm)
+            return hidden_states, topk_indices, normed_hidden_states
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         # Self Attention
@@ -618,6 +1377,41 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states, topk_indices
 
 
+# --- PROTOTYPE gap2-mtp (bench only): the checkpoint's multi-token-prediction module, off unless GLM_MTP=1 -------------
+# The checkpoint stores it as `model.layers.{num_hidden_layers}.*`: `enorm`, `hnorm`, `eh_proj`, one full decoder block
+# (its own latent attention, indexer and MoE) and `shared_head.norm`; the LM head and the embeddings are the main model's.
+# Kept under the checkpoint's own names as one more entry of `model.layers`, so the FP8 quantizer, the conversion mapping
+# and the TP plan treat it like any other layer. The main forward stops at `num_hidden_layers`.
+_GLM_MTP = _os.environ.get("GLM_MTP", "0") == "1"
+# vLLM zeroes the token embedding of the first position before `enorm` (DeepSeek's reference MTP does the same)
+_GLM_MTP_ZERO_FIRST = _os.environ.get("GLM_MTP_ZERO_FIRST", "1") == "1"
+
+
+class GlmMoeDsaMtpSharedHead(nn.Module):
+    def __init__(self, config: GlmMoeDsaConfig):
+        super().__init__()
+        self.norm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+class GlmMoeDsaMtpLayer(GlmMoeDsaDecoderLayer):
+    def __init__(self, config: GlmMoeDsaConfig):
+        import copy
+
+        # The MTP block is a sparse (MoE) layer with its own indexer; the per-layer lists of the config stop at the
+        # last main layer
+        layer_config = copy.copy(config)
+        layer_config.mlp_layer_types = list(config.mlp_layer_types) + ["sparse"]
+        layer_config.indexer_types = list(config.indexer_types) + ["full"]
+        super().__init__(layer_config, config.num_hidden_layers)
+        for module in self.modules():
+            if getattr(module, "config", None) is layer_config:
+                module.config = config
+        self.enorm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.hnorm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.eh_proj = nn.Linear(2 * config.hidden_size, config.hidden_size, bias=False)
+        self.shared_head = GlmMoeDsaMtpSharedHead(config)
+
+
 @auto_docstring
 class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     config: GlmMoeDsaConfig
@@ -636,7 +1430,8 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(GlmMoeDsaTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    # gap2-mtp prototype: with GLM_MTP=1 the MTP module's weights are loaded, not ignored
+    _keys_to_ignore_on_load_unexpected = [] if _GLM_MTP else [r"model\.layers\.78.*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]
 
     def _init_weights(self, module):
@@ -659,6 +1454,8 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         self.layers = nn.ModuleList(
             [GlmMoeDsaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        if _GLM_MTP and getattr(config, "num_nextn_predict_layers", 0) > 0:
+            self.layers.append(GlmMoeDsaMtpLayer(config))  # gap2-mtp prototype, `layers[num_hidden_layers]`
         self.norm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmMoeDsaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -710,7 +1507,29 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         topk_indices = None  # MAIN DIFF with DSV3.2
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+        normed_hidden_states = None
+        # [scratch, bench only] FUSE_COMPILE: decode-shaped CB batches run one compiled function per layer
+        fuse_compile = _fuse_compile.MODE != "0" and _fuse_compile.applies(self, hidden_states, cache, kwargs)
+        if fuse_compile:
+            hidden_states = _fuse_compile.run_layers(self, hidden_states, position_embeddings, cache, kwargs)
+        for i, decoder_layer in enumerate(() if fuse_compile else self.layers[: self.config.num_hidden_layers]):
+            if _TP_FUSED_ALL_REDUCE_NORM:
+                # [gap2 prototype] the layer also computes the norm that follows its MLP block: the next layer's
+                # input norm, or the final norm
+                next_norm = self.layers[i + 1].input_layernorm if i + 1 < self.config.num_hidden_layers else self.norm
+                hidden_states, topk_indices, normed_hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping["indexed_attention"],
+                    position_embeddings=position_embeddings,
+                    position_ids=position_ids,
+                    cache=cache,
+                    use_cache=use_cache,
+                    prev_topk_indices=topk_indices,
+                    normed_hidden_states=normed_hidden_states,
+                    next_norm=next_norm,
+                    **kwargs,
+                )
+                continue
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping["indexed_attention"],
@@ -722,7 +1541,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = normed_hidden_states if _TP_FUSED_ALL_REDUCE_NORM and not fuse_compile else self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             cache=cache,
@@ -804,6 +1623,53 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+    def mtp_forward(
+        self,
+        last_hidden_state: torch.Tensor,
+        input_ids: torch.LongTensor,
+        position_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        return_pre_norm: bool = False,
+        **kwargs,
+    ) -> torch.Tensor:
+        """gap2-mtp prototype. One pass of the MTP module over the same positions as a main forward.
+        (gap3-mtpk: `return_pre_norm=True` also returns the module's output before `shared_head.norm`, the previous
+        hidden state of the next draft pass when the module is applied several times.)
+
+        `last_hidden_state` `[B, S, H]` is the main model's output (after its final norm) at positions `p`,
+        `input_ids` `[B, S]` holds the tokens at positions `p + 1`, `position_ids` are the main model's (`p`). The
+        module caches its own latents and indexer keys in slot `num_hidden_layers` of `cache`, at the main layers'
+        indices. Returns its hidden states after `shared_head.norm`: `lm_head` of row `p` predicts token `p + 2`.
+        """
+        layer = self.model.layers[self.config.num_hidden_layers]
+        inputs_embeds = self.model.embed_tokens(input_ids)
+        if _GLM_MTP_ZERO_FIRST:
+            inputs_embeds = inputs_embeds.masked_fill((position_ids == 0).unsqueeze(-1), 0.0)
+        hidden_states = layer.eh_proj(torch.cat([layer.enorm(inputs_embeds), layer.hnorm(last_hidden_state)], dim=-1))
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": hidden_states,
+                "attention_mask": attention_mask,
+                "cache": cache,
+                "position_ids": position_ids,
+                "allow_is_causal_skip": False,
+            }
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
+        position_embeddings = self.model.rotary_emb(hidden_states, position_ids=position_ids)
+        hidden_states, _ = layer(
+            hidden_states,
+            attention_mask=causal_mask_mapping["indexed_attention"],
+            position_embeddings=position_embeddings,
+            position_ids=position_ids,
+            cache=cache,
+            **kwargs,
+        )
+        if return_pre_norm:
+            return layer.shared_head.norm(hidden_states), hidden_states
+        return layer.shared_head.norm(hidden_states)
 
 
 __all__ = ["GlmMoeDsaPreTrainedModel", "GlmMoeDsaModel", "GlmMoeDsaForCausalLM"]

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import re
 import warnings
 from typing import TYPE_CHECKING
@@ -47,7 +48,8 @@ if is_torch_distributed_available():
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
-    from .parallel_utils import _AllReduceBackward, _AllReduceForward
+    from . import parallel_utils
+    from .parallel_utils import _AllReduceBackward, _AllReduceForward, _tp_inference_all_reduce
 
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
@@ -91,6 +93,11 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
         return None
     # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
+
+
+# [scratch, bench only] FUSE_COMPILE_TP=trace: the in-place all-reduces of the inference path go through the custom op
+# of `models/glm_moe_dsa/_fuse_compile.py` so a compiled layer can trace through the tp_plan wrappers
+_FUSE_TP_TRACE = os.environ.get("FUSE_COMPILE", "0") not in ("0", "eager") and os.environ.get("FUSE_COMPILE_TP") == "trace"
 
 
 class TensorParallelLayer:
@@ -292,9 +299,15 @@ class RowwiseParallel(TensorParallelLayer):
             and isinstance(self.output_layouts, Replicate)
             and not output.requires_grad
         )
+        if isinstance(self.output_layouts, Partial) and self.use_local_output and not isinstance(output, DTensor):
+            # This rank's partial sum goes out as is: the module that sums the partial outputs all-reduces them
+            return output
         if use_local_inference_path:
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            dist.all_reduce(output, group=process_group)
+            if _FUSE_TP_TRACE:  # [scratch, bench only] an op dynamo can keep in a graph
+                torch.ops.transformers.fuse_tp_all_reduce(output)
+            else:
+                output = _tp_inference_all_reduce(output, process_group)
             if (bias := module._parameters.get("bias")) is not None:
                 output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
         else:
@@ -395,7 +408,12 @@ class AllReduceParallel(TensorParallelLayer):
         if output is None:
             return None
         if not isinstance(output, DTensor):
-            output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
+            # each rank holds a partial sum as a plain tensor: sum them in place, like `moe_tp_experts`
+            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            if _FUSE_TP_TRACE and not torch.is_grad_enabled():  # [scratch, bench only]
+                torch.ops.transformers.fuse_tp_all_reduce(output)
+                return output
+            return _AllReduceForward.apply(output, process_group)
         if output.placements != (Replicate(),):
             output = output.redistribute(placements=[Replicate()])
         return output.to_local()
@@ -550,6 +568,13 @@ class PackedRowwiseParallel(TensorParallelLayer):
 
 
 class MoeExpertsParallel(TensorParallelLayer):
+    """Experts whose weights are sharded inside every expert: each rank computes a partial output. `reduce_output=False`
+    leaves the partial outputs to be summed with others (e.g. the shared experts) and all-reduced once by the parent
+    module's `all_reduce` rule."""
+
+    def __init__(self, *, reduce_output: bool = True):
+        self.reduce_output = reduce_output
+
     def should_use_local_tensors(self, module):
         return True
 
@@ -570,8 +595,8 @@ class MoeExpertsParallel(TensorParallelLayer):
         return (hidden_states, *routing_args), kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
-        if output is None:
-            return None
+        if output is None or not self.reduce_output:
+            return output
         # each rank ran its shard of every expert: sum the partial outputs
         process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         return _AllReduceForward.apply(output, process_group)
@@ -609,6 +634,8 @@ if is_torch_distributed_available():
         "rowwise_split_input", RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate())
     )
     ALL_PARALLEL_STYLES.register("rowwise_rep", RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()))
+    # The output stays this rank's partial sum: for a block that sums several partial outputs and all-reduces once
+    ALL_PARALLEL_STYLES.register("rowwise_partial", RowwiseParallel(input_layouts=Shard(-1), output_layouts=Partial()))
     ALL_PARALLEL_STYLES.register("packed_colwise", PackedColwiseParallel())
     ALL_PARALLEL_STYLES.register("packed_rowwise", PackedRowwiseParallel())
     ALL_PARALLEL_STYLES.register("sequence_parallel", SequenceParallel(use_local_output=True))
@@ -616,6 +643,7 @@ if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("mla_kv_a_proj", MlaKvAProjParallel())
     ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
     ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
+    ALL_PARALLEL_STYLES.register("moe_tp_experts_partial", MoeExpertsParallel(reduce_output=False))
     ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
     ALL_PARALLEL_STYLES.register("local_params", LocalParamsParallel())
     # Every rank keeps the full param, e.g. a per-tensor quantization scale
@@ -642,6 +670,8 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
     """
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())
+    # [gap2 prototype] `tp_all_reduce_add_rms_norm` is called from model code, which has no mesh
+    parallel_utils._TP_GROUP = tp_mesh.get_group() if tp_mesh.ndim == 1 else tp_mesh.get_group("tp")
 
     for name, style_name in tp_plan.items():
         style = ALL_PARALLEL_STYLES[style_name]

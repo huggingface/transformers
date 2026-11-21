@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -75,6 +77,27 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    if os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") == "1":
+        # [gap prototype] One all-reduce per MLP block: the routed experts, the shared experts and the dense MLP keep
+        # their partial sums, the block's output is all-reduced once (2 all-reduces per layer instead of 3).
+        base_model_tp_plan = {
+            **base_model_tp_plan,
+            "layers.*.mlp.experts": "moe_tp_experts_partial",
+            "layers.*.mlp.shared_experts.down_proj": "rowwise_partial",
+            "layers.*.mlp.down_proj": "rowwise_partial",
+            "layers.*.mlp": "all_reduce",
+        }
+    if os.environ.get("HF_TP_ALL_REDUCE", "nccl") == "flashinfer_fused":
+        # [gap2 prototype] The attention and MLP blocks keep their partial sums: the decoder layer reduces them
+        # together with the residual add and the RMSNorm that follow (`tp_all_reduce_add_rms_norm`).
+        base_model_tp_plan = {
+            **base_model_tp_plan,
+            "layers.*.self_attn.o_proj": "rowwise_partial",
+            "layers.*.mlp.experts": "moe_tp_experts_partial",
+            "layers.*.mlp.shared_experts.down_proj": "rowwise_partial",
+            "layers.*.mlp.down_proj": "rowwise_partial",
+        }
+        base_model_tp_plan.pop("layers.*.mlp", None)
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),

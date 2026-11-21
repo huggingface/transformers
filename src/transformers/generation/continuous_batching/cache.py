@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
+import os
 import warnings
+import os
 from math import ceil, lcm
 from typing import Any
 
@@ -23,21 +25,34 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
+    INDEXED_ATTENTION,
     SLIDING_ATTENTION,
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
+    IndexedMLACacheAllocator,
+    MLACacheAllocator,
     SlidingAttentionCacheAllocator,
 )
 from .distributed import DistributedHelper
 from .requests import RequestState, RequestStatus
-from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memory_breakdown, logger
+from .utils import (
+    find_head_dim,
+    find_num_key_value_heads,
+    get_device_and_memory_breakdown,
+    logger,
+    proto_no_mask,
+)
 
+
+# WP train (prototype): `release_memory` keeps on the host only the byte ranges of the blocks in use
+_RELEASE_LIVE_ONLY = os.environ.get("CB_RELEASE_LIVE_ONLY", "0") == "1"
 
 # Maps each attention type to the allocator class handling its cache
 ATTN_TYPE_TO_ALLOCATOR = {
     FULL_ATTENTION: FullAttentionCacheAllocator,
     SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
+    INDEXED_ATTENTION: IndexedMLACacheAllocator,
 }
 
 
@@ -64,7 +79,15 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
         if layer_type not in ATTN_TYPE_TO_ALLOCATOR:
             raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
+    # gap2-mtp prototype: the MTP module caches its latents and indexer keys like one more indexed layer, in slot
+    # `num_hidden_layers`, at the same rows of a block as the main layers
+    if os.environ.get("GLM_MTP", "0") == "1" and getattr(config, "num_nextn_predict_layers", 0) > 0:
+        layer_counts[INDEXED_ATTENTION] = layer_counts[INDEXED_ATTENTION] + [config.num_hidden_layers]
     return layer_counts
+
+# PROTOTYPES of the engine work package (bench only, off by default), see PagedAttentionMemoryHandler
+_PROTO_NO_READBACK_BUDGET = os.environ.get("CB_PROTO_NO_READBACK_BUDGET", "0") == "1"
+_PROTO_VARLEN_PEAK_GB = float(os.environ.get("CB_PROTO_VARLEN_PEAK_GB", "0"))
 
 
 class PagedAttentionCache:
@@ -155,18 +178,13 @@ class PagedAttentionCache:
             num_key_value_heads //= kv_tp_size
 
         # Construct the necessary cache allocator for each attention type
-        ca_kwargs = {
-            "num_key_value_heads": num_key_value_heads,
-            "config": config,
-            "cache_dtype": self.dtype,
-            "page_size": continuous_batching_config.page_size,
-            "allow_block_sharing": continuous_batching_config.allow_block_sharing,
-        }
         self.cache_allocators: dict[str, CacheAllocator] = {}
         self.layer_to_allocator: dict[int, CacheAllocator] = {}
         for index, (attn_type, layer_indices) in enumerate(group_layers_by_attn_type(config).items()):
-            # Create the allocator and register it by name and indices
-            allocator = ATTN_TYPE_TO_ALLOCATOR[attn_type](index=index, layer_indices=layer_indices, **ca_kwargs)
+            # Create the allocator and register it by name and layers indices
+            allocator = self._create_allocator(
+                continuous_batching_config, attn_type, index, layer_indices, num_key_value_heads
+            )
             self.cache_allocators[attn_type] = allocator
             self.layer_to_allocator = self.layer_to_allocator | dict.fromkeys(layer_indices, allocator)
 
@@ -180,9 +198,7 @@ class PagedAttentionCache:
         )
         # Bytes of one cache block (page_size tokens of KV for every layer of the model), used to convert the num_blocks
         # config attribute to and from bytes
-        bytes_per_block = config.num_hidden_layers * FullAttentionCacheAllocator.get_bytes_per_page(
-            num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.page_size
-        )
+        bytes_per_block = sum(ca.bytes_per_block for ca in self.cache_allocators.values())
 
         max_batch_tokens, num_sectors = PagedAttentionMemoryHandler(
             config=config,
@@ -211,6 +227,7 @@ class PagedAttentionCache:
         non_trash_bytes = self.num_sectors * self.bytes_per_sector
         trash_bytes = 2 * self.bytes_per_sector
         self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
+        self._host_copy: torch.Tensor | None = None  # where the cache waits while it is released, see release_memory
         # Cache pool, which keeps track of the free sectors and their allocation
         self.pool = CachePool(self.num_sectors, len(self.cache_allocators))
         # Distribute the cache across all allocators
@@ -229,6 +246,32 @@ class PagedAttentionCache:
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
         # Helper attribute for the input/output classes
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
+
+    def _create_allocator(
+        self,
+        continuous_batching_config: ContinuousBatchingConfig,
+        attn_type: str,
+        index: int,
+        layer_indices: list[int],
+        num_key_value_heads: int,
+    ) -> CacheAllocator:
+        """Creates the cache allocator for a given set of layers with the same attention type."""
+        # Catch a special case: MLA layers are created with the same attention type as full attention layers
+        if attn_type == FULL_ATTENTION and getattr(self.config, "kv_lora_rank", None) is not None:
+            allocator_class = MLACacheAllocator
+        else:
+            allocator_class = ATTN_TYPE_TO_ALLOCATOR[attn_type]
+
+        allocator = allocator_class(
+            index=index,
+            layer_indices=layer_indices,
+            num_key_value_heads=num_key_value_heads,
+            config=self.config,
+            cache_dtype=self.dtype,
+            page_size=continuous_batching_config.page_size,
+            allow_block_sharing=continuous_batching_config.allow_block_sharing,
+        )
+        return allocator
 
     def _infer_read_cache_limit(self) -> int | None:
         """The maximum number of tokens that can be read from the cache for a single request."""
@@ -430,6 +473,100 @@ class PagedAttentionCache:
 
         return key_states, value_states
 
+    def update_indexer(
+        self,
+        indexer_key_states: torch.Tensor,  # shape [1, seqlen_q, index_head_dim]
+        layer_idx: int,
+    ) -> torch.Tensor:  # shape [1, seqlen_q + past_length, index_head_dim]
+        """Updates the indexer key cache of an indexed attention layer, at the indices of its last `update`, and returns
+        the complete indexer keys."""
+        indexer_key_states = self.layer_to_allocator[layer_idx].update_indexer(indexer_key_states[0], layer_idx)
+        return indexer_key_states.unsqueeze(0)
+
+    def _live_byte_ranges(self) -> list[tuple[int, int]]:
+        """Byte ranges of the cache tensor that hold blocks in use, adjacent ranges merged. Left out: the two trash
+        sectors (the read trash is zeros, the write trash is never read), free sectors and the free blocks of allocated
+        sectors. Block `b` of an allocator spans bytes `[b, b + 1) * bytes_per_block` of the tensor, sector `s` spans
+        `[s, s + 1) * bytes_per_sector`."""
+        free = [(0, 2 * self.bytes_per_sector)]
+        free += [(s * self.bytes_per_sector, (s + 1) * self.bytes_per_sector) for s in self.pool.free_sectors]
+        for allocator in self.cache_allocators.values():
+            size = allocator.bytes_per_block
+            for leaves in self.pool._free_blocks[allocator.index].trees.values():
+                free += [(leaf * size, (leaf + 1) * size) for leaf in leaves]
+        keep, start = [], 0
+        for free_start, free_end in sorted(free):
+            if free_start > start:
+                keep.append((start, free_start))
+            start = max(start, free_end)
+        if start < self.cache_tensor.numel():
+            keep.append((start, self.cache_tensor.numel()))
+        return keep
+
+    def release_memory(self) -> int:
+        """Copies the cache tensor to host memory and frees its GPU memory, returning the number of bytes released.
+        The tensor and every view of it stay valid objects and the requests keep their blocks, but nothing may read or
+        write the cache until `restore_memory` copies it back."""
+        if _RELEASE_LIVE_ONLY:
+            # WP train: only the blocks in use go to the host, so host memory follows the requests in flight instead
+            # of the cache size (the whole cache, pinned, is 139 GiB per rank on GLM-5.3 at TP8). Prefix-only blocks
+            # are dropped first: after a weight update they are stale anyway.
+            self.evict_cached_blocks()
+            ranges = self._live_byte_ranges()
+            nbytes = sum(end - begin for begin, end in ranges)
+            if self._host_copy is None or self._host_copy.numel() < nbytes:
+                # pinning is slow (2-6 GB/s): grow with headroom so a slowly growing set of requests re-pins rarely
+                self._host_copy = None
+                self._host_copy = torch.empty(int(nbytes * 1.25) + 1, dtype=torch.uint8, pin_memory=True)
+            offset = 0
+            for begin, end in ranges:
+                self._host_copy[offset : offset + end - begin].copy_(self.cache_tensor[begin:end], non_blocking=True)
+                offset += end - begin
+            self._live_ranges, self._host_live_bytes = ranges, nbytes
+            torch.accelerator.synchronize()
+            self._released_address = self.cache_tensor.data_ptr()
+            self.cache_tensor.untyped_storage().resize_(0)
+            return self.cache_tensor.numel()
+        if self._host_copy is None:
+            self._host_copy = torch.empty(self.cache_tensor.numel(), dtype=torch.uint8, pin_memory=True)
+        self._host_copy.copy_(self.cache_tensor, non_blocking=True)
+        # The copy reads the memory about to be freed
+        torch.accelerator.synchronize()
+        self._released_address = self.cache_tensor.data_ptr()
+        self.cache_tensor.untyped_storage().resize_(0)
+        return self._host_copy.numel()
+
+    def restore_memory(self) -> bool:
+        """Reallocates the memory freed by `release_memory` and copies the cache back into it. Returns whether the cache
+        came back at the same address, which captured CUDA graphs rely on."""
+        # Whatever used the memory in between can leave it reserved by the caching allocator in pieces, none of them
+        # large enough for the cache: hand them back to the device first
+        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+            device_module.empty_cache()
+        self.cache_tensor.untyped_storage().resize_(self.cache_tensor.numel())
+        if _RELEASE_LIVE_ONLY:
+            # what was not kept comes back as zeros, as the cache was created: the read trash must be zeros, and no
+            # bytes left by the caller's use of the memory (NaN patterns included) sit in rows a kernel may mask out
+            self.cache_tensor.zero_()
+            offset = 0
+            for begin, end in self._live_ranges:
+                self.cache_tensor[begin:end].copy_(self._host_copy[offset : offset + end - begin], non_blocking=True)
+                offset += end - begin
+            torch.accelerator.synchronize()
+            return self.cache_tensor.data_ptr() == self._released_address
+        self.cache_tensor.copy_(self._host_copy, non_blocking=True)
+        # The generation loop reads the cache on its own stream
+        torch.accelerator.synchronize()
+        return self.cache_tensor.data_ptr() == self._released_address
+
+    def invalidate_prefix_cache(self) -> None:
+        """WP train: the weights changed. Blocks kept only for prefix sharing go back to the pool, and the hash chains
+        of new requests start from a new root, so they never match a block computed with the old weights (requests in
+        flight keep their blocks and keep sharing among themselves)."""
+        self.evict_cached_blocks()
+        for allocator in self.cache_allocators.values():
+            allocator.ledger.epoch += 1
+
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
         self.free_all_requests(clear_ledgers=True)
@@ -580,6 +717,9 @@ class PagedAttentionMemoryHandler:
         if is_flash_attention_requested(self.config):
             self.num_attention_masks = 0
             self.kv_heads_at_peak = 2 * self.num_key_value_heads
+        elif proto_no_mask(self.config):  # PROTOTYPE: no mask allocated for MLA models
+            self.num_attention_masks = 0
+            self.kv_heads_at_peak = 2 * self.num_attention_heads + self.num_key_value_heads
         else:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=len(set(attn_types))`
             self.num_attention_masks = 2 if SLIDING_ATTENTION in attn_types else 1
@@ -595,6 +735,28 @@ class PagedAttentionMemoryHandler:
         # This account for the set of 2 IOs if async batching is used
         self.io_multiplier = 2 if cb_config.use_async_batching else 1
         self.available_memory = self.get_available_memory()
+
+    @property
+    def kv_numel_at_peak(self) -> int:
+        """The number of elements one token takes in the key and value states at the attention peak."""
+        config = self.config
+        if getattr(config, "kv_lora_rank", None) is None:
+            return self.kv_heads_at_peak * find_head_dim(config)
+        # PROTOTYPE (CB_PROTO_NO_READBACK_BUDGET=1): the prototype attention reads the latents in place, so the only
+        # per-token read-back left is the indexer key of the packed context on varlen batches, one layer at a time
+        if _PROTO_NO_READBACK_BUDGET:
+            return getattr(config, "index_head_dim", 0)
+        # MLA layers read two latents back from the cache and expand them to heads: the projected keys and values,
+        # the keys completed with their rotated part and, for flash, the values padded to the key head dimension
+        qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        expanded_dim = config.qk_nope_head_dim + config.v_head_dim + qk_head_dim
+        if is_flash_attention_requested(config) and config.v_head_dim != qk_head_dim:
+            expanded_dim += qk_head_dim
+        # Indexed MLA layers also read back the indexer key of each token
+        index_head_dim = getattr(config, "index_head_dim", 0)
+        return (
+            config.kv_lora_rank + config.qk_rope_head_dim + index_head_dim + self.num_attention_heads * expanded_dim
+        )
 
     @property
     def bytes_per_batch_token(self) -> int:
@@ -614,7 +776,7 @@ class PagedAttentionMemoryHandler:
             self.config.hidden_size  # hidden states, shape [M, hidden_size]
             + self.num_attention_heads * head_dim  # query projection, shape [M, num_heads * head_dim]
             + 2 * self.num_key_value_heads * head_dim  # new K and V states
-            + self.kv_heads_at_peak * head_dim  # their copy in the K and V read back from the cache # TODO: optimize
+            + self.kv_numel_at_peak  # their copy in the K and V read back from the cache # TODO: optimize
         )
         io_bytes = self.io_multiplier * (
             7 * i  # bulk_input: [7, M] int32, packed as 7 rows
@@ -629,7 +791,7 @@ class PagedAttentionMemoryHandler:
     def bytes_per_cache_token(self) -> int:
         """The memory cost of one readable cache token beside the cache itself: the old key and value states read from
         the cache at the attention peak, plus its share of the read indices."""
-        kv_read_bytes = self.kv_heads_at_peak * find_head_dim(self.config) * self.activation_dtype.itemsize
+        kv_read_bytes = self.kv_numel_at_peak * self.activation_dtype.itemsize
         read_index_bytes = self.io_multiplier * self.num_groups * 8  # read_index: [num_groups, N + M] (N part, int64)
         return kv_read_bytes + read_index_bytes
 
@@ -643,6 +805,9 @@ class PagedAttentionMemoryHandler:
         """Reservations that scale with neither batch tokens nor cache size: the trash sectors and, when the model
         slices hidden states with logits_to_keep, the LM head peak of the per-request logit rows."""
         overhead = self.trash_bytes
+        # PROTOTYPE (CB_PROTO_VARLEN_PEAK_GB=<float>): explicit reservation for the transient peak of the largest varlen
+        # (prefill) forward and its graph pool, which the read-back term used to cover by accident
+        overhead += int(_PROTO_VARLEN_PEAK_GB * 1024**3)
         if self.model_supports_logits_to_keep:
             a = self.activation_dtype.itemsize
             # 1024 mirrors FALLBACK_DEFAULTS["max_requests_per_batch"] in initialization.py (import would be circular)
