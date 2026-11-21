@@ -9,9 +9,38 @@ no visible pair writes -inf and skips its dot products, so the work follows sum 
 not M x N. Inputs are bf16, products are accumulated in fp32 (same values as the fp32 reference, another summation
 order). The kernel takes no indices into other tensors: `lo` / `hi` only gate what is computed and written.
 """
+import os
+
 import torch
 import triton
 import triton.language as tl
+
+
+# longctx WP: PROTO_MQA_ASSERTS=1 copies the index tensors of every launch to the CPU and checks every value the kernels
+# read (window bounds, block table entries, request ids) before the launch. A device sync per call: checks only, and
+# skipped while a CUDA graph is being captured (the eager pass before each capture runs them)
+_ASSERTS = os.environ.get("PROTO_MQA_ASSERTS", "0") == "1"
+
+
+def _check_windows(lo, hi, n, max_k):
+    if not _ASSERTS or torch.cuda.is_current_stream_capturing():
+        return
+    lo, hi = lo.cpu().long(), hi.cpu().long()
+    assert int(lo.min()) >= 0 and bool((hi >= lo).all()) and int(hi.max()) <= n, "window outside the packed keys"
+    assert int((hi - lo).max()) <= max_k, f"a window is wider than max_k={max_k}"
+
+
+def _check_paged(table, req, n_visible, num_rows, max_k, page):
+    if not _ASSERTS or torch.cuda.is_current_stream_capturing():
+        return
+    table, req, n_visible = table.cpu().long(), req.cpu().long(), n_visible.cpu().long()
+    assert int(req.min()) >= 0 and int(req.max()) < table.shape[0], "request id outside the block table"
+    assert int(n_visible.min()) >= 0 and int(n_visible.max()) <= min(max_k, table.shape[1] * page), "context too long"
+    slots = torch.arange(table.shape[1])
+    used = slots[None] < ((n_visible + page - 1) // page)[:, None]  # [M, pages]: the table entries each query reads
+    entries = table[req][used]
+    assert int(entries.min(initial=0)) >= 0, "a read page is missing (-1) in the block table"
+    assert int(entries.max(initial=0)) * page + page <= num_rows, "a page lies past the cache rows"
 
 
 @triton.jit
@@ -120,6 +149,7 @@ def paged_mqa_logits(
     assert q.stride(2) == 1 and keys.stride(1) == 1 and w.stride(1) == 1 and table.stride(1) == 1
     assert req.is_contiguous() and n_visible.is_contiguous() and d in (64, 128, 256)
     assert page % block_n == 0 and max_k % block_n == 0 and m > 0 and max_k > 0
+    _check_paged(table, req, n_visible, keys.shape[0], max_k, page)
     out = torch.empty((m, max_k), dtype=torch.float32, device=q.device)
     _paged_mqa_logits_kernel[(m, max_k // block_n)](
         q, w, keys, table, req, n_visible, out, q.stride(0), q.stride(1), w.stride(0), keys.stride(0), table.stride(0),
@@ -188,6 +218,7 @@ def mqa_logits_window(
     assert lo.dtype == torch.int32 and hi.dtype == torch.int32
     assert q.stride(2) == 1 and k.stride(1) == 1 and w.stride(1) == 1 and lo.is_contiguous() and hi.is_contiguous()
     assert d in (64, 128, 256) and m > 0 and n > 0 and max_k > 0 and n < 2**31
+    _check_windows(lo, hi, n, max_k)
     out = torch.empty((m, max_k), dtype=torch.float32, device=q.device)
     grid = (triton.cdiv(m, block_m), triton.cdiv(max_k, block_n))
     _mqa_logits_window_kernel[grid](
