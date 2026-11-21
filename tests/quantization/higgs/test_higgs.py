@@ -93,7 +93,8 @@ class HiggsTest(unittest.TestCase):
         Simple test that checks if the quantized model has been converted properly
         """
 
-        from transformers.integrations import HiggsLinear, replace_with_higgs_linear
+        from transformers.integrations import HiggsLinear
+        from transformers.quantizers.quantizer_higgs import HiggsHfQuantizer
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
@@ -107,7 +108,9 @@ class HiggsTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model, _ = replace_with_higgs_linear(model, quantization_config=quantization_config)
+        quantizer = HiggsHfQuantizer(quantization_config)
+        quantizer._process_model_before_weight_loading(model)
+        quantizer.replace_modules(model)
         nb_higgs_linear = 0
         for module in model.modules():
             if isinstance(module, HiggsLinear):
@@ -118,7 +121,9 @@ class HiggsTest(unittest.TestCase):
         with torch.device("meta"):
             model = OPTForCausalLM(config)
         quantization_config = HiggsConfig(modules_to_not_convert=["fc1"])
-        model, _ = replace_with_higgs_linear(model, quantization_config=quantization_config)
+        quantizer = HiggsHfQuantizer(quantization_config)
+        quantizer._process_model_before_weight_loading(model)
+        quantizer.replace_modules(model)
         nb_higgs_linear = 0
         for module in model.modules():
             if isinstance(module, HiggsLinear):

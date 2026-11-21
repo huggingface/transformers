@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Transformers supports many quantization methods such as QLoRA, GPTQ, LLM.int8, and AWQ. However, there are still many more quantization approaches that haven't been integrated yet. To make adding and using these quantization methods with Transformers easier, use the [`~quantizers.HfQuantizer`] class. [`~quantizers.HfQuantizer`] is designed to be an internal helper class for adding a quantization method instead of something applied to every PyTorch module.
 
-This guide will show you how to integrate a new quantization method with [`~quantizers.HfQuantizer`].
+This guide will show you how to integrate a new quantization method with [`~quantizers.HfQuantizer`]. A new quantization recipe gets its own config and quantizer, even if an existing method's kernels could run it: one config describes one recipe. [Add a quantized format](./add_format) walks through the modules, load ops, and checkpoint scheme readers of a low-precision format such as NVFP4 or MXFP4.
 
 ## Requirements
 
@@ -46,7 +46,7 @@ Some quantization methods may require "pre-quantizing" the model through data ca
 
 ## Create new HFQuantizer class
 
-0. The best starting point would be to have a look at another quantization method such as Finegrained Fp8. You will have to update or create three files in total: the [config file](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/quantization_config.py), the [integration file](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/finegrained_fp8.py) and the [quantizer file](https://github.com/huggingface/transformers/blob/main/src/transformers/quantizers/quantizer_finegrained_fp8.py).
+0. The best starting point would be to have a look at another quantization method such as NVFP4. You will have to update or create three files in total: the [config file](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/quantization_config.py), the [integration file](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/nvfp4.py) and the [quantizer file](https://github.com/huggingface/transformers/blob/main/src/transformers/quantizers/quantizer_nvfp4.py).
 
 1. Create a new quantization config class inside [src/transformers/utils/quantization_config.py](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/utils/quantization_config.py). Add the new quantization config to the [\_import_structure](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/__init__.py#L1088) inside Transformers' [src/transformers/\_\_init\_\_.py](https://github.com/huggingface/transformers/blob/abbffc4525566a48a9733639797c812301218b83/src/transformers/__init__.py) file.
 
@@ -60,13 +60,13 @@ Some quantization methods may require "pre-quantizing" the model through data ca
 
 4. Write the `validate_environment` and `update_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. Refer to other quantizers for an example of it is implemented.
 
-5. Write the `_process_model_before_weight_loading` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. This means the `_process_model_before_weight_loading` method takes care of manipulating the model skeleton to replace some modules ([nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)) with the target modules (quantization modules).
+5. Write the `quantized_module(name, module)` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. `quantized_module` returns the quantized module replacing `module` (e.g. an [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html)), or `None` to keep it. It is called on meta, only for the modules your quantizer owns (see [Quantization plans](./overview#quantization-plans)) and that `modules_to_not_convert` doesn't skip, so don't walk the model yourself. Only quantizers implementing `quantized_module` can be mixed with other methods in a quantization plan.
 
-You can define module replacement logic or any other utility method by creating a new file in [transformers/src/integrations/](https://github.com/huggingface/transformers/tree/abbffc4525566a48a9733639797c812301218b83/src/transformers/integrations) and exposing the relevant methods in that folder's `__init__.py` file.
+Define the quantized modules and load operations in a new file in [transformers/src/integrations/](https://github.com/huggingface/transformers/tree/main/src/transformers/integrations).
 
 6. Add the `get_quantize_ops` method to the quantizer class if the quantization supports quantizing on the fly. In transformers, we materialize each tensor and apply a sequence of different operations on it. In our case, the quantization operation happens at the end. You need to create a `XXXQuantize`, a subclass of `ConversionOps`, and add a `convert` method. In the `convert` method, you need to quantize the weights and return a dictionary of quantized params.
 
-7. Add the `get_weight_conversions` method to the quantizer class if the quantization supports loading pre-quantized weights. In transformers, we can collect multiple tensors and apply operations on them. This is particularly useful when we have tensors in the checkpoint that require to be regrouped to re-create the quantized tensors.
+7. If the quantization supports loading pre-quantized weights, set `serialized_names` (what each param is stored as) and `get_load_operations` (the `"deserialize"` and `"dequantize"` ops). Add `checkpoint_renames` if the checkpoint names a tensor differently than your module. Loading builds the converters from them, see [Load pre-quantized checkpoints](#load-pre-quantized-checkpoints).
 
 8. Write the `_process_model_after_weight_loading` method if needed. This method enables implementing additional features that require manipulating the model after loading the weights.
 
@@ -82,12 +82,13 @@ You can define module replacement logic or any other utility method by creating 
 | `quantizers/quantizer_your_method.py`        | Implement `YourMethodHfQuantizer` inheriting from `HfQuantizer`                                  |
 | `integrations/your_method.py`                | Implement `ConversionOps` subclasses and helper functions                                        |
 | `quantizers/auto.py`                         | Register quantizer and config in `AUTO_QUANTIZER_MAPPING` and `AUTO_QUANTIZATION_CONFIG_MAPPING` |
+| `quantizers/schema_readers.py`               | Optional: read a checkpoint's own quantization scheme into a plan, see [Add a quantized format](./add_format#4-read-the-checkpoints-own-scheme) |
 | `docs/source/en/quantization/your_method.md` | Document usage for users                                                                         |
 | `tests/quantization/your_method/`            | Add integration tests                                                                            |
 
-## Understanding `get_quantize_ops` vs `get_weight_conversions`
+## Understanding `get_quantize_ops` vs `get_load_operations`
 
-These two methods handle different scenarios for loading weights. Understanding when to use each is essential.
+These two methods handle different scenarios for loading weights. Understanding when to use each is essential. The quantization plan (a `QuantizationPlanHfQuantizer`, built by `AutoHfQuantizer.from_plan`) gives each param the ops of its module's quantizer while loading, so the same ops run when your method quantizes only part of a model, or mixes with others.
 
 ### `get_quantize_ops` — Quantize on the fly
 
@@ -115,34 +116,37 @@ class YourQuantize(ConversionOps):
         return {full_layer_name: quantized, full_layer_name + ".scale": scale, full_layer_name + ".zero_point": zero_point}
 ```
 
-### `get_weight_conversions` — Load pre-quantized checkpoints
+### Load pre-quantized checkpoints
 
-Use this when loading a **pre-quantized checkpoint** where the quantized weights are saved as several separate components (such as data, scale, and zero point), and these need to be combined into one tensor during loading. Not all quantization methods require this reconstruction step: for example, some methods like FP8 simply load weights and scales as-is, without combining them. Others, such as torchao, do require reassembling the quantized tensor from its multiple saved components.
+Use this when loading a **pre-quantized checkpoint**, where each param is saved as several tensors (such as data, scale, and zero point). Declare them in `serialized_names` and the ops turning them into your module's tensors in `get_load_operations`. You don't write the `WeightConverter`s: loading collects a param's serialized names together, also through the model's own converters (a scale goes through the same expert merge as its weight), and gives each param the op of its module's quantizer. See [Add a quantized format](./add_format) for how a scale follows its weight through the experts merge.
 
 ```text
 Checkpoint: model.safetensors (quantized components)
-  - layer._weight_qdata
-  - layer._weight_scale
-  - layer._weight_zero_point
+  - layer.weight_qdata
+  - layer.weight_scale
+  - layer.weight_zero_point
      ↓
-get_weight_conversions → WeightConverter + YourDeserialize.convert()
+serialized_names collect them → "deserialize" op: YourDeserialize.convert()
      ↓
 Result: Reconstructed quantized tensor → layer.weight
 ```
 
-The `WeightConverter` collects related tensors based on `source_patterns`, then passes them to your `convert` method:
+- `"deserialize"` runs after the model's converters (e.g. the experts merge), on the pre-quantized tensors of one param. Leave it out if your module stores the tensors exactly as the checkpoint does.
+- `"dequantize"` runs before the model's converters, on the weight and its serialized names, and returns the full-precision weight.
+- `get_load_operation()` picks the one for the config: `"dequantize"` when it sets `dequantize=True`, else `"deserialize"`. `update_weight_transform` attaches it to each param once the param's first key matches a converter.
+- `checkpoint_renames` maps globs on a checkpoint key's last names to yours, first match wins. Keys are renamed per layer (`rename_layer`) before anything else, so `serialized_names` only uses your names.
 
 ```py
-def get_weight_conversions(self):
-    if self.pre_quantized:
-        return [
-            WeightConverter(
-                source_patterns=["_weight_qdata", "_weight_scale", "_weight_zero_point"],
-                target_patterns="weight",
-                operations=[YourDeserialize(self)],
-            ),
-        ]
-    return []
+class YourHfQuantizer(HfQuantizer):
+    serialized_names = {
+        "weight": ["weight_qdata", "weight_scale", "weight_zero_point"],
+        # fused experts: the model's converters merge each expert's tensors into these
+        "gate_up_proj": ["gate_up_proj_qdata", "gate_up_proj_scale", "gate_up_proj_zero_point"],
+    }
+    checkpoint_renames = {"scale": "weight_scale", "zp": "weight_zero_point"}  # the checkpoint's `.scale` / `.zp`
+
+    def get_load_operations(self):
+        return {"deserialize": YourDeserialize, "dequantize": YourDequantize}
 
 
 class YourDeserialize(ConversionOps):

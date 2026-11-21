@@ -19,8 +19,6 @@ This module provides:
   - ``MetalLinear``: a drop-in replacement for ``nn.Linear`` that stores weights
     as affine-quantized uint32 packed tensors and uses the ``quantization-mlx``
     Metal kernels for the forward pass.
-  - ``replace_with_metal_linear``: walks a model and swaps every eligible
-    ``nn.Linear`` with ``MetalLinear``.
   - ``MetalQuantize`` / ``MetalDequantize``: weight conversion operations that
     participate in the new ``WeightConverter`` pipeline.
 
@@ -34,7 +32,6 @@ which computes ``y = x @ dequant(weight).T``, identical to ``nn.Linear``.
 """
 
 from ..core_model_loading import ConversionOps, _IdentityOp
-from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_torch_available, logging
 
 
@@ -46,6 +43,18 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 _metal_kernel = None
+
+
+_decode_kernels = []
+
+
+def _decode_kernel():
+    """The pinned `metal-moe-decode` hub kernel, or None where it does not load."""
+    if not _decode_kernels:
+        from .hub_kernels import metal_kernel
+
+        _decode_kernels.append(metal_kernel("metal-moe-decode"))
+    return _decode_kernels[0]
 
 
 def _get_metal_kernel():
@@ -132,54 +141,76 @@ class MetalLinear(nn.Linear):
         return output
 
 
-def replace_with_metal_linear(
-    model,
-    modules_to_not_convert: list[str] | None = None,
-    quantization_config=None,
-    pre_quantized: bool = False,
-):
+def metal_fp4_experts_available(device_map) -> bool:
+    """Whether a `device_map` puts the model on MPS and the `metal-moe-decode` kernels load: NVFP4 / MXFP8 experts then
+    stay quantized (`MetalFp4Experts`) instead of being dequantized"""
+    devices = set(device_map.values()) if isinstance(device_map, dict) else {device_map}
+    on_mps = all(str(device).startswith("mps") for device in devices)
+    return on_mps and _decode_kernel() is not None and hasattr(_decode_kernel(), "fp4_gate_up_act")
+
+
+def metal_fp4_module(name: str, module: nn.Module, fmt: str) -> nn.Module:
+    """The MPS module of a pre-quantized NVFP4 / MXFP8 module: experts run on `MetalFp4Experts`"""
+    if name.endswith(".experts"):
+        return MetalFp4Experts(module, fmt)
+    raise NotImplementedError(
+        f"Only MoE experts of a {fmt.upper()} checkpoint run quantized on MPS, not `{name}` ({type(module).__name__}). "
+        "Load it with `dequantize=True` in its quantization config."
+    )
+
+
+class MetalFp4Experts(nn.Module):
     """
-    Replace every eligible ``nn.Linear`` with ``MetalLinear``.
+    Experts kept in their checkpoint's NVFP4 or MXFP8 banks (no dequantized copy), run by the `metal-moe-decode`
+    kernels: gate/up + activation in one dispatch, down + routing sum in another, for any number of tokens. The params
+    have the names of the plan's NVFP4 / FP8 experts, so the same converters load them:
 
-    Args:
-        model: the ``PreTrainedModel`` (on the meta device at this point).
-        modules_to_not_convert: module names to leave untouched.
-        quantization_config: the ``MetalConfig`` instance.
-        pre_quantized: ``True`` when loading from a quantized checkpoint.
+        nvfp4: `{proj}` uint8 [E, N, K / 2], `{proj}_scale` e4m3 bytes [E, N, K / 16], `{proj}_scale_2` float32 global
+               scales ([E, 2] for gate / up, [E] for down)
+        mxfp8: `{proj}` float8_e4m3fn [E, N, K], `{proj}_scale_inv` e8m0 [E, N, K / 32]
+
+    `gate_up_proj` is `[gate; up]`. The activation is the experts' own: a softcapped SwiGLU (`gate_softcap` /
+    `up_softcap` on its `act_fn`, e.g. Inkling2) or SiLU(gate) * up.
     """
-    if quantization_config.dequantize:
-        return model
 
-    bits = quantization_config.bits
-    group_size = quantization_config.group_size
+    def __init__(self, experts: nn.Module, fmt: str = "nvfp4"):
+        super().__init__()
+        self.num_experts, self.fmt = experts.num_experts, fmt
+        hidden, inter = experts.hidden_dim, experts.intermediate_dim
+        self.act_fn = experts.act_fn
+        self.gate_cap = float(getattr(getattr(self.act_fn, "gate_softcap", None), "softcap", 0.0))
+        self.up_cap = float(getattr(getattr(self.act_fn, "up_softcap", None), "softcap", 0.0))
+        nvfp4 = fmt == "nvfp4"
+        for name, (rows, columns) in {"gate_up_proj": (2 * inter, hidden), "down_proj": (hidden, inter)}.items():
+            if nvfp4:
+                params = {
+                    name: torch.empty(self.num_experts, rows, columns // 2, dtype=torch.uint8),
+                    f"{name}_scale": torch.empty(self.num_experts, rows, columns // 16, dtype=torch.uint8),
+                    f"{name}_scale_2": torch.ones(self.num_experts, *((2,) if name == "gate_up_proj" else ())),
+                }
+            else:
+                params = {
+                    name: torch.empty(self.num_experts, rows, columns, dtype=torch.float8_e4m3fn),
+                    f"{name}_scale_inv": torch.empty(self.num_experts, rows, columns // 32, dtype=torch.uint8),
+                }
+            for key, tensor in params.items():
+                self.register_parameter(key, nn.Parameter(tensor, requires_grad=False))
+        if not nvfp4:  # the kernels take a global scale argument, unused for MXFP8
+            self.register_buffer("_no_scale_2", torch.ones(1), persistent=False)
 
-    has_been_replaced = False
+    def _bank(self, name):
+        if self.fmt == "nvfp4":
+            return getattr(self, name), getattr(self, f"{name}_scale"), getattr(self, f"{name}_scale_2")
+        return getattr(self, name), getattr(self, f"{name}_scale_inv"), self._no_scale_2
 
-    for module_name, module in model.named_modules():
-        if not should_convert_module(module_name, modules_to_not_convert):
-            continue
-
-        if isinstance(module, nn.Linear):
-            module_kwargs = {} if pre_quantized else {"dtype": None}
-            new_module = MetalLinear(
-                in_features=module.in_features,
-                out_features=module.out_features,
-                bias=module.bias is not None,
-                bits=bits,
-                group_size=group_size,
-                **module_kwargs,
-            )
-
-            model.set_submodule(module_name, new_module)
-            has_been_replaced = True
-
-    if not has_been_replaced:
-        logger.warning(
-            "You are loading a model with Metal quantization but no nn.Linear modules were found. "
-            "Please double check your model architecture."
+    def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor):
+        # every (token, route) pair is a gathered matvec straight from the banks: no dequantized copy, no host sync
+        kernel = _decode_kernel()
+        ids, weights = top_k_index.int(), top_k_weights.float()
+        act = kernel.fp4_gate_up_act(
+            hidden_states, *self._bank("gate_up_proj"), ids, weights, self.gate_cap, self.up_cap
         )
-
-    return model
+        return kernel.fp4_down_sum(act, *self._bank("down_proj"), ids, weights)
 
 
 def _affine_quantize_tensor(weight: torch.Tensor, group_size: int, bits: int):

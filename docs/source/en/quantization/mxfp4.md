@@ -18,6 +18,8 @@ rendered properly in your Markdown viewer.
 
 MXFP4 is the 4-bit floating-point format from the [Open Compute Project Microscaling (MX) specification](https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf). It stores E2M1 values in blocks that share one power-of-two (E8M0) scale. In Transformers, MXFP4 quantizes the mixture-of-experts layers of [GPT-OSS](../model_doc/gpt_oss) models, so use it to run GPT-OSS with less memory.
 
+Note: MXFP4 quantization currently only works for OpenAI GPT-OSS 120b and 20b, and for DeepSeek-V4's routed experts. DeepSeek-V4's checkpoints are [fine-grained FP8](./finegrained_fp8) with MXFP4 routed experts (`expert_dtype: "fp4"`), and load as a [quantization plan](./overview#quantization-plans) of the two. The MXFP4 experts have their own experts implementations (`grouped_mm`, `batched_mm`, `deepgemm`, `deepgemm_megamoe`, see [Experts backends](../experts_interface)); the default dequantizes each routed expert.
+
 The table below summarizes what MXFP4 supports in Transformers.
 
 | | |
