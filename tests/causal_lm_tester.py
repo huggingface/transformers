@@ -40,6 +40,7 @@ from .test_modeling_common import (
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
+from .test_sequence_parallel_mixin import SequenceParallelTesterMixin
 from .test_tensor_parallel_mixin import TensorParallelTesterMixin
 from .test_training_mixin import TrainingTesterMixin
 
@@ -261,6 +262,7 @@ class CausalLMModelTest(
     TensorParallelTesterMixin,
     ExpertParallelTesterMixin,
     FSDPTesterMixin,
+    SequenceParallelTesterMixin,
 ):
     model_tester_class = None
     all_model_classes = None

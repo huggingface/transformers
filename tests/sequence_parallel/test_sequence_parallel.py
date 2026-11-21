@@ -35,11 +35,10 @@ from transformers.distributed.utils import gather_full_state_dict
 from transformers.masking_utils import create_sliding_window_causal_mask
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 from transformers.models.mistral.modeling_mistral import MistralAttention, MistralRotaryEmbedding
-from transformers.testing_utils import is_fsdp_test
+from transformers.testing_utils import is_sequence_parallel_test
 from transformers.utils import is_torch_greater_or_equal
 
-from ..distributed_testing_utils import run_distributed
-from ..test_fsdp_mixin import _deterministic_init_model_dir, _distributed_tmpdir
+from ..distributed_testing_utils import _deterministic_init_model_dir, _distributed_tmpdir, run_distributed
 
 
 def _mesh(size=2, rank=0):
@@ -99,7 +98,7 @@ def _test_ulysses_matches_full_attention(rank):
     assert ALL_ATTENTION_FUNCTIONS["sdpa"] is sdpa
 
 
-@is_fsdp_test
+@is_sequence_parallel_test
 class TestUlyssesAttention(unittest.TestCase):
     def test_matches_full_attention(self):
         run_distributed(world_size=2, backend="gloo")(_test_ulysses_matches_full_attention)()
@@ -477,7 +476,7 @@ class TestSequenceParallelPlan(unittest.TestCase):
                 model._resolve_parallel_plans(DistributedConfig(sp_size=2))
 
 
-@is_fsdp_test
+@is_sequence_parallel_test
 class TestSequenceParallelModel(unittest.TestCase):
     """A model sharded with sequence parallelism reproduces the same run on the full sequences."""
 
