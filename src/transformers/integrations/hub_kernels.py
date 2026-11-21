@@ -79,6 +79,14 @@ _KERNELS_INTERNAL_PATH_MAPPINGS = {
 # Maps from import name to the distribution that ships it, where the two differ
 _PACKAGE_TO_DISTRIBUTION = {"fla": "flash-linear-attention"}
 
+# Maps from import name to the device types the package's kernels run on (ROCm tensors report `cuda`). Inputs on other
+# devices, e.g. CPU, use the torch implementation. Packages that aren't listed get inputs on every device.
+_PACKAGE_SUPPORTED_DEVICES = {
+    "causal_conv1d": ("cuda",),
+    "fla": ("cuda", "xpu", "mlu", "npu"),
+    "mamba_ssm": ("cuda",),
+}
+
 
 if is_kernels_available():
     from kernels import (
@@ -987,6 +995,14 @@ def get_kernel(
     )
 
 
+def _get_input_device_type(args: tuple, kwargs: dict) -> str | None:
+    """Device type of the first tensor in the arguments, `None` if there is none."""
+    for arg in (*args, *kwargs.values()):
+        if isinstance(arg, torch.Tensor):
+            return arg.device.type
+    return None
+
+
 def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
     """
     The same as `use_kernel_forward_from_hub` but with the optional fallback to an original package if it exists, e.g.,
@@ -995,7 +1011,7 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
     This combines all options with kernels, enabling kernels on top of the original package if requested as well.
     The order of priority is
         1. Hf kernels (if requested)
-        2. Original package
+        2. Original package (if it runs on the device of the inputs)
         3. Torch only path
     """
     kernel_wrapper_decorator = use_kernel_forward_from_hub(func_name)
@@ -1021,8 +1037,10 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
         # Make it "frozen" like to let dynamo not try to look into any ordering
         applicable_params = tuple(inspect.signature(implementation).parameters)
+        torch_params = tuple(inspect.signature(torch_function).parameters)
         # A boolean to track if the implementation is new, i.e. not the original torch function
         is_new_implementation = implementation is not torch_function
+        supported_devices = _PACKAGE_SUPPORTED_DEVICES.get(package) if is_new_implementation else None
 
         @functools.wraps(torch_function)
         def wrapped(*args, **kwargs):
@@ -1030,10 +1048,18 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             if is_new_implementation and is_torchdynamo_exporting():
                 return torch_function(*args, **kwargs)
 
-            if not is_new_implementation and (
-                kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None
-            ):
+            # Original packages only run on some devices, so inputs on any other device (e.g. CPU) use the torch path
+            device_type = _get_input_device_type(args, kwargs) if supported_devices is not None else None
+            unsupported_device = device_type is not None and device_type not in supported_devices
+            use_package = is_new_implementation and not unsupported_device
+
+            if not use_package and (kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None):
                 distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
+                if unsupported_device:
+                    raise ValueError(
+                        f"`{func_name}` can't keep packed sequences apart on {device_type}. `{distribution}`, "
+                        f"which handles them, only runs on {', '.join(supported_devices)}."
+                    )
                 raise ValueError(
                     f"`{func_name}` can't keep packed sequences apart without `{distribution}`. Install "
                     f"`{distribution}` to train on packed sequences."
@@ -1047,8 +1073,9 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
                     f"`{distribution}` for the optimized kernel."
                 )
 
-            kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
-            return implementation(*args, **kwargs)
+            function, params = (implementation, applicable_params) if use_package else (torch_function, torch_params)
+            kwargs = {k: v for k, v in kwargs.items() if k in params}
+            return function(*args, **kwargs)
 
         return kernel_wrapper_decorator(wrapped)
 
