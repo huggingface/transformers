@@ -22,8 +22,9 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, is_scipy_available, requires_backends
+from ...utils import auto_docstring, is_scipy_available
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 
 
 if is_scipy_available():
@@ -117,6 +118,7 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
+    @requires(backends=("torch", "scipy"))
     def post_process_object_detection(
         self,
         outputs,
@@ -142,7 +144,6 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             `polygon_points` and `order_seq` predicted by the model. Predictions are sorted by reading order, so
             `order_seq` is non-decreasing (a query selected under several labels keeps a single rank).
         """
-        requires_backends(self, ["torch", "scipy"])
         if target_sizes is None:
             raise ValueError("`target_sizes` is required to map the predictions back to the original image size.")
 
@@ -205,12 +206,12 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         Converts the box parameterization predicted by the bbox heads into normalized corner coordinates.
 
         Args:
-            pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_coords)`):
+            pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, config.num_coords)`):
                 Boxes as `[center_x, center_y, dx1, dy1, ..., dx4, dy4]` in sigmoid space, with the corner offsets
                 shifted by `+0.5`.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_queries, 4, 2)`: The four corners in top-left, top-right,
+            `torch.Tensor` of shape `(batch_size, num_queries, 4, 2)`: The four corners in top-left, top-right,
             bottom-right, bottom-left order, normalized to `[0, 1]`.
         """
         num_coords = pred_boxes.shape[-1]

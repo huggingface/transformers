@@ -146,10 +146,10 @@ In diversi modelli, le etichette diventano coerenti con gli altri modelli:
 - `lm_labels` diventa `labels` in `T5ForConditionalGeneration`.
 
 In diversi modelli, il meccanismo di memorizzazione nella cache diventa coerente con gli altri:
-- `decoder_cached_states` diventa `past_key_values` in tutti i modelli BART-like, FSMT e T5.
-- `decoder_past_key_values` diventa `past_key_values` in tutti i modelli BART-like, FSMT e T5.
-- `past` diventa `past_key_values` in tutti i modelli CTRL.
-- `past` diventa `past_key_values` in tutti i modelli GPT-2.
+- `decoder_cached_states` diventa `cache` in tutti i modelli BART-like, FSMT e T5.
+- `decoder_cache` diventa `cache` in tutti i modelli BART-like, FSMT e T5.
+- `past` diventa `cache` in tutti i modelli CTRL.
+- `past` diventa `cache` in tutti i modelli GPT-2.
 
 Per quanto riguarda le classi tokenizer:
 - L'attributo tokenizer `max_len` diventa `model_max_length`.

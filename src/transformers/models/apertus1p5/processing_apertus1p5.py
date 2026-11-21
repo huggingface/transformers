@@ -1,0 +1,100 @@
+# Copyright 2026 The SwissAI Initiative and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Processor class for Apertus 1.5."""
+
+import numpy as np
+
+from ...audio_utils import AudioInput
+from ...image_utils import ImageInput
+from ...processing_utils import MultiModalData, ProcessorMixin
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
+
+
+@auto_docstring(custom_intro="Constructs an Apertus 1.5 processor for text, images, and audio.")
+class Apertus1p5Processor(ProcessorMixin):
+    # bare arrays are assumed to already be 24 kHz mono, like the reference pipeline
+    audio_kwargs = {"sampling_rate": 24000}
+
+    def __init__(self, image_processor=None, feature_extractor=None, tokenizer=None, chat_template=None, **kwargs):
+        self.image_token = tokenizer.image_token
+        self.audio_token = tokenizer.audio_token
+        self.boi_token = tokenizer.boi_token
+        self.eoi_token = tokenizer.eoi_token
+        self.image_wrapper_token = tokenizer.image_wrapper_token
+        self.eol_token = tokenizer.eol_token
+        self.boa_token = tokenizer.boa_token
+        self.eoa_token = tokenizer.eoa_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
+        super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template)
+
+    def validate_inputs(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos=None,
+        audio: AudioInput | None = None,
+        **kwargs,
+    ):
+        """Run the base validation and require the text that holds the media placeholders."""
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        if text is None and (images is not None or audio is not None):
+            raise ValueError("`text` with media placeholder tokens must be provided when passing images or audio.")
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        spatial_factor = kwargs.get("spatial_factor", self.image_processor.spatial_factor)
+        grid_height, grid_width = (int(side) // spatial_factor for side in image_inputs["image_sizes"][image_idx])
+        rows = self.eol_token.join([self.image_token * grid_width] * grid_height)
+        return f"{self.boi_token}{grid_height}*{grid_width}{self.image_wrapper_token}{rows}{self.eoi_token}"
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        # count from the feature extractor's output, so truncation cannot desync placeholders from features
+        num_samples = int(np.asarray(audio_inputs["padding_mask"][audio_idx]).sum())
+        num_codes = self.feature_extractor.get_num_audio_codes(num_samples)
+        return f"{self.boa_token}{self.audio_token * num_codes}{self.eoa_token}"
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Counts cover only the `<|image|>` / `<|audio|>` placeholder tokens (one per discrete code), not the
+        surrounding structure tokens or the textual `H*W` size header. Audio counts assume untruncated clips;
+        explicit `truncation`/`max_length` audio kwargs passed to `__call__` reduce the actual counts.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            audio_lengths (`list[int]`, *optional*):
+                The number of audio samples (at 24 kHz) per each clip.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            data["num_image_tokens"] = [
+                self.image_processor.get_number_of_image_patches(int(height), int(width), images_kwargs)
+                for height, width in image_sizes
+            ]
+            data["num_image_patches"] = [1] * len(image_sizes)
+        if audio_lengths is not None:
+            data["num_audio_tokens"] = [
+                self.feature_extractor.get_num_audio_codes(int(length)) for length in audio_lengths
+            ]
+        return MultiModalData(**data)
+
+
+__all__ = ["Apertus1p5Processor"]

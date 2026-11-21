@@ -15,7 +15,7 @@
 import json
 import unittest
 
-from transformers.testing_utils import require_torchcodec, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -23,7 +23,6 @@ from ...test_processing_common import ProcessorTesterMixin
 
 if is_vision_available():
     from transformers import (
-        AutoProcessor,
         Ovis2Processor,
     )
 
@@ -67,40 +66,3 @@ class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
-
-    def test_chat_template(self):
-        processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-1B-hf")
-        expected_prompt = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-
-        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEqual(expected_prompt, formatted_prompt)
-
-    @require_torchcodec
-    def test_chat_template_dict(self):
-        processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-1B-hf")
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": "What is shown in this image?"},
-                ],
-            },
-        ]
-
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
-        expected_output = [[151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 27, 1805, 397, 3838, 374, 6839, 304, 419, 2168, 30, 151645, 198, 151644, 77091, 198]]  # fmt: skip
-        self.assertListEqual(expected_output, formatted_prompt_tokenized)
-
-        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
-        self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])

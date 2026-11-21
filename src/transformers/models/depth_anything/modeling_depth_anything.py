@@ -78,7 +78,7 @@ class DepthAnythingReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         out = []
@@ -244,7 +244,7 @@ class DepthAnythingNeck(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -316,7 +316,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     """
 )
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DepthAnythingConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -331,7 +331,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
     @filter_output_hidden_states
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:

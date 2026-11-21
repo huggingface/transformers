@@ -30,7 +30,7 @@ from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MultimodalBaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -38,12 +38,17 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_embedding_gemma2 import EmbeddingGemma2Config, EmbeddingGemma2TextConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 class EmbeddingGemma2RMSNorm(nn.Module):
@@ -125,7 +130,6 @@ class EmbeddingGemma2RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -406,6 +410,7 @@ class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
         self.layer_scalar = nn.Buffer(torch.ones(1))
         self.ple_block = EmbeddingGemma2TextPLEBlock(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -453,7 +458,6 @@ class EmbeddingGemma2PreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # override
     input_modalities = ("image", "text", "video", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, EmbeddingGemma2RotaryEmbedding):
@@ -510,12 +514,13 @@ class EmbeddingGemma2TextModel(EmbeddingGemma2PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -602,25 +607,24 @@ class EmbeddingGemma2AudioModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.BoolTensor | None = None
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for EmbeddingGemma2 outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class EmbeddingGemma2ModelOutput(BaseModelOutput):
-    r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    """
+class EmbeddingGemma2ModelOutput(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-    image_hidden_states: torch.FloatTensor | None = None
-
-    audio_hidden_states: torch.FloatTensor | None = None
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
 
 
 @auto_docstring(
@@ -633,6 +637,8 @@ class EmbeddingGemma2ModelOutput(BaseModelOutput):
 class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike Gemma4
     config: EmbeddingGemma2Config
     _keys_to_ignore_on_load_unexpected = [
         r"(^|\.)vision_tower\.",
@@ -663,7 +669,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -694,7 +700,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.BoolTensor, torch.BoolTensor, torch.BoolTensor]:
         """
         Obtains mask for multimodal placeholders (replaced by soft tokens) and hard text tokens.
@@ -739,23 +745,24 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EmbeddingGemma2ModelOutput:
         r"""
-        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
@@ -772,6 +779,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
         multimodal_mask = image_mask | video_mask | audio_mask
+        mm_encoder_outputs = {}
 
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if inputs_embeds is None:
@@ -780,8 +788,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            mm_encoder_outputs["image"] = image_outputs
+            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -797,10 +808,13 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
             )
 
         if pixel_values_videos is not None:
-            video_features = self.get_video_features(
+            video_outputs = self.get_video_features(
                 pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
-            ).pooler_output
-            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+            mm_encoder_outputs["video"] = video_outputs
+            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -818,6 +832,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            mm_encoder_outputs["audio"] = audio_output
             audio_features = audio_output.pooler_output
             audio_mask_from_encoder = audio_output.attention_mask  # True = valid
 
@@ -845,11 +860,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         )
 
         return EmbeddingGemma2ModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=mm_encoder_outputs.get("audio")
         )
 
     @can_return_tuple
@@ -861,9 +872,9 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | EmbeddingGemma2AudioModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
+        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.
-        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         """
         if self.audio_tower is None:
@@ -881,13 +892,13 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
     def get_video_features(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
+        pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
             on a separate video axis, so that videos of different lengths can be batched together.
         video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):

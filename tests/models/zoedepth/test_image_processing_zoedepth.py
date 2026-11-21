@@ -30,7 +30,7 @@ if is_torch_available():
 
 @dataclass
 class ZoeDepthDepthOutputProxy:
-    predicted_depth: torch.FloatTensor = None
+    predicted_depth: torch.Tensor = None
 
 
 class ZoeDepthImageProcessingTester(ImageProcessingTester):

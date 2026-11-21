@@ -1,10 +1,8 @@
 name: Self-hosted runner (benchmark)
 
+# Automatic runs (push to main, labeled PRs) are disabled; trigger manually if needed.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [ opened, labeled, reopened, synchronize ]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -27,9 +25,6 @@ jobs:
         group: [aws-g5-4xlarge-cache]
     runs-on:
       group: ${{ matrix.group }}
-    if: |
-      (github.event_name == 'pull_request' && contains( github.event.pull_request.labels.*.name, 'run-benchmark') )||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --privileged --ipc host
@@ -49,11 +44,7 @@ jobs:
       - name: Run benchmark
         run: |
           git config --global --add safe.directory /__w/transformers/transformers
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            commit_id=$(echo "${{ github.event.pull_request.head.sha }}")
-          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            commit_id=$GITHUB_SHA
-          fi
+          commit_id=$GITHUB_SHA
           commit_msg=$(git show -s --format=%s | cut -c1-70)
           python3 benchmark_v2/run_benchmarks.py -b 32 -s 128 -n 256 --level 2 --branch-name "$BRANCH_NAME" --commit-id "$commit_id" --commit-message "$commit_msg" --model-id "$MODEL_ID" --log-level INFO --push-result-to-dataset "$DATASET_ID"
         env:

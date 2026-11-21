@@ -353,7 +353,6 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     }
     _input_embed_layer = "patch_embeddings"
 
-    @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
@@ -487,7 +486,7 @@ class Dinov2WithRegistersForImageClassification(Dinov2WithRegistersPreTrainedMod
     """
 )
 class Dinov2WithRegistersBackbone(BackboneMixin, Dinov2WithRegistersPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Dinov2WithRegistersConfig):
         super().__init__(config)
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = Dinov2WithRegistersEmbeddings(config)

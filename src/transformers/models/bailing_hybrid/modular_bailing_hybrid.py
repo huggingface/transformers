@@ -55,6 +55,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 
 
@@ -67,11 +68,12 @@ class BailingHybridConfig(DeepseekV3Config):
     first_k_dense_replace (`int`, *optional*, defaults to 2):
         Number of initial decoder layers that use a dense MLP instead of routed experts.
     num_mtp_layers (`int`, *optional*, defaults to 1):
-        Number of Multi-Token Prediction (MTP) modules available to append after the base transformer model. When `0`,
-        the model behaves as a standard decoder. When `>0`, each extra module can predict one additional future token at inference
-        time (speculative decoding via `generate(..., use_mtp=True)`).
+        Number of Multi-Token Prediction (MTP) layers stored after the main decoder in the checkpoint. Standard causal
+        inference uses only `num_hidden_layers` decoder layers.
     rope_theta (`float`, *optional*, defaults to 6000000.0):
         Base period of the rotary position embeddings used by MLA layers.
+    q_lora_rank (`int`, *optional*, defaults to `None`):
+        Low-rank dimension of the query projection in MLA layers. When unset, queries use a single projection.
     short_conv_kernel_size (`int`, *optional*, defaults to 4):
         Kernel size of the short depthwise convolutions in KDA layers.
     layer_group_size (`int`, *optional*, defaults to 6):
@@ -88,7 +90,6 @@ class BailingHybridConfig(DeepseekV3Config):
     """
 
     model_type = "bailing_hybrid"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -149,6 +150,7 @@ class BailingHybridConfig(DeepseekV3Config):
     output_router_logits: bool = False
 
     kv_lora_rank: int = 512
+    q_lora_rank: int | None = None
     qk_nope_head_dim: int = 128
     qk_rope_head_dim: int = 64
     v_head_dim: int = 128
@@ -167,7 +169,6 @@ class BailingHybridConfig(DeepseekV3Config):
     # Ling checkpoints use `num_experts`; the DeepSeek compatibility name is not part of this architecture.
     n_routed_experts = AttributeError()
     rope_interleave = AttributeError()
-    q_lora_rank = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.linear_head_dim = self.head_dim
@@ -211,29 +212,28 @@ class BailingHybridMLP(DeepseekV3MLP):
 
 
 class BailingHybridAttention(DeepseekV3Attention):
-    """Multi-head latent attention with the head-wise output gate used by Ling 3.0."""
+    """Multi-head latent attention with the head-wise output gate used by Ling 3 models."""
 
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.g_proj = nn.Linear(config.hidden_size, self.num_heads, bias=False)
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
-        del self.q_a_proj
-        del self.q_a_layernorm
-        del self.q_b_proj
-        del self.q_lora_rank
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
-        q_states = self.q_proj(hidden_states)
+        if self.q_lora_rank is None:
+            q_states = self.q_proj(hidden_states)
+        else:
+            q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states)))
         q_states = q_states.view(query_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
@@ -245,8 +245,8 @@ class BailingHybridAttention(DeepseekV3Attention):
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
-        if past_key_values is not None:
-            kv_nope, k_rot = past_key_values.update(kv_nope, k_rot, self.layer_idx)
+        if cache is not None:
+            kv_nope, k_rot = cache.update(kv_nope, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states, value_states = self.expand_kv(kv_nope, k_rot)
@@ -281,8 +281,8 @@ class BailingHybridForgetGate(nn.Module):
         self.qkv_dim = self.head_dim * self.num_heads
         self.safe_gate = config.kda_safe_gate
         self.lower_bound = config.kda_lower_bound
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
         self.f_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -311,10 +311,11 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
         del self.layer_type
 
     @force_accelerate_hooks("conv1d")
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -326,9 +327,9 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
         ).transpose(1, 2)
 
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
-        if cache_params is not None:
-            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
-            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        if cache is not None:
+            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
             conv_state, recurrent_state = None, None
 
@@ -341,10 +342,8 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
                 activation=self.activation,
             )
         else:
-            if cache_params is not None:
-                mixed_qkv = cache_params.update_conv_state(
-                    mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size
-                )
+            if cache is not None:
+                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
             mixed_qkv = causal_conv1d_fn(
                 mixed_qkv,
                 weight=self.conv1d.weight.squeeze(1),
@@ -352,7 +351,7 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
                 activation=self.activation,
                 **kwargs,
             )
-            if cache_params is not None:
+            if cache is not None:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         query, key, value = torch.split(mixed_qkv.transpose(1, 2), [self.qkv_dim] * 3, dim=-1)
@@ -368,7 +367,7 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
                 g=decay,
                 beta=beta,
                 initial_state=recurrent_state,
-                output_final_state=cache_params is not None,
+                output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
             )
@@ -380,13 +379,13 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
                 g=decay,
                 beta=beta,
                 initial_state=recurrent_state,
-                output_final_state=cache_params is not None,
+                output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
             )
 
-        if cache_params is not None:
-            cache_params.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
+        if cache is not None:
+            cache.update_recurrent_state(last_recurrent_state.to(torch.float32), self.layer_idx)
 
         output_gate = self.g_proj(hidden_states)
         output = self.o_norm(output, output_gate.view(hidden_shape)).reshape(batch_size, seq_len, -1)
@@ -408,9 +407,10 @@ class BailingHybridDecoderLayer(KimiLinearDecoderLayer):
 @auto_docstring
 class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _no_split_modules = ["BailingHybridDecoderLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.42\..*"]
+    _keys_to_ignore_on_load_unexpected = None
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "conv1d",
         "dt_bias",
         "A_log",
@@ -421,7 +421,6 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         "attentions": BailingHybridAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, BailingHybridForgetGate):
@@ -441,7 +440,12 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
 
 @auto_docstring
 class BailingHybridModel(Qwen3NextModel):
-    pass
+    def __init__(self, config: BailingHybridConfig):
+        super().__init__(config)
+        self._keys_to_ignore_on_load_unexpected = [
+            rf"(^|\.)layers\.{layer_idx}\."
+            for layer_idx in range(config.num_hidden_layers, config.num_hidden_layers + config.num_mtp_layers)
+        ]
 
 
 class BailingHybridForCausalLM(DeepseekV3ForCausalLM, GenerationMixin):

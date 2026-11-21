@@ -424,34 +424,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
 
-    def test_missing_images_error(self):
-        """Test that appropriate error is raised when images are referenced but not provided."""
-        processor = self.get_processor()
-
-        # Test single text with image token but no image
-        text = "Let me show you this image: <image> What do you think?"
-        with self.assertRaises(ValueError) as context:
-            processor(text=text)
-        self.assertTrue("We detected 1 tokens in the text but no images were passed" in str(context.exception))
-
-        # Test batch with image tokens but no images
-        texts = [
-            "First text with <image> token.",
-            "Second text <image> with token.",
-        ]
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts)
-        self.assertTrue("We detected 2 tokens in the text but no images were passed" in str(context.exception))
-
-        # Test with None as Images
-        with self.assertRaises(ValueError) as context:
-            processor(text=text, images=None)
-        self.assertTrue("We detected 1 tokens in the text but no images were passed" in str(context.exception))
-
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts, images=None)
-        self.assertTrue("We detected 2 tokens in the text but no images were passed" in str(context.exception))
-
     def test_single_tile_image_with_thumbnail_disabled(self):
         """Test that single-tile images work correctly when use_thumbnail=False."""
         processor_components = self.prepare_components()

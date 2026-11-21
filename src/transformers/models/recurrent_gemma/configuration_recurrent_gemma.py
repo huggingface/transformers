@@ -54,7 +54,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
     """
 
     model_type = "recurrent_gemma"
-    attribute_map = {"sliding_window": "attention_window_size"}
+    attribute_map = {"sliding_window": "attention_window_size", "layer_types": "layers_block_type"}
 
     num_hidden_layers: int = 26
     vocab_size: int = 256000
@@ -97,7 +97,9 @@ class RecurrentGemmaConfig(PreTrainedConfig):
 
     @property
     def layers_block_type(self):
-        return (self.block_types * 100)[: self.num_hidden_layers]
+        # Follow the `layer_types` conventions: the attention blocks always use local (sliding window) attention
+        block_types = (self.block_types * 100)[: self.num_hidden_layers]
+        return ["linear_attention" if x == "recurrent" else "sliding_attention" for x in block_types]
 
 
 __all__ = ["RecurrentGemmaConfig"]

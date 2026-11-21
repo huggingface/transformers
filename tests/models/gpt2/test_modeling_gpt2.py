@@ -51,15 +51,10 @@ class GPT2ModelTester(CausalLMModelTester):
         base_model_class = GPT2Model
         causal_lm_class = GPT2LMHeadModel
 
-    def __init__(
-        self,
-        parent,
-        use_token_type_ids=True,
-        num_choices=4,
-        **kwargs,
-    ):
-        super().__init__(parent, use_token_type_ids=use_token_type_ids, **kwargs)
-        self.num_choices = num_choices
+    small_config_overrides = {
+        "use_token_type_ids": True,
+        "num_choices": 4,
+    }
 
     def prepare_config_and_inputs(
         self, extra_inputs=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -390,9 +385,9 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         else:
-            model.gradient_checkpointing_disable()
+            model.activation_checkpointing_disable()
         model.to(torch_device)
 
         # The dog
