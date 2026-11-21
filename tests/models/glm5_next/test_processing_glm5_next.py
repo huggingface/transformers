@@ -338,3 +338,30 @@ class Glm5NextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         original = copy.deepcopy(conversation)
         processor.apply_chat_template(conversation, tools=TOOLS, tokenize=True, return_dict=True)
         self.assertEqual(conversation, original)
+
+    def test_reorder_tool_results_opt_in_default_false(self):
+        # Other processors leave `reorder_tool_results_in_template_order = False` so images stay in message order
+        processor = self.get_glm5_processor()
+        processor.reorder_tool_results_in_template_order = False
+        conversation = _with_images(
+            [
+                USER_TURN,
+                _assistant_calls("c1", "c2"),
+                _tool_result("c2", [_image_block(1)]),
+                _tool_result("c1", [_image_block(2)]),
+            ]
+        )
+        batch_images, _, _, _ = processor._multimodal_inputs_from_conversations([conversation], {})
+        self.assertEqual([im.size for im in batch_images[0]], [_image(i).size for i in (0, 1, 2)])
+
+    def test_multimodal_inputs_skip_blocks_without_type(self):
+        processor = self.get_glm5_processor()
+        processor.reorder_tool_results_in_template_order = False
+        conversation = _with_images(
+            [
+                USER_TURN,
+                {"role": "tool", "content": [{"id": "a", "output": [_image_block(1)]}]},
+            ]
+        )
+        batch_images, _, _, _ = processor._multimodal_inputs_from_conversations([conversation], {})
+        self.assertEqual([im.size for im in batch_images[0]], [_image(0).size])
