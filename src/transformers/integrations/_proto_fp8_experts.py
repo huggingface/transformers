@@ -248,9 +248,24 @@ def trtllm_autotune(prepared, hidden, top_k, routing: dict | None, group=None):
     x = torch.randn(n, hidden, device=device, dtype=torch.bfloat16, generator=g)
     logits = torch.randn(n, num_experts, device=device, dtype=torch.float32, generator=g)
     top_k_weights, top_k_index = torch.topk(logits.sigmoid(), top_k, dim=-1)
+    # PROTO_EXPERTS_TRTLLM_AUTOTUNE_CACHE=<dir>: the chosen tactics persist in a small JSON file per rank (as vLLM does),
+    # loaded on entry and written back on exit, so only the first start of a machine pays the tuning. The name carries
+    # what the tactics depend on; flashinfer also rejects a file whose kernels no longer match
+    cache = None
+    cache_dir = os.environ.get("PROTO_EXPERTS_TRTLLM_AUTOTUNE_CACHE")
+    if cache_dir:
+        import flashinfer
+        import torch.distributed as dist
+
+        rank, world = (dist.get_rank(group), dist.get_world_size(group)) if group is not None else (0, 1)
+        gpu = torch.cuda.get_device_name(device).replace(" ", "_")
+        os.makedirs(cache_dir, exist_ok=True)
+        cache = os.path.join(
+            cache_dir, f"trtllm_moe_{gpu}_flashinfer{flashinfer.__version__}_e{num_experts}_h{hidden}_tp{world}_rank{rank}.json"
+        )
     set_autotune_process_group(group)
     try:
-        with torch.no_grad(), autotune(True):
+        with torch.no_grad(), autotune(True, cache=cache):
             trtllm_experts_forward(prepared, x, top_k_index, top_k_weights)
             if routing is not None:
                 trtllm_experts_forward_routing(prepared, x, logits, top_k=top_k, **routing)
