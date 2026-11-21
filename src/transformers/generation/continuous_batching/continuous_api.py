@@ -1206,7 +1206,7 @@ class ContinuousBatchingManager:
             raise RuntimeError("Call `reset_prefix_cache` inside the `pause` context, the generation loop uses it.")
         self.batch_processor.cache.invalidate_prefix_cache()
 
-    def release_memory(self) -> int:
+    def release_memory(self, nbytes: int | None = None) -> int:
         """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
         of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
         copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
@@ -1223,7 +1223,7 @@ class ContinuousBatchingManager:
         # paused loop always has its batch processor)
         if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
             raise RuntimeError("Call `release_memory` inside the `pause` context, the generation loop uses the cache.")
-        return self.batch_processor.cache.release_memory()
+        return self.batch_processor.cache.release_memory(nbytes)
 
     def restore_memory(self) -> None:
         """Brings back the KV cache freed by `release_memory`. CUDA graphs replay the addresses they were captured
@@ -1234,7 +1234,7 @@ class ContinuousBatchingManager:
             self.batch_processor.inputs_and_outputs.clear_graphs()
             logger.info("The KV cache moved while it was released, so the captured CUDA graphs were dropped")
 
-    def release_memory(self) -> int:
+    def release_memory(self, nbytes: int | None = None) -> int:
         """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
         of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
         copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
@@ -1251,7 +1251,7 @@ class ContinuousBatchingManager:
         # paused loop always has its batch processor)
         if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
             raise RuntimeError("Call `release_memory` inside the `pause` context, the generation loop uses the cache.")
-        return self.batch_processor.cache.release_memory()
+        return self.batch_processor.cache.release_memory(nbytes)
 
     def restore_memory(self) -> None:
         """Brings back the KV cache freed by `release_memory`. CUDA graphs replay the addresses they were captured

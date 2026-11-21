@@ -511,7 +511,7 @@ class PagedAttentionCache:
             keep.append((start, self.cache_tensor.numel()))
         return keep
 
-    def release_memory(self) -> int:
+    def release_memory(self, nbytes: int | None = None) -> int:
         """Copies the cache tensor to host memory and frees its GPU memory, returning the number of bytes released.
         The tensor and every view of it stay valid objects and the requests keep their blocks, but nothing may read or
         write the cache until `restore_memory` copies it back."""
@@ -530,7 +530,12 @@ class PagedAttentionCache:
             torch.accelerator.synchronize()  # nothing in flight may touch a chunk once it is unmapped
             t2 = perf_counter()
             self._released_address = self.cache_tensor.data_ptr()
-            freed = self._vmm.unmap_chunks([i for i in range(self._vmm.num_chunks) if i not in keep])
+            free_chunks = [i for i in range(self._vmm.num_chunks) if i not in keep]
+            if nbytes is not None:
+                # [scratch, gap4 pause] only what the caller asks for, from the start of the cache (the pool hands out
+                # sectors from the end): unmapping and mapping cost ~1.5 ms per GiB, whatever the chunk size
+                free_chunks = free_chunks[: -(-nbytes // chunk)]
+            freed = self._vmm.unmap_chunks(free_chunks)
             self._pause_detail = {"live_gib": round(live / 2**30, 3), "kept_chunks": len(keep), "chunks": self._vmm.num_chunks,
                                   "ranges_s": round(t1 - t0, 4), "sync_s": round(t2 - t1, 4), "unmap_s": round(perf_counter() - t2, 4)}
             return freed
