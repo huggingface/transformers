@@ -17,7 +17,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...backbone_utils import load_backbone
+from ...backbone_utils import filter_output_hidden_states, load_backbone
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -294,6 +294,7 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
@@ -325,12 +326,6 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
         ```"""
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
-
-        # Output flags are only forwarded to the backbone (which records them) if explicitly requested, either
-        # as kwargs or through this model's own config.
-        for flag in ("output_hidden_states", "output_attentions"):
-            if flag not in kwargs and getattr(self.config, flag, None):
-                kwargs[flag] = True
 
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, return_dict=True, **kwargs)
         features = outputs.feature_maps
