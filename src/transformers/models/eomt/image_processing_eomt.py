@@ -328,7 +328,7 @@ class EomtImageProcessor(TorchvisionBackend):
                 }
             )
 
-            processed_segmentation_maps, _ = self._preprocess(
+            processed_segmentation_maps, segmentation_patch_offsets = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
             )
             processed_segmentation_maps = [
@@ -338,7 +338,8 @@ class EomtImageProcessor(TorchvisionBackend):
             mask_labels, class_labels = [], []
             for idx, segmentation_map in enumerate(processed_segmentation_maps):
                 if isinstance(instance_id_to_semantic_id, list):
-                    instance_id = instance_id_to_semantic_id[idx]
+                    image_idx = segmentation_patch_offsets[idx][0] if segmentation_patch_offsets else idx
+                    instance_id = instance_id_to_semantic_id[image_idx]
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
