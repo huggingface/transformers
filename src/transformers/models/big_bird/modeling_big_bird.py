@@ -1408,7 +1408,6 @@ class BigBirdPreTrainedModel(PreTrainedModel):
         "cross_attentions": OutputRecorder(BigBirdSelfAttention, index=1, layer_name=".crossattention."),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -1591,6 +1590,13 @@ class BigBirdModel(BigBirdPreTrainedModel):
                 f"= {self.config.block_size}, config.num_random_blocks "
                 f"= {self.config.num_random_blocks}. "
                 "Changing attention type to 'original_full'..."
+            )
+            self.set_attention_type("original_full")
+
+        if self.attention_type == "block_sparse" and self.config.is_decoder and cache is not None:
+            # Block-sparse attention is bidirectional and never writes to the cache, so it cannot be used to decode
+            logger.warning_once(
+                "Attention type 'block_sparse' does not support `cache`. Changing attention type to 'original_full'..."
             )
             self.set_attention_type("original_full")
 

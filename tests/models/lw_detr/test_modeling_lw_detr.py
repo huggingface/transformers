@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -52,42 +53,29 @@ CHECKPOINT = {
 }
 
 
-class LwDetrVitModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        num_labels=3,
-        num_channels=3,
-        use_labels=True,
-        is_training=True,
-        image_size=256,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        window_block_indices=[1],
-        out_indices=[0],
-        num_windows=16,
-        dropout_prob=0.0,
-        attn_implementation="eager",
-    ):
+class LwDetrVitModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "num_labels": 3,
+        "num_channels": 3,
+        "use_labels": True,
+        "image_size": 256,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "window_block_indices": [1],
+        "out_indices": [0],
+        "num_windows": 16,
+        "dropout_prob": 0.0,
+        "attn_implementation": "eager",
+        "is_training": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_labels = num_labels
-        self.num_channels = num_channels
-        self.use_labels = use_labels
-        self.image_size = image_size
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.window_block_indices = window_block_indices
-        self.out_indices = out_indices
-        self.num_windows = num_windows
-        self.dropout_prob = dropout_prob
-        self.attn_implementation = attn_implementation
-
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -162,6 +150,8 @@ class LwDetrVitModelTester:
 
 @require_torch
 class LwDetrViTBackboneTest(ModelTesterMixin, BackboneTesterMixin, unittest.TestCase):
+    model_tester_class = LwDetrVitModelTester
+
     all_model_classes = (LwDetrViTBackbone,) if is_torch_available() else ()
     config_class = LwDetrViTConfig
     test_resize_embeddings = False
@@ -303,61 +293,42 @@ def prepare_img():
     return image
 
 
-class LwDetrModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        is_training=True,
-        image_size=256,
-        num_labels=5,
-        n_targets=4,
-        use_labels=True,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
+class LwDetrModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "is_training": True,
+        "num_channels": 3,
+        "image_size": 256,
+        "num_labels": 5,
+        "n_targets": 4,
+        "use_labels": True,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-5,
+        "batch_norm_eps": 1e-5,
         # backbone
-        backbone_config=None,
+        "backbone_config": None,
         # projector
-        projector_scale_factors=[0.5, 2.0],
+        "projector_scale_factors": [0.5, 2.0],
         # decoder
-        d_model=32,
-        decoder_ffn_dim=32,
-        decoder_layers=2,
-        decoder_self_attention_heads=2,
-        decoder_cross_attention_heads=4,
+        "d_model": 32,
+        "decoder_ffn_dim": 32,
+        "decoder_layers": 2,
+        "decoder_self_attention_heads": 2,
+        "decoder_cross_attention_heads": 4,
         # model
-        num_queries=10,
-        group_detr=2,
-        dropout=0.0,
-        activation_dropout=0.0,
-        attention_dropout=0.0,
-        attn_implementation="eager",
-    ):
+        "num_queries": 10,
+        "group_detr": 2,
+        "dropout": 0.0,
+        "activation_dropout": 0.0,
+        "attention_dropout": 0.0,
+        "attn_implementation": "eager",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.num_channels = 3
-        self.image_size = image_size
-        self.num_labels = num_labels
-        self.n_targets = n_targets
-        self.use_labels = use_labels
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
-        self.backbone_config = backbone_config
-        self.projector_scale_factors = projector_scale_factors
-        self.d_model = d_model
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_layers = decoder_layers
-        self.decoder_self_attention_heads = decoder_self_attention_heads
-        self.decoder_cross_attention_heads = decoder_cross_attention_heads
-        self.num_queries = num_queries
-        self.group_detr = group_detr
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.attention_dropout = attention_dropout
-        self.attn_implementation = attn_implementation
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -441,6 +412,8 @@ class LwDetrModelTester:
 
 @require_torch
 class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = LwDetrModelTester
+
     all_model_classes = (LwDetrModel, LwDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": LwDetrModel, "object-detection": LwDetrForObjectDetection}

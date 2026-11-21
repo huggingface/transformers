@@ -39,6 +39,8 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
@@ -281,7 +283,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_omni_moe_text"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
@@ -665,7 +666,6 @@ class Qwen3OmniMoePreTrainedModel(Qwen2_5OmniPreTrainedModel, PreTrainedModel):
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = getattr(self.config, "initializer_range", 0.02)
@@ -1246,7 +1246,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -1356,13 +1356,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
             **kwargs,
         )
 
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cache=outputs.cache,
-            router_logits=outputs.router_logits,
-        )
+        return MultimodalMoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
@@ -1404,11 +1398,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | MoeCausalLMOutputWithPast:
+    ) -> tuple | MultimodalMoeCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
-        outputs: MoeModelOutputWithPast = self.model(
+        outputs: MultimodalMoeBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             input_features=input_features,
             pixel_values=pixel_values,
@@ -1449,13 +1443,14 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             aux_loss=aux_loss,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cache=outputs.cache,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 
@@ -2852,8 +2847,39 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
             )
         # "audio_kwargs" has priority for backwards compatibility. The omni hooks read it from "audio_kwargs"
         audio_kwargs.setdefault("n_window", kwargs.pop("n_window", self.n_window))
-        return super().__call__(
-            text=text, images=images, videos=videos, audio=audio, audio_kwargs=audio_kwargs, **kwargs
+        videos_kwargs = dict(kwargs.pop("videos_kwargs", {}))
+        for key in ("seconds_per_chunk", "position_id_per_seconds"):
+            if key in videos_kwargs:
+                logger.warning_once(
+                    f"Passing `{key}` in `videos_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+                # "videos_kwargs" has priority for backwards compatibility
+                kwargs[key] = videos_kwargs.pop(key)
+
+        if kwargs.pop("use_audio_in_video", False) or videos_kwargs.pop("use_audio_in_video", False):
+            logger.warning(
+                "`use_audio_in_video` is depreacted and will be removed in v5.25, use `load_audio_from_video` instead"
+            )
+            kwargs["load_audio_from_video"] = True
+        return OmniModalProcessorMixin.__call__(
+            self,
+            images=images,
+            text=text,
+            videos=videos,
+            audio=audio,
+            audio_kwargs=audio_kwargs,
+            videos_kwargs=videos_kwargs,
+            **kwargs,
+        )
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, audio_lengths=None, **kwargs):
+        if "n_window" in kwargs:
+            kwargs["audio_kwargs"] = dict(kwargs.get("audio_kwargs", {}))
+            kwargs["audio_kwargs"].setdefault("n_window", kwargs.pop("n_window"))
+        return super()._get_num_multimodal_tokens(
+            image_sizes=image_sizes, video_sizes=video_sizes, audio_lengths=audio_lengths, **kwargs
         )
 
     def _get_num_audio_tokens(self, audio_length: int, **kwargs) -> int:

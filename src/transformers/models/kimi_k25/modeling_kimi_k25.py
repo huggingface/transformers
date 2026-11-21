@@ -29,10 +29,14 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
@@ -45,55 +49,31 @@ from ..auto import AutoModel
 from .configuration_kimi_k25 import Kimi_K25Config, Kimi_K25VisionConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Kimi_K25 outputs, with hidden states and attentions.
-    """
-)
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring
 @dataclass
-class Kimi_K25ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    image_hidden_states: torch.Tensor | None = None
+class Kimi_K25ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Kimi_K25 causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class Kimi_K25CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
+class Kimi_K25CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 def get_vision_frame_index(grid_thw: torch.Tensor, kwargs: dict | None = None) -> torch.Tensor:
@@ -216,7 +196,6 @@ class Kimi_K25VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -424,7 +403,6 @@ class Kimi_K25PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kimi_K25VisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -441,29 +419,60 @@ class Kimi_K25PreTrainedModel(PreTrainedModel):
 
 def get_vision_temporal_merge_index(
     grid_thw: torch.Tensor, kernel_height: int, kernel_width: int, kwargs: dict | None = None
-) -> torch.Tensor:
-    """Gather index regrouping a flat patch sequence into `(total_merged, t, kernel_height *
-    kernel_width)` for the temporal-pooling merger, or pop `"temporal_merge_index"` from `kwargs`.
+) -> tuple[torch.Tensor, torch.Tensor, int]:
+    """Per-patch scatter target for temporal-pooling merge, fully vectorized over ragged videos.
 
-    Row `m` collects the `t` frames × `kernel_height*kernel_width` source patches that pool into
-    merged token `m`; the caller means over the frame axis. Precomputable, so the encoder avoids a
-    per-clip `grid_thw.tolist()` loop.
+    Returns:
+        destination_index: (num_patches,) long. merged_token_index * kernel_size + position_in_kernel.
+        frame_weight: (num_patches,) float. 1 / num_frames of the video each patch belongs to,
+            so index_add_ yields the mean over frames.
+        num_merged_tokens: total merged tokens across all videos.
     """
     if kwargs is not None and (index := kwargs.pop("temporal_merge_index", None)) is not None:
         return index
+
     device = grid_thw.device
-    running, rows = 0, []
-    for t, h, w in grid_thw.tolist():
-        t, h, w = int(t), int(h), int(w)
-        new_h, new_w = h // kernel_height, w // kernel_width
-        base = torch.arange(running, running + t * h * w, device=device).view(
-            t, new_h, kernel_height, new_w, kernel_width
-        )
-        # (t, new_h, new_w, kh, kw) → (new_h*new_w, t, kh*kw): frame axis kept for the caller's mean.
-        base = base.permute(1, 3, 0, 2, 4).reshape(new_h * new_w, t, kernel_height * kernel_width)
-        rows.append(base)
-        running += t * h * w
-    return torch.cat(rows, dim=0)
+    kernel_size = kernel_height * kernel_width
+
+    num_frames, height, width = grid_thw.unbind(-1)  # each (num_videos,)
+    merged_height = height // kernel_height
+    merged_width = width // kernel_width
+
+    patches_per_video = num_frames * height * width
+    merged_tokens_per_video = merged_height * merged_width
+
+    patch_offset_per_video = torch.cumsum(patches_per_video, 0) - patches_per_video
+    merged_offset_per_video = torch.cumsum(merged_tokens_per_video, 0) - merged_tokens_per_video
+
+    num_patches = int(patches_per_video.sum())  # one sync; pass precomputed values to avoid it
+    num_merged_tokens = int(merged_tokens_per_video.sum())
+
+    # Which video each flat patch belongs to, and its index within that video.
+    video_index = torch.repeat_interleave(
+        torch.arange(len(patches_per_video), device=device),
+        patches_per_video,
+        output_size=num_patches,
+    )
+    patch_index_in_video = torch.arange(num_patches, device=device) - patch_offset_per_video[video_index]
+
+    patch_height = height[video_index]
+    patch_width = width[video_index]
+    patch_merged_width = merged_width[video_index]
+
+    # Position within a single frame (the frame index is dropped: that's the pooled axis).
+    index_in_frame = patch_index_in_video % (patch_height * patch_width)
+    row = index_in_frame // patch_width
+    col = index_in_frame % patch_width
+
+    merged_index_in_video = (row // kernel_height) * patch_merged_width + (col // kernel_width)
+    position_in_kernel = (row % kernel_height) * kernel_width + (col % kernel_width)
+
+    destination_index = (
+        merged_offset_per_video[video_index] + merged_index_in_video
+    ) * kernel_size + position_in_kernel
+    frame_weight = 1.0 / num_frames[video_index].to(torch.float32)
+
+    return destination_index, frame_weight, num_merged_tokens
 
 
 @auto_docstring
@@ -485,33 +494,16 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=1e-05)
         self.post_init()
 
-    def temporal_patch_merger(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-    ) -> torch.Tensor:
-        r"""
-        Merges temporal frames by spatially pooling patch embeddings across time, returning
-        `(total_merged_patches, kernel_height * kernel_width, hidden_dim)`.
-
-        Kept for backward compatibility: `forward` now pools with the export-friendly
-        `get_vision_temporal_merge_index` gather instead of this Python per-clip loop.
-        """
-        hidden_dim = hidden_states.size(-1)
-        kernel_height, kernel_width = self.merge_kernel_size
-
-        outputs = []
-        running_length = 0
-        for t, h, w in grid_thw.tolist():
-            seq = hidden_states[running_length : running_length + t * h * w]
-            new_height, new_width = h // kernel_height, w // kernel_width
-            reshaped_seq = seq.view(t, new_height, kernel_height, new_width, kernel_width, hidden_dim)
-            reshaped_seq = reshaped_seq.transpose(2, 3).mean(dim=0)  # temporal pooling
-            padded_seq = reshaped_seq.reshape(new_height * new_width, kernel_height * kernel_width, -1)
-            outputs.append(padded_seq)
-            running_length += t * h * w
-
-        return torch.cat(outputs, dim=0)
+    def temporal_merge(self, hidden_states, grid_thw, kernel_height, kernel_width, kwargs=None):
+        destination_index, frame_weight, num_merged_tokens = get_vision_temporal_merge_index(
+            grid_thw, kernel_height, kernel_width, kwargs=kwargs
+        )
+        kernel_size = kernel_height * kernel_width
+        pooled_states = hidden_states.new_zeros(
+            num_merged_tokens * kernel_size, hidden_states.shape[-1], dtype=torch.float32
+        )
+        pooled_states.index_add_(0, destination_index, hidden_states.float() * frame_weight[:, None])
+        return pooled_states.view(num_merged_tokens, kernel_size, -1).to(hidden_states.dtype)
 
     @capture_outputs
     @auto_docstring
@@ -543,8 +535,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
             )
 
         hidden_states = self.final_layernorm(hidden_states)
-        merge_index = get_vision_temporal_merge_index(grid_thw, *self.merge_kernel_size, kwargs=kwargs)
-        pooled_hidden_states = hidden_states[merge_index].mean(dim=1)
+        pooled_hidden_states = self.temporal_merge(hidden_states, grid_thw, *self.merge_kernel_size, kwargs=kwargs)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_states,
@@ -599,7 +590,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
-        split_sizes = (image_grid_thw.prod(-1) // merge_kernel_size).tolist()
+        split_sizes = (image_grid_thw[:, 1:].prod(-1) // merge_kernel_size).tolist()
         vision_outputs.pooler_output = torch.split(image_embeds, split_sizes)
         return vision_outputs
 
@@ -725,10 +716,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel):
             **kwargs,
         )
         return Kimi_K25ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -861,6 +849,9 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, GenerationMixin)
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
+            router_logits=outputs.router_logits,
         )
 
 

@@ -81,6 +81,14 @@ def _gemm_local(tensor):
     return tensor.to_local() if isinstance(tensor, DTensor) else tensor
 
 
+def _router_weight_as(weight, dtype):
+    """[scratch, bench only] Upstream keeps the router weight in fp32 (`_keep_in_fp32_modules_strict`); the inference
+    fast paths run the router as a bf16 GEMM with fp32 output. GLM-5.3 ships the weight in bf16, so the cast is exact
+    until the weight is trained in fp32. Cast per call (6 MB per layer), never cached: a trainer's update is always seen."""
+    weight = _gemm_local(weight)
+    return weight if weight.dtype == dtype else weight.to(dtype)
+
+
 @torch.no_grad()
 def _gemm_fuse_rows(linears):
     """Turns the weights of `linears` (same input size, no bias, 16-bit) into row views of one new [sum of out, in]
@@ -219,7 +227,6 @@ class GlmMoeDsaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1129,7 +1136,7 @@ class GlmMoeDsaTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -1139,10 +1146,8 @@ class GlmMoeDsaTopkRouter(nn.Module):
     def proto_logits(self, hidden_states):
         """[scratch, bench only] PROTO_EXPERTS_TRTLLM_ROUTING: the fp32 router logits alone, as `forward` computes them
         under the same flags (no-grad forwards only)."""
-        if _fuse_compile.KERNELS and hidden_states.dtype == self.weight.dtype == torch.bfloat16:
-            return torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
-        weight = _gemm_local(self.weight) if (_GEMM_ROUTER_BF16 or _PROTO_TF32_SCOPED) else None
-        if weight is not None and weight.dtype == hidden_states.dtype == torch.bfloat16:
+        if (_fuse_compile.KERNELS or _GEMM_ROUTER_BF16 or _PROTO_TF32_SCOPED) and hidden_states.dtype == torch.bfloat16:
+            weight = _router_weight_as(self.weight, hidden_states.dtype)
             return torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
         return F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
 
@@ -1154,19 +1159,24 @@ class GlmMoeDsaTopkRouter(nn.Module):
             and self.topk_group == 1
             and not torch.is_grad_enabled()
             and hidden_states.is_cuda
-            and hidden_states.dtype == self.weight.dtype == torch.bfloat16
+            and hidden_states.dtype == torch.bfloat16
         ):
             # [scratch, bench only] FUSE_KERNELS (inference only): the bf16 GEMM accumulates and returns fp32 (no fp32
-            # copy of the input and of the weight per call), then one kernel does sigmoid, bias, top-k, gather,
-            # normalize and scale
-            router_logits = torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
+            # copy of the input per call), then one kernel does sigmoid, bias, top-k, gather, normalize and scale
+            router_logits = torch.mm(
+                hidden_states, _router_weight_as(self.weight, hidden_states.dtype).t(), out_dtype=torch.float32
+            )
             topk_indices, topk_weights = torch.ops.transformers.fuse_router(
                 router_logits, self.e_score_correction_bias, self.top_k, self.routed_scaling_factor, self.norm_topk_prob
             )
             return router_logits, topk_weights, topk_indices
         # GEMM_ROUTER_BF16=1 (gemm WP) and PROTO_TF32=scoped (train WP) are the same change: bf16 GEMM with fp32 output
-        weight = _gemm_local(self.weight) if (_GEMM_ROUTER_BF16 or _PROTO_TF32_SCOPED) else None
-        if weight is not None and weight.dtype == hidden_states.dtype == torch.bfloat16 and not torch.is_grad_enabled():
+        if (
+            (_GEMM_ROUTER_BF16 or _PROTO_TF32_SCOPED)
+            and hidden_states.dtype == torch.bfloat16
+            and not torch.is_grad_enabled()
+        ):
+            weight = _router_weight_as(self.weight, hidden_states.dtype)
             router_logits = torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
         else:
             router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
@@ -1408,7 +1418,6 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GlmMoeDsaDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -1420,12 +1429,11 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
         "attentions": GlmMoeDsaAttention,
         "router_logits": OutputRecorder(GlmMoeDsaTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     # gap2-mtp prototype: with GLM_MTP=1 the MTP module's weights are loaded, not ignored
     _keys_to_ignore_on_load_unexpected = [] if _GLM_MTP else [r"model\.layers\.78.*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GlmMoeDsaTopkRouter):

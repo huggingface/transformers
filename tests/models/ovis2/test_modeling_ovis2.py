@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
@@ -43,12 +44,10 @@ if is_torch_available():
     import torch
 
 
-class Ovis2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        seq_length=7,
-        text_config={
+class Ovis2VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "text_config": {
             "model_type": "qwen2",
             "seq_length": 7,
             "is_training": True,
@@ -65,8 +64,7 @@ class Ovis2VisionText2TextModelTester:
             "num_labels": 3,
             "pad_token_id": 0,
         },
-        is_training=True,
-        vision_config={
+        "vision_config": {
             "image_size": 32,
             "patch_size": 8,
             "num_channels": 3,
@@ -81,32 +79,35 @@ class Ovis2VisionText2TextModelTester:
             "hidden_stride": 2,
             "tokenize_function": "softmax",
         },
-        image_token_id=1,
-        visual_indicator_token_ids=[],
-        vocab_size=99,
-        hidden_size=64,
-        ignore_id=-100,
-    ):
-        self.parent = parent
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.image_token_id = image_token_id
-        self.visual_indicator_token_ids = visual_indicator_token_ids
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.image_seq_length = (
+        "image_token_id": 1,
+        "visual_indicator_token_ids": [],
+        "vocab_size": 99,
+        "hidden_size": 64,
+        "is_training": True,
+        "ignore_id": -100,
+        "seq_length": 7,
+        "batch_size": 3,
+        "num_channels": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        vision_config = values["vision_config"]
+        text_config = values["text_config"]
+        values["image_seq_length"] = (
             vision_config["image_size"] // (vision_config["patch_size"] * vision_config["hidden_stride"])
         ) ** 2
-        self.seq_length = seq_length + self.image_seq_length
-        self.is_training = is_training
-        self.num_attention_heads = text_config["num_attention_heads"]
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        return values
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.ignore_id = ignore_id
-
-        self.batch_size = 3
-        self.num_channels = 3
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Ovis2Config(
@@ -158,6 +159,8 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     """
     Model tester for `Ovis2ForConditionalGeneration`.
     """
+
+    model_tester_class = Ovis2VisionText2TextModelTester
 
     all_model_classes = (
         (

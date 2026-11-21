@@ -20,6 +20,7 @@ from transformers import Tipsv2DptConfig
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -40,58 +41,52 @@ if is_torch_available():
     from transformers.image_utils import load_image_as_tensor
 
 
-class Tipsv2DptForDensePredictionTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,
-        image_size=28,
-        patch_size=14,
-        num_channels=3,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        mlp_ratio=2,
-        num_register_tokens=1,
-        neck_hidden_sizes=[4, 8],
-        fusion_hidden_size=8,
-        reassemble_factors=[4, 2],
-        num_depth_bins=32,
-        min_depth=0.001,
-        max_depth=10.0,
-        num_labels=5,
-        is_training=False,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.num_register_tokens = num_register_tokens
-        self.neck_hidden_sizes = neck_hidden_sizes
-        self.fusion_hidden_size = fusion_hidden_size
-        self.reassemble_factors = reassemble_factors
-        self.num_depth_bins = num_depth_bins
-        self.min_depth = min_depth
-        self.max_depth = max_depth
-        self.num_labels = num_labels
-        self.is_training = is_training
-        self.scope = scope
+class Tipsv2DptForDensePredictionTester(ModelTesterConfigMixin):
+    defaults = {}
 
-        self.patch_height = image_size // patch_size
-        self.patch_width = image_size // patch_size
-        self.seq_length = 1 + num_register_tokens + self.patch_height * self.patch_width
+    small_config_overrides = {
+        "batch_size": 4,
+        "image_size": 28,
+        "patch_size": 14,
+        "num_channels": 3,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "mlp_ratio": 2,
+        "num_register_tokens": 1,
+        "neck_hidden_sizes": [4, 8],
+        "fusion_hidden_size": 8,
+        "reassemble_factors": [4, 2],
+        "num_depth_bins": 32,
+        "min_depth": 0.001,
+        "max_depth": 10.0,
+        "num_labels": 5,
+        "is_training": False,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["patch_height"] = values["image_size"] // values["patch_size"]
+        values["patch_width"] = values["image_size"] // values["patch_size"]
+        values["seq_length"] = 1 + values["num_register_tokens"] + values["patch_height"] * values["patch_width"]
 
         # output spatial resolution: 2 fusion layers, each doubling resolution
         # starting from (patch_h * factor_min) upsampled 2 times by 2
         # deepest reassemble factor is 2 → 4x4, then 2× doublings → 16×16
-        self.decoder_height = int(self.patch_height * min(reassemble_factors)) * 2 ** len(neck_hidden_sizes)
-        self.decoder_width = int(self.patch_width * min(reassemble_factors)) * 2 ** len(neck_hidden_sizes)
+        values["decoder_height"] = int(values["patch_height"] * min(values["reassemble_factors"])) * 2 ** len(
+            values["neck_hidden_sizes"]
+        )
+        values["decoder_width"] = int(values["patch_width"] * min(values["reassemble_factors"])) * 2 ** len(
+            values["neck_hidden_sizes"]
+        )
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         from transformers import Tipsv2VisionConfig
@@ -187,6 +182,8 @@ class Tipsv2DptForDensePredictionTester:
 
 @require_torch
 class Tipsv2DptForDensePredictionTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Tipsv2DptForDensePredictionTester
+
     all_model_classes = (
         (
             Tipsv2DptForDensePrediction,

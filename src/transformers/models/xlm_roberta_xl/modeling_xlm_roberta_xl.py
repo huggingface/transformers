@@ -519,7 +519,6 @@ class XLMRobertaXLPreTrainedModel(PreTrainedModel):
         "cross_attentions": XLMRobertaXLCrossAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

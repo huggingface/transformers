@@ -33,7 +33,13 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -131,7 +137,6 @@ class Dots3NoteTextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -299,7 +304,7 @@ class Dots3NoteTextTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -660,7 +665,6 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteAudioLayer", "Dots3NoteTextDecoderLayer", "Dots3NoteVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -672,13 +676,12 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
         "attentions": Dots3NoteTextAttention,
         "router_logits": OutputRecorder(Dots3NoteTextTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [
         r"^model\.(language_model\.)?layers\.46\.",
         r"^model\.(language_model\.)?mtp\.",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Dots3NoteTextTopkRouter):
@@ -899,7 +902,6 @@ class Dots3NoteAudioRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1122,7 +1124,6 @@ class Dots3NoteAudioPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteAudioLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1233,7 +1234,6 @@ class Dots3NoteVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -1296,7 +1296,7 @@ class Dots3NoteVisionTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.router_scaling_factor = config.router_scaling_factor
 
     def forward(
@@ -1327,7 +1327,7 @@ class Dots3NoteVisionMoE(nn.Module):
         layer_config = config.per_layer_config[layer_idx]
         self.experts = Dots3NoteExperts(layer_config)
         self.gate = Dots3NoteVisionTopKRouter(layer_config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
@@ -1491,16 +1491,14 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Dots3NoteVisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, Dots3NoteVisionTopKRouter):
@@ -1664,7 +1662,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
         chunk_sample_lengths: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> MoeModelOutputWithPast | tuple:
+    ) -> MultimodalMoeBaseModelOutputWithPast | tuple:
         r"""
         chunk_sample_lengths (`torch.Tensor`, *optional*):
             Waveform sample count for each audio feature chunk.
@@ -1709,12 +1707,15 @@ class Dots3NoteModel(Dots3NotePreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_embeddings.to(inputs_embeds))
 
-        return self.language_model(
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
             inputs_embeds=inputs_embeds,
             **kwargs,
+        )
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
     @accepts_precomputed_kwargs(modality="video")
@@ -1765,7 +1766,7 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixi
         chunk_sample_lengths: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
+    ) -> MultimodalMoeCausalLMOutputWithPast:
         r"""
         chunk_sample_lengths (`torch.Tensor`, *optional*):
             Number of waveform samples in each audio chunk.
@@ -1797,12 +1798,13 @@ class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, GenerationMixi
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

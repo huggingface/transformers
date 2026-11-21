@@ -42,6 +42,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -53,15 +54,16 @@ if is_vision_available():
     from PIL import Image
 
 
-class Idefics2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        is_training=True,
-        batch_size=2,
-        num_images=2,
-        seq_length=10,
-        vision_config={
+class Idefics2VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+        "batch_size": 2,
+        "num_images": 2,
+        "num_channels": 3,
+        "seq_length": 10,
+        "vision_config": {
             "image_size": 12,
             "patch_size": 12,
             "num_channels": 3,
@@ -73,7 +75,7 @@ class Idefics2VisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-        perceiver_config={
+        "perceiver_config": {
             "hidden_act": "silu",
             "resampler_n_latents": 2,
             "resampler_depth": 2,
@@ -82,7 +84,7 @@ class Idefics2VisionText2TextModelTester:
             "resampler_head_dim": 16,
             "attention_dropout": 0.0,
         },
-        text_config={
+        "text_config": {
             "vocab_size": 100,
             "hidden_size": 64,
             "intermediate_size": 56,
@@ -102,30 +104,27 @@ class Idefics2VisionText2TextModelTester:
             "sliding_window": 32,
             "attention_dropout": 0.0,
         },
-        use_cache=False,
-        tie_word_embeddings=False,
+        "use_cache": False,
+        "tie_word_embeddings": False,
         # should be smaller than vocab size - 16 to survive clamping
-        image_token_id=57,
-    ):
-        self.parent = parent
-        self.pad_token_id = text_config["pad_token_id"]
-        self.is_training = is_training
-        self.batch_size = batch_size
-        self.num_images = num_images
-        self.num_channels = 3
-        self.seq_length = seq_length
-        self.use_cache = use_cache
-        self.image_token_id = image_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        # Hack - add properties here so use common tests
-        self.vocab_size = text_config["vocab_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
+        "image_token_id": 57,
+    }
 
-        self.vision_config = vision_config
-        self.perceiver_config = perceiver_config
-        self.text_config = text_config
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        # Hack - add properties here so use common tests
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Idefics2Config(
@@ -174,6 +173,8 @@ class Idefics2ModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `Idefics2`.
     """
+
+    model_tester_class = Idefics2VisionText2TextModelTester
 
     all_model_classes = (Idefics2Model,) if is_torch_available() else ()
     # Idefics2 merges batch_size and num_frames in the first output dimension
@@ -238,6 +239,8 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
     Model tester for `Idefics2ForConditionalGeneration`.
     """
+
+    model_tester_class = Idefics2VisionText2TextModelTester
 
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()

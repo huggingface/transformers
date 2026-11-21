@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -31,7 +29,8 @@ from ...utils import auto_docstring
 class Inkling2TextConfig(PreTrainedConfig):
     r"""
     unpadded_vocab_size (`int`, *optional*, defaults to 200058):
-        Number of rows of the unembedding matrix that hold real tokens. Logits beyond it are dropped.
+        Output size of the language modeling head. The checkpoint unembedding is padded to `vocab_size`, the padded
+        rows are dropped on load and restored as zeros on save.
     swa_num_attention_heads (`int`, *optional*, defaults to 48):
         Number of attention heads in the sliding-window layers.
     swa_num_key_value_heads (`int`, *optional*, defaults to 8):
@@ -180,15 +179,6 @@ class Inkling2VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-# Missing from the hub config: the routed experts are MXFP8 (e4m3, a ue8m0 scale per row and 32 values), the rest bf16
-INKLING2_QUANTIZATION_CONFIG = {
-    "quant_method": "fp8",
-    "weight_block_size": [1, 32],
-    "scale_fmt": "ue8m0",
-    "modules_to_not_convert": ["lm_head", "model.vision_tower", "model.language_model.layers.*.self_attn"],
-}
-
-
 @auto_docstring(checkpoint="thinkingmachines/Inkling-2-Small-MXFP8")
 @strict
 class Inkling2Config(PreTrainedConfig):
@@ -203,14 +193,6 @@ class Inkling2Config(PreTrainedConfig):
     text_config: Inkling2TextConfig | dict | None = None
     vision_config: Inkling2VisionConfig | dict | None = None
     image_token_id: int = 200054
-
-    @classmethod
-    def from_dict(cls, config_dict: dict, **kwargs):
-        # Quantization config is missing from the hub config: only added to an original checkpoint's config, not to
-        # one saved by Transformers (which has its own, or none once dequantized)
-        if "quantization_config" not in config_dict and "transformers_version" not in config_dict:
-            config_dict = {**config_dict, "quantization_config": copy.deepcopy(INKLING2_QUANTIZATION_CONFIG)}
-        return super().from_dict(config_dict, **kwargs)
 
     def validate_architecture(self):
         if self.vision_config.text_hidden_size != self.text_config.hidden_size:

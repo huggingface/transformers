@@ -39,6 +39,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image, url_to_local_path
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -55,21 +56,21 @@ if is_vision_available():
     from PIL import Image
 
 
-class InternVLVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        image_seq_length=64,
-        vision_feature_layer=-1,
-        ignore_index=-100,
-        image_token_id=1,
-        num_channels=3,
-        image_size=64,
-        model_type="internvl",
-        is_training=True,
-        text_config={
+class InternVLVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "image_seq_length": 64,
+        "vision_feature_layer": -1,
+        "ignore_index": -100,
+        "image_token_id": 1,
+        "num_channels": 3,
+        "image_size": 64,
+        "model_type": "internvl",
+        "is_training": True,
+        "text_config": {
             "model_type": "qwen2",
             "vocab_size": 99,
             "hidden_size": 128,
@@ -87,7 +88,7 @@ class InternVLVisionText2TextModelTester:
             "eos_token_id": 4,
             "pad_token_id": 5,
         },
-        vision_config={
+        "vision_config": {
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -98,28 +99,26 @@ class InternVLVisionText2TextModelTester:
             "hidden_act": "quick_gelu",
             "use_absolute_position_embeddings": True,
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = image_token_id
-        self.model_type = model_type
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.vision_feature_layer = vision_feature_layer
-        self.is_training = is_training
-        self.image_seq_length = image_seq_length
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.seq_length = seq_length + image_seq_length
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["bos_token_id"] = text_config["bos_token_id"]
+        values["eos_token_id"] = text_config["eos_token_id"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return InternVLConfig(
@@ -183,6 +182,8 @@ class InternVLVisionText2TextModelTester:
 
 @require_torch
 class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = InternVLVisionText2TextModelTester
+
     all_model_classes = (InternVLForConditionalGeneration, InternVLModel) if is_torch_available() else ()
     all_generative_model_classes = (InternVLForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -719,6 +720,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
+                ("xpu", 5): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
                 ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("rocm", (9, 4)): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("tpu", None): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",

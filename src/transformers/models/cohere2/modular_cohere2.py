@@ -68,7 +68,6 @@ class Cohere2Config(PreTrainedConfig):
     """
 
     model_type = "cohere2"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -126,7 +125,6 @@ class Cohere2Config(PreTrainedConfig):
 
 
 class Cohere2RotaryEmbedding(CohereRotaryEmbedding):
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)

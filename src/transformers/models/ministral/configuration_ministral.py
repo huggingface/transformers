@@ -46,7 +46,6 @@ class MinistralConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ministral"
-    keys_to_ignore_at_inference = ["cache"]
     # Default tensor parallel plan for base model `MinistralModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
