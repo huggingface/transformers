@@ -659,8 +659,6 @@ class MambaModel(MambaPreTrainedModel):
         use_cache (`bool`, *optional*):
             If set to `True`, the `cache_params` is returned and can be used to quickly generate the next logits.
         """
-        # Not resolved through `merge_with_config_defaults`: the cache must stay disabled by default in training so
-        # that the fused training kernel path (which requires `cache_params is None`) keeps being used
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
 
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
