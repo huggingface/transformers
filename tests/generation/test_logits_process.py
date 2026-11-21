@@ -66,6 +66,22 @@ if is_torch_available():
     )
 
 
+def top_h_reference_num_kept(logits, top_h, top_n=100):
+    """
+    Number of tokens Top-H keeps (arXiv:2509.02510, Algorithm 1): the largest prefix of the sorted tokens whose
+    renormalized entropy is at most `top_h` times the entropy of the full distribution, capped at `top_n`.
+    """
+    probs = logits.double().softmax(-1).sort(descending=True).values
+    budget = top_h * torch.distributions.Categorical(probs=probs).entropy()
+    num_kept = 1
+    while num_kept < min(len(probs), top_n):
+        prefix = probs[: num_kept + 1] / probs[: num_kept + 1].sum()
+        if torch.distributions.Categorical(probs=prefix).entropy() > budget:
+            break
+        num_kept += 1
+    return num_kept
+
+
 @require_torch
 class LogitsProcessorTest(unittest.TestCase):
     def _get_uniform_logits(self, batch_size: int, length: int):
@@ -465,6 +481,128 @@ class LogitsProcessorTest(unittest.TestCase):
         top_h_warp = TopHLogitsWarper(top_h=0.5)
         out_again = top_h_warp(input_ids, dist3)
         assert not torch.all(out_again == dist3)
+
+    @parameterized.expand(
+        [
+            # uniform over 50 tokens: keeps 50**0.4 -> 4 tokens, not 0.4 * 50 = 20
+            ("uniform_50", lambda: torch.zeros(50), 0.4),
+            # uniform over 16 tokens, just below / above 16**0.5 = 4: keeps 3 and 4 tokens
+            ("uniform_16_below", lambda: torch.zeros(16), 0.49),
+            ("uniform_16_above", lambda: torch.zeros(16), 0.51),
+            ("candidate_cap", lambda: torch.zeros(200), 1.0),
+            ("masked_logits", lambda: torch.tensor([2.0, 1.0, 0.0, -float("inf")]), 0.9),
+            ("peaked_logits", lambda: -3.0 * torch.arange(16, dtype=torch.float), 0.4),
+            # long-tailed vocabulary: the entropy budget must come from the full distribution, not the top 100
+            ("zipf_49152", lambda: -1.1 * torch.arange(1, 49153, dtype=torch.float).log(), 0.4),
+            # exponentially decaying probabilities: second long-tailed distribution catching the bug
+            ("exponential_decay", lambda: -0.1 * torch.arange(150, dtype=torch.float), 0.4),
+        ]
+    )
+    def test_top_h_dist_warper_matches_reference(self, name, make_logits, top_h):
+        """
+        TopHLogitsWarper keeps the same number of tokens as the reference implementation of the paper's rule, and the
+        kept tokens are a top-k set.
+        """
+        logits = make_logits().to(torch_device)
+        filtered_logits = TopHLogitsWarper(top_h=top_h)(None, logits[None].clone())[0]
+        kept = torch.isfinite(filtered_logits)
+
+        self.assertEqual(kept.sum().item(), top_h_reference_num_kept(logits, top_h))
+        if (~kept).any():
+            self.assertGreaterEqual(logits[kept].min().item(), logits[~kept].max().item())
+
+    def test_top_h_batch_and_invariances(self):
+        generator = torch.Generator().manual_seed(42)
+        scores = torch.randn(3, 257, generator=generator).to(torch_device)
+        original = scores.clone()
+        warper = TopHLogitsWarper(0.4)
+        output = warper(None, scores)
+        kept = torch.isfinite(output)
+        permutation = torch.randperm(scores.shape[-1], generator=generator).to(torch_device)
+        torch.testing.assert_close(torch.isfinite(warper(None, scores[:, permutation])), kept[:, permutation])
+        torch.testing.assert_close(torch.isfinite(warper(None, scores + 8.0)), kept)
+        torch.testing.assert_close(scores, original)
+        torch.testing.assert_close(output[kept], scores[kept])
+        for row, mask in zip(scores, kept):
+            torch.testing.assert_close(torch.isfinite(warper(None, row[None]))[0], mask)
+            self.assertEqual(mask.sum().item(), top_h_reference_num_kept(row, 0.4))
+            self.assertGreaterEqual(row[mask].min().item(), row[~mask].max().item())
+
+    @parameterized.expand([("float16",), ("bfloat16",)])
+    def test_top_h_low_precision_matches_reference(self, dtype):
+        scores = (-torch.arange(1, 51, device=torch_device, dtype=torch.float).log()).to(getattr(torch, dtype))
+        original = scores.clone()
+        output = TopHLogitsWarper(0.4)(None, scores[None])[0]
+        kept = torch.isfinite(output)
+        self.assertEqual(kept.sum().item(), top_h_reference_num_kept(scores, 0.4))
+        self.assertEqual(output.dtype, scores.dtype)
+        torch.testing.assert_close(output[kept], scores[kept])
+        torch.testing.assert_close(scores, original)
+        self.assertGreaterEqual(scores[kept].min().item(), scores[~kept].max().item())
+
+    def test_top_h_monotonicity(self):
+        """
+        Increasing the entropy budget alpha must never reduce the number of retained tokens:
+        if alpha_1 < alpha_2, then k(alpha_1) <= k(alpha_2).
+
+        Uses alpha values strictly between 0 and 1 with safe margins away from exact
+        float32 rounding ties.
+        """
+        alpha_grid = [0.05, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9]
+        generator = torch.Generator(device=torch_device).manual_seed(42)
+        distributions = [
+            ("uniform", torch.zeros(50, device=torch_device)),
+            ("exponential", -0.1 * torch.arange(80, dtype=torch.float, device=torch_device)),
+            ("zipf", -1.1 * torch.arange(1, 500, dtype=torch.float, device=torch_device).log()),
+            ("normal", torch.randn(60, generator=generator, device=torch_device)),
+        ]
+
+        for dist_name, logits in distributions:
+            counts = []
+            for alpha in alpha_grid:
+                warper = TopHLogitsWarper(top_h=alpha)
+                filtered = warper(None, logits[None].clone())[0]
+                kept_count = torch.isfinite(filtered).sum().item()
+                counts.append(kept_count)
+            for i in range(len(counts) - 1):
+                self.assertLessEqual(
+                    counts[i],
+                    counts[i + 1],
+                    f"Monotonicity violated for {dist_name}: alpha={alpha_grid[i]} kept {counts[i]} > alpha={alpha_grid[i + 1]} kept {counts[i + 1]}",
+                )
+
+    def test_top_h_validation_and_filter_value(self):
+        """
+        Validates constructor input validation and custom filter_value handling:
+        - Constructor rejects alpha <= 0.0 or alpha > 1.0 with ValueError.
+        - Custom filter_value is applied to filtered tokens without modifying input logits in-place.
+        - Retained logits preserve their exact values.
+        - Works properly inside LogitsProcessorList.
+        """
+        # Constructor validation
+        for invalid_h in [0.0, -0.5, 1.001, 2.0]:
+            with self.assertRaises(ValueError):
+                TopHLogitsWarper(top_h=invalid_h)
+
+        # In-place preservation and custom filter_value
+        logits = torch.tensor([[3.0, 2.0, 1.0, 0.0]], device=torch_device)
+        logits_clone = logits.clone()
+        custom_filter = -9999.0
+        warper = TopHLogitsWarper(top_h=0.3, filter_value=custom_filter)
+        out = warper(None, logits)
+
+        # Input tensor unchanged
+        self.assertTrue(torch.equal(logits, logits_clone))
+        # Kept tokens identical to input
+        kept = out != custom_filter
+        self.assertTrue(torch.equal(out[kept], logits[kept]))
+        # Filtered tokens set to custom_filter
+        self.assertTrue((out[~kept] == custom_filter).all())
+
+        # Integration with LogitsProcessorList
+        processors = LogitsProcessorList([warper])
+        processed = processors(None, logits.clone())
+        self.assertTrue(torch.equal(processed, out))
 
     def test_min_p_dist_warper(self):
         input_ids = None
