@@ -437,8 +437,8 @@ class TestBuildGenerationConfig(unittest.TestCase):
         from transformers import GenerationConfig
 
         handler = self._make_handler()
-        # Invalid values: out of [-2.0, 2.0], non-positive repetition penalty, or non-numeric
-        for invalid_fp in [-1.0, -1.5, -2.0, -2.5, 2.5, "invalid"]:
+        # Invalid values: out of [-2.0, 2.0], non-positive repetition penalty, or non-numeric/overflow
+        for invalid_fp in [-1.0, -1.5, -2.0, -2.5, 2.5, "invalid", 10**400, -(10**400)]:
             with self.subTest(frequency_penalty=invalid_fp):
                 with self.assertRaises(HTTPException) as cm:
                     handler._build_generation_config({"frequency_penalty": invalid_fp}, GenerationConfig())
@@ -453,7 +453,7 @@ class TestBuildGenerationConfig(unittest.TestCase):
         result = handler._build_generation_config({"frequency_penalty": 0.5}, GenerationConfig())
         self.assertAlmostEqual(result.repetition_penalty, 1.5)
 
-        for invalid_fp in [-1.0, -1.5, -2.0, -2.5, 2.5, "invalid"]:
+        for invalid_fp in [-1.0, -1.5, -2.0, -2.5, 2.5, "invalid", 10**400, -(10**400)]:
             with self.subTest(frequency_penalty=invalid_fp):
                 with self.assertRaises(HTTPException) as cm:
                     handler._build_generation_config({"frequency_penalty": invalid_fp}, GenerationConfig())

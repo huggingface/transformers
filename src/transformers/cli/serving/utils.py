@@ -1207,7 +1207,7 @@ class BaseHandler:
         if body.get("frequency_penalty") is not None:
             try:
                 freq_penalty = float(body["frequency_penalty"])
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, OverflowError):
                 raise HTTPException(status_code=400, detail="frequency_penalty must be a valid float.")
 
             if not (-2.0 <= freq_penalty <= 2.0):
