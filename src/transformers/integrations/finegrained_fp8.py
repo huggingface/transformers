@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import functools
 import os
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -737,6 +738,14 @@ _PROTO_EXPERTS_TRTLLM = os.environ.get("PROTO_EXPERTS_TRTLLM", "0") == "1"
 # PROTO_EXPERTS_TRTLLM_INPLACE=1 (with PROTO_EXPERTS_TRTLLM=1): no copy, the parameters are re-laid in place while the
 # continuous batching loop runs (`_proto_relayout_fp8_experts`)
 _PROTO_EXPERTS_TRTLLM_INPLACE = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_INPLACE", "0") == "1"
+# PROTO_EXPERTS_TRTLLM_ROUTING=1 (with PROTO_EXPERTS_TRTLLM=1): the MoE block hands the fp32 router logits and the score
+# correction bias to the TRT-LLM kernel, which routes inside (DeepSeekV3 routing), instead of the router's own top-k
+# (`proto_trtllm_moe_routing`, called from the model's MoE block)
+_PROTO_EXPERTS_TRTLLM_ROUTING = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_ROUTING", "0") == "1"
+# PROTO_EXPERTS_TRTLLM_AUTOTUNE=1 (with PROTO_EXPERTS_TRTLLM=1): flashinfer's autotuner picks the TRT-LLM MoE tactics
+# once per process, when the first CB batch processor is created (`_proto_autotune_fp8_experts`), never in band
+_PROTO_EXPERTS_TRTLLM_AUTOTUNE = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_AUTOTUNE", "0") == "1"
+_proto_trtllm_tuned = False
 _PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") in ("1", "fold")
 _PROTO_EXPERTS_DECODE_FOLD = os.environ.get("PROTO_EXPERTS_DECODE", "0") == "fold"
 
@@ -859,6 +868,85 @@ def _fuse_trtllm_routed_moe_fake(hidden_states, top_k_index, top_k_weights, w13,
 # and flashinfer's routed MoE as one op dynamo does not trace into
 torch.library.custom_op("transformers::fuse_trtllm_routed_moe", _fuse_trtllm_routed_moe, mutates_args=())
 torch.library.register_fake("transformers::fuse_trtllm_routed_moe", _fuse_trtllm_routed_moe_fake)
+
+
+def _fuse_trtllm_routing_moe(
+    hidden_states: torch.Tensor,
+    router_logits: torch.Tensor,
+    routing_bias: torch.Tensor,
+    w13: torch.Tensor,
+    s13: torch.Tensor,
+    w2: torch.Tensor,
+    s2: torch.Tensor,
+    top_k: int,
+    n_group: int,
+    topk_group: int,
+    routed_scaling_factor: float,
+    norm_topk_prob: bool,
+) -> torch.Tensor:
+    from . import _proto_fp8_experts as proto
+
+    return proto.trtllm_experts_forward_routing(
+        (w13, s13, w2, s2), hidden_states, router_logits, routing_bias, top_k, n_group, topk_group,
+        routed_scaling_factor, norm_topk_prob,
+    )  # fmt: skip
+
+
+def _fuse_trtllm_routing_moe_fake(hidden_states, router_logits, routing_bias, w13, s13, w2, s2, *args):
+    return torch.empty_like(hidden_states)
+
+
+# [gap3 experts, bench only] PROTO_EXPERTS_TRTLLM_ROUTING inside a torch.compile region (FUSE_COMPILE): one opaque op
+torch.library.custom_op("transformers::fuse_trtllm_routing_moe", _fuse_trtllm_routing_moe, mutates_args=())
+torch.library.register_fake("transformers::fuse_trtllm_routing_moe", _fuse_trtllm_routing_moe_fake)
+
+
+def proto_trtllm_moe_routing(experts: nn.Module, router: nn.Module, hidden_states, router_logits):
+    """PROTO_EXPERTS_TRTLLM_ROUTING: the routed experts of a MoE block from its fp32 router logits, routed inside the
+    TRT-LLM kernel. `router` gives the routing parameters (`top_k`, `num_group`, `topk_group`, `routed_scaling_factor`,
+    `norm_topk_prob`, `e_score_correction_bias`). Returns this rank's partial sum, as the experts module does under
+    `moe_tp_experts_partial`."""
+    if (
+        torch.distributed.is_initialized()
+        and torch.distributed.get_world_size() > 1
+        and os.environ.get("HF_TP_SINGLE_MLP_ALL_REDUCE", "0") != "1"
+        and os.environ.get("HF_TP_ALL_REDUCE", "nccl") != "flashinfer_fused"
+    ):
+        raise NotImplementedError("PROTO_EXPERTS_TRTLLM_ROUTING under TP needs the experts' partial sums reduced by the MLP block")
+    args = (
+        router.e_score_correction_bias, *experts._proto_trtllm, router.top_k, router.num_group, router.topk_group,
+        float(router.routed_scaling_factor), bool(router.norm_topk_prob),
+    )  # fmt: skip
+    if torch.compiler.is_compiling():
+        return torch.ops.transformers.fuse_trtllm_routing_moe(hidden_states.contiguous(), router_logits, *args)
+    return _fuse_trtllm_routing_moe(hidden_states.contiguous(), router_logits, *args)
+
+
+def _proto_autotune_fp8_experts(model: nn.Module, group=None) -> None:
+    """PROTO_EXPERTS_TRTLLM_AUTOTUNE: flashinfer's autotuner, once per process, on the shapes of the first FP8Experts
+    module that holds TRT-LLM weights (every MoE layer of a rank has the same shapes). Called when the CB batch
+    processor is created, after the re-layout and before the cache is sized and any graph is captured. Every TP rank
+    must call it (`group`: the TP ranks' gloo group, so they pick the same tactics)."""
+    global _proto_trtllm_tuned
+    if not _PROTO_EXPERTS_TRTLLM_AUTOTUNE or _proto_trtllm_tuned:
+        return
+    from . import _proto_fp8_experts as proto
+
+    experts = next((m for m in model.modules() if isinstance(m, FP8Experts) and m._proto_trtllm is not None), None)
+    if experts is None:
+        return
+    router = next(m for m in model.modules() if "e_score_correction_bias" in m._buffers)
+    routing = None
+    if _PROTO_EXPERTS_TRTLLM_ROUTING:
+        routing = {
+            "routing_bias": router.e_score_correction_bias, "n_group": router.num_group,
+            "topk_group": router.topk_group, "routed_scaling_factor": float(router.routed_scaling_factor),
+            "norm_topk_prob": bool(router.norm_topk_prob),
+        }  # fmt: skip
+    t = time.perf_counter()
+    proto.trtllm_autotune(experts._proto_trtllm, experts.hidden_dim, router.top_k, routing, group)
+    _proto_trtllm_tuned = True
+    logger.warning(f"PROTO_EXPERTS_TRTLLM_AUTOTUNE: tactics chosen in {time.perf_counter() - t:.1f}s")
 
 
 def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):

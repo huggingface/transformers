@@ -566,6 +566,9 @@ if _os.environ.get("PROTO_TF32", "0") == "1":
 # scores as bf16 GEMMs with fp32 output: the operands are bf16 values either way, the products are exact and the sum
 # accumulates in fp32, so only the summation order changes. Forwards with gradients keep the fp32 GEMMs.
 _PROTO_TF32_SCOPED = _os.environ.get("PROTO_TF32", "0") == "scoped"
+# [scratch, bench only] experts WP: PROTO_EXPERTS_TRTLLM_ROUTING=1 (see integrations/finegrained_fp8.py)
+from ...integrations.finegrained_fp8 import _PROTO_EXPERTS_TRTLLM_ROUTING  # noqa: E402
+from ...integrations.finegrained_fp8 import proto_trtllm_moe_routing as _proto_trtllm_moe_routing  # noqa: E402
 
 
 def _proto_scores_bf16(q, keys):
@@ -1128,6 +1131,16 @@ class GlmMoeDsaTopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
         self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
+    def proto_logits(self, hidden_states):
+        """[scratch, bench only] PROTO_EXPERTS_TRTLLM_ROUTING: the fp32 router logits alone, as `forward` computes them
+        under the same flags (no-grad forwards only)."""
+        if _fuse_compile.KERNELS and hidden_states.dtype == self.weight.dtype == torch.bfloat16:
+            return torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
+        weight = _gemm_local(self.weight) if (_GEMM_ROUTER_BF16 or _PROTO_TF32_SCOPED) else None
+        if weight is not None and weight.dtype == hidden_states.dtype == torch.bfloat16:
+            return torch.mm(hidden_states, weight.t(), out_dtype=torch.float32)
+        return F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         if (
@@ -1241,6 +1254,13 @@ class GlmMoeDsaMoE(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
+        if _PROTO_EXPERTS_TRTLLM_ROUTING and not torch.is_grad_enabled() and self.experts.__dict__.get("_proto_trtllm"):
+            # [scratch, bench only] PROTO_EXPERTS_TRTLLM_ROUTING: the TRT-LLM kernel routes from the fp32 logits itself
+            hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+            hidden_states = _proto_trtllm_moe_routing(
+                self.experts, self.gate, hidden_states, self.gate.proto_logits(hidden_states)
+            ).view(*orig_shape)
+            return hidden_states + self.shared_experts(residuals)
         _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
