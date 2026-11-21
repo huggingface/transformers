@@ -1012,15 +1012,27 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         """
         Mask whole words based on word ids and mask.
         """
-        mask = to_numpy(mask)
+        mask = to_numpy(mask).astype(bool, copy=False)
+        if word_ids.size == 0:
+            return np.zeros_like(word_ids, dtype=bool)
 
         valid_ids = word_ids != -1
+        max_word_id = int(word_ids.max())
+        if max_word_id < 0:
+            return np.zeros_like(word_ids, dtype=bool)
 
-        # Create 3D mask where [batch, token_i, token_j] is True if token_i and token_j are the same word
-        same_word = (word_ids[:, :, None] == word_ids[:, None, :]) & valid_ids[:, :, None] & valid_ids[:, None, :]
+        # Offset each row's non-negative word_ids so word IDs are unique across the batch.
+        stride = max_word_id + 1
+        row_offsets = np.arange(word_ids.shape[0], dtype=word_ids.dtype)[:, None] * stride
+        flat_word_ids = np.where(valid_ids, word_ids + row_offsets, -1)
 
-        # For each token, set True if any token in the same word is masked
-        return np.any(same_word & mask[:, None, :], axis=2)
+        masked_word_ids = flat_word_ids[valid_ids & mask]
+        if masked_word_ids.size == 0:
+            return np.zeros_like(word_ids, dtype=bool)
+
+        has_masked_word = np.zeros(word_ids.shape[0] * stride, dtype=bool)
+        has_masked_word[masked_word_ids] = True
+        return np.where(valid_ids, has_masked_word[np.maximum(flat_word_ids, 0)], False)
 
 
 def to_numpy(x) -> np.ndarray[Any]:
