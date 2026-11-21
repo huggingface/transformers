@@ -303,6 +303,9 @@ class BackgroundThreadStatus:
 _PROTO_TP_STATE_OVERLAP = os.environ.get("CB_PROTO_TP_STATE_OVERLAP", "0") == "1"
 _PROTO_IDLE_DRIVER_WAIT = os.environ.get("CB_PROTO_IDLE_DRIVER_WAIT", "0") == "1"
 _PROTO_UPLOADS_ON_COMPUTE_STREAM = os.environ.get("CB_PROTO_UPLOADS_ON_COMPUTE_STREAM", "0") == "1"
+# [scratch, gap4 pause] CB_PAUSE_TRACE=1: the engine side of every pause, timed, in `batch_processor._pause_trace`
+_PAUSE_TRACE = os.environ.get("CB_PAUSE_TRACE", "0") == "1"
+
 # WP train prototypes, see `ContinuousBatchingManager._proto_after_pause`
 _TRAIN_FIX_KV_B = os.environ.get("TRAIN_FIX_KV_B", "")
 _TRAIN_FIX_PREFIX = os.environ.get("TRAIN_FIX_PREFIX", "0") == "1"
@@ -403,6 +406,7 @@ class ContinuousBatchProcessor:
         self.use_async_batching = self.cb_config.use_async_batching
 
         self._proto_tp_state_done: bool | None = None
+        self._pause_trace: list[dict] = []  # [scratch, gap4 pause] CB_PAUSE_TRACE=1
         if self.use_async_batching:
             self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
@@ -484,12 +488,19 @@ class ContinuousBatchProcessor:
         # Pause window: if any thread of the TP group asked for a pause, all ranks wait here until their own threads
         # are done pausing. Thanks to the barrier (one per rank), all ranks leave the pause at the same time.
         if pause_requested:
+            trace = [perf_counter()] if _PAUSE_TRACE else None  # [scratch, gap4 pause] engine side of a pause
             # Wait for the work on the compute stream to be done before pausing
             if self.inputs_and_outputs.compute_stream is not None:
                 self.inputs_and_outputs.compute_stream.synchronize()
+            if trace is not None:
+                trace.append(perf_counter())
             if self._proto_relayout_experts is not None:  # WP experts: the checkpoint's layout during the window
                 self._proto_relayout_experts(trtllm=False)
+            if trace is not None:
+                trace.append(perf_counter())
             self.background_thread_status.pause_and_wait()
+            if trace is not None:
+                trace.append(perf_counter())
             if self.distributed_helper.cpu_comm_group is not None:
                 timeout = self.cb_config.cpu_group_timeout
                 dist.monitored_barrier(  # ty: ignore[possibly-missing-attribute]
@@ -497,8 +508,16 @@ class ContinuousBatchProcessor:
                     timeout=timedelta(seconds=timeout) if timeout is not None else None,
                     wait_all_ranks=True,
                 )
+            if trace is not None:
+                trace.append(perf_counter())
             if self._proto_relayout_experts is not None:
                 self._proto_relayout_experts(trtllm=True)
+            if trace is not None:
+                trace.append(perf_counter())
+                names = ("t_seen", "step_drain_s", "relayout_out_s", "paused_s", "barrier_s", "relayout_in_s")
+                self._pause_trace.append(
+                    {names[0]: trace[0], **{n: round(b - a, 4) for n, a, b in zip(names[1:], trace, trace[1:])}}
+                )
 
         # After the pause window is done, we can still exit early if there is no payload
         if payload_size == 0:
@@ -1162,6 +1181,11 @@ class ContinuousBatchingManager:
         that held it may have updated them. TRAIN_FIX_KV_B=refresh rewrites, in place, the merged kv_b_proj weights of
         the absorbed attention; TRAIN_FIX_PREFIX=1 stops new requests from reusing prefix blocks computed before the
         pause."""
+        if self.batch_processor is not None and self.batch_processor.cache._vmm is not None:
+            # [scratch, gap4 pause] CB_CACHE_VMM=1: the loop must never run on unmapped cache chunks (a device fault)
+            if self.batch_processor.cache._vmm.unmapped_chunks():
+                logger.warning("The pause ends with the KV cache released: restoring it before generation resumes")
+                self.restore_memory()
         if _TRAIN_FIX_KV_B == "refresh":
             from ...models.glm_moe_dsa.modeling_glm_moe_dsa import _proto_refresh_derived_weights
 
@@ -1182,7 +1206,7 @@ class ContinuousBatchingManager:
             raise RuntimeError("Call `reset_prefix_cache` inside the `pause` context, the generation loop uses it.")
         self.batch_processor.cache.invalidate_prefix_cache()
 
-    def release_memory(self) -> int:
+    def release_memory(self, nbytes: int | None = None) -> int:
         """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
         of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
         copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
@@ -1199,7 +1223,7 @@ class ContinuousBatchingManager:
         # paused loop always has its batch processor)
         if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
             raise RuntimeError("Call `release_memory` inside the `pause` context, the generation loop uses the cache.")
-        return self.batch_processor.cache.release_memory()
+        return self.batch_processor.cache.release_memory(nbytes)
 
     def restore_memory(self) -> None:
         """Brings back the KV cache freed by `release_memory`. CUDA graphs replay the addresses they were captured
@@ -1210,7 +1234,7 @@ class ContinuousBatchingManager:
             self.batch_processor.inputs_and_outputs.clear_graphs()
             logger.info("The KV cache moved while it was released, so the captured CUDA graphs were dropped")
 
-    def release_memory(self) -> int:
+    def release_memory(self, nbytes: int | None = None) -> int:
         """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
         of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
         copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
@@ -1227,7 +1251,7 @@ class ContinuousBatchingManager:
         # paused loop always has its batch processor)
         if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
             raise RuntimeError("Call `release_memory` inside the `pause` context, the generation loop uses the cache.")
-        return self.batch_processor.cache.release_memory()
+        return self.batch_processor.cache.release_memory(nbytes)
 
     def restore_memory(self) -> None:
         """Brings back the KV cache freed by `release_memory`. CUDA graphs replay the addresses they were captured
