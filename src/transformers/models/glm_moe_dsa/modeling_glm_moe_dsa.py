@@ -685,10 +685,46 @@ def _proto_block_table_row_state(table, cu_k, max_k, page, last_safe_row, write_
     return write_rows, rows_all, visible
 
 
+# gap3-mtp prototype (bench only): with CB_MTP=spec a block-table decode batch holds 1 + k query tokens per request (the
+# request's last token, then its drafts), so the rows are computed per query token instead of per request
+_CB_MTP_SPEC = _os.environ.get("CB_MTP", "") == "spec"
+
+
+def _proto_block_table_token_state(table, cu_q, cu_k, max_k, page, last_safe_row, write_trash_index, num_tokens):
+    """gap3-mtp prototype: `_proto_block_table_row_state` for a decode batch whose requests bring several query tokens
+    (`cu_q`). Query token `t` of request `r` sits at offset `seqlen_k[r] - q_len[r] + (t - cu_q[r])` of its request; it
+    writes its own row and sees the request's tokens up to itself (causal). Returns the write row of every query token
+    ([M]), the rows of the first `max_k` tokens of its request ([M, max_k]) and which of them it sees. Tokens past the
+    last request (padding) write to the trash row and see nothing. Every row is clamped to [0, last_safe_row]."""
+    table = table.long()  # [R, max_blocks], -1 for unused entries
+    cu_q, cu_k = cu_q.long(), cu_k.long()  # [R + 1]
+    num_requests = table.shape[0]
+    tok = torch.arange(num_tokens, device=table.device)
+    req = torch.searchsorted(cu_q[1:].contiguous(), tok, right=True)  # [M], num_requests past the last request
+    real = req < num_requests
+    req = req.clamp(max=num_requests - 1)
+    seqlen_k = cu_k[req + 1] - cu_k[req]
+    offset = seqlen_k - (cu_q[req + 1] - cu_q[req]) + (tok - cu_q[req])  # position of the token in its request
+    real = real & (seqlen_k > 0) & (offset >= 0)
+    offset = offset.clamp(min=0)
+    request_table = table[req]  # [M, max_blocks]
+    new_page = request_table.gather(1, (offset // page).clamp(max=table.shape[1] - 1)[:, None]).squeeze(1)
+    write_rows = torch.where(real & (new_page >= 0), new_page * page + offset % page, write_trash_index).clamp(
+        0, last_safe_row
+    )
+    offsets = torch.arange(max_k, device=table.device)
+    pages = request_table[:, (offsets // page).clamp(max=table.shape[1] - 1)]  # [M, max_k]
+    n_visible = torch.where(real, offset + 1, 0)
+    visible = (offsets[None] < n_visible[:, None]) & (pages >= 0)
+    rows_all = torch.where(visible, pages * page + offsets % page, 0).clamp(0, last_safe_row)
+    return write_rows, rows_all, visible
+
+
 def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
                             prev_topk_indices, kwargs):
     """PROTOTYPE of the engine work package: a decode batch (one query token per request, token j belongs to request
-    j) served from CB's block table. Writes the new latents (and indexer keys), and returns the physical rows of the
+    j; with CB_MTP=spec, 1 + k query tokens per request, see `_proto_block_table_token_state`) served from CB's block
+    table. Writes the new latents (and indexer keys), and returns the physical rows of the
     top-k tokens of each query, -1 for empty slots. Neither the read index nor the mask is used."""
     page = allocator.tokens_per_page
     kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
@@ -697,14 +733,26 @@ def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_stat
         # the smallest layer view is the one of the group's last layer, which starts `tokens_per_block - page` rows
         # later than the first
         last_safe_row = allocator.cache_tensor.shape[0] - allocator.tokens_per_block + page - 1
-        state = _proto_block_table_row_state(
-            kwargs["block_table"][allocator.index],
-            kwargs["cu_seq_lens_k"][allocator.layer_type],
-            kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
-            page,
-            last_safe_row,
-            allocator.write_trash_index,
-        )
+        if _CB_MTP_SPEC:  # gap3-mtp prototype: 1 + k query tokens per request
+            state = _proto_block_table_token_state(
+                kwargs["block_table"][allocator.index],
+                kwargs["cu_seq_lens_q"],
+                kwargs["cu_seq_lens_k"][allocator.layer_type],
+                kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
+                page,
+                last_safe_row,
+                allocator.write_trash_index,
+                hidden_states.shape[1],
+            )
+        else:
+            state = _proto_block_table_row_state(
+                kwargs["block_table"][allocator.index],
+                kwargs["cu_seq_lens_k"][allocator.layer_type],
+                kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
+                page,
+                last_safe_row,
+                allocator.write_trash_index,
+            )
         cache._proto_bt_state = state
     write_rows, rows_all, visible = state
     kv_latent_cache.index_copy_(0, write_rows, k_pass.reshape(-1, module.kv_lora_rank))
@@ -1268,6 +1316,41 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states, topk_indices
 
 
+# --- PROTOTYPE gap2-mtp (bench only): the checkpoint's multi-token-prediction module, off unless GLM_MTP=1 -------------
+# The checkpoint stores it as `model.layers.{num_hidden_layers}.*`: `enorm`, `hnorm`, `eh_proj`, one full decoder block
+# (its own latent attention, indexer and MoE) and `shared_head.norm`; the LM head and the embeddings are the main model's.
+# Kept under the checkpoint's own names as one more entry of `model.layers`, so the FP8 quantizer, the conversion mapping
+# and the TP plan treat it like any other layer. The main forward stops at `num_hidden_layers`.
+_GLM_MTP = _os.environ.get("GLM_MTP", "0") == "1"
+# vLLM zeroes the token embedding of the first position before `enorm` (DeepSeek's reference MTP does the same)
+_GLM_MTP_ZERO_FIRST = _os.environ.get("GLM_MTP_ZERO_FIRST", "1") == "1"
+
+
+class GlmMoeDsaMtpSharedHead(nn.Module):
+    def __init__(self, config: GlmMoeDsaConfig):
+        super().__init__()
+        self.norm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+class GlmMoeDsaMtpLayer(GlmMoeDsaDecoderLayer):
+    def __init__(self, config: GlmMoeDsaConfig):
+        import copy
+
+        # The MTP block is a sparse (MoE) layer with its own indexer; the per-layer lists of the config stop at the
+        # last main layer
+        layer_config = copy.copy(config)
+        layer_config.mlp_layer_types = list(config.mlp_layer_types) + ["sparse"]
+        layer_config.indexer_types = list(config.indexer_types) + ["full"]
+        super().__init__(layer_config, config.num_hidden_layers)
+        for module in self.modules():
+            if getattr(module, "config", None) is layer_config:
+                module.config = config
+        self.enorm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.hnorm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.eh_proj = nn.Linear(2 * config.hidden_size, config.hidden_size, bias=False)
+        self.shared_head = GlmMoeDsaMtpSharedHead(config)
+
+
 @auto_docstring
 class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     config: GlmMoeDsaConfig
@@ -1287,7 +1370,8 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(GlmMoeDsaTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    # gap2-mtp prototype: with GLM_MTP=1 the MTP module's weights are loaded, not ignored
+    _keys_to_ignore_on_load_unexpected = [] if _GLM_MTP else [r"model\.layers\.78.*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]
 
     @torch.no_grad()
@@ -1311,6 +1395,8 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         self.layers = nn.ModuleList(
             [GlmMoeDsaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        if _GLM_MTP and getattr(config, "num_nextn_predict_layers", 0) > 0:
+            self.layers.append(GlmMoeDsaMtpLayer(config))  # gap2-mtp prototype, `layers[num_hidden_layers]`
         self.norm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmMoeDsaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -1478,6 +1564,48 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+    def mtp_forward(
+        self,
+        last_hidden_state: torch.Tensor,
+        input_ids: torch.LongTensor,
+        position_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """gap2-mtp prototype. One pass of the MTP module over the same positions as a main forward.
+
+        `last_hidden_state` `[B, S, H]` is the main model's output (after its final norm) at positions `p`,
+        `input_ids` `[B, S]` holds the tokens at positions `p + 1`, `position_ids` are the main model's (`p`). The
+        module caches its own latents and indexer keys in slot `num_hidden_layers` of `cache`, at the main layers'
+        indices. Returns its hidden states after `shared_head.norm`: `lm_head` of row `p` predicts token `p + 2`.
+        """
+        layer = self.model.layers[self.config.num_hidden_layers]
+        inputs_embeds = self.model.embed_tokens(input_ids)
+        if _GLM_MTP_ZERO_FIRST:
+            inputs_embeds = inputs_embeds.masked_fill((position_ids == 0).unsqueeze(-1), 0.0)
+        hidden_states = layer.eh_proj(torch.cat([layer.enorm(inputs_embeds), layer.hnorm(last_hidden_state)], dim=-1))
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": hidden_states,
+                "attention_mask": attention_mask,
+                "cache": cache,
+                "position_ids": position_ids,
+                "allow_is_causal_skip": False,
+            }
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
+        position_embeddings = self.model.rotary_emb(hidden_states, position_ids=position_ids)
+        hidden_states, _ = layer(
+            hidden_states,
+            attention_mask=causal_mask_mapping["indexed_attention"],
+            position_embeddings=position_embeddings,
+            position_ids=position_ids,
+            cache=cache,
+            **kwargs,
+        )
+        return layer.shared_head.norm(hidden_states)
 
 
 __all__ = ["GlmMoeDsaPreTrainedModel", "GlmMoeDsaModel", "GlmMoeDsaForCausalLM"]

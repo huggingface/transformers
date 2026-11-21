@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 
 from .cache import PagedAttentionCache
+from .cache_allocators.compressed_latents import _PROTO_MLA_BLOCK_TABLE
 from .requests import FutureRequestState, RequestState, RequestStatus
 from .utils import logger
 
@@ -27,6 +28,20 @@ from .utils import logger
 # the waiting or prefilling requests. Unset: today's behaviour, where one waiting request turns the batch into a varlen
 # batch for every request in it.
 _PROTO_PREFILLS_APART = int(os.environ.get("CB_PROTO_PREFILLS_APART", "-1"))
+# gap3-mtp prototype: with CB_MTP=spec and the block table decode path, a decoding request brings its last token and
+# its draft (2 query tokens) and still takes the decode fast path
+_MTP_BT_QUERY = 2 if os.environ.get("CB_MTP", "") == "spec" and _PROTO_MLA_BLOCK_TABLE else 1
+
+
+def _decode_eligible(state: RequestState, request_len: int, max_length: int) -> bool:
+    """Whether a request of `request_len` query tokens can take the decode fast path (block table)."""
+    if _MTP_BT_QUERY > 1:  # gap3-mtp prototype: only a decoding request with its draft, as a whole
+        return (
+            request_len == _MTP_BT_QUERY
+            and state.status == RequestStatus.DECODING
+            and state.position_offset + request_len <= max_length
+        )
+    return request_len == 1 and state.position_offset < max_length
 
 
 class Scheduler(ABC):
@@ -234,13 +249,16 @@ class Scheduler(ABC):
 
             # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
+            # gap2-mtp prototype: a decoding request that carries a draft takes its two tokens together or waits
+            if state.status == RequestStatus.DECODING and len(request_tokens) > token_budget:
+                continue
             # Account for token budget
             request_len = min(len(request_tokens), token_budget)
 
             # This block checks cache budget: decode batches have infinite budget, but varlen batches don't, because KV
             # cache is read through a fixed-sized index tensor. We keep track of the current budget in case the batch
             # goes from decode to varlen
-            is_decode_eligible = request_len == 1 and state.position_offset < self.cache.max_decode_fast_path_length
+            is_decode_eligible = _decode_eligible(state, request_len, self.cache.max_decode_fast_path_length)
             read_cache_needed = state.current_len()
             if self.cache.read_cache_limit is not None:
                 read_cache_needed = min(read_cache_needed, self.cache.read_cache_limit)
@@ -262,7 +280,7 @@ class Scheduler(ABC):
             request_len = len(state.tokens_to_process)  # it may change after scheduling
 
             # The decode fast path is only used if the request is a single token and its length is less than the max blocks per request
-            decode_fast_path &= request_len == 1 and state.position_offset < self.cache.max_decode_fast_path_length
+            decode_fast_path &= _decode_eligible(state, request_len, self.cache.max_decode_fast_path_length)
 
             # Update the token and cache budgets
             token_budget -= request_len
