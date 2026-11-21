@@ -59,6 +59,7 @@ else:
             ("cosmos3_omni", {"torchvision": "Qwen3VLVideoProcessor"}),
             ("dots3_note", {"torchvision": "Qwen3VLVideoProcessor"}),
             ("exaone4_5", {"torchvision": "Qwen2VLVideoProcessor"}),
+            ("hy_v4_flash", {"torchvision": "HYV4VLVideoProcessor"}),
             ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLVideoProcessor"}),
             ("instructblip", {"torchvision": "InstructBlipVideoVideoProcessor"}),
             ("lfm3_vl", {"torchvision": "Qwen3VLVideoProcessor"}),

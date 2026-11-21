@@ -211,6 +211,26 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"^vit", target_patterns="model.vision_tower"),
         ],
+        # HY4-Flash: text renames sit here rather than under the text sub-config's type, so they apply whatever
+        # a released config calls its text tower. Each rule is spelled out because saving reverses targets into
+        # regexes, where HY4's short `.hc_` / `.hc_scale` would match inside `unified_per_hc_scales`.
+        "hy_v4_flash": [
+            WeightRenaming(r"\.self_attn\.learnable_sink_param", ".self_attn.sinks"),
+            WeightRenaming(r"\.self_attn\.linear_gate\.weight", ".self_attn.gate_proj.weight"),
+            WeightRenaming(r"\.mlp\.post_fc2_norm\.weight", ".post_mlp_layernorm.weight"),
+            WeightRenaming(r"\.mlp\.routed_expert_down_proj\.weight", ".mlp.pre_expert_proj.weight"),
+            WeightRenaming(r"\.mlp\.routed_expert_up_proj\.weight", ".mlp.post_expert_proj.weight"),
+            # Follow DSv4 HC standards, dropping the `hc_pre` level the checkpoint carries
+            WeightRenaming(r"\.hc_attn_layer\.hc_pre\.hc_fn", ".attn_hc.fn"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_pre\.hc_base", ".attn_hc.base"),
+            WeightRenaming(r"\.hc_attn_layer\.hc_pre\.hc_scale", ".attn_hc.scale"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_pre\.hc_fn", ".ffn_hc.fn"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_pre\.hc_base", ".ffn_hc.base"),
+            WeightRenaming(r"\.hc_mlp_layer\.hc_pre\.hc_scale", ".ffn_hc.scale"),
+            WeightRenaming(r"\.hc_head\.hc_head_fn", ".hc_head.hc_fn"),
+            WeightRenaming(r"\.hc_head\.hc_head_base", ".hc_head.hc_base"),
+            WeightRenaming(r"\.hc_head\.hc_head_scale", ".hc_head.hc_scale"),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [
@@ -2404,6 +2424,8 @@ def _build_checkpoint_conversion_mapping():
             force_cpu=True,
         ),
     ]
+
+    mapping["hy_v4_flash"] += mapping["hy_v4_vl"].copy()
 
     mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
