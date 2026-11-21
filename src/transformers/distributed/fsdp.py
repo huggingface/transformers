@@ -180,14 +180,16 @@ def apply_fully_sharded_data_parallelism(
     ep_plan: dict[str, str],
 ) -> nn.Module:
     """
-    Apply FSDP2 (fully_shard) to a model: dispatched experts on `efsdp` and the rest of the modules on `fsdp`, or on
-    `sp` when sequence parallelism splits the sequences.
+    Apply FSDP2 (fully_shard) to a model: dispatched experts on `efsdp` and the rest of the modules on `fsdp`, which
+    spans `sp` too when sequence parallelism splits the sequences (`fsdp_sp`, or `sp` alone when `fsdp_size == 1`).
 
     Torch availability, distributed initialization and the version requirement
     are asserted upstream by `initialize_distributed_mesh`.
     """
     distributed_config = getattr(model.config, "distributed_config", None)
-    fsdp_dim = "sp" if distributed_config is not None and distributed_config.sp_size > 1 else "fsdp"
+    fsdp_dim = "fsdp"
+    if distributed_config is not None and distributed_config.sp_size > 1:
+        fsdp_dim = "fsdp_sp" if distributed_config.fsdp_size > 1 else "sp"
     if distributed_config is not None and distributed_config.dp_replicate_size > 1:
         fsdp_mesh = mesh_manager.get_mesh(("dp_replicate", fsdp_dim))
     else:
