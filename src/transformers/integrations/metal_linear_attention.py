@@ -54,17 +54,22 @@ kernel void gated_delta_rule(device const T* q, device const T* k, device const 
                              constant int& L, constant int& HK, constant int& HV, constant int& DV,
                              constant int& l2norm, uint2 lane [[thread_position_in_threadgroup]],
                              uint2 group [[threadgroup_position_in_grid]]) {
-    int col = lane.x, h = group.x, b = group.y, hk = h / (HV / HK);
+    // Thread (col, slice) holds rows [slice * R, (slice + 1) * R) of the state's column `col`; the dot products over
+    // DK are summed across the SLICES threads of a column through threadgroup memory.
+    constexpr int SLICES = 4, R = DK / SLICES;
+    int col = lane.x, slice = lane.y, h = group.x, b = group.y, hk = h / (HV / HK);
     threadgroup float qs[DK], ks[DK];
     threadgroup float norms[2];
-    float s[DK];
-    device float* st = state + ((b * HV + h) * DK) * DV + col;
-    for (int i = 0; i < DK; ++i) s[i] = st[i * DV];
+    threadgroup float red[SLICES][256];
+    float s[R];
+    device float* st = state + ((b * HV + h) * DK + slice * R) * DV + col;
+    for (int i = 0; i < R; ++i) s[i] = st[i * DV];
+    int tid = slice * DV + col, nthreads = SLICES * DV;
     for (int t = 0; t < L; ++t) {
         int qk = ((b * L + t) * HK + hk) * DK;
-        for (int i = col; i < DK; i += DV) { qs[i] = float(q[qk + i]); ks[i] = float(k[qk + i]); }
+        for (int i = tid; i < DK; i += nthreads) { qs[i] = float(q[qk + i]); ks[i] = float(k[qk + i]); }
         threadgroup_barrier(mem_flags::mem_threadgroup);
-        if (col == 0) {
+        if (tid == 0) {
             float nq = 0.0f, nk = 0.0f;
             for (int i = 0; i < DK; ++i) { nq += qs[i] * qs[i]; nk += ks[i] * ks[i]; }
             norms[0] = (l2norm ? rsqrt(nq + 1e-6f) : 1.0f) * rsqrt(float(DK));
@@ -73,14 +78,25 @@ kernel void gated_delta_rule(device const T* q, device const T* k, device const 
         threadgroup_barrier(mem_flags::mem_threadgroup);
         int gh = (b * L + t) * HV + h;
         float decay = exp(g[gh]), kv = 0.0f, nk = norms[1];
-        for (int i = 0; i < DK; ++i) { s[i] *= decay; kv += s[i] * ks[i]; }
+        for (int i = 0; i < R; ++i) { s[i] *= decay; kv += s[i] * ks[slice * R + i]; }
+        red[slice][col] = kv;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        kv = 0.0f;
+        for (int j = 0; j < SLICES; ++j) kv += red[j][col];
         float delta = (float(v[gh * DV + col]) - kv * nk) * float(beta[gh]) * nk;
         float o = 0.0f;
-        for (int i = 0; i < DK; ++i) { s[i] += ks[i] * delta; o += s[i] * qs[i]; }
-        out[gh * DV + col] = T(o * norms[0]);
+        for (int i = 0; i < R; ++i) { s[i] += ks[slice * R + i] * delta; o += s[i] * qs[slice * R + i]; }
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        red[slice][col] = o;
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+        if (slice == 0) {
+            o = 0.0f;
+            for (int j = 0; j < SLICES; ++j) o += red[j][col];
+            out[gh * DV + col] = T(o * norms[0]);
+        }
         threadgroup_barrier(mem_flags::mem_threadgroup);
     }
-    for (int i = 0; i < DK; ++i) st[i * DV] = s[i];
+    for (int i = 0; i < R; ++i) st[i * DV] = s[i];
 }
 
 #define CONV(T) \\
@@ -169,7 +185,7 @@ def _gdr(
     out = torch.empty_like(v)
     getattr(_lib(), f"gated_delta_rule_{_NAMES[dtype]}_{k_dim}")(
         q, k, v, g, beta, state, out, length, k_heads, v_heads, v_dim, l2norm,
-        threads=(v_heads * v_dim, batch), group_size=(v_dim, 1),
+        threads=(v_heads * v_dim, batch * 4), group_size=(v_dim, 4),  # 4 = SLICES in the kernel
     )  # fmt: skip
     return out
 
