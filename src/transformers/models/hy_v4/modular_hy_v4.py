@@ -47,7 +47,7 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLitePreTrainedModel,
     Glm4MoeLiteRMSNorm,
     Glm4MoeLiteTopkRouter,
-    apply_rotary_pos_emb,
+    apply_rotary_pos_emb_interleave,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding
@@ -231,7 +231,7 @@ class HYV4Indexer(DeepseekV32Indexer):
         )  # [B, S, 1, D]
         k_pass, k_rot = torch.split(k, [self.head_dim - self.qk_rope_head_dim, self.qk_rope_head_dim], dim=-1)
 
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
         q = torch.cat([q_pass, q_rot], dim=-1)  # [B, S, H, D]
         k = torch.cat([k_pass, k_rot], dim=-1).squeeze(2)  # [B, S, D]
 
@@ -295,8 +295,7 @@ class HYV4Attention(GlmMoeDsaAttention):
 
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
         cos, sin = position_embeddings
-        # Non-interleave RoPE
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while latent KV is still compressed
         if cache is not None:

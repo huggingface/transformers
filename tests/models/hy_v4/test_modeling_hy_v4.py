@@ -24,7 +24,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import HYV4ForCausalLM, HYV4Model
+    from transformers import DynamicCache, HYV4ForCausalLM, HYV4Model
 
 
 class HYV4ModelTester(CausalLMModelTester):
@@ -91,6 +91,31 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
                 [state.shape for state in iter_hidden_states],
                 expected_shapes,
             )
+
+    @torch.no_grad()
+    def test_interleaved_rotary_keys(self):
+        config = self.model_tester.get_config()
+        model = HYV4Model(config).to(torch_device).eval()
+        attn = model.layers[0].self_attn
+        hidden = torch.randn(1, 3, config.hidden_size, device=torch_device)
+        positions = torch.tensor([[0, 1, 7]], device=torch_device)
+        cache = DynamicCache(config=config)
+        mask = hidden.new_zeros(1, 1, 3, 3)
+        attn(hidden, model.rotary_emb(hidden, positions), mask, past_key_values=cache, position_ids=positions)
+
+        dim = config.qk_rope_head_dim
+        angles = positions[..., None] * config.rope_parameters["rope_theta"] ** (
+            -torch.arange(0, dim, 2, device=torch_device) / dim
+        )
+        phase = torch.polar(torch.ones_like(angles), angles)
+        mla_keys = attn.kv_a_proj_with_mqa(hidden)[..., -dim:]
+        indexer_keys = attn.indexer.k_norm(attn.indexer.wk(hidden))[..., -dim:]
+        layer = cache.layers[0]
+        for raw, cached in ((mla_keys, layer.values.squeeze(1)), (indexer_keys, layer.indexer_keys[..., -dim:])):
+            pairs = torch.view_as_complex(raw.reshape(1, 3, dim // 2, 2).contiguous())
+            reference = torch.view_as_real(pairs * phase).flatten(-2)
+            # Inner products are independent of how the rotated coordinates are stored in the cache.
+            torch.testing.assert_close(cached @ cached.mT, reference @ reference.mT)
 
     def test_hidden_states_output(self):
         """Override to account for the difference in MHC and the final state shapes"""
