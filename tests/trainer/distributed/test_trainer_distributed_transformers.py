@@ -16,8 +16,11 @@
 Trainer tests for models sharded at load time by transformers' `DistributedConfig`.
 """
 
+import json
 import os
+import tempfile
 
+import torch
 from parameterized import parameterized
 
 from transformers.testing_utils import (
@@ -28,6 +31,7 @@ from transformers.testing_utils import (
     require_torch_greater_or_equal,
     require_torch_multi_accelerator,
 )
+from transformers.utils import is_torch_greater_or_equal
 
 from .test_trainer_distributed import SCRIPTS_DIR
 
@@ -35,8 +39,13 @@ from .test_trainer_distributed import SCRIPTS_DIR
 @require_torch_greater_or_equal("2.7")
 @require_torch_multi_accelerator
 class TestTrainerDistributedConfig(TestCasePlus):
-    def get_torchrun_cmd(self, script, script_args=None):
-        cmd = ["torchrun", "--nproc_per_node=2", "--nnodes=1", f"--master_port={get_torch_dist_unique_port()}"]
+    def get_torchrun_cmd(self, script, script_args=None, nproc_per_node=2):
+        cmd = [
+            "torchrun",
+            f"--nproc_per_node={nproc_per_node}",
+            "--nnodes=1",
+            f"--master_port={get_torch_dist_unique_port()}",
+        ]
         cmd.append(os.path.join(SCRIPTS_DIR, script))
         return cmd + (script_args or [])
 
@@ -82,6 +91,83 @@ class TestTrainerDistributedConfig(TestCasePlus):
         execute_subprocess_async(
             self.get_torchrun_cmd("grad_accum_distributed_config.py", script_args), env=self.get_env()
         )
+
+    @parameterized.expand(
+        [
+            ("sp", 2, 1, 1, 1, True),
+            ("sp_grad_accumulation", 2, 1, 1, 2, True),
+            ("fsdp_sp", 2, 2, 1, 2, True),
+            ("tp_sp", 2, 1, 2, 1, True),
+            ("sp_tokens_not_averaged_across_devices", 2, 1, 1, 1, False),
+        ]
+    )
+    def test_sequence_parallel(self, _, sp_size, fsdp_size, tp_size, gradient_accumulation_steps, average_tokens):
+        """A model split over sp and tp groups takes the same steps as a single device on the same samples."""
+        if not is_torch_greater_or_equal("2.10" if fsdp_size > 1 else "2.9"):
+            self.skipTest("Sequence parallelism requires torch>=2.9, and torch>=2.10 with FSDP2")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            single_device_file = os.path.join(tmp_dir, "single_device.json")
+            # the data parallel groups hold a distinct batch each, so a single device accumulates one micro-batch per
+            # group to cover the same samples in a step
+            reference_args = [
+                "--output_dir",
+                os.path.join(tmp_dir, "single_device"),
+                "--metrics_file",
+                single_device_file,
+                "--gradient_accumulation_steps",
+                str(gradient_accumulation_steps * fsdp_size),
+            ] + ([] if average_tokens else ["--no_average_tokens_across_devices"])
+            # one process: a plain run would use `DataParallel` over every visible GPU
+            reference_cmd = self.get_torchrun_cmd("sp_distributed_config.py", reference_args, nproc_per_node=1)
+            execute_subprocess_async(reference_cmd, env=self.get_env())
+
+            sp_file = os.path.join(tmp_dir, "sequence_parallel.json")
+            script_args = [
+                "--output_dir",
+                os.path.join(tmp_dir, "sequence_parallel"),
+                "--metrics_file",
+                sp_file,
+                "--sp_size",
+                str(sp_size),
+                "--fsdp_size",
+                str(fsdp_size),
+                "--tp_size",
+                str(tp_size),
+                "--gradient_accumulation_steps",
+                str(gradient_accumulation_steps),
+            ] + ([] if average_tokens else ["--no_average_tokens_across_devices"])
+            cmd = self.get_torchrun_cmd(
+                "sp_distributed_config.py", script_args, nproc_per_node=sp_size * fsdp_size * tp_size
+            )
+            execute_subprocess_async(cmd, env=self.get_env())
+
+            with open(single_device_file, encoding="utf-8") as f:
+                single_device = json.load(f)
+            with open(sp_file, encoding="utf-8") as f:
+                sequence_parallel = json.load(f)
+
+        torch.testing.assert_close(
+            torch.tensor(sequence_parallel["losses"]),
+            torch.tensor(single_device["losses"]),
+            rtol=1e-5,
+            atol=1e-6,
+            msg="Loss mismatch",
+        )
+        torch.testing.assert_close(
+            torch.tensor(sequence_parallel["grad_norms"]),
+            torch.tensor(single_device["grad_norms"]),
+            rtol=1e-5,
+            atol=1e-6,
+            msg="Gradient norm mismatch",
+        )
+        torch.testing.assert_close(
+            torch.tensor(sequence_parallel["eval_loss"]),
+            torch.tensor(single_device["eval_loss"]),
+            rtol=1e-5,
+            atol=1e-6,
+            msg="Evaluation loss mismatch",
+        )
+        assert sequence_parallel["num_input_tokens_seen"] == single_device["num_input_tokens_seen"]
 
     def test_train_after_evaluate(self):
         """Training after an evaluation updates every parameter of a model sharded at load time."""
