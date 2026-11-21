@@ -189,6 +189,8 @@ class MetalExperts(nn.Module):
         for flag in ("has_gate", "has_bias", "is_concatenated", "is_transposed"):
             setattr(self, flag, getattr(experts, flag, None))
         self._apply_gate_fn = type(experts)._apply_gate
+        # The Metal decode down+routing kernel: 4 bits, no bias, group a multiple of 32 (one scale per uint4 block)
+        self._fused_decode = bits == 4 and not getattr(experts, "has_bias", False) and group_size in (32, 64)
         for name in self.PROJECTIONS:
             num_experts, rows, columns = getattr(experts, name).shape
             groups = columns // group_size
@@ -233,6 +235,19 @@ class MetalExperts(nn.Module):
         # unfilled slots are zeros), so the product is 0
         weights = top_k_weights.reshape(-1) * (ids < self.num_experts)
         ids = ids.clamp(max=self.num_experts - 1).to(torch.int32)
+        if num_tokens == 1 and self._fused_decode and hidden_states.device.type == "mps":
+            # One token: MLX gate/up for every route, then one dispatch for the short-row down projections + routing sum
+            from .metal_qmv import experts_down_sum
+
+            act = self._apply_gate(self._qmm(hidden_states.expand(top_k, -1), "gate_up_proj", ids, False))
+            return experts_down_sum(
+                act, self.down_proj, self.down_proj_scales, self.down_proj_qbiases, ids, weights, self.group_size
+            )
+        if num_tokens == 1:
+            # One token: every route reads the same row, and the routes reduce with a weighted sum (no scatter)
+            x = hidden_states.expand(top_k, -1)
+            out = self._qmm(self._apply_gate(self._qmm(x, "gate_up_proj", ids, False)), "down_proj", ids, False)
+            return (out * weights[:, None].to(out.dtype)).sum(0, keepdim=True)
         rows = torch.arange(num_tokens * top_k, device=ids.device) // top_k
         # MLX picks its batched kernel for sorted ids (prefill); decode rows stay in place
         sorted_indices = ids.numel() >= 16

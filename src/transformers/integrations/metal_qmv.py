@@ -58,6 +58,44 @@ kernel void qmv4(device const uint* w, device const T* scales, device const T* b
 template [[host_name("qmv4_" #T "_" #GS)]] kernel void qmv4<T, GS>(device const uint*, device const T*, \\
     device const T*, device const T*, device T*, constant int&, constant int&, constant int&, uint, uint, uint, uint);
 QMV(float, 32) QMV(half, 32) QMV(bfloat, 32) QMV(float, 64) QMV(half, 64) QMV(bfloat, 64)
+
+// Experts decode, down projection + routing: y[h] = sum_r wt[r] * (down[e_r, h] . act[r]). One simdgroup per row h,
+// lanes stride over the (route, uint4 block of 32 inputs) pairs: the rows are short (I inputs), the routes fill lanes.
+template <typename T, int GS>
+kernel void experts_down_sum(device const uint4* w, device const T* sc, device const T* bi, device const T* act,
+                             device const int* ids, device const float* wt, device T* y, constant int& H,
+                             constant int& I, constant int& R, uint gid [[thread_position_in_grid]],
+                             uint lane [[thread_index_in_simdgroup]]) {
+    int h = gid / 32;
+    if (h >= H) return;
+    int blocks = I / 32, groups = I / GS, total = R * blocks;
+    float acc = 0.0f;
+    for (int p = lane; p < total; p += 32) {
+        int r = p / blocks, blk = p % blocks;
+        long row = (long)ids[r] * H + h;
+        uint4 q = w[row * blocks + blk];
+        device const vec<T, 4>* xr = (device const vec<T, 4>*)(act + r * I + blk * 32);
+        float dot = 0.0f, xsum = 0.0f;
+        for (int word = 0; word < 4; ++word) {
+            float4 x0 = float4(xr[word * 2]), x1 = float4(xr[word * 2 + 1]);
+            uint qw = q[word];
+            float4 q0 = float4(qw & 0xF, (qw >> 4) & 0xF, (qw >> 8) & 0xF, (qw >> 12) & 0xF);
+            float4 q1 = float4((qw >> 16) & 0xF, (qw >> 20) & 0xF, (qw >> 24) & 0xF, (qw >> 28) & 0xF);
+            dot += metal::dot(q0, x0) + metal::dot(q1, x1);
+            xsum += x0.x + x0.y + x0.z + x0.w + x1.x + x1.y + x1.z + x1.w;
+        }
+        int g = blk * 32 / GS;
+        acc += wt[r] * (float(sc[row * groups + g]) * dot + float(bi[row * groups + g]) * xsum);
+    }
+    acc = simd_sum(acc);
+    if (lane == 0) y[h] = T(acc);
+}
+
+#define DOWN(T, GS) \
+template [[host_name("experts_down_sum_" #T "_" #GS)]] kernel void experts_down_sum<T, GS>(device const uint4*, \
+    device const T*, device const T*, device const T*, device const int*, device const float*, device T*, \
+    constant int&, constant int&, constant int&, uint, uint);
+DOWN(float, 32) DOWN(half, 32) DOWN(bfloat, 32) DOWN(float, 64) DOWN(half, 64) DOWN(bfloat, 64)
 """
 
 _NAMES = {torch.float32: "float", torch.float16: "half", torch.bfloat16: "bfloat"}
@@ -90,3 +128,24 @@ def qmv4(
 @qmv4.register_fake
 def _(x, weight, scales, biases, group_size):
     return x.new_empty(*x.shape[:-1], weight.shape[0])
+
+
+@torch.library.custom_op("transformers::metal_experts_down_sum", mutates_args=())
+def experts_down_sum(
+    act: torch.Tensor, down: torch.Tensor, scales: torch.Tensor, biases: torch.Tensor, ids: torch.Tensor,
+    weights: torch.Tensor, group_size: int,
+) -> torch.Tensor:  # fmt: skip
+    """One token's routed down projections and their routing-weighted sum: `act` [R, I], `down` [E, H, I / 8] uint32,
+    `ids` / `weights` [R] -> [1, H]."""
+    hidden, inter, routes = down.shape[-2], act.shape[-1], ids.numel()
+    out = torch.empty(1, hidden, dtype=act.dtype, device=act.device)
+    getattr(_lib(), f"experts_down_sum_{_NAMES[act.dtype]}_{group_size}")(
+        down, scales, biases, act.contiguous(), ids.to(torch.int32).contiguous(), weights.float().contiguous(), out,
+        hidden, inter, routes, threads=hidden * 32, group_size=128,
+    )  # fmt: skip
+    return out
+
+
+@experts_down_sum.register_fake
+def _(act, down, scales, biases, ids, weights, group_size):
+    return act.new_empty(1, down.shape[-2])
