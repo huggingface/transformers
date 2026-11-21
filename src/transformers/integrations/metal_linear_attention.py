@@ -155,28 +155,28 @@ def _(x, state, weight, bias, silu):
     return torch.empty_like(x, dtype=weight.dtype)
 
 
-@torch.library.custom_op("transformers::metal_gated_delta_rule", mutates_args=())
+@torch.library.custom_op("transformers::metal_gated_delta_rule", mutates_args=("state",))
 def _gdr(
     q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, g: torch.Tensor, beta: torch.Tensor, state: torch.Tensor,
     l2norm: int,
-) -> tuple[torch.Tensor, torch.Tensor]:  # fmt: skip
+) -> torch.Tensor:  # fmt: skip
+    """Advances the float32 contiguous `state` [B, HV, DK, DV] in place; returns the outputs."""
     batch, length, k_heads, k_dim = k.shape
     v_heads, v_dim = v.shape[-2:]
     dtype = v.dtype
     q, k = q.contiguous().to(dtype), k.contiguous().to(dtype)
     v, beta, g = v.contiguous(), beta.contiguous().to(dtype), g.contiguous().float()
-    state = state.float().contiguous().clone()
     out = torch.empty_like(v)
     getattr(_lib(), f"gated_delta_rule_{_NAMES[dtype]}_{k_dim}")(
         q, k, v, g, beta, state, out, length, k_heads, v_heads, v_dim, l2norm,
         threads=(v_heads * v_dim, batch), group_size=(v_dim, 1),
     )  # fmt: skip
-    return out, state
+    return out
 
 
 @_gdr.register_fake
 def _(q, k, v, g, beta, state, l2norm):
-    return torch.empty_like(v), torch.empty(state.shape, dtype=torch.float32, device=state.device)
+    return torch.empty_like(v)
 
 
 def causal_conv1d_fn(hidden_states, weight, bias=None, activation=None, seq_idx=None, **kwargs):
@@ -201,8 +201,13 @@ def gated_delta_rule(
     batch, _, _, k_dim = key.shape
     v_heads, v_dim = value.shape[-2:]
     if initial_state is None:
-        initial_state = torch.zeros(batch, v_heads, k_dim, v_dim, device=value.device, dtype=torch.float32)
-    out, state = _gdr(query, key, value, g, beta, initial_state, int(use_qk_l2norm_in_kernel))
+        state = torch.zeros(batch, v_heads, k_dim, v_dim, device=value.device, dtype=torch.float32)
+    elif initial_state.dtype == torch.float32 and initial_state.is_contiguous():
+        # Advanced in place: a cache's state buffer, which the cache's `copy_` of the result then skips (same tensor)
+        state = initial_state
+    else:
+        state = initial_state.float().contiguous()
+    out = _gdr(query, key, value, g, beta, state, int(use_qk_l2norm_in_kernel))
     return out, state if output_final_state else None
 
 
