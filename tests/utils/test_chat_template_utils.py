@@ -740,6 +740,31 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         with self.assertRaisesRegex(TypeHintParsingException, "stops"):
             get_json_schema(fn)
 
+    def test_starred_docstring_names(self):
+        def fn(origin: str, **filters: int):
+            """
+            Test function
+
+            Args:
+                origin: The input
+                **filters: The extras
+            """
+            return origin, filters
+
+        # Google style writes a variadic entry with its stars, so the name in the docstring is "**filters".
+        # Without them the line reads as part of the previous description instead of as its own argument
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"origin": {"type": "string", "description": "The input"}},
+                "additionalProperties": {"type": "integer", "description": "The extras"},
+                "required": ["origin"],
+            },
+        }
+        self.assertEqual(get_json_schema(fn)["function"], expected_schema)
+
     def test_multiline_docstring_with_types(self):
         def fn(x: int, y: int):
             """
