@@ -46,7 +46,7 @@ def _rope_pair(x1, x2, c, s):
 @triton.jit
 def _norm_rope_write_kernel(
     qa_ptr, qr_ptr, qw_ptr, kva_ptr, kvw_ptr, cos_ptr, sin_ptr, widx_ptr, cache_ptr, ik_ptr, lnw_ptr, lnb_ptr,
-    cache_stride, n_rows, cos_stride, eps_q, eps_kv, eps_ln,
+    cache_stride, n_rows, cos_stride, eps_q, eps_kv, eps_ln, qa_stride, kva_stride, ik_stride,
     QD: tl.constexpr, KD: tl.constexpr, R: tl.constexpr, ID: tl.constexpr,
     QB: tl.constexpr, KB: tl.constexpr, PB: tl.constexpr, IB: tl.constexpr, HAS_INDEXER: tl.constexpr,
 ):  # fmt: skip
@@ -54,7 +54,7 @@ def _norm_rope_write_kernel(
     # RMSNorm of the query latent
     oq = tl.arange(0, QB)
     mq = oq < QD
-    x = tl.load(qa_ptr + m * QD + oq, mask=mq, other=0.0).to(tl.float32)
+    x = tl.load(qa_ptr + m * qa_stride + oq, mask=mq, other=0.0).to(tl.float32)
     w = tl.load(qw_ptr + oq, mask=mq, other=0.0).to(tl.float32)
     rr = tl.rsqrt(tl.sum(x * x, axis=0) / QD + eps_q)
     tl.store(qr_ptr + m * QD + oq, _bf16(x * rr * w).to(tl.bfloat16), mask=mq)
@@ -64,7 +64,7 @@ def _norm_rope_write_kernel(
     row = tl.load(widx_ptr + m)
     row = tl.minimum(tl.maximum(row, 0), n_rows - 1)
     base = cache_ptr + row * cache_stride
-    src = kva_ptr + m * (KD + R)
+    src = kva_ptr + m * kva_stride
     ok = tl.arange(0, KB)
     mk = ok < KD
     kx = tl.load(src + ok, mask=mk, other=0.0).to(tl.float32)
@@ -84,7 +84,7 @@ def _norm_rope_write_kernel(
 
     if HAS_INDEXER:
         # LayerNorm of the indexer key, rotary of its first R dims, the rest passes through
-        isrc = ik_ptr + m * ID
+        isrc = ik_ptr + m * ik_stride
         oi = tl.arange(0, IB)
         mi = oi < ID
         v = tl.load(isrc + oi, mask=mi, other=0.0).to(tl.float32)
@@ -216,24 +216,29 @@ def _norm_rope_write(
 ) -> Tensor:
     """qa [..., M, QD] (q_a_proj output), kva [..., M, KD + R] (kv_a_proj output), cos / sin [..., M, R] (per-pair angle
     in the first R / 2), write_index [M] rows of `cache_rows` [rows, >= KD + R (+ ID)], index_key [..., M, ID] (the
-    indexer's `wk` output) or None. Returns the normed query latent, like qa; the cache rows are written in place."""
+    indexer's `wk` output) or None. Returns the normed query latent, like qa; the cache rows are written in place.
+    The rows of qa, kva and index_key may be strided (column slices of one fused projection output, GEMM_FUSE_QKV_A),
+    their last dim must be contiguous."""
     qd, kd, rope = qa.shape[-1], kv_weight.shape[0], cos.shape[-1]
     num_tokens = write_index.shape[0]
     has_indexer = index_key is not None
     idim = index_key.shape[-1] if has_indexer else rope
     assert _is_bf16(qa, q_weight, kva, kv_weight, cos, sin, cache_rows) and write_index.dtype == torch.int64
-    assert qa.is_contiguous() and kva.is_contiguous() and cos.is_contiguous() and sin.is_contiguous()
-    assert qa.numel() == num_tokens * qd and kva.numel() == num_tokens * (kd + rope) and cos.numel() == num_tokens * rope
+    qa2, kva2 = qa.reshape(-1, qd), kva.reshape(-1, kva.shape[-1])  # views of the rows (strided or not)
+    assert qa2.stride(1) == 1 and kva2.stride(1) == 1 and cos.is_contiguous() and sin.is_contiguous()
+    assert qa2.shape[0] == num_tokens and kva2.shape == (num_tokens, kd + rope) and cos.numel() == num_tokens * rope
     assert cache_rows.dim() == 2 and cache_rows.stride(1) == 1 and rope % 2 == 0 and _pow2(rope) == rope
     assert cache_rows.shape[1] >= kd + rope + (idim if has_indexer else 0)
     if has_indexer:
-        assert _is_bf16(index_key, ln_weight, ln_bias) and index_key.is_contiguous()
-        assert index_key.numel() == num_tokens * idim and idim >= rope
-    q_resid = torch.empty_like(qa)
+        ik2 = index_key.reshape(-1, idim)
+        assert _is_bf16(index_key, ln_weight, ln_bias) and ik2.stride(1) == 1
+        assert ik2.shape[0] == num_tokens and idim >= rope
+    q_resid = torch.empty(qa.shape, dtype=qa.dtype, device=qa.device)
     _norm_rope_write_kernel[(num_tokens,)](
-        qa, q_resid, q_weight, kva, kv_weight, cos, sin, write_index, cache_rows,
-        index_key if has_indexer else qa, ln_weight if has_indexer else q_weight, ln_bias if has_indexer else q_weight,
+        qa2, q_resid, q_weight, kva2, kv_weight, cos, sin, write_index, cache_rows,
+        ik2 if has_indexer else qa2, ln_weight if has_indexer else q_weight, ln_bias if has_indexer else q_weight,
         cache_rows.stride(0), cache_rows.shape[0], rope, eps_q, eps_kv, eps_ln,
+        qa2.stride(0), kva2.stride(0), ik2.stride(0) if has_indexer else 0,
         QD=qd, KD=kd, R=rope, ID=idim, QB=_pow2(qd), KB=_pow2(kd), PB=_pow2(max(idim - rope, 1)), IB=_pow2(idim),
         HAS_INDEXER=has_indexer, num_warps=8,
     )  # fmt: skip
@@ -243,7 +248,7 @@ def _norm_rope_write(
 def _norm_rope_write_fake(
     qa, q_weight, kva, kv_weight, cos, sin, write_index, cache_rows, index_key, ln_weight, ln_bias, eps_q, eps_kv, eps_ln
 ):
-    return torch.empty_like(qa)
+    return torch.empty(qa.shape, dtype=qa.dtype, device=qa.device)
 
 
 def _q_pack(qb: Tensor, q_lat: Tensor, cos: Tensor, sin: Tensor, q_abs: Tensor, nope: int) -> None:

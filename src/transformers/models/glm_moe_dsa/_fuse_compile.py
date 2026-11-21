@@ -131,6 +131,23 @@ def _localize(module):
     return twin
 
 
+def _with_twin_fused_gemms(module, twin):
+    """[gap3] The fused GEMM buffers of GEMM_FUSE_* (`_gemm_qkv_a`, `_gemm_gate_up`) name the linears they were built
+    from, and `_gemm_fused_weight` only uses a buffer for those exact modules and weights: point the twin's entries to
+    the twin's own linears (same storage), or the twin's forwards would silently skip the fused GEMMs."""
+    twins = {id(m): t for m, t in zip(module.modules(), twin.modules())}
+    for sub in twin.modules():
+        for key in ("_gemm_qkv_a", "_gemm_gate_up"):
+            entry = sub.__dict__.get(key)
+            if entry is None:
+                continue
+            buffer, linears, _ = entry
+            mapped = [twins.get(id(lin)) for lin in linears]
+            if all(m is not None for m in mapped):
+                sub.__dict__[key] = (buffer, mapped, [m.weight for m in mapped])
+    return twin
+
+
 torch.library.custom_op("transformers::fuse_cache_write", _cache_write, mutates_args=("cache_rows",))
 torch.library.custom_op("transformers::fuse_sparse_mla", _sparse_mla, mutates_args=())
 torch.library.register_fake("transformers::fuse_sparse_mla", _sparse_mla_fake)
@@ -196,7 +213,7 @@ def _decode_layer(layer, hidden_states, cos, sin, cache_rows, write_index, rows,
 
 def _decode_layer_fused(
     layer, residual, hidden_states, cos, sin, cache_rows, write_index, rows, counts, w_kv_b, q_abs, next_weight,
-    next_eps: float, tp: bool,
+    next_eps: float, tp: bool, qkv_a=None,
 ):
     """Same layer with its fixed chains as fused kernels (FUSE_KERNELS=1). `hidden_states` is `residual` already
     normed by this layer's `input_layernorm` (done by the previous layer's last kernel); returns this layer's output
@@ -208,13 +225,20 @@ def _decode_layer_fused(
     indexer = attn.indexer
     index_key = ln_weight = ln_bias = None
     ln_eps = 0.0
+    if qkv_a is not None:
+        # [gap3] GEMM_FUSE_QKV_A: q_a, kv_a (and the indexer's wk) in one GEMM, the kernel reads the column slices
+        projections = F.linear(hidden_states, qkv_a).split(attn._gemm_qkv_a_sizes, dim=-1)
+        q_a, kv_a = projections[0], projections[1]
+        wk_out = projections[2] if indexer is not None else None
+    else:
+        q_a, kv_a = attn.q_a_proj(hidden_states), attn.kv_a_proj_with_mqa(hidden_states)
+        wk_out = indexer.wk(hidden_states) if indexer is not None else None
     if indexer is not None:  # the indexer's key of the new tokens, cached for later, longer contexts
-        index_key, ln_weight, ln_bias, ln_eps = indexer.wk(hidden_states), indexer.k_norm.weight, indexer.k_norm.bias, indexer.k_norm.eps
+        index_key, ln_weight, ln_bias, ln_eps = wk_out, indexer.k_norm.weight, indexer.k_norm.bias, indexer.k_norm.eps
     # q_a norm; kv_a norm + key rotary + cache write; indexer key norm + rotary + cache write: one kernel
     q_resid = ops.fuse_norm_rope_write(
-        attn.q_a_proj(hidden_states), attn.q_a_layernorm.weight, attn.kv_a_proj_with_mqa(hidden_states),
-        attn.kv_a_layernorm.weight, cos, sin, write_index, cache_rows, index_key, ln_weight, ln_bias,
-        attn.q_a_layernorm.variance_epsilon, attn.kv_a_layernorm.variance_epsilon, ln_eps,
+        q_a, attn.q_a_layernorm.weight, kv_a, attn.kv_a_layernorm.weight, cos, sin, write_index, cache_rows, index_key,
+        ln_weight, ln_bias, attn.q_a_layernorm.variance_epsilon, attn.kv_a_layernorm.variance_epsilon, ln_eps,
     )
     q_b = attn.q_b_proj(q_resid)  # [1, M, heads * (nope + rope)]
     q_pass = q_b.view(seq_length, -1, attn.qk_head_dim)[:, :, : attn.qk_nope_head_dim].transpose(0, 1)  # [heads, M, nope]
@@ -294,7 +318,14 @@ def _prepare(model, cache):
                 raise NotImplementedError("FUSE_COMPILE under TP expects HF_TP_SINGLE_MLP_ALL_REDUCE=1")
             if any(layer.self_attn.o_proj.bias is not None for layer in layers):
                 raise NotImplementedError("FUSE_COMPILE under TP expects bias-free row-parallel projections")
-            tp, run_layers_on = True, [_localize(layer) for layer in layers]
+            tp, run_layers_on = True, [_with_twin_fused_gemms(layer, _localize(layer)) for layer in layers]
+            from . import modeling_glm_moe_dsa as m
+
+            if m._GEMM_FUSE_GATE_UP or m._GEMM_FUSE_QKV_A:  # how many fused GEMMs the twins can run (bench log)
+                mlps = [t for twin in run_layers_on for t in twin.modules() if isinstance(t, m.GlmMoeDsaMLP)]
+                usable = sum(m._gemm_fused_weight(t, "_gemm_gate_up", (t.gate_proj, t.up_proj)) is not None for t in mlps)
+                STATS["twin_fused_gate_up"] = f"{usable}/{len(mlps)}"
+                print(f"FUSE_COMPILE twins: fused gate_up usable in {usable}/{len(mlps)} MLPs", flush=True)
     state = {
         "views": views, "h_pad": h_pad, "tp": tp,
         "layers": run_layers_on, "q_abs": {},
@@ -446,6 +477,22 @@ def _index_rows(hidden_states, allocator, kwargs, topk_length):
     return write_index, rows, counts
 
 
+def _qkv_a_weights(model):
+    """[gap3] Per layer, the fused q_a + kv_a (+ wk) weight of GEMM_FUSE_QKV_A when it may run now (read from the
+    model's own modules, not the TP twins, every step: training may unfuse them), else None."""
+    from . import modeling_glm_moe_dsa as m
+
+    layers = model.layers[: model.config.num_hidden_layers]
+    if not m._GEMM_FUSE_QKV_A:
+        return [None] * len(layers)
+    weights = []
+    for layer in layers:
+        a = layer.self_attn
+        current = (a.q_a_proj, a.kv_a_proj_with_mqa) + (() if a.indexer is None else (a.indexer.wk,))
+        weights.append(m._gemm_fused_weight(a, "_gemm_qkv_a", current))
+    return weights
+
+
 def _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts, w_kv_b):
     """Layer loop of FUSE_KERNELS=1: every layer hands the next one its output and that output already normed."""
     cos, sin = position_embeddings
@@ -459,6 +506,7 @@ def _run_layers_fused(model, state, hidden_states, position_embeddings, write_in
         q_abs = hidden_states.new_zeros(key[0], key[1], attn.kv_lora_rank + attn.qk_rope_head_dim)
         state["q_abs"][key] = q_abs
     norms = [layer.input_layernorm for layer in layers[1:]] + [model.norm]
+    qkv_a = _qkv_a_weights(model)
     fn = _layer_fn()
     tp = state["tp"]
     timings = STATS.get("layer_seconds")
@@ -470,7 +518,7 @@ def _run_layers_fused(model, state, hidden_states, position_embeddings, write_in
             start = time.perf_counter()
         args = (
             layer, residual, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, w_kv_b[i], q_abs,
-            norms[i].weight, norms[i].variance_epsilon, tp,
+            norms[i].weight, norms[i].variance_epsilon, tp, qkv_a[i],
         )
         if ranges:
             with torch.autograd.profiler.record_function(f"M:L{i}:layer"):
