@@ -71,3 +71,21 @@ Fine stub ablation of Q15 (`diag_qwen38_ablate_fine.py`, 20.80 ms): linear_attn 
 (250 GB/s), hyper up 1.58, hyper down+inject 1.47 (130 GB/s), attention qkv+indexer 1.27, sdpa 0.98, shared expert 0.63+0.49,
 gated delta rule 0.53, conv 0.23. Per-dispatch Metal attribution is not available here: GPU counters are a time series
 (default set: RT unit) and `torch.mps.profiler(wait_until_completed)` does not sync custom / hub Metal kernels.
+
+## Streamed experts on MPS: Qwen3.8 synthetic, all 512 experts on disk (`make_qwen38_synthetic_ckpt.py`), cache 0.25
+
+Router skew 0.6 (`sim_routing.py`, per-layer popularity: ~98.5% expert hit rate), static cache + compile, 4-bit dense.
+All-resident reference (64-expert synthetic): 48.1 tok/s.
+
+| # | Date | Change | Decode tok/s @0.25 | Notes |
+|---|---|---|---|---|
+| S1 | 2026-11-21 | baseline (uniform random routing) | 8.6 | hit rate ~ cache fraction, meaningless |
+| S2 | 2026-11-21 | skew 0.6 | 8.6 | sync (device drain per layer) 74 ms/token, disk waits <1 ms |
+| S3 | 2026-11-21 | lookahead 0 (guess reads starved the GIL), routing copy before pass 1, misses-only pass 2 | 11.7 | 48 host round trips/token, 170-260 us each on MPS |
+| S4 | 2026-11-21 | **device waits on a Metal shared event, a host thread resolves misses** (`integrations/mps_events`, `_MPSHostRouter`): routing read from shared memory, misses `preadv`-ed straight into pool slots, slot table written in place | 15.2 | host never waits on the device mid-step |
+| S5 | 2026-11-21 | memmove table updates, C++ hit path (no GIL) + stamp-based LRU | ~20 | Python on the host thread competed with issue for the GIL |
+| S6 | 2026-11-21 | one command buffer per 2 layers (each costs device start-up + event resume) | **22.7 / 24.3 / 23.3** (3 runs) | exact: fp32 streamed == in-memory greedy tokens with the router asserted active |
+
+Gotchas found on the way: Metal stops a queue past ~64 committed-but-blocked command buffers (host throttled to 32 layers
+ahead); CPU writes into MPS memory race the caching allocator's queued writes of a previous owner (sync before the first
+CPU write into a new buffer / pool); a device fill of a fresh buffer runs after the host reads it (CPU memset instead).

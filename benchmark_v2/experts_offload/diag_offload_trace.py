@@ -58,3 +58,4 @@ total = events[-1][0] - events[0][0]
 print(f"cache {fraction}, skew {skew}: {total / tokens * 1e3:.1f} ms/token traced, store stats {store.stats()}")
 for span, seconds in sorted(spans.items(), key=lambda kv: -kv[1])[:12]:
     print(f"{seconds / tokens * 1e3:8.2f} ms/token  {span}")
+print("mps host router active:", store.mps_router is not None)

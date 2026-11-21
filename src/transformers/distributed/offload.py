@@ -38,8 +38,13 @@ from __future__ import annotations
 
 import bisect
 import collections
+import ctypes
 import fnmatch
 import itertools
+import json
+import os
+import queue
+import struct
 import threading
 import time
 import weakref
@@ -192,6 +197,7 @@ class ExpertsOffloadStore:
         self.pending = {}  # (layer, expert) -> Future of its device tensors
         self.pending_experts = collections.defaultdict(set)  # layer -> its experts in `pending`
         self.host_routes = {}  # layer -> (routing on the host, its copy's MPS event), from `start_routing`
+        self.mps_router: _MPSHostRouter | None = None  # MPS: misses resolved while the device waits, see the class
         self.hits = self.misses = self.reads = self.covered = 0
         self.trace: list | None = None  # set to [] to record (time, thread, phase, layer, info) events, see `_mark`
         # Host time blocked on the routing copy (device sync) and on expert reads, see `stats`
@@ -263,6 +269,13 @@ class ExpertsOffloadStore:
             pool.tables[name] = torch.full((num_experts,), pool.num_slots, dtype=torch.long)
             self.device_tables[name] = pool.tables[name].to(self.device)
         logger.info(f"Streaming experts through {[p.num_slots for p in self.pools.values()]} device slots")
+        if self.device.type == "mps" and os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_MPS_EVENTS", "1") == "1":
+            from ..integrations.mps_events import load
+
+            ext = load()
+            if ext is not None and self.key_files is not None:
+                torch.mps.synchronize()
+                self.mps_router = _MPSHostRouter(self, ext)
 
     def add_reader(self, target_name: str, mapping, reads: dict[str, list], hf_quantizer=None):
         """Register how to read one expert of `target_name` from the checkpoint slices the loader collected.
@@ -359,6 +372,8 @@ class ExpertsOffloadStore:
             module._parameters.pop(param, None)
             module.register_buffer(param, pool.banks[param], persistent=False)
         module.register_buffer("offload_table", self.device_tables[name], persistent=False)
+        if self.mps_router is not None:  # the host thread writes slots and tables from the CPU: no queued writes left
+            torch.mps.synchronize()
         module.num_experts = pool.num_slots
         module._is_expert_parallel = True
         if name in self.order[: self.pin_layers]:  # pinned: all its experts now, never a miss after
@@ -398,6 +413,8 @@ class ExpertsOffloadStore:
         ahead = self.next_layers(name)
         decode = top_k_index.numel() < num_experts
         guessed = [n for n in ahead if decode and self.routers[n] is not None]
+        if self.device.type == "mps":
+            torch.mps.Event().record()  # submit pass 1 now: the device runs it while the host handles the misses
         self._mark("sync_start", name)
         start = time.perf_counter()
         routes = self.host_routes.pop(name, None)
@@ -467,6 +484,8 @@ class ExpertsOffloadStore:
         for expert in unused:
             self._pop_pending(name, expert).cancel()
         self._mark("layer_end", name, unused_guesses=len(unused))
+        if self.device.type == "mps":
+            torch.mps.Event().record()  # submit pass 2 / table copies: they run while the host issues the next ops
 
     def _pop_pending(self, layer, expert):
         self.pending_experts[layer].discard(expert)
@@ -496,6 +515,172 @@ class ExpertsOffloadStore:
         return self.order[index + 1 : index + 1 + self.lookahead]
 
 
+class _MPSHostRouter:
+    """MPS: misses resolved by a host thread while the device waits on a Metal shared event, so the host never waits on
+    the device mid-step. Per streamed layer call: the device copies the routing into the layer's shared buffer and
+    waits; this thread spins (C++, GIL released) until the routing lands, reads the missing experts from their files
+    straight into free pool slots (`preadv` into the slots' unified memory: no copy, no device op), writes the slot
+    table in place and signals. Pools and tables live in shared storage, written by the CPU while the device waits."""
+
+    MAX_AHEAD = 32
+    COMMIT_EVERY = int(os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_COMMIT_EVERY", "2"))
+
+    def __init__(self, store, ext):
+        self.store, self.ext = store, ext
+        self.slot_bases = {}  # (pool, param) -> (CPU address of slot 0, slot bytes)
+        self.stamps: dict[int, torch.Tensor] = {}  # pool -> last use per slot (job counter), written by the hit path
+        self.owners: dict[int, dict[int, tuple[str, int]]] = {}  # pool -> slot -> (layer, expert)
+        self.spin_seconds = self.work_seconds = 0.0  # host thread: waiting for routings / resolving them
+        self.jobs_done = 0
+        self.event = ext.event_new()
+        self.counter = 0
+        self.jobs = queue.SimpleQueue()
+        self.buffers: dict[str, torch.Tensor] = {}  # layer -> routing buffer (int32, -1 = not landed)
+        self.files: dict[str, int] = {}  # path -> fd
+        self.layout: dict[tuple[str, str], tuple[int, int, int]] = {}  # (layer, param) -> (fd, base offset, row bytes)
+        self.error = None
+        threading.Thread(target=self._run, daemon=True, name="experts-offload-mps").start()
+
+    @staticmethod
+    def _host_written(tensor):
+        """`tensor` on MPS, safe for CPU writes: the caching allocator may hand out memory that queued device work
+        of its previous owner still writes, so wait for the queue first (the host thread keeps signalling meanwhile,
+        the wait releases the GIL)."""
+        tensor = tensor.to("mps")
+        torch.mps.synchronize()
+        return tensor
+
+    def _locate(self, layer):
+        """File, byte offset and row size of each param bank of `layer` (rows are experts, stored contiguous)."""
+        for reader in self.store.readers[layer]:
+            for param, _, dtype, key in reader.banks:
+                path = self.store.key_files[key]
+                if path not in self.files:
+                    self.files[path] = os.open(path, os.O_RDONLY)
+                    with open(path, "rb") as f:
+                        size = struct.unpack("<Q", f.read(8))[0]
+                        self.files[(path, "header")] = (8 + size, json.loads(f.read(size)))
+                start, header = self.files[(path, "header")]
+                info = header[key]
+                rows = info["shape"][0]
+                row_bytes = (info["data_offsets"][1] - info["data_offsets"][0]) // rows
+                self.layout[(layer, param)] = (self.files[path], start + info["data_offsets"][0], row_bytes)
+
+    def submit(self, layer, top_k_index):
+        """Issue side (main thread, inside the compiled step): copy the routing on the device, queue the job, wait."""
+        n = top_k_index.numel()
+        buffer = self.buffers.get(layer)
+        if buffer is None or buffer.numel() < n:  # first call, or a longer prompt
+            buffer = self.buffers[layer] = self._host_written(torch.empty(max(n, 1 << 16), dtype=torch.int32))
+            ctypes.memset(self.ext.cpu_address(buffer), 0xFF, buffer.numel() * 4)  # -1: not landed
+        if (layer, self.store.params[layer][0]) not in self.layout:
+            self._locate(layer)
+        buffer[:n].copy_(top_k_index.reshape(-1))
+        self.counter += 1
+        # Each wait commits a command buffer: past ~64 in flight Metal stops the queue, so the host stays at most
+        # `MAX_AHEAD` layers ahead of the device
+        while self.counter - self.ext.signaled(self.event) > self.MAX_AHEAD:
+            if self.error is not None:
+                break
+            time.sleep(0)
+        self.jobs.put((layer, n, self.counter, self.ext.cpu_address(buffer)))
+        # Commit every `COMMIT_EVERY` waits: each command buffer costs device start-up + event-resume latency, and
+        # the host is far enough ahead that a later commit does not hold the host thread up
+        self.ext.gpu_wait(self.event, self.counter, self.counter % self.COMMIT_EVERY == 0)
+        if self.error is not None:
+            raise RuntimeError("experts offload host thread failed") from self.error
+
+    def _run(self):
+        try:
+            while True:
+                job = self.jobs.get()
+                with (
+                    torch.inference_mode()
+                ):  # the pool's host tables are inference tensors (made in the first forward)
+                    self._resolve(*job)
+        except BaseException as error:  # surfaced on the next submit; release the device so it does not hang
+            logger.error("experts offload host thread failed", exc_info=error)
+            self.error = error
+            self.ext.cpu_signal(self.event, 1 << 62)
+
+    def _slot_address(self, pool, param, slot):
+        base = self.slot_bases.get((id(pool), param))
+        if base is None:
+            bank = pool.banks[param]
+            base = self.slot_bases[(id(pool), param)] = (self.ext.cpu_address(bank), bank[0].nbytes)
+        return base[0] + slot * base[1]
+
+    def _stamps(self, pool):
+        stamps = self.stamps.get(id(pool))
+        if stamps is None:
+            stamps = self.stamps[id(pool)] = torch.zeros(pool.num_slots, dtype=torch.int64)
+            self.owners[id(pool)] = {slot: key for key, slot in pool.cache.items()}
+        return stamps
+
+    def _evict_into(self, pool, key, keep):
+        """A slot for `key`: a free one, else the least recently used (by stamp) whose expert is not in `keep`."""
+        owners, stamps = self.owners[id(pool)], self.stamps[id(pool)]
+        if pool.free:
+            slot = pool.free.pop()
+        else:
+            ranked = stamps.clone()
+            ranked[[pool.cache[k] for k in keep if k in pool.cache]] = torch.iinfo(torch.int64).max
+            slot = int(ranked.argmin())
+            victim = owners.pop(slot)
+            del pool.cache[victim]
+            pool.tables[victim[0]][victim[1]] = pool.num_slots
+            pool.dirty.add(victim[0])
+        owners[slot] = key
+        pool.cache[key] = slot
+        pool.tables[key[0]][key[1]] = slot
+        pool.dirty.add(key[0])
+        return slot
+
+    def _resolve(self, layer, n, counter, address):
+        store, pool = self.store, self.store.pool_of[layer]
+        stamps = self._stamps(pool)
+        table = store.device_tables[layer]
+        start = time.perf_counter()
+        # Hit path in C++ (no GIL): routing landed, all resident -> stamps, reset, signal
+        status = self.ext.resolve_hits(
+            address, n, self.ext.cpu_address(table), table.numel(), pool.num_slots, stamps.data_ptr(), counter,
+            self.event, counter, 10_000_000,
+        )  # fmt: skip
+        if status == -1:
+            raise TimeoutError(f"routing of {layer} never landed")
+        if status == -2:
+            raise ValueError(f"{layer}: routing out of range: {list((ctypes.c_int32 * n).from_address(address))[:20]}")
+        landed = time.perf_counter()
+        self.spin_seconds += landed - start
+        if status == 1:
+            store.hits += n
+            self.jobs_done += 1
+            return
+        view = (ctypes.c_int32 * n).from_address(address)
+        experts = set(view[:])
+        keep = {(layer, e) for e in experts}
+        misses = [e for e in experts if (layer, e) not in pool.cache]
+        for e in misses:
+            slot = self._evict_into(pool, (layer, e), keep)
+            for param in pool.layout:
+                fd, base, row_bytes = self.layout[(layer, param)]
+                target = (ctypes.c_char * row_bytes).from_address(self._slot_address(pool, param, slot))
+                if os.preadv(fd, [memoryview(target).cast("B")], base + e * row_bytes) != row_bytes:
+                    raise OSError(f"short read of expert {e} of {layer}")
+        for name in pool.dirty:  # this layer's table, and those of the layers that lost an evicted expert
+            entries = pool.tables[name]
+            ctypes.memmove(self.ext.cpu_address(store.device_tables[name]), entries.data_ptr(), entries.nbytes)
+        pool.dirty.clear()
+        stamps[[pool.cache[(layer, e)] for e in experts]] = counter
+        ctypes.memset(address, 0xFF, n * 4)
+        self.ext.cpu_signal(self.event, counter)
+        store.hits += len(experts) - len(misses)
+        store.misses += len(misses)
+        store.reads += len(misses)
+        self.work_seconds += time.perf_counter() - landed
+        self.jobs_done += 1
+
+
 class ExpertsOffloadLayer(TensorParallelLayer):
     """`TensorParallelLayer` style for an experts module streamed through an `ExpertsOffloadStore` (passed where TP
     passes its mesh): `shard_param` leaves the meta banks for the loader to skip, `install_forward` runs the module on
@@ -518,6 +703,12 @@ class ExpertsOffloadLayer(TensorParallelLayer):
                 raise RuntimeError("Streamed experts are inference-only: use torch.no_grad() / inference_mode()")
             if not hasattr(module, "offload_table"):  # first call only: no graph break once set up
                 setup(name)
+            if store.mps_router is not None:
+                # MPS: the device waits while a host thread installs the misses: one pass, no host round trip
+                state = [module.offload_table, *(getattr(module, p) for p in store.pool_of[name].layout)]
+                torch.ops.transformers.experts_offload_mps_resolve(handle, top_k_index, state)
+                slots = module.offload_table[top_k_index]
+                return _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwargs)
             torch.ops.transformers.experts_offload_route(handle, hidden_states, top_k_index)
             # Pass 1, all on the device (compilable): resident experts through the slot table, misses are sentinels
             slots = module.offload_table[top_k_index]
@@ -561,6 +752,19 @@ def _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwa
         for name, bank in banks.items():
             setattr(module, name, bank)
         module.num_experts = num_slots
+
+
+@torch.library.custom_op("transformers::experts_offload_mps_resolve", mutates_args=("state",))
+def experts_offload_mps_resolve(handle: int, top_k_index: torch.Tensor, state: list[torch.Tensor]) -> None:
+    """MPS: queue the routing for the host thread and make the device wait until it installed the misses (`state`: the
+    slot table and pool banks it writes)."""
+    module = _LAYERS[handle]
+    module.offload_store.mps_router.submit(module.offload_name, top_k_index)
+
+
+@experts_offload_mps_resolve.register_fake
+def _(handle, top_k_index, state) -> None:
+    return None
 
 
 @torch.library.custom_op("transformers::experts_offload_route", mutates_args=(), tags=(torch.Tag.cudagraph_unsafe,))
