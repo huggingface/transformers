@@ -53,6 +53,10 @@ TP_MODE = os.environ.get("FUSE_COMPILE_TP", "twin")
 KERNELS = os.environ.get("FUSE_KERNELS", "0") == "1"
 TOPK_LENGTH = os.environ.get("FUSE_TOPK_LENGTH", "0") == "1"
 BLOCK_TABLE_ONLY = os.environ.get("CB_PROTO_MLA_BLOCK_TABLE", "0") == "1"
+# [gap3] FUSE_COMPILE_EXACT=1 (default): inductor keeps eager's bf16 rounding between the ops it fuses
+#   (`emulate_precision_casts`), so the compiled layer gives the same bits as the eager one. 0: inductor keeps fp32
+#   between fused ops (closer to an fp32 reference, but greedy outputs drift from the eager path's).
+EXACT = os.environ.get("FUSE_COMPILE_EXACT", "1") == "1"
 
 _flash_mla = None
 _rotary = None  # `apply_rotary_pos_emb_interleave` of the modeling file, set on first use (no circular import)
@@ -241,13 +245,18 @@ def _layer_fn():
     fn = _decode_layer_fused if KERNELS else _decode_layer
     if MODE == "eager":
         return fn
-    key = (MODE, DYNAMIC, FULLGRAPH, KERNELS)
+    key = (MODE, DYNAMIC, FULLGRAPH, KERNELS, EXACT)
     if key not in _compiled:
         mode = {"default": "default", "max": "max-autotune-no-cudagraphs"}[MODE]
+        # inductor options of the mode, plus eager's rounding with FUSE_COMPILE_EXACT (`mode` and `options` exclude
+        # each other in torch.compile)
+        options = {**torch._inductor.list_mode_options(mode), "emulate_precision_casts": EXACT}
         # Static shapes: one artifact per layer kind and padded batch size, more than dynamo's default of 8 per frame.
         # The limit is passed per region: `torch._dynamo.config` overrides are thread-local and every CB manager runs
         # its own engine thread, so a value set in one thread is not seen by the next manager's.
-        _compiled[key] = torch.compile(fn, mode=mode, dynamic=DYNAMIC, fullgraph=FULLGRAPH, recompile_limit=64)
+        _compiled[key] = torch.compile(
+            fn, options=options, dynamic=DYNAMIC, fullgraph=FULLGRAPH, recompile_limit=64
+        )
     return _compiled[key]
 
 
@@ -271,6 +280,8 @@ def _prepare(model, cache):
     if allocator.tokens_per_block != len(allocator.layer_indices) * page:
         raise NotImplementedError("FUSE_COMPILE expects one page per layer in a block")
     views = [allocator.cache_tensor[position[i] * page : position[i] * page + common] for i in range(len(layers))]
+    for view in views:  # [gap3] the cache size changes with each manager: only the opaque cache ops read this dim
+        torch._dynamo.mark_dynamic(view, 0)
     h_pad = 0 if torch.cuda.get_device_capability()[0] == 9 else 64
     tp, run_layers_on = False, list(layers)
     o_proj_weight = layers[0].self_attn.o_proj.weight
