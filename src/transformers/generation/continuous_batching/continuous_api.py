@@ -316,6 +316,7 @@ _MTP_ORACLE: dict | None = None
 _MTP_ORACLE_MODE = os.environ.get("CB_MTP_ORACLE", "accept")
 # Test switch: hash blocks from the scheduler's count, which includes the row of a draft that may be rejected
 _MTP_UNSAFE_HASH = os.environ.get("CB_MTP_UNSAFE_HASH", "0") == "1"
+from .input_outputs import _CB_MTP_ASYNC  # noqa: E402  gap3-mtpa prototype
 
 
 def _mtp_oracle_draft(state: RequestState, draft: int) -> int:
@@ -421,8 +422,10 @@ class ContinuousBatchProcessor:
         self.mtp_mode = _CB_MTP
         self.mtp_stats = {"steps": 0, "emitted": 0, "drafted": 0, "accepted": 0}
         self.mtp_step_times: list[float] = []
-        if self.mtp_mode and self.use_async_batching:
-            raise NotImplementedError("CB_MTP prototype: the number of tokens a step emits is only known on the host")
+        if self.mtp_mode and self.use_async_batching and not _CB_MTP_ASYNC:
+            raise NotImplementedError("CB_MTP prototype: asynchronous batching needs CB_MTP_ASYNC=1 (gap3-mtpa)")
+        if _CB_MTP_ASYNC and (not self.use_async_batching or _MTP_ORACLE is not None):
+            raise NotImplementedError("CB_MTP_ASYNC=1 needs asynchronous batching and takes the drafts of the device")
 
         # Setup the model runner
         self.model_runner = ModelRunner(
@@ -605,6 +608,10 @@ class ContinuousBatchProcessor:
         for future_state in io.requests_in_batch:
             state = future_state.state
             if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
+                if _CB_MTP_ASYNC:
+                    # gap3-mtpa: finished while this step was in flight, its outputs are dropped
+                    row += future_state.has_new_token
+                    continue
                 raise RuntimeError(f"Tried to update {state.status.name} request {state.request_id} in sync mode.")
             if not future_state.has_new_token:
                 if state.status == RequestStatus.PREFILLING:
@@ -614,7 +621,15 @@ class ContinuousBatchProcessor:
                 state.status = RequestStatus.DECODING
             had_draft, is_accepted = future_state.mtp_has_draft, bool(accepted[row])
             token = first_tokens[row]
-            if had_draft:
+            if had_draft and _CB_MTP_ASYNC:
+                # gap3-mtpa: the step was prepared with the draft's row not counted; it is counted once accepted. Blocks
+                # completed by decoding are not registered for prefix sharing (the host length lags one step)
+                stats["drafted"] += 1
+                stats["accepted"] += is_accepted
+                state.position_offset += is_accepted
+                state.mtp_pending_acc -= 1
+                future_state.complete_blocks = {}
+            elif had_draft:
                 stats["drafted"] += 1
                 stats["accepted"] += is_accepted
                 if not is_accepted:

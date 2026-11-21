@@ -149,6 +149,12 @@ if _CB_MTP not in ("", "shadow", "spec"):
 # path (requests to a power of 2), so the graph key (query tokens, key bucket) also fixes the number of logits rows
 _CB_MTP_BT = _CB_MTP == "spec" and _PROTO_MLA_BLOCK_TABLE
 _CB_MTP_QUERY = 2
+# gap3-mtpa prototype: MTP speculative decoding under asynchronous batching (CB_MTP_ASYNC=1, with CB_MTP=spec, the block
+# table decode path and "use_async_batching": true). Step N+1 is prepared before step N's outcome is known: the host
+# schedules every drafted request as if its draft were rejected (pessimistic length, one slack row allocated), and the
+# step itself takes the request's last token (bonus or first token), its new draft and the +1 shift of an accepted
+# draft from step N's outputs on the device. The host learns the accepted counts when it updates step N, one step later.
+_CB_MTP_ASYNC = _CB_MTP_BT and _mtp_os.environ.get("CB_MTP_ASYNC", "0") == "1"
 
 
 class ContinuousBatchingIOs:
@@ -335,6 +341,11 @@ class ContinuousBatchingIOs:
             other._proto_len_k_bucket = self._proto_len_k_bucket
         # Transfer static tensors
         with stream_context(stream):
+            if self.mtp_mode:  # gap3-mtpa prototype: the MTP inputs of the step
+                other.mtp_shift_ids.copy_(self.mtp_shift_ids, non_blocking=non_blocking)
+                other.mtp_src.copy_(self.mtp_src, non_blocking=non_blocking)
+                other.mtp_has_draft.copy_(self.mtp_has_draft, non_blocking=non_blocking)
+                other.mtp_prev_draft.copy_(self.mtp_prev_draft, non_blocking=non_blocking)
             other._bulk_input_tensor.copy_(self._bulk_input_tensor, non_blocking=non_blocking)  # fast bulk transfer
             # Only transfer block_table for decode-only batches (when it's actually used)
             if self.use_block_table:
@@ -614,6 +625,15 @@ class ContinuousBatchingIOs:
                 if self.mtp_mode and future_state.mtp_has_draft:
                     logits_indices[-1] -= 1  # the row that verifies the draft; the draft's own row is the next one
                 state.tokens_to_process = [TMP_TOKEN_ID]
+                if _CB_MTP_ASYNC:
+                    # gap3-mtpa: the request's next query tokens (last token, new draft) are taken on the device from this
+                    # step's outputs when it is scheduled in the next step; on the host they are placeholders (valid ids)
+                    state.tokens_to_process = [0, 0]
+                    state.mtp_has_draft = True
+                    if future_state.mtp_has_draft:
+                        # pessimistic: the draft's row is not counted until the host knows it was accepted
+                        state.position_offset -= 1
+                        state.mtp_pending_acc += 1
                 self.req_id_to_new_token_position[state.request_id] = logits_indices[-1]
 
             self.requests_in_batch.append(future_state)
@@ -660,7 +680,7 @@ class ContinuousBatchingIOs:
                         self.block_table[allocator.index, : len(rows)].copy_(table, non_blocking=True)
                 else:
                     self.block_table[allocator.index, : len(rows)].copy_(table, non_blocking=True)
-            longest = max(self.max_length_k.values())
+            longest = max(self.max_length_k.values()) + (1 if _CB_MTP_ASYNC else 0)  # gap3-mtpa: a shift of +1
             self._proto_len_k_bucket = pad_to_pow2(longest, self.cache.max_decode_fast_path_length, 1024)
 
         # If needed, build the attention mask with the un-padded sequence lengths
@@ -780,7 +800,7 @@ class ContinuousBatchingIOs:
                     self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
                     self.true_read_sizes[i] = len(group_read_indices)
 
-        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE_CHECK:
+        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE_CHECK and not _CB_MTP_ASYNC:  # rows shift on the device
             self._proto_check_block_table_rows(requests_in_batch, use_padding)
 
     def _proto_check_block_table_rows(self, requests_in_batch: list[FutureRequestState], use_padding: bool) -> None:
@@ -1167,7 +1187,15 @@ class ContinuousBatchingAsyncIOs:
         io_pair.host_io.prepare_batch_tensors(
             requests_in_batch, logits_processors, use_decode_fast_path, num_q_tokens, max_kv_read, use_padding
         )
-        io_pair.host_io.carry_over_ids.copy_(self.infer_carry_over_ids())
+        carry_over_ids = self.infer_carry_over_ids()
+        if _CB_MTP_ASYNC and not io_pair.host_io.use_block_table:
+            # gap3-mtpa: only the block table path takes the shift of an accepted draft on the device; a varlen batch must
+            # not hold a request whose last step is still in flight (the scheduler keeps prefills apart from decodes)
+            prev_positions = self.io_pairs[1 - self.current_pair].host_io.req_id_to_new_token_position
+            carried = [r for r in io_pair.host_io.req_id_to_new_token_position if r in prev_positions and not r.startswith("__warmup_")]
+            if carried:
+                raise RuntimeError(f"CB_MTP_ASYNC: varlen batch with {len(carried)} requests whose last step is in flight")
+        io_pair.host_io.carry_over_ids.copy_(carry_over_ids)
 
     def infer_carry_over_ids(self) -> torch.Tensor:
         """Infers the ids of the tokens to carry over from batch N to batch N+1. In asynchronous batching mode, we can
@@ -1274,6 +1302,17 @@ class ContinuousBatchingAsyncIOs:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()
+
+    def prepare_mtp_batch_update(self) -> tuple[list, ...]:
+        """gap3-mtpa prototype: the MTP output rows of the step whose outputs were just retrieved."""
+        io_pair = self.io_pairs[self.current_pair]
+        io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]
+        return io_pair.host_io.prepare_mtp_batch_update()
+
+    @property
+    def requests_in_batch(self) -> list[FutureRequestState]:
+        """gap3-mtpa prototype: the requests of the step whose outputs were just retrieved."""
+        return self.io_pairs[self.current_pair].host_io.requests_in_batch
 
     def reset(self) -> None:
         """Reset all state for a new generation session. Used in persistent mode between sessions."""

@@ -22,7 +22,13 @@ from ...distributed.parallel_utils import with_fast_tp_all_reduce
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
-from .input_outputs import _CB_MTP_BT, _CB_MTP_QUERY, ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
+from .input_outputs import (
+    _CB_MTP_ASYNC,
+    _CB_MTP_BT,
+    _CB_MTP_QUERY,
+    ContinuousBatchingAsyncIOs,
+    ContinuousBatchingIOs,
+)
 from .requests import RequestState, RequestStatus, create_warmup_future_states
 from .utils import (
     accelerator_graph_capture_context,
@@ -264,6 +270,37 @@ class ModelRunner:
         # Sample next tokens
         self._sample(scores, output_ids)
 
+    @staticmethod
+    def _mtp_take_previous_step(batch_data: dict, carry_over_ids: torch.Tensor, prev_output_ids: torch.Tensor) -> None:
+        """gap3-mtpa prototype (CB_MTP_ASYNC=1, block table decode batches): a request that was in the previous step
+        (still in flight when this step was prepared) takes from that step's outputs its last token (the bonus token
+        if the draft was accepted, else the first token) and its new draft, as its two query tokens, and moves its
+        positions and key length by one when the draft was accepted (the host counted it as rejected).
+        `carry_over_ids[t]` is the previous step's logits row of the request whose first query token is token `t`, -1
+        elsewhere. Every index is clamped, so a wrong map can only give wrong values."""
+        input_ids = batch_data["input_ids"][0]  # [Q]
+        num_tokens = input_ids.shape[0]
+        carry = carry_over_ids[:num_tokens].long()
+        has_prev = carry >= 0
+        prev_row = carry.clamp(0, prev_output_ids.shape[1] - 1)
+        accepted = prev_output_ids[4, prev_row]  # int32, 0 for rows without a draft
+        last_token = torch.where(accepted != 0, prev_output_ids[2, prev_row], prev_output_ids[0, prev_row])
+        new_draft = prev_output_ids[5, prev_row]
+        zero = has_prev[:1] & False
+        draft_slot = torch.cat([zero, has_prev[:-1]])  # the token right after a carried first token is its draft
+        new_ids = torch.where(has_prev, last_token, input_ids)
+        new_ids = torch.where(draft_slot, torch.cat([new_draft[:1] * 0, new_draft[:-1]]), new_ids)
+        input_ids.copy_(new_ids)
+        # the shift of the request's two tokens, then of its key length (cumulated over the requests before it)
+        shift = torch.where(has_prev, accepted, 0)
+        shift = shift + torch.cat([shift[:1] * 0, shift[:-1]])
+        batch_data["position_ids"][0].add_(shift)
+        cu_q = batch_data["cu_seq_lens_q"].long()
+        first = cu_q[:-1].clamp(max=num_tokens - 1)
+        request_shift = torch.where(cu_q[:-1] < num_tokens, torch.where(has_prev, accepted, 0)[first], 0)
+        for cu_k in batch_data["cu_seq_lens_k"].values():
+            cu_k[1:].add_(torch.cumsum(request_shift, 0).to(cu_k.dtype))
+
     def _forward_verify_sample_and_draft(
         self,
         model: nn.Module,
@@ -283,6 +320,8 @@ class ModelRunner:
         if self.logit_processor.do_processing:
             raise NotImplementedError("CB_MTP prototype: logits processors are not supported")
         mtp = batch_data["mtp"]
+        if _CB_MTP_ASYNC:
+            self._mtp_take_previous_step(batch_data, carry_over_ids, prev_output_ids)
         model_kwargs = {k: v for k, v in batch_data.items() if k != "mtp"}
         hidden_states = model.model(**model_kwargs).last_hidden_state  # [1, num_q_tokens, hidden], after the final norm
 

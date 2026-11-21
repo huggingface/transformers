@@ -150,6 +150,8 @@ class RequestState:
     mtp_has_draft: bool = False
     mtp_draft: int | None = None
     mtp_draft_logprob: float = 0.0
+    # gap3-mtpa prototype: steps whose draft verification the host has not seen yet (asynchronous batching)
+    mtp_pending_acc: int = 0
 
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
