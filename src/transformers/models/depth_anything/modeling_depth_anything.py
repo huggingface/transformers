@@ -374,9 +374,6 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        # The backbone has its own config, so honor a flag set on this model's config
-        if "output_attentions" not in kwargs and getattr(self.config, "output_attentions", False):
-            kwargs["output_attentions"] = True
         outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         hidden_states = outputs.feature_maps
 
