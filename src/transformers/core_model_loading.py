@@ -863,7 +863,9 @@ class Inkling2UnpadVocab(ConversionOps):
         self.inverse = inverse
 
     @torch.no_grad
-    def convert(self, input_dict, source_patterns, target_patterns, config=None, **kwargs):
+    def convert(
+        self, input_dict, source_patterns, target_patterns, config=None, model=None, full_layer_name=None, **kwargs
+    ):
         tensor = next(iter(input_dict.values()))
         tensor = tensor[0] if isinstance(tensor, list) else tensor
         text_config = config.get_text_config()
@@ -871,7 +873,8 @@ class Inkling2UnpadVocab(ConversionOps):
             padding = tensor.new_zeros(text_config.vocab_size - tensor.shape[0], *tensor.shape[1:])
             tensor = torch.cat([tensor, padding], dim=0)
         else:
-            tensor = tensor[: text_config.unpadded_vocab_size].contiguous()
+            dtype = model.get_parameter(full_layer_name).dtype
+            tensor = tensor[: text_config.unpadded_vocab_size].to(dtype).contiguous()
         return {target_patterns[0]: tensor}
 
     @property
