@@ -20,9 +20,10 @@ import numpy as np
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, resolve_revision
 from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
+from ..auto.video_processing_auto import AutoVideoProcessor
 
 
 @auto_docstring
@@ -167,6 +168,47 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
             vision_data["num_video_tokens"] = num_video_tokens
 
         return MultiModalData(**vision_data)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str = "main",
+        **kwargs,
+    ):
+        kwargs["cache_dir"] = cache_dir
+        kwargs["force_download"] = force_download
+        kwargs["local_files_only"] = local_files_only
+        # Resolve the revision once, so the processor config and all its sub-processors come from the same repo state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
+
+        if token is not None:
+            kwargs["token"] = token
+
+        original_kwargs = kwargs.copy()
+
+        # Get processor_dict first so we can use it to instantiate non-tokenizer sub-processors
+        processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        if "video_processor" not in original_kwargs:
+            # `Ernie4_5VLVideoProcessor`.from_dict() doesn't work for this model
+            # so load it `from_pretrained` unless user passes their own video-processor
+            processor_dict["video_processor"] = AutoVideoProcessor.from_pretrained(
+                pretrained_model_name_or_path, **original_kwargs
+            )
+        processor_dict, kwargs = cls._resolve_subprocessors(
+            pretrained_model_name_or_path, processor_dict, **original_kwargs
+        )
+        return cls.from_dict(processor_dict, **kwargs)
 
 
 __getattr__ = deprecate_attr(__name__, rename={"Ernie4_5_VLMoeProcessorKwargs": (ProcessingKwargs, "5.29.0")})

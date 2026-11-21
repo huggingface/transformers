@@ -189,6 +189,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             feature_extractor_dict = get_feature_extractor_config(tmpdirname)
             self.assertEqual(feature_extractor_dict, {"feature_extractor_type": "SomeFeatureExtractor"})
             video_processor_dict = get_video_processor_config(tmpdirname)
+            video_processor_dict.pop("_path_to_repo")
             self.assertEqual(video_processor_dict, {"video_processor_type": "SomeVideoProcessor"})
 
         # case 2: `processor_config.json` exists but does not contain a nested key
@@ -207,6 +208,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             feature_extractor_dict = get_feature_extractor_config(tmpdirname)
             self.assertEqual(feature_extractor_dict, {"feature_extractor_type": "SomeFeatureExtractor"})
             video_processor_dict = get_video_processor_config(tmpdirname)
+            video_processor_dict.pop("_path_to_repo")
             self.assertEqual(video_processor_dict, {"video_processor_type": "SomeVideoProcessor"})
 
     def test_processor_from_processor_class(self):
