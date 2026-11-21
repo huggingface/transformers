@@ -498,6 +498,14 @@ class PagedAttentionCache:
         torch.accelerator.synchronize()
         return self.cache_tensor.data_ptr() == self._released_address
 
+    def invalidate_prefix_cache(self) -> None:
+        """WP train: the weights changed. Blocks kept only for prefix sharing go back to the pool, and the hash chains
+        of new requests start from a new root, so they never match a block computed with the old weights (requests in
+        flight keep their blocks and keep sharing among themselves)."""
+        self.evict_cached_blocks()
+        for allocator in self.cache_allocators.values():
+            allocator.ledger.epoch += 1
+
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
         self.free_all_requests(clear_ledgers=True)

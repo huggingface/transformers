@@ -346,8 +346,105 @@ _PROTO_SPARSE_MLA = _os.environ.get("PROTO_SPARSE_MLA", "1") == "1"  # on by def
 _flash_mla = None
 
 
+# WP train (training with pause + release): how the absorbed attention gets kv_b_proj's weight. Unset: the phase-1
+# behaviour (a tensor cached on the module at first use: a view of a bf16 weight, a copy of an fp8 one; a PEFT adapter
+# on kv_b_proj is ignored and a parameter rebound to a new tensor is never seen). In every mode below a bf16 weight is
+# read live (a view, nothing kept across forwards) and an fp8 one, frozen, is dequantized once per parameter object.
+#   TRAIN_FIX_KV_B=delta    LoRA adapters enter as low-rank terms of the two absorbed products, inside the forward (so
+#                           inside CUDA graphs, which read A and B by address: in-place updates are seen without any
+#                           hook, and no merged weight is rounded to bf16):
+#                               q_abs += s (q B_uk) A          out += s (latent A^T) B_uv
+#   TRAIN_FIX_KV_B=merge    the merged weight W + s B A is recomputed inside every forward (2-4 kernels per layer on
+#                           [out, kv_lora], whatever the batch).
+#   TRAIN_FIX_KV_B=refresh  the merged weight lives in a buffer owned by the module, recomputed in place (same address,
+#                           captured graphs stay valid) by `_proto_refresh_derived_weights`, which CB calls when a pause
+#                           is released. Costs nothing per decode step.
+_TRAIN_FIX_KV_B = _os.environ.get("TRAIN_FIX_KV_B", "")
+
+
+def _train_kv_b_adapters(module):
+    """Active, unmerged LoRA adapters of kv_b_proj as (A [r, kv_lora], B [out, r], scaling)."""
+    lin = module.kv_b_proj
+    if not hasattr(lin, "base_layer") or lin.merged or lin.disable_adapters:
+        return []
+    adapters = []
+    for name in lin.active_adapters:
+        if name not in lin.lora_A:
+            continue
+        if lin.use_dora.get(name, False) or lin.lora_B[name].bias is not None:
+            raise RuntimeError("The absorbed attention only handles plain LoRA adapters on kv_b_proj")
+        adapters.append((lin.lora_A[name].weight, lin.lora_B[name].weight, lin.scaling[name]))
+    return adapters
+
+
+def _train_kv_b_effective(module, with_adapters=True):
+    """bf16 [out, kv_lora] effective weight of kv_b_proj on this rank, and whether it is the live parameter itself."""
+    lin = module.kv_b_proj
+    base = lin.base_layer if hasattr(lin, "base_layer") else lin  # PEFT wraps the linear and keeps it as base_layer
+    weight = base.weight.to_local() if hasattr(base.weight, "to_local") else base.weight
+    if weight.element_size() == 1:  # fp8: frozen, dequantized once per parameter object
+        cached = module.__dict__.get("_train_kv_b_fp8")
+        if cached is None or cached[0] is not base.weight:
+            s = base.weight_scale_inv
+            s = s.to_local() if hasattr(s, "to_local") else s
+            bn, bk = base.block_size
+            s = s.float().repeat_interleave(bn, 0)[: weight.shape[0]].repeat_interleave(bk, 1)[:, : weight.shape[1]]
+            cached = (base.weight, (weight.float() * s).to(torch.bfloat16))
+            module._train_kv_b_fp8 = cached
+        weight = cached[1]
+    live = weight.dtype == torch.bfloat16 and weight.element_size() > 1 and base.weight.element_size() > 1
+    effective = weight.to(torch.bfloat16)
+    if with_adapters:
+        for a, b, scaling in _train_kv_b_adapters(module):
+            if b.shape[0] != effective.shape[0]:
+                raise RuntimeError(
+                    f"LoRA B of kv_b_proj has {b.shape[0]} rows, this rank's weight {effective.shape[0]}: adapters on "
+                    "a tensor-parallel shard are not handled"
+                )
+            effective = effective + ((b @ a) * scaling).to(torch.bfloat16)
+            live = False
+    return effective, live
+
+
+@torch.no_grad()
+def _proto_refresh_derived_weights(model) -> int:
+    """TRAIN_FIX_KV_B=refresh: recompute, in place, every merged kv_b_proj buffer. Called outside the generation loop
+    (CB calls it when a pause is released). Returns the number of buffers rewritten."""
+    refreshed = 0
+    for module in model.modules():
+        if "_proto_w_kv_b" not in module.__dict__:
+            continue
+        effective, live = _train_kv_b_effective(module)
+        shape = (-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+        buffer = module._proto_w_kv_b
+        if live:
+            if buffer.data_ptr() != effective.data_ptr():  # the adapters are gone, or the parameter was rebound
+                module._proto_w_kv_b = effective.view(shape)
+                module._train_kv_b_moved = True
+        elif buffer.shape == effective.view(shape).shape and not module.__dict__.get("_train_kv_b_is_view", False):
+            buffer.copy_(effective.view(shape))
+            refreshed += 1
+        else:  # was a view of the parameter, now needs its own buffer: a new address, graphs must be dropped
+            module._proto_w_kv_b = effective.view(shape).clone()
+            module._train_kv_b_moved = True
+            refreshed += 1
+        module._train_kv_b_is_view = live
+    return refreshed
+
+
 def _proto_kv_b_dequantized(module):
     """kv_b_proj as bf16 [heads, nope + v, kv_lora], dequantized once (fp8 block scales or plain weight)."""
+    if _TRAIN_FIX_KV_B in ("delta", "merge"):
+        effective, _ = _train_kv_b_effective(module, with_adapters=_TRAIN_FIX_KV_B == "merge")
+        return effective.view(-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+    if _TRAIN_FIX_KV_B == "refresh":
+        w = module.__dict__.get("_proto_w_kv_b")
+        if w is None:
+            effective, live = _train_kv_b_effective(module)
+            w = effective.view(-1, module.qk_nope_head_dim + module.v_head_dim, module.kv_lora_rank)
+            w = w if live else w.clone()
+            module._proto_w_kv_b, module._train_kv_b_is_view = w, live
+        return w
     w = getattr(module, "_proto_w_kv_b", None)
     if w is None:
         lin = module.kv_b_proj
@@ -627,7 +724,15 @@ def _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, top
     w_uk, w_uv = w[:, : module.qk_nope_head_dim], w[:, module.qk_nope_head_dim :]
     h_pad = num_heads if torch.cuda.get_device_capability()[0] == 9 else max(64, num_heads)
     q_abs = q_pass.new_zeros(seq_length, h_pad, module.kv_lora_rank + module.qk_rope_head_dim)
-    q_abs[:, :num_heads, : module.kv_lora_rank] = torch.einsum("hsn,hnc->shc", q_pass[0], w_uk)
+    q_latent = torch.einsum("hsn,hnc->shc", q_pass[0], w_uk)
+    adapters = _train_kv_b_adapters(module) if _TRAIN_FIX_KV_B == "delta" else []
+    for a, b, scaling in adapters:  # q W_uk with W = W_base + s B A: the adapter's part, never materialized
+        if b.shape[0] != w.shape[0] * w.shape[1]:
+            raise RuntimeError("LoRA adapters on a tensor-parallel shard of kv_b_proj are not handled")
+        b_uk = b.view(w.shape[0], w.shape[1], -1)[:, : module.qk_nope_head_dim]
+        low_rank = torch.einsum("hsn,hnr->shr", q_pass[0].to(b.dtype), b_uk)
+        q_latent = q_latent + (torch.matmul(low_rank, a) * scaling).to(q_latent.dtype)
+    q_abs[:, :num_heads, : module.kv_lora_rank] = q_latent
     q_abs[:, :num_heads, module.kv_lora_rank :] = q_rot[0].transpose(0, 1)
     latent_rows = kv_latent_cache.as_strided(
         (kv_latent_cache.shape[0], 1, module.kv_lora_rank + module.qk_rope_head_dim),
@@ -636,7 +741,12 @@ def _proto_absorbed_sparse_attention(module, allocator, q_pass, q_rot, rows, top
     out_latent = _flash_mla.flash_mla_sparse_fwd(
         q_abs, latent_rows, rows[:, None, :], module.scaling, d_v=module.kv_lora_rank, topk_length=lengths
     )[0][:, :num_heads]  # [M, H, kv_lora]
-    attn_output = torch.einsum("shc,hvc->shv", out_latent, w_uv).reshape(batch_size, seq_length, -1)
+    attn_output = torch.einsum("shc,hvc->shv", out_latent, w_uv)
+    for a, b, scaling in adapters:
+        b_uv = b.view(w.shape[0], w.shape[1], -1)[:, module.qk_nope_head_dim :]
+        low_rank = torch.matmul(out_latent.to(a.dtype), a.t())
+        attn_output = attn_output + (torch.einsum("shr,hvr->shv", low_rank, b_uv) * scaling).to(attn_output.dtype)
+    attn_output = attn_output.reshape(batch_size, seq_length, -1)
     return module.o_proj(attn_output), None, topk_indices
 
 class GlmMoeDsaAttention(nn.Module):

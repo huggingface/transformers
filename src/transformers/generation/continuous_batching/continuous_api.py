@@ -302,6 +302,9 @@ class BackgroundThreadStatus:
 _PROTO_TP_STATE_OVERLAP = os.environ.get("CB_PROTO_TP_STATE_OVERLAP", "0") == "1"
 _PROTO_IDLE_DRIVER_WAIT = os.environ.get("CB_PROTO_IDLE_DRIVER_WAIT", "0") == "1"
 _PROTO_UPLOADS_ON_COMPUTE_STREAM = os.environ.get("CB_PROTO_UPLOADS_ON_COMPUTE_STREAM", "0") == "1"
+# WP train prototypes, see `ContinuousBatchingManager._proto_after_pause`
+_TRAIN_FIX_KV_B = os.environ.get("TRAIN_FIX_KV_B", "")
+_TRAIN_FIX_PREFIX = os.environ.get("TRAIN_FIX_PREFIX", "0") == "1"
 
 
 class ContinuousBatchProcessor:
@@ -937,7 +940,63 @@ class ContinuousBatchingManager:
         try:
             yield
         finally:
-            self.background_thread_status.release_pause()
+            try:
+                self._proto_after_pause()
+            finally:
+                self.background_thread_status.release_pause()
+
+    def _proto_after_pause(self) -> None:
+        """WP train prototypes (off by default): what has to follow the weights when a pause ends, since the thread
+        that held it may have updated them. TRAIN_FIX_KV_B=refresh rewrites, in place, the merged kv_b_proj weights of
+        the absorbed attention; TRAIN_FIX_PREFIX=1 stops new requests from reusing prefix blocks computed before the
+        pause."""
+        if _TRAIN_FIX_KV_B == "refresh":
+            from ...models.glm_moe_dsa.modeling_glm_moe_dsa import _proto_refresh_derived_weights
+
+            _proto_refresh_derived_weights(self.model)
+            moved = [m.__dict__.pop("_train_kv_b_moved", False) for m in self.model.modules()]
+            if any(moved) and self.batch_processor is not None:  # a buffer changed address: graphs replay the old one
+                self.batch_processor.inputs_and_outputs.clear_graphs()
+            torch.accelerator.synchronize()  # the generation loop reads the weights on its own stream
+        if _TRAIN_FIX_PREFIX and self.batch_processor is not None:
+            self.reset_prefix_cache()
+
+    def reset_prefix_cache(self) -> None:
+        """WP train: forgets the blocks kept for prefix sharing, so no request submitted from now on reuses keys and
+        values computed before this call. To call after the weights changed, inside `pause()` (the generation loop owns
+        the block ledgers), and on every rank of a TP group, which must all agree on what a request prefills. Requests
+        in flight keep their blocks."""
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `reset_prefix_cache` inside the `pause` context, the generation loop uses it.")
+        self.batch_processor.cache.invalidate_prefix_cache()
+
+    def release_memory(self) -> int:
+        """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
+        of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
+        copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
+        inside `pause()`, and on every rank of a TP group.
+
+        ```python
+        with manager.pause():
+            released_bytes = manager.release_memory()
+            ...  # the memory is free for something else, a training step for instance
+            manager.restore_memory()
+        ```
+        """
+        # The generation loop reads and writes the cache, so it can only lose its memory while the loop is paused (a
+        # paused loop always has its batch processor)
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `release_memory` inside the `pause` context, the generation loop uses the cache.")
+        return self.batch_processor.cache.release_memory()
+
+    def restore_memory(self) -> None:
+        """Brings back the KV cache freed by `release_memory`. CUDA graphs replay the addresses they were captured
+        with, so they are dropped and captured again if the cache came back elsewhere."""
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `restore_memory` inside the `pause` context, the generation loop uses the cache.")
+        if not self.batch_processor.cache.restore_memory():
+            self.batch_processor.inputs_and_outputs.clear_graphs()
+            logger.info("The KV cache moved while it was released, so the captured CUDA graphs were dropped")
 
     def release_memory(self) -> int:
         """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
