@@ -543,6 +543,37 @@ class Inkling2LoopGatedOutputProjection(nn.Module):
         return self.linear(attn_output)
 
 
+@use_kernel_func_from_hub_with_fallback("inkling2_loop_attention", "inkling2_loop_attention")
+def inkling2_loop_attention(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    module: nn.Module,
+    hidden_states: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    relative_distance: torch.Tensor,
+    attention_interface: Callable,
+    **kwargs,
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    """The attention of `module` with its relative position bias and sinks, through `attention_interface`. A hub kernel
+    may replace it (on MPS: one dispatch per decode step)."""
+    position_bias = module.relative_position_bias(hidden_states, relative_distance, kwargs["position_ids"])
+    sinks = module.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
+    return attention_interface(
+        module,
+        query,
+        key,
+        value,
+        attention_mask,
+        dropout=0.0 if not module.training else module.attention_dropout,
+        scaling=module.scaling,
+        sliding_window=module.sliding_window,
+        position_bias=position_bias,
+        sinks=sinks,
+        **kwargs,
+    )
+
+
 class Inkling2LoopSlidingAttention(nn.Module):
     def __init__(self, config: Inkling2LoopTextConfig, layer_idx: int):
         super().__init__()
@@ -615,19 +646,15 @@ class Inkling2LoopSlidingAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        position_bias = self.relative_position_bias(hidden_states, relative_distance, kwargs["position_ids"])
-        sinks = self.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
-        attn_output, attn_weights = attention_interface(
-            self,
+        attn_output, attn_weights = inkling2_loop_attention(
             query_states,
             key_states,
             value_states,
+            self,
+            hidden_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            position_bias=position_bias,
-            sinks=sinks,
+            relative_distance,
+            attention_interface,
             **kwargs,
         )
 
@@ -706,19 +733,15 @@ class Inkling2LoopFullAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        position_bias = self.relative_position_bias(hidden_states, relative_distance, kwargs["position_ids"])
-        sinks = self.sink_proj(hidden_states).transpose(1, 2).unsqueeze(-1)
-        attn_output, attn_weights = attention_interface(
-            self,
+        attn_output, attn_weights = inkling2_loop_attention(
             query_states,
             key_states,
             value_states,
+            self,
+            hidden_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            position_bias=position_bias,
-            sinks=sinks,
+            relative_distance,
+            attention_interface,
             **kwargs,
         )
 
