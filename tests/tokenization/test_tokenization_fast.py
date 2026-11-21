@@ -20,11 +20,14 @@ import shutil
 import tempfile
 import unittest
 
-from tokenizers import Tokenizer, decoders, pre_tokenizers, trainers
-from tokenizers.models import BPE, WordLevel
-
 from transformers import AutoTokenizer, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tiktoken, require_tokenizers
+from transformers.utils import is_tokenizers_available
+
+
+if is_tokenizers_available():
+    from tokenizers import Tokenizer, decoders, pre_tokenizers, trainers
+    from tokenizers.models import BPE, WordLevel
 
 
 @require_tokenizers

@@ -15,10 +15,10 @@
 
 import collections
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import WordPiece
 
-from ...tokenization_utils_tokenizers import TokenizersBackend
+from ...tokenization_utils_tokenizers import TokenizersBackend, template_processing
 from ...utils import logging
 
 
@@ -125,7 +125,7 @@ class BertTokenizer(TokenizersBackend):
         cls_token_id = self.cls_token_id if self.cls_token_id is not None else 2
         sep_token_id = self.sep_token_id if self.sep_token_id is not None else 3
 
-        self._tokenizer.post_processor = processors.TemplateProcessing(
+        self._tokenizer.post_processor = template_processing(
             single=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0",
             pair=f"{str(self.cls_token)}:0 $A:0 {str(self.sep_token)}:0 $B:1 {str(self.sep_token)}:1",
             special_tokens=[
