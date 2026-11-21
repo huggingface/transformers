@@ -347,6 +347,46 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
             # Check label_smoother was disabled
             self.assertIsNone(trainer.label_smoother)
 
+    def test_label_smoothing_shifts_labels_for_vlm(self):
+        # VLMs like Llava aren't registered as causal LMs but their loss predicts the next token,
+        # so label smoothing must shift the labels too
+        from transformers import LlavaConfig, LlavaForConditionalGeneration
+
+        config = LlavaConfig(
+            text_config={
+                "model_type": "llama",
+                "vocab_size": 99,
+                "hidden_size": 32,
+                "intermediate_size": 37,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 4,
+            },
+            vision_config={
+                "model_type": "clip_vision_model",
+                "hidden_size": 32,
+                "intermediate_size": 37,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "image_size": 30,
+                "patch_size": 6,
+            },
+            image_token_id=98,
+        )
+        torch.manual_seed(0)
+        model = LlavaForConditionalGeneration(config).eval()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(tmp_dir, label_smoothing_factor=0.1, report_to="none")
+            trainer = Trainer(model=model, args=args)
+            input_ids = torch.randint(0, 97, (2, 8), device=args.device)
+            inputs = {"input_ids": input_ids, "labels": input_ids.clone()}
+            with torch.no_grad():
+                loss = trainer.compute_loss(model, dict(inputs))
+                outputs = model(input_ids=input_ids)
+
+        expected = LabelSmoother(0.1)(outputs, inputs["labels"], shift_labels=True)
+        torch.testing.assert_close(loss, expected)
+
 
 # ---------------------------------------------------------------------------
 # Sampler and sharding tests
