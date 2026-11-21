@@ -1739,7 +1739,9 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
 
 
 class Glm5NextProcessor(Glm46VProcessor):
-    pass
+    # The chat template renders a block of tool results in the order of the preceding `tool_calls`,
+    # and the media nested inside aggregated `{"id": ..., "output": [...]}` results.
+    reorder_tool_results_in_template_order = True
 
 
 def smart_resize(

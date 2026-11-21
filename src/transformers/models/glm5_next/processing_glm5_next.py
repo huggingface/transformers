@@ -36,6 +36,9 @@ class Glm5NextProcessor(ProcessorMixin):
         "return_token_type_ids": False,
     }
     videos_kwargs = {"return_metadata": True}
+    # The chat template renders a block of tool results in the order of the preceding `tool_calls`,
+    # and the media nested inside aggregated `{"id": ..., "output": [...]}` results.
+    reorder_tool_results_in_template_order = True
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
