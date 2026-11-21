@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import copy
-from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -22,10 +21,9 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...integrations import use_kernel_func_from_hub_with_fallback
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
@@ -46,7 +44,6 @@ from ..inkling2.modeling_inkling2 import (
     Inkling2TextModel,
     Inkling2TopKRouter,
     Inkling2UnweightedRMSNorm,
-    eager_attention_forward,
     get_relative_distance,
 )
 
