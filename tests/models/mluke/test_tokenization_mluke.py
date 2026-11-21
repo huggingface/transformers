@@ -50,6 +50,30 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = MLukeTokenizer(vocab=vocab_scores, **kwargs)
         return tokenizer
 
+    def test_spm_conversion_uses_fairseq_ids(self):
+        """A SentencePiece checkpoint has to keep the fairseq ids MLuke was trained with (see #51018)."""
+        vocab_ids, vocab_scores, _ = SentencePieceExtractor(SAMPLE_VOCAB).extract()
+
+        # what `_convert_from_sentencepiece` passes on to the constructor
+        kwargs = MLukeTokenizer.convert_from_spm_model(vocab_scores, unk_id=vocab_ids["<unk>"])
+        tokenizer = MLukeTokenizer(vocab=kwargs.pop("vocab"), **kwargs, entity_vocab_file=SAMPLE_ENTITY_VOCAB)
+
+        # <s>/<pad>/</s>/<unk> first, then the pieces shifted by one, <mask> at the end
+        self.assertListEqual(
+            [tokenizer.convert_tokens_to_ids(token) for token in ("<s>", "<pad>", "</s>", "<unk>")], [0, 1, 2, 3]
+        )
+        for piece, spm_id in vocab_ids.items():
+            if spm_id >= 3:
+                self.assertEqual(tokenizer.convert_tokens_to_ids(piece), spm_id + 1, piece)
+        self.assertEqual(tokenizer.vocab_size, len(vocab_ids) + 2)
+        self.assertEqual(tokenizer.convert_tokens_to_ids("<mask>"), len(vocab_ids) + 1)
+
+        # and encoding uses those ids, not the raw sentencepiece ones
+        self.assertListEqual(
+            tokenizer.encode("Hello", add_special_tokens=False),
+            [vocab_ids[piece] + 1 for piece in tokenizer.tokenize("Hello")],
+        )
+
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"

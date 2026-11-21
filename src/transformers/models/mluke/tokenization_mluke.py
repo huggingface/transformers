@@ -214,6 +214,33 @@ class MLukeTokenizer(TokenizersBackend):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
+    @staticmethod
+    def convert_from_spm_model(vocab, unk_id=0, **kwargs):
+        """Put the SentencePiece pieces into the fairseq order MLuke was trained with.
+
+        The checkpoint is a plain XLM-R SentencePiece model, but MLuke (like the original
+        fairseq release) reserves ``<s>``/``<pad>``/``</s>``/``<unk>`` for ids 0-3 and shifts
+        every word piece up by one, with ``<mask>``/``<ent>``/``<ent2>`` at the end of the
+        vocabulary. Handing the raw pieces to ``Unigram`` gives the unshifted ids instead, so
+        the model would see different ids for every input than it was trained on.
+        """
+        pieces = list(vocab) if vocab is not None else []
+        if len(pieces) < 3 or pieces[0][0] != "<unk>" or pieces[1][0] != "<s>" or pieces[2][0] != "</s>":
+            # not a plain SentencePiece model, leave it alone
+            return {"vocab": vocab, "unk_id": unk_id, **kwargs}
+
+        reordered = [
+            ("<s>", 0.0),
+            ("<pad>", 0.0),
+            ("</s>", 0.0),
+            ("<unk>", 0.0),
+            *pieces[3:],
+            ("<mask>", 0.0),
+            ("<ent>", 0.0),
+            ("<ent2>", 0.0),
+        ]
+        return {"vocab": reordered, "unk_id": 3, **kwargs}
+
     def __init__(
         self,
         bos_token="<s>",
@@ -264,6 +291,8 @@ class MLukeTokenizer(TokenizersBackend):
         if entity_vocab is None and "entity_vocab" in kwargs:
             entity_vocab = kwargs.pop("entity_vocab")
 
+        unk_id = kwargs.pop("unk_id", 0)
+
         # Build vocab from data (list of (token, score) tuples)
         if isinstance(vocab, list):
             # vocab is list of (token, score) tuples from SentencePieceExtractor
@@ -278,7 +307,7 @@ class MLukeTokenizer(TokenizersBackend):
             self._vocab_size = 0  # Will be updated when real vocab is loaded
 
         # Build Unigram tokenizer
-        self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=0))
+        self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=unk_id))
 
         # Add SentencePiece-style normalization and pre-tokenization
         self._tokenizer.normalizer = normalizers.Sequence(
@@ -401,8 +430,15 @@ class MLukeTokenizer(TokenizersBackend):
         Post-initialization to configure the post-processor for MLuke's special token format.
         """
         super()._post_init()
-        # Ensure the Python-side vocab metadata matches the fast tokenizer backend after loading
-        self._vocab_size = self._tokenizer.get_vocab_size(with_added_tokens=False)
+        # Ensure the Python-side vocab metadata matches the fast tokenizer backend after loading.
+        # In the fairseq layout the backend vocab holds one extra token in front of the pieces (<pad>)
+        # and three behind them (<mask>/<ent>/<ent2>), which are all added tokens, not pieces.
+        backend_vocab = self._tokenizer.get_vocab()
+        fairseq_layout = (
+            backend_vocab.get("<s>") == 0 and backend_vocab.get("<pad>") == 1 and backend_vocab.get("<unk>") == 3
+        )
+        backend_vocab_size = self._tokenizer.get_vocab_size(with_added_tokens=False)
+        self._vocab_size = backend_vocab_size - 4 if fairseq_layout else backend_vocab_size
         self.fairseq_tokens_to_ids["<mask>"] = self._vocab_size + self.fairseq_offset
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
