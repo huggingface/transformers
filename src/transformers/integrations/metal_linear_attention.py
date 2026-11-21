@@ -135,7 +135,6 @@ def _silu(activation) -> int:
 
 @torch.library.custom_op("transformers::metal_causal_conv1d", mutates_args=())
 def _conv(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None, silu: int) -> torch.Tensor:
-    x, weight = x.contiguous().to(weight.dtype), weight.contiguous()
     batch, channels, length = x.shape
     out = torch.empty_like(x)
     bias_ = weight if bias is None else bias.contiguous()
@@ -155,7 +154,6 @@ def _(x, weight, bias, silu):
 def _conv_step(
     x: torch.Tensor, state: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor | None, silu: int
 ) -> torch.Tensor:
-    x, weight = x.contiguous().to(weight.dtype), weight.contiguous()
     batch, channels, _ = x.shape
     out = torch.empty_like(x)
     bias_ = weight if bias is None else bias.contiguous()
@@ -180,8 +178,6 @@ def _gdr(
     batch, length, k_heads, k_dim = k.shape
     v_heads, v_dim = v.shape[-2:]
     dtype = v.dtype
-    q, k = q.contiguous().to(dtype), k.contiguous().to(dtype)
-    v, beta, g = v.contiguous(), beta.contiguous().to(dtype), g.contiguous().float()
     out = torch.empty_like(v)
     getattr(_lib(), f"gated_delta_rule_{_NAMES[dtype]}_{k_dim}")(
         q, k, v, g, beta, state, out, length, k_heads, v_heads, v_dim, l2norm,
@@ -198,13 +194,15 @@ def _(q, k, v, g, beta, state, l2norm):
 def causal_conv1d_fn(hidden_states, weight, bias=None, activation=None, seq_idx=None, **kwargs):
     if seq_idx is not None:
         raise ValueError("Metal causal conv1d does not keep packed sequences apart (`seq_idx`)")
-    return _conv(hidden_states, weight, bias, _silu(activation)).to(hidden_states.dtype)
+    x = hidden_states.to(weight.dtype).contiguous()
+    return _conv(x, weight.contiguous(), bias, _silu(activation)).to(hidden_states.dtype)
 
 
 def causal_conv1d_update(hidden_states, conv_state, weight, bias=None, activation=None, **kwargs):
     if hidden_states.shape[-1] != 1:
         raise ValueError("Metal causal_conv1d_update takes one token at a time")
-    return _conv_step(hidden_states, conv_state, weight, bias, _silu(activation)).to(hidden_states.dtype)
+    x = hidden_states.to(weight.dtype).contiguous()
+    return _conv_step(x, conv_state, weight.contiguous(), bias, _silu(activation)).to(hidden_states.dtype)
 
 
 def gated_delta_rule(
@@ -223,6 +221,10 @@ def gated_delta_rule(
         state = initial_state
     else:
         state = initial_state.float().contiguous()
+    # Contiguous / dtype casts here, where compile fuses them into the producers, not inside the op
+    dtype = value.dtype
+    query, key = query.to(dtype).contiguous(), key.to(dtype).contiguous()
+    value, beta, g = value.contiguous(), beta.to(dtype).contiguous(), g.float().contiguous()
     out = _gdr(query, key, value, g, beta, state, int(use_qk_l2norm_in_kernel))
     return out, state if output_final_state else None
 

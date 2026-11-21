@@ -121,12 +121,12 @@ def experts_down_sum(
     act: torch.Tensor, down: torch.Tensor, scales: torch.Tensor, biases: torch.Tensor, ids: torch.Tensor,
     weights: torch.Tensor, group_size: int,
 ) -> torch.Tensor:  # fmt: skip
-    """One token's routed down projections and their routing-weighted sum: `act` [R, I], `down` [E, H, I / 8] uint32,
-    `ids` / `weights` [R] -> [1, H]."""
+    """One token's routed down projections and their routing-weighted sum: `act` [R, I] contiguous, `down`
+    [E, H, I / 8] uint32, `ids` int32 / `weights` float32 [R] -> [1, H]."""
     hidden, inter, routes = down.shape[-2], act.shape[-1], ids.numel()
     out = torch.empty(1, hidden, dtype=act.dtype, device=act.device)
     getattr(_lib(), f"experts_down_sum_{_NAMES[act.dtype]}_{group_size}")(
-        down, scales, biases, act.contiguous(), ids.to(torch.int32).contiguous(), weights.float().contiguous(), out,
+        down, scales, biases, act, ids, weights, out,
         hidden, inter, routes, threads=hidden * 32, group_size=128,
     )  # fmt: skip
     return out

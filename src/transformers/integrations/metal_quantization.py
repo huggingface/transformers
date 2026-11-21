@@ -241,9 +241,8 @@ class MetalExperts(nn.Module):
             from .metal_qmv import experts_down_sum
 
             act = self._apply_gate(self._qmm(hidden_states.expand(top_k, -1), "gate_up_proj", ids, False))
-            return experts_down_sum(
-                act, self.down_proj, self.down_proj_scales, self.down_proj_qbiases, ids, weights, self.group_size
-            )
+            down = (self.down_proj, self.down_proj_scales, self.down_proj_qbiases)
+            return experts_down_sum(act.contiguous(), *down, ids.contiguous(), weights.float(), self.group_size)
         if num_tokens == 1:
             # One token: every route reads the same row, and the routes reduce with a weighted sum (no scatter)
             x = hidden_states.expand(top_k, -1)
