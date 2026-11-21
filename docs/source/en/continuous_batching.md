@@ -380,6 +380,17 @@ cb_config = ContinuousBatchingConfig(cpu_offload_space=8.0)
 
 By default, `cpu_offload_space_safety_threshold=0.8` limits the requested space to 80% of available system RAM when `psutil` is installed. Set `cpu_offload_space=None` to size the swap pool from the safety threshold.
 
+A caller that shares the device, like a training step, can also take the KV cache's memory while generation is paused. [`~ContinuousBatchingManager.release_memory`] copies the cache to pinned host memory and frees it, and [`~ContinuousBatchingManager.restore_memory`] copies it back before generation resumes, so every request carries on where it was.
+
+```py
+with manager.pause():
+    manager.release_memory()
+    ...  # the KV cache's memory is free for something else
+    manager.restore_memory()
+```
+
+A tensor allocated during the pause and still alive at `restore_memory` can sit in the middle of the freed memory, so the cache no longer fits in one piece. Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to avoid this.
+
 ### Tensor parallel timeout
 
 Under tensor parallelism, the manager creates a CPU communication group to coordinate request submissions, cancellations, and shutdown across ranks. `cpu_group_timeout` limits how long a collective on this group can block before the process crashes. If one rank stalls, the timeout prevents the others from waiting forever.

@@ -2054,6 +2054,47 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         )
         self.assertEqual(len(outputs), num_requests, "some requests did not complete")
 
+    @parameterized.expand([("eager", False, False), ("cuda_graphs", True, False), ("async", True, True)])
+    @with_flush_memory
+    def test_release_memory_during_generation(self, _, use_cuda_graph: bool, use_async_batching: bool) -> None:
+        """Frees the KV cache while requests are in flight, like a trainer that needs the memory for its step would,
+        then brings it back. The memory must really be freed, and every request must finish with the tokens it gets
+        without the release, since its cache went to host memory and back."""
+        tokenizer, model = get_tokenizer_and_model("TinyLlama/TinyLlama-1.1B-Chat-v1.0", "sdpa", torch_device)
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        cb_config = ContinuousBatchingConfig(
+            use_cuda_graph=use_cuda_graph,
+            use_async_batching=use_async_batching,
+            auto_switch_to_flash=False,
+            max_memory_percent=0.3,  # the cache is copied to host memory, keep it small
+        )
+
+        def generate(release: bool) -> list[list[int]]:
+            manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+            manager.logit_processor.clear()
+            manager.warmup()
+            manager.start()
+            request_ids = [manager.add_request(ids, max_new_tokens=100) for ids in input_ids]
+            try:
+                if release:
+                    self._wait_until_generating(manager)
+                    with self.assertRaises(RuntimeError):  # the loop is running
+                        manager.release_memory()
+                    with manager.pause():
+                        self.assertTrue(manager.batch_processor.scheduler.active_requests, "no request in flight")
+                        allocated = backend_memory_allocated(torch_device)
+                        released_bytes = manager.release_memory()
+                        self.assertGreater(released_bytes, 0)
+                        self.assertGreaterEqual(allocated - backend_memory_allocated(torch_device), released_bytes)
+                        manager.restore_memory()
+                outputs = self._collect_finished(manager, len(input_ids))
+            finally:
+                manager.stop(block=True)
+            self.assertEqual(len(outputs), len(input_ids), "some requests did not complete")
+            return [outputs[request_id].generated_tokens for request_id in request_ids]
+
+        self.assertEqual(generate(release=True), generate(release=False))
+
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         input_msg = "What is the Transformers library known for?"

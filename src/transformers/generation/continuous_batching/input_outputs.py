@@ -576,6 +576,10 @@ class ContinuousBatchingIOs:
         self.graphs.set_graph(key, graph)
         logger.info(f"Setting graph for {key = }")
 
+    def clear_graphs(self) -> None:
+        """Drops the captured CUDA graphs, so the next batches capture them again."""
+        self.graphs = CudaGraphBuffer()
+
 
 class HostDeviceIOPair:
     def __init__(
@@ -807,6 +811,11 @@ class ContinuousBatchingAsyncIOs:
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
         self.io_pairs[self.current_pair].device_io.set_graph(graph)
+
+    def clear_graphs(self) -> None:
+        """Drops the CUDA graphs captured by both IO pairs, so the next batches capture them again."""
+        for io_pair in self.io_pairs:
+            io_pair.device_io.clear_graphs()
 
     @property
     def use_block_table(self) -> bool:
