@@ -93,6 +93,7 @@ def _proto_build_attention_mask_on_device(
 
 # WP prefill (bench only): smallest key-length bucket of prefill batches under CUDA graphs (0: the default 1024)
 _PROTO_PREFILL_MIN_LEN_K = int(os.environ.get("CB_PROTO_PREFILL_MIN_LEN_K", "0"))
+_PROTO_VARLEN_BUCKETS_IO = os.environ.get("CB_PROTO_VARLEN_BUCKETS", "0") == "1"  # gap4 zsbench, see model_runner.py
 
 
 class PagedAttentionArgs(TypedDict):
@@ -940,6 +941,8 @@ class ContinuousBatchingIOs:
             if self.mtp_mode:
                 # gap2-mtp prototype: a decoding request takes two query tokens, so the logits rows follow the number
                 # of requests (padded), not the number of query tokens. It joins the graph key
+                if _PROTO_VARLEN_BUCKETS_IO:  # gap4 zsbench prototype: powers of 2, see CB_PROTO_VARLEN_BUCKETS
+                    return pad_to_pow2(self.num_request_in_batch, self.max_requests_per_batch, 64)
                 return pad_to_interval(self.num_request_in_batch, 64, self.max_requests_per_batch)
             return min(self.num_q_tokens, self.max_requests_per_batch)
         return self.num_request_in_batch

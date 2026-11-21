@@ -53,6 +53,16 @@ _GLUE_SAMPLE = _glue_os.environ.get("GLUE_SAMPLE", "0") == "1"
 # padded request count already ran once eagerly (every kernel it uses is compiled and tuned) captures its graph first
 # and replays the capture to produce the step's result, instead of an eager forward followed by a capture pass.
 _PROTO_CAPTURE_THEN_REPLAY = os.environ.get("CB_PROTO_CAPTURE_THEN_REPLAY", "0") == "1"
+# PROTOTYPE of the gap4 zsbench work package (off by default). CB_PROTO_VARLEN_BUCKETS=1: varlen (prefill or mixed)
+# batches take a small fixed set of CUDA graph keys, all captured at warm-up (`proto_warmup_varlen_buckets`, on both IO
+# pairs) and never in band: the query tokens are padded to a power of 2 (at least CB_PROTO_VARLEN_Q_MIN, 256), the
+# cache tokens read to the whole cache (one bucket), max_length_k to a power of 2 (at least 1024) and, in MTP mode, the
+# number of sequences to a power of 2 (at least 64). A varlen batch whose key was not captured at warm-up (a longer
+# max_length_k than CB_PROTO_VARLEN_MLK_MAX, more sequences than the warm-up's) runs eager, and is logged
+_PROTO_VARLEN_BUCKETS = os.environ.get("CB_PROTO_VARLEN_BUCKETS", "0") == "1"
+_PROTO_VARLEN_Q_MIN = int(os.environ.get("CB_PROTO_VARLEN_Q_MIN", "256"))
+_PROTO_VARLEN_MLK_MAX = int(os.environ.get("CB_PROTO_VARLEN_MLK_MAX", "2048"))
+_PROTO_BLAS_READY = __import__("threading").local()  # threads whose cuBLAS handles exist, see compute_batch
 # [scratch, bench only] With synchronous IOs the inputs of a batch are written with device copies queued on the default
 # stream (`storage[i, :n] = torch.tensor(..., device=...)`), and the forward runs on `compute_stream` without waiting
 # for them: a forward that reads the read index in its first kernels sometimes sees the previous batch's. On when
@@ -115,6 +125,8 @@ class ModelRunner:
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
         self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
+        self._proto_varlen_warm_done = False  # gap4 zsbench prototype, see CB_PROTO_VARLEN_BUCKETS
+        self._proto_varlen_eager: dict[tuple[int, ...], int] = {}
         self._proto_eager_seen: set[tuple[bool, int]] = set()  # (decode path, padded query tokens) that ran eagerly
         self._fused_sampler = None
         processors = list(logit_processor.logits_processor)
@@ -160,8 +172,12 @@ class ModelRunner:
         if not self.pad_inputs:
             return num_q_tokens, max_kv_read
         max_batch_tokens = self.cache.max_batch_tokens
+        # gap4 zsbench prototype (CB_PROTO_VARLEN_BUCKETS=1): a few fixed keys for the varlen graphs, see the flag
+        if not use_decode_fast_path and _PROTO_VARLEN_BUCKETS and self.use_cuda_graph_varlen:
+            num_q_tokens = pad_to_pow2(num_q_tokens, max_batch_tokens, _PROTO_VARLEN_Q_MIN)
+            max_kv_read = self.cache.max_tokens_read
         # For varlen batches, we pad using interval sizes
-        if not use_decode_fast_path:
+        elif not use_decode_fast_path:
             num_q_tokens = pad_to_interval(num_q_tokens, self.cb_config.q_padding_interval_size, max_batch_tokens)
             max_kv_read = pad_to_interval(
                 max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.max_tokens_read
@@ -226,8 +242,33 @@ class ModelRunner:
             if graph is not None:
                 with stream_context(compute_stream):
                     graph.replay()
+            # gap4 zsbench prototype: after the bucket warm-up, a varlen key that was not captured runs eager
+            elif (
+                _PROTO_VARLEN_BUCKETS
+                and self._proto_varlen_warm_done
+                and not self.inputs_and_outputs.use_block_table
+            ):
+                io = self.inputs_and_outputs
+                device_io = io.io_pairs[io.current_pair].device_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
+                key = device_io._get_graph_key()
+                count = self._proto_varlen_eager[key] = self._proto_varlen_eager.get(key, 0) + 1
+                if count & (count - 1) == 0:  # 1, 2, 4, 8, ... occurrences
+                    logger.warning(f"VARLEN_BUCKETS eager varlen batch, key {key} not captured at warm-up ({count} so far)")
+                with stream_context(compute_stream):
+                    forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
             # Otherwise, the graph does not exist, so we create it
             else:
+                if _PROTO_VARLEN_BUCKETS and not getattr(_PROTO_BLAS_READY, "done", False):
+                    # gap4 zsbench prototype: cuBLAS / cuBLASLt create their handles lazily, per thread, and creating
+                    # one inside a capture fails (CUBLAS_STATUS_NOT_INITIALIZED). With the varlen graphs all captured
+                    # at warm-up on the caller's thread, the engine thread may capture before it ran any eager GEMM
+                    device = torch.device("cuda", torch.cuda.current_device())
+                    with stream_context(compute_stream):
+                        x = torch.ones(16, 64, device=device, dtype=torch.bfloat16)
+                        nn.functional.linear(x, x, x[:, 0])  # addmm with a bias: cuBLASLt
+                        torch.mm(x, x.t())  # cuBLAS
+                    torch.cuda.current_blas_handle()
+                    _PROTO_BLAS_READY.done = True
                 args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
                 self._capture_graph(forward_fn, compute_stream, *args)
 
@@ -737,6 +778,53 @@ class ModelRunner:
         logger.info(f"Warmup completed in {total_duration:.2f}s")
 
     @with_fast_tp_all_reduce  # [gap2 prototype] warm-up captures take the engine's fast TP all-reduce
+    @torch.no_grad()
+    def proto_warmup_varlen_buckets(self, model: nn.Module) -> int:
+        """gap4 zsbench prototype (CB_PROTO_VARLEN_BUCKETS=1): captures the varlen graph of every bucket key on the IO
+        pair in use (call it once per IO pair under async batching, then set `_proto_varlen_warm_done`). One fake
+        request of q tokens with a one-page past for every q bucket (powers of 2 from CB_PROTO_VARLEN_Q_MIN to
+        max_batch_tokens) and every max_length_k bucket (powers of 2 from 1024 to CB_PROTO_VARLEN_MLK_MAX). Returns the
+        number of graphs captured."""
+        if not (_PROTO_VARLEN_BUCKETS and self.use_cuda_graph_varlen):
+            return 0
+        io = self.inputs_and_outputs
+        q_buckets, q = [], _PROTO_VARLEN_Q_MIN
+        while q < self.cache.max_batch_tokens:
+            q_buckets.append(q)
+            q *= 2
+        q_buckets.append(self.cache.max_batch_tokens)
+        mlk_buckets, m = [], 1024
+        while m <= _PROTO_VARLEN_MLK_MAX:
+            mlk_buckets.append(m)
+            m *= 2
+        captured = 0
+        for num_q_tokens in q_buckets:
+            for max_length_k in mlk_buckets:
+                past_length = self.cb_config.page_size
+                future_states = create_warmup_future_states(
+                    1, RequestStatus.PREFILLING, num_q_tokens, past_length, self.cache
+                )
+                if not future_states:
+                    logger.warning(f"VARLEN_BUCKETS warm-up: no blocks for q={num_q_tokens}")
+                    continue
+                try:
+                    padded_q, padded_kv = self.maybe_pad_inputs(num_q_tokens, past_length, use_decode_fast_path=False)
+                    io.prepare_batch_tensors(
+                        future_states, self.logit_processor, False, padded_q, padded_kv, use_padding=True
+                    )
+                    batch_data = io.get_model_kwargs(use_padding=True)
+                    device_io = io.io_pairs[io.current_pair].device_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
+                    for allocator in self.cache.cache_allocators.values():
+                        batch_data["max_length_k"][allocator.layer_type] = max_length_k
+                        device_io.max_length_k[allocator.layer_type] = max_length_k
+                    if device_io.get_graph() is None:
+                        self.compute_batch(model, batch_data)
+                        captured += 1
+                finally:
+                    for fs in future_states:
+                        self.cache.free_blocks(fs.state.request_id)
+        return captured
+
     def run_one_warmup(self, model: nn.Module, num_q_tokens: int, max_kv_read: int | None) -> float:
         """Warms up the decode fast path (if max_kv_read is None) or varlen path (if max_kv_read is an int) for a
         specific number of query and cache-resident tokens. `max_kv_read` is the number of tokens already in cache,
