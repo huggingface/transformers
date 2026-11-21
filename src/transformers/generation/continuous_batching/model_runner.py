@@ -62,6 +62,7 @@ _PROTO_CAPTURE_THEN_REPLAY = os.environ.get("CB_PROTO_CAPTURE_THEN_REPLAY", "0")
 _PROTO_VARLEN_BUCKETS = os.environ.get("CB_PROTO_VARLEN_BUCKETS", "0") == "1"
 _PROTO_VARLEN_Q_MIN = int(os.environ.get("CB_PROTO_VARLEN_Q_MIN", "256"))
 _PROTO_VARLEN_MLK_MAX = int(os.environ.get("CB_PROTO_VARLEN_MLK_MAX", "2048"))
+_PROTO_BLAS_READY = __import__("threading").local()  # threads whose cuBLAS handles exist, see compute_batch
 # [scratch, bench only] With synchronous IOs the inputs of a batch are written with device copies queued on the default
 # stream (`storage[i, :n] = torch.tensor(..., device=...)`), and the forward runs on `compute_stream` without waiting
 # for them: a forward that reads the read index in its first kernels sometimes sees the previous batch's. On when
@@ -257,6 +258,17 @@ class ModelRunner:
                     forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
             # Otherwise, the graph does not exist, so we create it
             else:
+                if _PROTO_VARLEN_BUCKETS and not getattr(_PROTO_BLAS_READY, "done", False):
+                    # gap4 zsbench prototype: cuBLAS / cuBLASLt create their handles lazily, per thread, and creating
+                    # one inside a capture fails (CUBLAS_STATUS_NOT_INITIALIZED). With the varlen graphs all captured
+                    # at warm-up on the caller's thread, the engine thread may capture before it ran any eager GEMM
+                    device = torch.device("cuda", torch.cuda.current_device())
+                    with stream_context(compute_stream):
+                        x = torch.ones(16, 64, device=device, dtype=torch.bfloat16)
+                        nn.functional.linear(x, x, x[:, 0])  # addmm with a bias: cuBLASLt
+                        torch.mm(x, x.t())  # cuBLAS
+                    torch.cuda.current_blas_handle()
+                    _PROTO_BLAS_READY.done = True
                 args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
                 self._capture_graph(forward_fn, compute_stream, *args)
 
