@@ -131,6 +131,23 @@ def _localize(module):
     return twin
 
 
+def _with_twin_fused_gemms(module, twin):
+    """[gap3] The fused GEMM buffers of GEMM_FUSE_* (`_gemm_qkv_a`, `_gemm_gate_up`) name the linears they were built
+    from, and `_gemm_fused_weight` only uses a buffer for those exact modules and weights: point the twin's entries to
+    the twin's own linears (same storage), or the twin's forwards would silently skip the fused GEMMs."""
+    twins = {id(m): t for m, t in zip(module.modules(), twin.modules())}
+    for sub in twin.modules():
+        for key in ("_gemm_qkv_a", "_gemm_gate_up"):
+            entry = sub.__dict__.get(key)
+            if entry is None:
+                continue
+            buffer, linears, _ = entry
+            mapped = [twins.get(id(lin)) for lin in linears]
+            if all(m is not None for m in mapped):
+                sub.__dict__[key] = (buffer, mapped, [m.weight for m in mapped])
+    return twin
+
+
 torch.library.custom_op("transformers::fuse_cache_write", _cache_write, mutates_args=("cache_rows",))
 torch.library.custom_op("transformers::fuse_sparse_mla", _sparse_mla, mutates_args=())
 torch.library.register_fake("transformers::fuse_sparse_mla", _sparse_mla_fake)
@@ -301,7 +318,14 @@ def _prepare(model, cache):
                 raise NotImplementedError("FUSE_COMPILE under TP expects HF_TP_SINGLE_MLP_ALL_REDUCE=1")
             if any(layer.self_attn.o_proj.bias is not None for layer in layers):
                 raise NotImplementedError("FUSE_COMPILE under TP expects bias-free row-parallel projections")
-            tp, run_layers_on = True, [_localize(layer) for layer in layers]
+            tp, run_layers_on = True, [_with_twin_fused_gemms(layer, _localize(layer)) for layer in layers]
+            from . import modeling_glm_moe_dsa as m
+
+            if m._GEMM_FUSE_GATE_UP or m._GEMM_FUSE_QKV_A:  # how many fused GEMMs the twins can run (bench log)
+                mlps = [t for twin in run_layers_on for t in twin.modules() if isinstance(t, m.GlmMoeDsaMLP)]
+                usable = sum(m._gemm_fused_weight(t, "_gemm_gate_up", (t.gate_proj, t.up_proj)) is not None for t in mlps)
+                STATS["twin_fused_gate_up"] = f"{usable}/{len(mlps)}"
+                print(f"FUSE_COMPILE twins: fused gate_up usable in {usable}/{len(mlps)} MLPs", flush=True)
     state = {
         "views": views, "h_pad": h_pad, "tp": tp,
         "layers": run_layers_on, "q_abs": {},
