@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -40,66 +41,42 @@ if is_torch_available():
     from transformers import AutoTokenizer, FalconH1ForCausalLM, FalconH1Model
 
 
-class FalconH1ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=64,
-        hidden_act="silu",
-        attention_dropout=0.0,
-        attn_layer_indices=None,
-        attn_rotary_emb=8,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        initializer_range=0.02,
-        num_labels=3,
-        pad_token_id=0,
-        mamba_n_groups=1,
-        mamba_n_heads=16,
-        mamba_d_state=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=16,
-        scope=None,
-    ):
+class FalconH1ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "intermediate_size": 64,
+        "hidden_act": "silu",
+        "attention_dropout": 0.0,
+        "attn_layer_indices": None,
+        "attn_rotary_emb": 8,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "pad_token_id": 0,
+        "mamba_n_groups": 1,
+        "mamba_n_heads": 16,
+        "mamba_d_state": 16,
+        "mamba_d_conv": 4,
+        "mamba_expand": 2,
+        "mamba_chunk_size": 16,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.attn_layer_indices = attn_layer_indices
-        self.attn_rotary_emb = attn_rotary_emb
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.mamba_n_groups = mamba_n_groups
-        self.mamba_n_heads = mamba_n_heads
-        self.mamba_d_state = mamba_d_state
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_chunk_size = mamba_chunk_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -209,7 +186,7 @@ class FalconH1ModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -227,7 +204,7 @@ class FalconH1ModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -261,20 +238,45 @@ class FalconH1ModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
             torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
             msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
         )
+
+    def create_and_check_gated_rms_norm_batched_cached_decoding(self, config, input_ids, *args):
+        """
+        With `mamba_rms_norm=True`, a batched single-token cached step must give the same hidden states
+        as the uncached forward pass, and must keep its `[batch_size, 1, hidden_size]` shape.
+        """
+        input_ids = input_ids.to(torch_device)
+        # The gate is applied in a different place depending on `mamba_norm_before_gate`, so we check both
+        for norm_before_gate in (True, False):
+            config.mamba_rms_norm = True
+            config.mamba_norm_before_gate = norm_before_gate
+            model = FalconH1Model(config=config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                full_out = model(input_ids, use_cache=False).last_hidden_state
+                prefill = model(input_ids[:, :-1], use_cache=True)
+                step_out = model(input_ids[:, -1:], cache=prefill.cache, use_cache=True).last_hidden_state
+
+            self.parent.assertEqual(step_out.shape, (input_ids.shape[0], 1, config.hidden_size))
+            self.parent.assertTrue(
+                torch.allclose(full_out[:, -1:], step_out, atol=1e-4, rtol=1e-4),
+                msg=f"Max diff: {(full_out[:, -1:] - step_out).abs().max().item():.6f}",
+            )
 
     def create_and_check_kwargs_reach_mamba2_mixer(self, config, input_ids, *args):
         """
@@ -310,6 +312,8 @@ class FalconH1ModelTester:
 
 @require_torch
 class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = FalconH1ModelTester
+
     all_model_classes = (FalconH1Model, FalconH1ForCausalLM) if is_torch_available() else ()
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -356,6 +360,10 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_mamba2_chunked_prefill_cpu(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    def test_gated_rms_norm_batched_cached_decoding(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gated_rms_norm_batched_cached_decoding(*config_and_inputs)
 
     def test_kwargs_reach_mamba2_mixer(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -524,11 +532,33 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
             3. **"""
         )
 
+        EXPECTED_TEXT_BMG = textwrap.dedent(
+            """\
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (the American Revolution and the Seven Years' War), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's declaration of itself as the National Assembly, marking the start of the revolution.
+
+            ### **Key Events**
+            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            2. **Declaration of the Rights of Man and of the Citizen (1789)**: A foundational document proclaiming liberty, equality, and fraternity.
+            3. **Reign of Terror (1793–1794)**: Led by Maximilien Robespierre and the Committee of Public Safety, thousands were executed by guillotine for alleged counter-revolutionary activities.
+            4. **Rise and Fall of Robespierre**: Robespierre's radical rule ended with his execution in July 1794, leading to a more moderate phase known as the Thermidorian Reaction.
+            5. **Execution of Louis XVI (July 1793)**: The king was guillot"""
+        )
+
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): EXPECTED_TEXT_A100,
                 ("cuda", (8, 6)): EXPECTED_TEXT_A10,
                 ("xpu", None): EXPECTED_TEXT_XPU,
+                ("xpu", 5): EXPECTED_TEXT_BMG,
             }
         )
         EXPECTED_TEXT = expected_texts.get_expectation()

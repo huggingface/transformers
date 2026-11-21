@@ -24,6 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
@@ -116,6 +117,10 @@ class FlintMLP(Qwen3MoeMLP):
 
 
 class FlintTopKRouter(Qwen3MoeTopKRouter):
+    def __init__(self, config):
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
+
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         # `device.type` is a proxy under FX tracing, which vLLM uses to fuse this router
@@ -177,14 +182,15 @@ class FlintAttention(Qwen3MoeAttention):
     def __init__(self, config: FlintConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads, dtype=torch.float32))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -199,8 +205,8 @@ class FlintAttention(Qwen3MoeAttention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -232,7 +238,6 @@ class FlintPreTrainedModel(Qwen3MoePreTrainedModel):
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _keep_in_fp32_modules_strict = ["gate.weight", "sinks"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, FlintAttention):

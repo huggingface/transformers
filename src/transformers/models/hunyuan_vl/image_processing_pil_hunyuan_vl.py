@@ -30,7 +30,6 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 
 
 # Adapted from transformers.models.hunyuan_vl.image_processing_hunyuan_vl.HunYuanVLImageProcessorKwargs
@@ -84,7 +83,6 @@ def smart_resize(
     return h_bar, w_bar
 
 
-@requires(backends=("vision", "torchvision"))
 @auto_docstring
 class HunYuanVLImageProcessorPil(PilBackend):
     do_resize = True

@@ -51,7 +51,6 @@ class SmolLM3Config(PreTrainedConfig):
     ```"""
 
     model_type = "smollm3"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 2000000.0
 
     base_model_tp_plan = {

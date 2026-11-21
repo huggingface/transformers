@@ -45,7 +45,6 @@ class ImageGPTConfig(PreTrainedConfig):
     ```"""
 
     model_type = "imagegpt"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "n_embd",
         "max_position_embeddings": "n_positions",

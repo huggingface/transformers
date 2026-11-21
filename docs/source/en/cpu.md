@@ -15,20 +15,35 @@ rendered properly in your Markdown viewer.
 
 # CPU
 
-CPU training works well when GPUs aren't available or when you want a cost-effective setup. Modern Intel CPUs support bf16 mixed precision training with [PyTorch's AMP](https://docs.pytorch.org/docs/stable/amp) (Automatic Mixed Precision) for CPU backends, which reduces memory usage and speeds up training.
+CPUs run Transformers models with the device string `cpu`, without an accelerator. They work for inference and training when GPUs aren't available, or when you want a cost-effective setup.
 
-Scale CPU training across multiple sockets or nodes if a single CPU is too slow. The examples below cover three scenarios:
+## Run inference
+
+Models load on CPU by default when you don't pass `device_map`, and [`pipeline`] uses the CPU when no accelerator is available. Pass `device_map="cpu"` or `device="cpu"` to use the CPU on a machine that also has an accelerator.
+
+```py
+from transformers import pipeline
+
+generator = pipeline("text-generation", model="Qwen/Qwen3-0.6B", device="cpu")
+print(generator("CPUs are", max_new_tokens=50, do_sample=False)[0]["generated_text"])
+```
+
+## Train with Trainer
+
+CPUs with bf16 support, such as recent Intel and AMD processors, can use bf16 mixed precision training with [PyTorch's AMP](https://docs.pytorch.org/docs/stable/amp), which reduces memory usage and speeds up training.
+
+The examples below cover three setups, from a single CPU to several machines when one CPU is too slow:
 
 - a single CPU
 - multiple processes on one machine (one per CPU socket)
 - multiple processes across several machines
 
-All distributed examples use [Intel MPI](https://www.intel.com/content/www/us/en/developer/tools/oneapi/mpi-library.html) from the [Intel oneAPI HPC Toolkit](https://www.intel.com/content/www/us/en/developer/tools/oneapi/hpc-toolkit.html) for communication and a DDP strategy with [`Trainer`].
+The single-node and multi-node examples launch processes with `mpirun` from [Intel MPI](https://www.intel.com/content/www/us/en/developer/tools/oneapi/mpi-library.html), part of the [Intel oneAPI HPC Toolkit](https://www.intel.com/content/www/us/en/developer/tools/oneapi/hpc-toolkit.html), and [`Trainer`] runs DDP over the `gloo` backend.
 
 <hfoptions id="distrib-cpu">
 <hfoption id="single CPU">
 
-[`Trainer`] supports bf16 mixed precision training on CPU. Prefer bf16 over fp16 for CPU training because it's more numerically stable. Pass `--bf16` to enable PyTorch's CPU autocast and `--use_cpu` to force CPU training. You can pass the same parameters to [`TrainingArguments`] directly.
+Set `bf16=True` and `use_cpu=True` in [`TrainingArguments`], or pass `--bf16` and `--use_cpu` to a training script. Prefer bf16 over fp16 on CPU because it's more numerically stable.
 
 ```py
 from transformers import TrainingArguments
@@ -43,7 +58,7 @@ training_args = TrainingArguments(
 </hfoption>
 <hfoption id="distributed CPU (single node)">
 
-On a dual-socket CPU, run one process per socket. Keeping memory accesses local to each socket improves throughput. The example below launches two processes on a single machine with one process per socket, where `train.py` is your [`Trainer`] training script.
+On a dual-socket CPU, run one process per socket. Keeping memory accesses local to each socket improves throughput. The example below launches two processes on a single machine with one process per socket, where `train.py` is your `Trainer` training script.
 
 > [!TIP]
 > Set `OMP_NUM_THREADS` to the number of physical cores on one socket, minus one core reserved for the OS. For example, on a 24-core socket set `OMP_NUM_THREADS=23`.
@@ -60,7 +75,7 @@ python3 train.py \
 </hfoption>
 <hfoption id="distributed CPU (multiple nodes)">
 
-Scale training to four processes across two Xeon machines (`node0` and `node1`) using a hostfile that lists each node's IP address. The `-n 4` flag sets the total number of processes. `-ppn 2` sets two processes per node (one per socket).
+Scale training to four processes across two machines (`node0` and `node1`) using a `hostfile` that lists each node's IP address. The `-n 4` flag sets the total number of processes. `-ppn 2` sets two processes per node (one per socket).
 
 Run this script from `node0`, which acts as the main process.
 
@@ -90,154 +105,15 @@ python3 train.py \
 </hfoption>
 </hfoptions>
 
-## Kubernetes
+## Tune CPU performance
 
-Distributed CPU training can also run on a Kubernetes cluster using [PyTorchJob](https://www.kubeflow.org/docs/components/training/user-guides/pytorch/).
+Preload a faster memory allocator and Intel's OpenMP runtime to reduce overhead in CPU training. Install `google-perftools` (for `libtcmalloc`) and the `intel-openmp` Python package (for `libiomp5`), then add both libraries to the `LD_PRELOAD` environment variable before you launch training.
 
-Complete the following setup before deploying:
-
-1. Ensure you have access to a Kubernetes cluster with [Kubeflow](https://www.kubeflow.org/docs/started/installing-kubeflow/) installed.
-2. Install and configure [kubectl](https://kubernetes.io/docs/tasks/tools) to interact with the cluster.
-3. Set up a [PersistentVolumeClaim (PVC)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) to store datasets and model files.
-4. Build a Docker image for the training script and its dependencies.
-
-The example Dockerfile below starts from an Intel-optimized PyTorch base image that includes MPI support for multi-node CPU training. It also installs two performance libraries:
-
-- `google-perftools` (`libtcmalloc`): a memory allocator that reduces allocation overhead compared to the default system allocator.
-- `libomp-dev` (`libiomp5`): Intel's OpenMP runtime, which provides better CPU thread management than the GNU OpenMP default.
-
-```dockerfile
-FROM intel/intel-optimized-pytorch:2.4.0-pip-multinode
-
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends --fix-missing \
-    google-perftools \
-    libomp-dev
-
-WORKDIR /workspace
-
-# Install Transformers and copy your training script into the image
-RUN pip install --no-cache-dir transformers
-COPY train.py /workspace/train.py
-```
-
-Build the image and push it to a registry accessible from your cluster's nodes before deploying.
-
-### PyTorchJob
-
-[PyTorchJob](https://www.kubeflow.org/docs/components/training/user-guides/pytorch/) is a Kubernetes custom resource that manages PyTorch distributed training jobs. It handles worker pod lifecycle, restart policy, and process coordination. Your training script only needs to handle the model and data.
-
-The example yaml file below sets up four workers running a training script with bf16 enabled.
-
-When setting CPU resource limits and requests, use [CPU units](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/#meaning-of-cpu) where one unit equals one physical core or virtual core. Set both limits and requests to the same value for a `Guaranteed` [quality of service](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod). Leave some cores unallocated for kubelet and system processes. Set `OMP_NUM_THREADS` to match the number of allocated CPU units so PyTorch uses all available cores.
-
-Adapt the yaml file based on your training script and the number of nodes in your cluster.
-
-```yaml
-apiVersion: "kubeflow.org/v1"
-kind: PyTorchJob
-metadata:
-  name: transformers-pytorchjob
-spec:
-  elasticPolicy:
-    rdzvBackend: c10d
-    minReplicas: 1
-    maxReplicas: 4
-    maxRestarts: 10
-  pytorchReplicaSpecs:
-    Worker:
-      replicas: 4  # The number of worker pods
-      restartPolicy: OnFailure
-      template:
-        spec:
-          containers:
-            - name: pytorch
-              image: <image name>:<tag>  # Specify the docker image to use for the worker pods
-              imagePullPolicy: IfNotPresent
-              command: ["/bin/bash", "-c"]
-              args:
-                - >-
-                  cd /workspace;
-                  torchrun train.py \
-                    --model_name_or_path distilbert/distilbert-base-uncased \
-                    --do_train \
-                    --do_eval \
-                    --per_device_train_batch_size 12 \
-                    --learning_rate 3e-5 \
-                    --num_train_epochs 2 \
-                    --output_dir /tmp/pvc-mount/output_$(date +%Y%m%d_%H%M%S) \
-                    --bf16;
-              env:
-              - name: LD_PRELOAD
-                value: "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9:/usr/local/lib/libiomp5.so"
-              - name: HF_HUB_CACHE
-                value: "/tmp/pvc-mount/hub_cache"
-              - name: HF_DATASETS_CACHE
-                value: "/tmp/pvc-mount/hf_datasets_cache"
-              - name: LOGLEVEL
-                value: "INFO"
-              - name: OMP_NUM_THREADS  # Set to match the number of allocated CPU units
-                value: "240"
-              resources:
-                limits:
-                  cpu: 240  # Update the CPU and memory limit values based on your nodes
-                  memory: 128Gi
-                requests:
-                  cpu: 240  # Update the CPU and memory request values based on your nodes
-                  memory: 128Gi
-              volumeMounts:
-              - name: pvc-volume
-                mountPath: /tmp/pvc-mount
-              - mountPath: /dev/shm
-                name: dshm
-          restartPolicy: Never
-          nodeSelector:  # Optionally use nodeSelector to match a certain node label for the worker pods
-            node-type: gnr
-          volumes:
-          - name: pvc-volume
-            persistentVolumeClaim:
-              claimName: transformers-pvc
-          - name: dshm
-            emptyDir:
-              medium: Memory
-```
-
-### Deploy
-
-Deploy the PyTorchJob to the cluster with the following command.
-
-```bash
-export NAMESPACE=<specify your namespace>
-
-kubectl create -f pytorchjob.yaml -n ${NAMESPACE}
-```
-
-List the pods in the namespace to monitor their status. Pods start as **Pending** while the container image is pulled, then transition to **Running**.
-
-```bash
-kubectl get pods -n ${NAMESPACE}
-
-NAME                                                     READY   STATUS                  RESTARTS          AGE
-...
-transformers-pytorchjob-worker-0                         1/1     Running                 0                 7m37s
-transformers-pytorchjob-worker-1                         1/1     Running                 0                 7m37s
-transformers-pytorchjob-worker-2                         1/1     Running                 0                 7m37s
-transformers-pytorchjob-worker-3                         1/1     Running                 0                 7m37s
-...
-```
-
-Stream logs from a worker pod to follow training progress.
-
-```bash
-kubectl logs transformers-pytorchjob-worker-0 -n ${NAMESPACE} -f
-```
-
-Copy the trained model from the PVC or your storage location after training completes. Then delete the PyTorchJob resource.
-
-```bash
-kubectl delete -f pytorchjob.yaml -n ${NAMESPACE}
-```
+Set `OMP_NUM_THREADS` to the number of cores each process can use. In a container or a cluster job with CPU limits, that's the number of allocated CPU units, so leave some cores unallocated for system processes.
 
 ## Next steps
 
 - Read the [Accelerating PyTorch Transformers with Intel Sapphire Rapids](https://huggingface.co/blog/intel-sapphire-rapids) blog post for a deeper look at BF16 performance on modern Intel hardware.
+- Read [DDP](./ddp) for more on the distributed strategy the multi-process examples use.
+- Read the PyTorch [CPU threading](https://docs.pytorch.org/docs/stable/notes/cpu_threading_torchscript_inference.html) notes to learn how `OMP_NUM_THREADS` affects performance.
+- Read the Kubeflow [PyTorchJob guide](https://www.kubeflow.org/docs/components/training/user-guides/pytorch/) to run distributed CPU training on Kubernetes.

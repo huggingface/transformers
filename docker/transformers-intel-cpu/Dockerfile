@@ -47,11 +47,10 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 RUN pip install --upgrade pip wheel
 RUN pip install torch torchvision torchaudio torchcodec torchao --index-url https://download.pytorch.org/whl/cpu --no-cache-dir
-RUN pip install av pyctcdecode pytesseract decord galore-torch scipy scikit-learn sentencepiece sentence_transformers sacremoses nltk librosa soundfile mpi4py pytorch_msssim
+RUN pip install av pytesseract decord galore-torch scipy scikit-learn sentencepiece sentence_transformers sacremoses nltk librosa soundfile mpi4py pytorch_msssim
 RUN pip install onnx optimum onnxruntime
-RUN pip install -U datasets timm transformers accelerate peft diffusers opencv-python kenlm
+RUN pip install -U datasets timm "transformers[kernels]" accelerate peft diffusers opencv-python
 RUN pip install -U intel-openmp
-RUN pip install kernels
 RUN pip install gptqmodel bitsandbytes
 RUN pip install git+https://github.com/facebookresearch/detectron2.git --no-build-isolation
 
@@ -59,7 +58,6 @@ RUN pip install git+https://github.com/facebookresearch/detectron2.git --no-buil
 RUN pip install "triton>=3.5.0"
 
 ENV LD_PRELOAD=${LD_PRELOAD}:/opt/venv/lib/libiomp5.so:/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4
-ENV KMP_AFFINITY=granularity=fine,compact,1,0
 
 RUN touch /entrypoint.sh
 RUN chmod +x /entrypoint.sh
