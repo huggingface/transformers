@@ -156,6 +156,7 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     # Consumed by config logic: `mlp_ratio` sets `intermediate_size`.
     "Inkling2VisionConfig": ["mlp_ratio"],
+    "Inkling2LoopTextConfig": ["hidden_act"],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
     "GPTNeoConfig": ["attention_types"],
