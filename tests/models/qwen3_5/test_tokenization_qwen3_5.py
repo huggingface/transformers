@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -87,3 +90,39 @@ class Qwen3_5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         auto_ids = tokenizer_auto.encode(text, add_special_tokens=False)
         tok_ids = tokenizer_tok.encode(text, add_special_tokens=False)
         self.assertEqual(auto_ids, tok_ids)
+
+    def test_tokenizer_json_normalizer_survives_the_class_rebuild(self):
+        """A checkpoint with model_type qwen3_5 whose tokenizer.json carries a custom normalizer
+        (e.g. `tencent/WeMM-Embedding-2B` strips a trailing newline before NFC) must keep that
+        normalizer when the class rebuilds the backend from vocab/merges (#49578). The class's
+        own NFC default used to replace it, leaving a trailing newline token on every input —
+        an extra embedding token for models that read the last position."""
+        from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
+        from tokenizers.models import BPE
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            vocab = {char: index for index, char in enumerate(sorted(pre_tokenizers.ByteLevel.alphabet()))}
+            backend = Tokenizer(BPE(vocab=vocab, merges=[]))
+            backend.normalizer = normalizers.Sequence(
+                [
+                    normalizers.Replace(Regex("\\n$"), ""),
+                    normalizers.NFC(),
+                ]
+            )
+            backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=True)
+            backend.decoder = decoders.ByteLevel()
+            with open(os.path.join(tmp_dir, "tokenizer.json"), "w", encoding="utf-8") as handle:
+                json.dump(json.loads(backend.to_str()), handle)
+
+            tokenizer = Qwen3_5Tokenizer.from_pretrained(tmp_dir)
+
+            # The file's normalizer (Replace + NFC) wins over the class's plain NFC default.
+            file_normalizer = backend.normalizer
+            loaded_normalizer = tokenizer._tokenizer.normalizer
+            self.assertIsNotNone(loaded_normalizer)
+            self.assertEqual(str(loaded_normalizer), str(file_normalizer))
+
+            # A single trailing newline is normalized away, a middle one is kept.
+            newline_id = vocab["Ċ"]
+            self.assertNotIn(newline_id, tokenizer.encode("hello\n", add_special_tokens=False))
+            self.assertIn(newline_id, tokenizer.encode("hello\nworld", add_special_tokens=False))
