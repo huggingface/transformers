@@ -699,6 +699,72 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         self.assertEqual(get_json_schema(fn)["function"], expected_schema)
         self.assertEqual(get_json_schema(nested_fn)["function"], {**expected_schema, "name": "nested_fn"})
 
+    def test_var_keyword_becomes_additional_properties(self):
+        def fn(origin: str, **filters: int):
+            """
+            Test function
+
+            Args:
+                origin: The input
+                filters: The extras
+            """
+            return origin, filters
+
+        # The model can pass any name it likes to **filters, so the extras belong in additionalProperties.
+        # Describing them as an argument called "filters" lets the model pass only that one name
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"origin": {"type": "string", "description": "The input"}},
+                "additionalProperties": {"type": "integer", "description": "The extras"},
+                "required": ["origin"],
+            },
+        }
+        self.assertEqual(get_json_schema(fn)["function"], expected_schema)
+
+    def test_var_positional_fails(self):
+        def fn(origin: str, *stops: str):
+            """
+            Test function
+
+            Args:
+                origin: The input
+                stops: The extras
+            """
+            return origin, stops
+
+        # A tool call names each argument, so a model following a "stops" argument would call
+        # fn(origin=..., stops=...), which *stops cannot accept
+        with self.assertRaisesRegex(TypeHintParsingException, "stops"):
+            get_json_schema(fn)
+
+    def test_starred_docstring_names(self):
+        def fn(origin: str, **filters: int):
+            """
+            Test function
+
+            Args:
+                origin: The input
+                **filters: The extras
+            """
+            return origin, filters
+
+        # Google style writes a variadic entry with its stars, so the name in the docstring is "**filters".
+        # Without them the line reads as part of the previous description instead of as its own argument
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"origin": {"type": "string", "description": "The input"}},
+                "additionalProperties": {"type": "integer", "description": "The extras"},
+                "required": ["origin"],
+            },
+        }
+        self.assertEqual(get_json_schema(fn)["function"], expected_schema)
+
     def test_multiline_docstring_with_types(self):
         def fn(x: int, y: int):
             """
