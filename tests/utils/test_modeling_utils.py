@@ -1082,6 +1082,35 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             torch.testing.assert_close(p1, p2)
 
+    def test_checkpoint_variant_shards_survive_default_save(self):
+        config = BertConfig(
+            vocab_size=1000,
+            hidden_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=128,
+        )
+        model = BertModel(config).half()
+        expected_state_dict = {key: value.detach().float().clone() for key, value in model.state_dict().items()}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, variant="fp16", max_shard_size="50kB")
+
+            variant_index_file = os.path.join(tmp_dir, "model.safetensors.index.fp16.json")
+            with open(variant_index_file, encoding="utf-8") as f:
+                variant_index = json.load(f)
+            variant_shards = set(variant_index["weight_map"].values())
+            self.assertGreater(len(variant_shards), 1)
+
+            model.float().save_pretrained(tmp_dir, max_shard_size="50kB")
+
+            for shard in variant_shards:
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, shard)))
+
+            reloaded_model = BertModel.from_pretrained(tmp_dir, variant="fp16")
+            for key, value in reloaded_model.state_dict().items():
+                torch.testing.assert_close(value, expected_state_dict[key])
+
     def test_checkpoint_loading_only_safetensors_available(self):
         # Test that the loading behaviour is as expected when only safetensor checkpoints are available
         # - We can load the model with use_safetensors=True
