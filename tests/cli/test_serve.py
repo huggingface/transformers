@@ -23,6 +23,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
@@ -250,7 +251,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
             self.assertEqual(msg["content"][0]["type"], "text")
 
     def test_llm_tool_use_fields_forwarded(self):
-        """Tool-use fields (tool_calls, tool_call_id) should be forwarded to processor inputs."""
+        """Tool-use fields (tool_calls, tool_call_id) and reasoning_content should be forwarded to processor inputs."""
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -259,7 +260,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         ]
         messages = [
             {"role": "user", "content": "What's the weather in Paris?"},
-            {"role": "assistant", "tool_calls": tool_calls},
+            {"role": "assistant", "reasoning_content": "Look up the weather first.", "tool_calls": tool_calls},
             {"role": "tool", "content": "22°C, sunny", "tool_call_id": "call_1"},
         ]
         result = get_processor_inputs_from_messages(messages, Modality.LLM)
@@ -267,6 +268,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         # The preprocessor parses function.arguments from JSON string to dict.
         tool_calls[0]["function"]["arguments"] = json.loads(tool_calls[0]["function"]["arguments"])
         self.assertEqual(result[1]["tool_calls"], tool_calls)
+        self.assertEqual(result[1]["reasoning_content"], "Look up the weather first.")
         self.assertNotIn("tool_calls", result[0])
         self.assertEqual(result[2]["tool_call_id"], "call_1")
         self.assertNotIn("tool_call_id", result[0])
@@ -1212,6 +1214,39 @@ class TestCompletion(ServeIntegrationTestCase):
 class TestResponseInputConversion(unittest.TestCase):
     def _make_handler(self):
         return ResponseHandler(model_manager=MagicMock(), generation_state=GenerationState())
+
+    def test_response_forwards_reasoning_except_native_mistral(self):
+        class TemplateReached(Exception):
+            pass
+
+        reasoning = "Greet the user."
+        mistral = SimpleNamespace(backend="mistral_common", tokenizer=SimpleNamespace())
+        cases = (
+            ("tokenizers", SimpleNamespace(backend="tokenizers"), Modality.LLM, reasoning),
+            ("mistral_common", mistral, Modality.LLM, None),
+            ("wrapped_mistral_common", SimpleNamespace(tokenizer=mistral), Modality.MULTIMODAL, None),
+        )
+        body = {
+            "model": "test-model",
+            "input": [
+                {"role": "user", "content": "Hello"},
+                {"type": "reasoning", "content": [{"type": "reasoning_text", "text": reasoning}]},
+                {"role": "assistant", "content": "Hi!"},
+            ],
+        }
+        for name, processor, modality, expected in cases:
+            with self.subTest(processor=name):
+                processor.apply_chat_template = MagicMock(side_effect=TemplateReached)
+                handler = self._make_handler()
+                handler.model_manager.get_model_modality.return_value = modality
+                with patch.object(handler, "_resolve_model", return_value=("test-model", MagicMock(), processor)):
+                    with self.assertRaises(TemplateReached):
+                        asyncio.run(handler.handle_request(body, "test-request"))
+                assistant = processor.apply_chat_template.call_args.args[0][1]
+                if expected is None:
+                    self.assertNotIn("reasoning_content", assistant)
+                else:
+                    self.assertEqual(assistant["reasoning_content"], expected)
 
     def test_string_input(self):
         handler = self._make_handler()
