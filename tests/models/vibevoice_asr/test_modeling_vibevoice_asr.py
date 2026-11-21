@@ -35,6 +35,7 @@ from transformers.trainer_utils import set_seed
 
 from ...alm_tester import ALMModelTest
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -46,20 +47,20 @@ if is_torch_available():
     import torch
 
 
-class VibeVoiceAsrModelTester:
+class VibeVoiceAsrModelTester(ModelTesterConfigMixin):
     """
     Builds a tiny VibeVoice ASR config and synthetic inputs for testing.
     """
 
     conditional_generation_class = VibeVoiceAsrForConditionalGeneration if is_torch_available() else None
 
-    def __init__(
-        self,
-        parent,
-        audio_token_id=0,
-        seq_length=25,
-        audio_samples=24000,  # 1 second at 24kHz
-        text_config={
+    defaults = {}
+    small_config_overrides = {
+        "audio_token_id": 0,
+        "seq_length": 25,
+        "audio_samples": 24000,  # 1 second at 24kHz
+        "is_training": True,
+        "text_config": {
             "model_type": "qwen2",
             "intermediate_size": 36,
             "initializer_range": 0.02,
@@ -71,7 +72,7 @@ class VibeVoiceAsrModelTester:
             "vocab_size": 99,
             "pad_token_id": 1,  # Ensure pad token != audio token
         },
-        acoustic_tokenizer_encoder_config={
+        "acoustic_tokenizer_encoder_config": {
             "model_type": "vibevoice_acoustic_tokenizer_encoder",
             "hidden_size": 16,
             "kernel_size": 3,
@@ -79,7 +80,7 @@ class VibeVoiceAsrModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        semantic_tokenizer_encoder_config={
+        "semantic_tokenizer_encoder_config": {
             "model_type": "vibevoice_acoustic_tokenizer_encoder",
             "channels": 1,
             "hidden_size": 32,  # 2x acoustic hidden size
@@ -88,22 +89,24 @@ class VibeVoiceAsrModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        is_training=True,
-    ):
+        "batch_size": 2,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.audio_token_id = audio_token_id
-        self.seq_length = seq_length
-        self.audio_samples = audio_samples
-        self.is_training = is_training
-        self.text_config = text_config
-        self.acoustic_tokenizer_encoder_config = acoustic_tokenizer_encoder_config
-        self.semantic_tokenizer_encoder_config = semantic_tokenizer_encoder_config
-        self.batch_size = 2
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.encoder_seq_length = seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return VibeVoiceAsrConfig(
@@ -138,6 +141,8 @@ class VibeVoiceAsrModelTester:
 
 @require_torch
 class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = VibeVoiceAsrModelTester
+
     all_model_classes = (VibeVoiceAsrModel, VibeVoiceAsrForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"audio-text-to-text": VibeVoiceAsrForConditionalGeneration} if is_torch_available() else {}

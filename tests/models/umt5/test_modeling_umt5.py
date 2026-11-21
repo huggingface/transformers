@@ -334,8 +334,15 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_tie_word_embeddings(self):
         # Force it to True, see https://github.com/huggingface/transformers/pull/43880
-        config = UMT5Config(tie_word_embeddings=False)
-        self.assertTrue(config.tie_word_embeddings)
+        config_untied_checkpoint = UMT5Config(tie_word_embeddings=False)
+        self.assertTrue(config_untied_checkpoint.tie_word_embeddings)
+        self.assertFalse(config_untied_checkpoint.scale_decoder_outputs)
+
+        config_tied_checkpoint = UMT5Config(tie_word_embeddings=True)
+        self.assertTrue(config_tied_checkpoint.scale_decoder_outputs)
+
+        config_default = UMT5Config()
+        self.assertTrue(config_default.scale_decoder_outputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
