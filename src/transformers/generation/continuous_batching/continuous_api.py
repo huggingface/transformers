@@ -310,6 +310,7 @@ _TRAIN_FIX_PREFIX = os.environ.get("TRAIN_FIX_PREFIX", "0") == "1"
 class ContinuousBatchProcessor:
     inputs_and_outputs: ContinuousBatchingIOs | ContinuousBatchingAsyncIOs
     scheduler: Scheduler
+    _proto_relayout_experts = None  # WP experts: set by the manager, called by the loop thread around a pause window
 
     def __init__(
         self,
@@ -456,6 +457,8 @@ class ContinuousBatchProcessor:
             # Wait for the work on the compute stream to be done before pausing
             if self.inputs_and_outputs.compute_stream is not None:
                 self.inputs_and_outputs.compute_stream.synchronize()
+            if self._proto_relayout_experts is not None:  # WP experts: the checkpoint's layout during the window
+                self._proto_relayout_experts(trtllm=False)
             self.background_thread_status.pause_and_wait()
             if self.distributed_helper.cpu_comm_group is not None:
                 timeout = self.cb_config.cpu_group_timeout
@@ -464,6 +467,8 @@ class ContinuousBatchProcessor:
                     timeout=timedelta(seconds=timeout) if timeout is not None else None,
                     wait_all_ranks=True,
                 )
+            if self._proto_relayout_experts is not None:
+                self._proto_relayout_experts(trtllm=True)
 
         # After the pause window is done, we can still exit early if there is no payload
         if payload_size == 0:
@@ -945,6 +950,17 @@ class ContinuousBatchingManager:
             finally:
                 self.background_thread_status.release_pause()
 
+    def _proto_relayout_experts(self, trtllm: bool) -> None:
+        """WP experts prototype (PROTO_EXPERTS_TRTLLM_INPLACE=1, no-op otherwise): the routed-expert weights hold
+        TRT-LLM's layout, in place, from the creation of the batch processor until the generation loop exits, and the
+        checkpoint's layout during a pause window and after the loop, when anything else may read them. The loop thread
+        switches them when it parks and when it wakes up, so a window held by several threads switches once each way."""
+        from ...integrations.finegrained_fp8 import _proto_relayout_fp8_experts
+
+        moved = _proto_relayout_fp8_experts(self.model, trtllm)
+        if moved and self.batch_processor is not None:  # a weight changed address: graphs replay the old one
+            self.batch_processor.inputs_and_outputs.clear_graphs()
+
     def _proto_after_pause(self) -> None:
         """WP train prototypes (off by default): what has to follow the weights when a pause ends, since the thread
         that held it may have updated them. TRAIN_FIX_KV_B=refresh rewrites, in place, the merged kv_b_proj weights of
@@ -1272,6 +1288,7 @@ class ContinuousBatchingManager:
             self._handle_critical_error(e, batch_processor)
         finally:
             self.background_thread_status.mark_as_stopped()
+            self._proto_relayout_experts(trtllm=False)  # still inside the thread: `join` and `is_running` wait for it
             logger.info("Generation loop finished and background thread exited successfully.")
 
     def _generation_step(self) -> None:
@@ -1282,6 +1299,7 @@ class ContinuousBatchingManager:
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
         """Create a new batch processor. If an already initialized batch processor exists, it is reset and returned."""
+        self._proto_relayout_experts(trtllm=True)  # before any graph capture and before the cache is sized
         # Early return if a batch processor exists already
         batch_processor = getattr(self, "batch_processor", None)
         if isinstance(batch_processor, ContinuousBatchProcessor):
@@ -1340,6 +1358,8 @@ class ContinuousBatchingManager:
             scheduler=scheduler,
             distributed_helper=self.distributed_helper,
         )
+        if os.environ.get("PROTO_EXPERTS_TRTLLM_INPLACE", "0") == "1":
+            batch_processor._proto_relayout_experts = self._proto_relayout_experts
         return batch_processor
 
     def _handle_critical_error(self, error: Exception, batch_processor: ContinuousBatchProcessor | None) -> None:

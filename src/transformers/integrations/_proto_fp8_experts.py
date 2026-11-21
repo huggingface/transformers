@@ -4,6 +4,8 @@ Two implementations of `FP8Experts.forward(hidden_states, top_k_index, top_k_wei
 
 - `PROTO_EXPERTS_TRTLLM=1`: flashinfer's TRT-LLM routed FP8 MoE, called the way vLLM's `TrtLlmFp8ExpertsModular` does.
   The weights are re-laid once at load (`trtllm_prepare`, bytes only moved), the originals are kept. Blackwell only.
+  With `PROTO_EXPERTS_TRTLLM_INPLACE=1` there is no copy: the parameters themselves are re-laid in place
+  (`trtllm_relayout_`) while the continuous batching loop runs, and given back in the checkpoint's layout otherwise.
 - `PROTO_EXPERTS_DECODE=1`: a Triton kernel pair with the dispatch fused and a decode schedule: one program per
   (expert, N tile) walking that expert's routed rows. Candidate for `kernels-community/finegrained-fp8`.
   `PROTO_EXPERTS_DECODE=fold` uses one activation scale per (routed row, weight tile) in the first kernel.
@@ -107,6 +109,41 @@ def trtllm_prepare(gate_up, gate_up_scale, down, down_scale):
     assert tuple(w13.shape) == (num_experts, hidden // 128, two_i, 128)
     assert tuple(w2.shape) == (num_experts, inter // 128, hidden, 128)
     return w13, s13.contiguous(), w2, s2.contiguous()
+
+
+def trtllm_relayout_(weight, swap_halves, inverse, chunk_bytes=256 << 20):
+    """`trtllm_prepare`'s re-layout of one `[E, rows, K]` fp8 stack done in place (`inverse=False`), or undone in place
+    (`inverse=True`). The tensor keeps its shape, storage and address: only the order of its bytes changes, so CUDA
+    graphs captured on it stay valid. A few experts at a time go through a temporary of at most `chunk_bytes`."""
+    from flashinfer.utils import get_shuffle_matrix_a_row_indices
+
+    num_experts, m, k = weight.shape
+    assert weight.dtype == FP8 and weight.is_contiguous() and k % 128 == 0, (weight.dtype, weight.shape)
+    rows = get_shuffle_matrix_a_row_indices(torch.empty(m, 1, dtype=torch.uint8), 64)  # rows[new_row] = old_row
+    if swap_halves:
+        rows = (rows + m // 2) % m
+    if inverse:
+        rows = torch.argsort(rows)  # old_row -> new_row
+    rows = rows.to(weight.device)
+    raw = weight.view(torch.uint8)
+    step = max(1, chunk_bytes // (m * k))
+    for start in range(0, num_experts, step):
+        chunk = raw[start : start + step]
+        n = chunk.shape[0]
+        if inverse:  # [n, K / 128, rows, 128] -> [n, rows, K / 128, 128]
+            new = chunk.view(n, k // 128, m, 128).permute(0, 2, 1, 3)[:, rows]
+        else:  # [n, rows, K / 128, 128] -> [n, K / 128, rows, 128]
+            new = chunk.view(n, m, k // 128, 128).permute(0, 2, 1, 3)[:, :, rows]
+        chunk.copy_(new.reshape(n, m, k))
+
+
+def trtllm_scales_(s13, s2, gate_up_scale, down_scale):
+    """`trtllm_prepare`'s block scales written into existing buffers (same addresses for the CUDA graphs)."""
+    n_gate = gate_up_scale.shape[1] // 2
+    s13[:, :n_gate].copy_(gate_up_scale[:, n_gate:])
+    s13[:, n_gate:].copy_(gate_up_scale[:, :n_gate])
+    s13.clamp_(min=_TRTLLM_MIN_BLOCK_SCALE)
+    s2.copy_(down_scale).clamp_(min=_TRTLLM_MIN_BLOCK_SCALE)
 
 
 def trtllm_experts_forward(prepared, hidden_states, top_k_index, top_k_weights):

@@ -691,6 +691,7 @@ def _can_use_fp8_fused_experts(self, hidden_states, top_k_index) -> bool:
         and self.swiglu_alpha is None
         and self.limit is None
         and not self._is_expert_parallel
+        and not self._proto_trtllm_laid
         and self.gate_up_proj.dtype == _FP8_DTYPE
         and self.block_size is not None
     )
@@ -702,6 +703,9 @@ def _can_use_fp8_fused_experts(self, hidden_states, top_k_index) -> bool:
 # PROTO_EXPERTS_DECODE=fold  the same with one activation scale per (routed row, weight tile) in the first kernel
 # Both replace the `grouped_mm` and `batched_mm` forwards of `FP8Experts` when no gradient is needed.
 _PROTO_EXPERTS_TRTLLM = os.environ.get("PROTO_EXPERTS_TRTLLM", "0") == "1"
+# PROTO_EXPERTS_TRTLLM_INPLACE=1 (with PROTO_EXPERTS_TRTLLM=1): no copy, the parameters are re-laid in place while the
+# continuous batching loop runs (`_proto_relayout_fp8_experts`)
+_PROTO_EXPERTS_TRTLLM_INPLACE = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_INPLACE", "0") == "1"
 _PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") in ("1", "fold")
 _PROTO_EXPERTS_DECODE_FOLD = os.environ.get("PROTO_EXPERTS_DECODE", "0") == "fold"
 
@@ -726,7 +730,7 @@ def _proto_experts_supported(module: "FP8Experts") -> bool:
 def _proto_prepare_fp8_experts(model: nn.Module) -> None:
     """Load-time half of `PROTO_EXPERTS_TRTLLM`: every rank re-lays its own shard of the expert weights for the
     TRT-LLM kernels. The original parameters are kept (the default path, saving and training still see them)."""
-    if not _PROTO_EXPERTS_TRTLLM:
+    if not _PROTO_EXPERTS_TRTLLM or _PROTO_EXPERTS_TRTLLM_INPLACE:
         return
     from ..distributed.parallel_utils import _use_local_dtensor_params
     from . import _proto_fp8_experts as proto
@@ -749,9 +753,67 @@ def _proto_prepare_fp8_experts(model: nn.Module) -> None:
     logger.warning(f"PROTO_EXPERTS_TRTLLM: re-laid the weights of {prepared} FP8Experts modules for TRT-LLM")
 
 
+def _proto_relayout_fp8_experts(model: nn.Module, trtllm: bool) -> bool:
+    """`PROTO_EXPERTS_TRTLLM_INPLACE`: re-lays the expert weights of every rank in place, for the TRT-LLM kernels
+    (`trtllm=True`) or back to the checkpoint's layout. The continuous batching manager keeps TRT-LLM's layout while its
+    generation loop runs and gives the checkpoint's back whenever anything else may read the weights (pause, stop).
+    The storage does not move, so CUDA graphs captured on it stay valid. Idempotent. Returns whether a weight changed
+    address since the previous re-layout (replaced rather than updated in place): graphs captured before then are stale.
+    """
+    if not _PROTO_EXPERTS_TRTLLM_INPLACE:
+        return False
+    from ..distributed.parallel_utils import _use_local_dtensor_params
+    from . import _proto_fp8_experts as proto
+
+    moved, count = False, 0
+    torch.accelerator.synchronize()  # the generation loop reads the weights on its own stream
+    with torch.no_grad():
+        for module in model.modules():
+            if not isinstance(module, FP8Experts) or module._proto_trtllm_laid == trtllm or module._is_expert_parallel:
+                continue
+            if module.config._experts_implementation not in ("grouped_mm", "batched_mm"):
+                continue
+            with _use_local_dtensor_params(module):
+                if not _proto_experts_supported(module) or not proto.trtllm_supported(module.gate_up_proj.device):
+                    continue
+                gate_up, down = module.gate_up_proj.data, module.down_proj.data
+                proto.trtllm_relayout_(gate_up, swap_halves=True, inverse=not trtllm)
+                proto.trtllm_relayout_(down, swap_halves=False, inverse=not trtllm)
+                module._proto_trtllm_laid = trtllm
+                count += 1
+                if not trtllm:
+                    module._proto_trtllm = None
+                    continue
+                if module._proto_trtllm_scales is None:
+                    module._proto_trtllm_scales = (
+                        torch.empty_like(module.gate_up_proj_scale_inv.data),
+                        torch.empty_like(module.down_proj_scale_inv.data),
+                    )
+                s13, s2 = module._proto_trtllm_scales
+                proto.trtllm_scales_(s13, s2, module.gate_up_proj_scale_inv.data, module.down_proj_scale_inv.data)
+                num_experts, two_i, hidden = gate_up.shape
+                ptrs = (gate_up.data_ptr(), down.data_ptr())
+                moved |= module._proto_trtllm_ptrs is not None and module._proto_trtllm_ptrs != ptrs
+                module._proto_trtllm_ptrs = ptrs
+                module._proto_trtllm = (
+                    gate_up.view(num_experts, hidden // 128, two_i, 128),
+                    s13,
+                    down.view(num_experts, two_i // 256, hidden, 128),
+                    s2,
+                )
+    torch.accelerator.synchronize()
+    logger.warning_once(f"PROTO_EXPERTS_TRTLLM_INPLACE: {count} FP8Experts modules re-laid in place")
+    return moved
+
+
 def _proto_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     """The prototype forward selected by the flags, or `None` when the default path has to run."""
     if self._is_expert_parallel or (torch.is_grad_enabled() and hidden_states.requires_grad):
+        if self._proto_trtllm_laid:
+            raise RuntimeError(
+                "The expert weights hold TRT-LLM's layout while the continuous batching loop runs: use the model "
+                "inside `manager.pause()` or after `manager.stop()`."
+            )
         return None
     from . import _proto_fp8_experts as proto
 
@@ -970,6 +1032,11 @@ class FP8Experts(nn.Module):
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
     _proto_trtllm = None  # PROTO_EXPERTS_TRTLLM: this rank's weights in TRT-LLM's layout, built once at load
+    # PROTO_EXPERTS_TRTLLM_INPLACE: the parameters hold TRT-LLM's layout (then `_proto_trtllm` views them), the block
+    # scale buffers in TRT-LLM's order, and the weights' addresses at the last re-layout
+    _proto_trtllm_laid = False
+    _proto_trtllm_scales = None
+    _proto_trtllm_ptrs = None
 
     def __init__(
         self,
