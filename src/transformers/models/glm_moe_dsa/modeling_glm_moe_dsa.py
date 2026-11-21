@@ -373,7 +373,12 @@ def _train_kv_b_adapters(module):
             continue
         if lin.use_dora.get(name, False) or lin.lora_B[name].bias is not None:
             raise RuntimeError("The absorbed attention only handles plain LoRA adapters on kv_b_proj")
-        adapters.append((lin.lora_A[name].weight, lin.lora_B[name].weight, lin.scaling[name]))
+        a, b = lin.lora_A[name].weight, lin.lora_B[name].weight
+        # under tensor parallelism PEFT shards B like the base weight (rows, Shard(0)) and keeps A whole: this rank's
+        # rows of B are the ones of its heads. The local tensors share the parameters' storage (graphs read them live)
+        a = a.to_local() if hasattr(a, "to_local") else a
+        b = b.to_local() if hasattr(b, "to_local") else b
+        adapters.append((a, b, lin.scaling[name]))
     return adapters
 
 
