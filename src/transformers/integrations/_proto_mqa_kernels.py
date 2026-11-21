@@ -131,7 +131,7 @@ def _paged_mqa_logits_kernel(
 
 def paged_mqa_logits(
     q: torch.Tensor, w: torch.Tensor, keys: torch.Tensor, table: torch.Tensor, req: torch.Tensor,
-    n_visible: torch.Tensor, max_k: int, page: int, block_n: int = 64, num_warps: int = 4,
+    n_visible: torch.Tensor, max_k: int, page: int, block_n: int = 128, num_warps: int = 8,
 ) -> torch.Tensor:
     """The DSA indexer's scores of a decode batch on CB's block table, without gathering the keys:
 
