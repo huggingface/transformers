@@ -241,6 +241,7 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache": cache,
+                "position_ids": position_ids,
             }
             # Create the masks
             causal_mask_mapping = {

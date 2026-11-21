@@ -105,14 +105,6 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
                                     expected = expected.to(dtype)
                                 torch.testing.assert_close(parameter, expected, rtol=0, atol=0)
 
-    @unittest.skip("Afmoe applies key/query norm which doesn't work with packing")
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("Afmoe  applies key/query norm which doesn't work with packing")
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
-
     @unittest.skip("Afmoe has moe, output can be different")
     def test_model_outputs_equivalence(self, **kwargs):
         pass

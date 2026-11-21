@@ -216,6 +216,36 @@ class GraniteMoeHybridModelTest(
         unpadded_custom_inputs = {"attention_mask": None}
         super().test_left_padding_compatibility(unpadded_custom_inputs=unpadded_custom_inputs)
 
+    def test_packed_sequence_with_position_ids(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # Test packed sequences on attention layers where causal masks are constructed
+        config.layer_types = ["full_attention"] * len(config.layer_types)
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            doc_len_a, doc_len_b = 8, 8
+            input_ids_a = torch.randint(1, config.vocab_size, (1, doc_len_a), device=torch_device)
+            input_ids_b = torch.randint(1, config.vocab_size, (1, doc_len_b), device=torch_device)
+            input_ids_packed = torch.cat([input_ids_a, input_ids_b], dim=-1)
+            position_ids_packed = torch.cat(
+                [
+                    torch.arange(doc_len_a, device=torch_device),
+                    torch.arange(doc_len_b, device=torch_device),
+                ]
+            ).unsqueeze(0)
+
+            with torch.no_grad():
+                out_packed = model(input_ids_packed, position_ids=position_ids_packed, use_cache=False)[0][
+                    :, doc_len_a:
+                ]
+                input_ids_a_mod = input_ids_a.clone()
+                input_ids_a_mod[0, 0] = (input_ids_a[0, 0] % (config.vocab_size - 2)) + 1
+                input_ids_packed_mod = torch.cat([input_ids_a_mod, input_ids_b], dim=-1)
+                out_packed_mod = model(input_ids_packed_mod, position_ids=position_ids_packed, use_cache=False)[0][
+                    :, doc_len_a:
+                ]
+
+            torch.testing.assert_close(out_packed, out_packed_mod, atol=1e-5, rtol=1e-5)
+
     @unittest.skip(
         "Bamba requires additionally specifying position_ids, seq_idx, and FlashAttentionKwargs for padding-free training."
     )

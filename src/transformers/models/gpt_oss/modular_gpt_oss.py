@@ -375,6 +375,7 @@ class GptOssModel(MixtralModel):
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "cache": cache,
+                "position_ids": position_ids,
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
