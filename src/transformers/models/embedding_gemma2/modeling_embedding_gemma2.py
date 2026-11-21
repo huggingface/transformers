@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -691,7 +692,7 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
         last_hidden_state = vision_outputs.last_hidden_state
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
-        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        k_squared = math.isqrt(image_position_ids.shape[1] // output_length) ** 2
         vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
         return vision_outputs
 

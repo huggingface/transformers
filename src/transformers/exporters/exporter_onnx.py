@@ -77,6 +77,7 @@ if is_onnxscript_available():
     import onnx_ir
     from onnxscript.function_libs.torch_lib.ops.core import aten_index_put
     from onnxscript.onnx_opset import opset18 as op
+    from onnxscript.onnx_opset import opset23
 
     from .onnxruntime_fusions import fuse_for_onnxruntime
 
@@ -144,13 +145,16 @@ class OnnxExporter(DynamoExporter):
         # A model quantized before export has no ops the fusions match.
         quantizer = config.quantizer
         ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
+        # Opset 23 exports attention, RMS norms and rotary embeddings as single ops. ONNX Runtime's fusions match their
+        # decompositions, and NNCF's `QuantizeLinear` mismatches its zero point at 23.
+        opset_version = config.opset_version or (20 if ort_fusions is not None or quantizer is not None else 23)
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
-        experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
+        experts_implementation = "batched_mm" if ort_fusions is not None and ort_fusions.mixture_of_experts else None
 
         with (
-            patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
             apply_patches("onnx"),
             use_experts_implementation(model, experts_implementation),
+            patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -160,15 +164,15 @@ class OnnxExporter(DynamoExporter):
                 args=(),
                 input_names=inputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
-                custom_translation_table=_ONNX_TRANSLATION_TABLE,
-                opset_version=config.opset_version,
+                custom_translation_table=_onnx_translation_table(opset_version),
+                opset_version=opset_version,
                 optimize=config.optimize,
             )
 
         _name_graph_outputs(onnx_program.model.graph, outputs_names)
         apply_onnx_ir_fixes(onnx_program)
 
-        if ort_fusions:
+        if ort_fusions is not None:
             fuse_for_onnxruntime(onnx_program.model, ort_fusions)
 
         onnx_model = quantize_converted_model(onnx_program.model, sample_inputs, config)
@@ -389,7 +393,7 @@ def _patch_opset13_constant(original):
 
 @register_patch("onnx", "onnxscript.optimizer.optimize_ir")
 def _patch_optimize_ir(original):
-    """Skip constant-folding `Resize` nodes during onnxscript optimization.
+    """Skip constant-folding `Resize` nodes, and the `SlicesSplit` rewrite, during onnxscript optimization.
 
     The optimizer's constant folder evaluates foldable nodes with onnx's pure-Python
     reference implementation. For `Resize` — e.g. the bicubic position-embedding
@@ -398,11 +402,21 @@ def _patch_optimize_ir(original):
     on tiny graphs (~4.5 min per Resize node on the YOLOS test model, vs <1 s for the
     whole rest of the optimization). Keeping the Resize node in the graph costs one
     native ORT kernel launch at inference instead.
+
+    `SlicesSplit` (two `Slice`s into one `Split`) matches every pair of `Slice`s, rescanning the graph for each: a
+    static Qwen3.5 prompt graph, its chunked delta rule unrolled into thousands of `Slice`s, spent 45 of its 47 minutes
+    of export there.
     """
+    import onnxscript.rewriter as rewriter
 
     def patch(model, *args, **kwargs):
         kwargs.setdefault("should_fold", lambda node: False if node.op_type == "Resize" else None)
-        return original(model, *args, **kwargs)
+        rules = rewriter._DEFAULT_REWRITE_RULES
+        rewriter._DEFAULT_REWRITE_RULES = tuple(rule for rule in rules if rule.name != "SlicesSplit")
+        try:
+            return original(model, *args, **kwargs)
+        finally:
+            rewriter._DEFAULT_REWRITE_RULES = rules
 
     return patch
 
@@ -1195,6 +1209,29 @@ def _quantized_decomposed_dequantize_per_channel(
     return op.DequantizeLinear(input, scales, axis=axis)
 
 
+def _aten_scaled_dot_product_attention_23(
+    query, key, value, attn_mask=None, dropout_p: float = 0.0, is_causal: bool = False, scale=None, enable_gqa=False
+):
+    """SDPA as one `Attention` (opset 23). torchlib lowers it the same way but first checks the query's and key's head
+    counts against each other, which fails on a symbolic head axis: `dynamic=True` marks every axis of a cache input
+    dynamic. `Attention` reads both head counts from the shapes when it runs, and SDPA already requires them to match
+    (or, with `enable_gqa`, to divide)."""
+    if dropout_p != 0:
+        raise ValueError("`Attention` has no dropout: export the model in eval mode.")
+    output, _, _, _ = opset23.Attention(query, key, value, attn_mask=attn_mask, scale=scale, is_causal=is_causal)
+    return output
+
+
+def _onnx_translation_table(opset_version: int) -> dict[Any, Any]:
+    """`_ONNX_TRANSLATION_TABLE`, plus the translations to ops of `opset_version` (`Attention` from 23)."""
+    if opset_version < 23:
+        return _ONNX_TRANSLATION_TABLE
+    return {
+        **_ONNX_TRANSLATION_TABLE,
+        torch.ops.aten.scaled_dot_product_attention.default: _aten_scaled_dot_product_attention_23,
+    }
+
+
 _ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
 if is_onnxscript_available():
     _ONNX_TRANSLATION_TABLE.update(
@@ -1273,9 +1310,40 @@ def _fix_ir_constant_gather_nd(graph_like: onnx_ir.Graph) -> None:
         replacement.name = gathered.name
 
 
+def _fix_ir_rotary_embedding_batch(graph_like: onnx_ir.Graph) -> None:
+    """Expand a `RotaryEmbedding`'s cos and sin to its input's batch. onnxscript fuses the rotation into the op (opset
+    23) from cos and sin a model computes once for the batch (batch 1), which torch broadcasts against the input; the
+    op takes them only at the input's batch."""
+    for node in list(graph_like):
+        if node.op_type != "RotaryEmbedding" or node.domain not in ("", "ai.onnx"):
+            continue
+        # With `position_ids`, cos and sin are a cache indexed by position, without a batch axis.
+        if len(node.inputs) > 3 and node.inputs[3] is not None:
+            continue
+        x, cos, sin = node.inputs[:3]
+        if x.shape is not None and cos.shape is not None and sin.shape is not None:
+            if isinstance(x.shape[0], int) and x.shape[0] == cos.shape[0] == sin.shape[0]:
+                continue
+        batch = onnx_ir.node("Shape", [x], {"start": 0, "end": 1})
+        batch.outputs[0].dtype = onnx_ir.DataType.INT64
+        added = [batch]
+        for index, value in ((1, cos), (2, sin)):
+            rest = onnx_ir.node("Shape", [value], {"start": 1})
+            shape = onnx_ir.node("Concat", [batch.outputs[0], rest.outputs[0]], {"axis": 0})
+            expanded = onnx_ir.node("Expand", [value, shape.outputs[0]])
+            # cos and sin share the input's dtype; the fused graph may not record theirs.
+            expanded.outputs[0].dtype = value.dtype or x.dtype
+            for shape_node in (rest, shape):
+                shape_node.outputs[0].dtype = onnx_ir.DataType.INT64
+            added += [rest, shape, expanded]
+            node.replace_input_with(index, expanded.outputs[0])
+        graph_like.insert_before(node, added)
+
+
 _IR_FIXES = [
     _fix_ir_topk_sorted,
     _fix_ir_constant_gather_nd,
+    _fix_ir_rotary_embedding_batch,
 ]
 
 
