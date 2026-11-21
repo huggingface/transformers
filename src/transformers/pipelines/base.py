@@ -20,6 +20,7 @@ import importlib
 import json
 import os
 import pickle
+import string
 import sys
 import traceback
 import types
@@ -383,6 +384,31 @@ class PipelineException(Exception):
 
         self.task = task
         self.model = model
+
+
+def validate_hypothesis_template(hypothesis_template: str) -> None:
+    """
+    Check that `hypothesis_template` only substitutes the label, and raise `ValueError` otherwise.
+
+    The zero-shot pipelines build their hypotheses with `hypothesis_template.format(label)`. Format specs are part of
+    that mini-language, so a width on a caller-supplied template (`"{:>9999999999}"`) allocates a string of that size
+    before the model ever runs. `hypothesis_template` is a request parameter on hosted zero-shot endpoints, so only a
+    bare `{}` or `{0}` is accepted: no format spec, conversion, or attribute or index access.
+    """
+    try:
+        fields = list(string.Formatter().parse(hypothesis_template))
+    except ValueError as e:
+        raise ValueError(f'The provided hypothesis_template "{hypothesis_template}" is not a valid format string: {e}')
+
+    for _, field_name, format_spec, conversion in fields:
+        # `field_name` is None for the trailing literal text of the template, which has no placeholder after it.
+        if field_name is None:
+            continue
+        if field_name not in ("", "0") or format_spec or conversion is not None:
+            raise ValueError(
+                f'The provided hypothesis_template "{hypothesis_template}" uses unsupported formatting syntax. '
+                "Only a bare {} placeholder is allowed, so that the label is inserted as-is."
+            )
 
 
 class ArgumentHandler(ABC):

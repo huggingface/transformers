@@ -8,7 +8,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import Pipeline, build_pipeline_init_args
+from .base import Pipeline, build_pipeline_init_args, validate_hypothesis_template
 
 
 if is_vision_available():
@@ -103,7 +103,8 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):
                 The format used in conjunction with *candidate_labels* to attempt the image classification by
                 replacing the placeholder with the candidate_labels. Pass "{}" if *candidate_labels* are
-                already formatted.
+                already formatted. Only a bare `{}` placeholder is accepted: a format spec such as `"{:>10}"` is
+                rejected, since it would size the hypothesis rather than insert the label.
 
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
@@ -148,6 +149,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         inputs = self.image_processor(images=[image], return_tensors="pt")
         inputs = inputs.to(self.dtype)
         inputs["candidate_labels"] = candidate_labels
+        validate_hypothesis_template(hypothesis_template)
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         tokenizer_default_kwargs = {"padding": True}
         if "siglip" in self.model.config.model_type:
