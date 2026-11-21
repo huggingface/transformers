@@ -90,3 +90,7 @@ Gotchas found on the way: Metal stops a queue past ~64 committed-but-blocked com
 ahead); CPU writes into MPS memory race the caching allocator's queued writes of a previous owner (sync before the first
 CPU write into a new buffer / pool); a device fill of a fresh buffer runs after the host reads it (CPU memset instead).
 | S7 | 2026-11-21 | pass 1 (resident experts) before the wait, misses-only pass 2 (masked kernels), deferred table publication; wait op no longer declares the pool mutated (compile copied the whole pool around it per layer) | **37.0 / 38.5 / 40.2 / 40.7** (skew 0.6); 42.0 (skew 1.5, ~no misses) | exact (fp32 test); parallel `preadv` of misses tried: 34.5-35.7 (reader threads compete), reverted |
+| S8 | 2026-11-21 | the host reads the slots pass 1 actually gathered (published with the routing), so installs publish at once (no deferral); next-layer guess published for read-ahead (off at lookahead 0) | **42.7 / 42.6 / 42.5** (skew 0.6, 3 runs, GPU idle) | exact: fp32 test; bf16 synthetic tokens match the host-sync path up to the same summation-order divergence (token 17); decode misses 0.3-0.4/token |
+
+Note: another app (a browser tab) using ~65-70% of the GPU dropped the resident reference from 48.1 to ~38 tok/s and made
+runs 32-41 tok/s; check `ioreg -r -c IOAccelerator | grep "Device Utilization"` is near 0 before benchmarking.

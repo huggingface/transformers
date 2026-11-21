@@ -71,29 +71,24 @@ bool spin_until_landed(int64_t address, int64_t n, int64_t timeout_us) {
   return true;
 }
 
-// The hit path of a streamed layer, GIL released: wait for its routing (`n` int32 at `routes`, -1 = not landed), look
-// every expert up in the slot table (int64, `sentinel` = not resident). All resident: stamp their slots' last use,
-// reset the routing to -1 and signal the event (returns 1). A miss: returns 0 and leaves it to the caller. Timeout: -1;
-// an expert id out of range: -2.
-int64_t resolve_hits(int64_t routes, int64_t n, int64_t table, int64_t num_experts, int64_t sentinel, int64_t stamps,
-                     int64_t stamp, int64_t handle, int64_t counter, int64_t timeout_us) {
+// The hit path of a streamed layer, GIL released: wait until its [routing (n) | slots pass 1 read (n) | guess (g)]
+// block landed (int32, -1 = not landed). If no slot is `sentinel` (every expert pass 1 needed was resident): stamp the
+// slots' last use and signal the event (returns 1); the caller still reads the block, then resets it. A miss: 0.
+// Timeout: -1.
+int64_t resolve_hits(int64_t block, int64_t n, int64_t g, int64_t sentinel, int64_t stamps, int64_t stamp,
+                     int64_t handle, int64_t counter, int64_t timeout_us) {
   pybind11::gil_scoped_release release;
-  volatile int32_t* r = (volatile int32_t*)routes;
-  const int64_t* t = (const int64_t*)table;
+  volatile int32_t* b = (volatile int32_t*)block;
   int64_t* st = (int64_t*)stamps;
   auto start = std::chrono::steady_clock::now();
-  for (int64_t i = 0; i < n;) {
-    if (r[i] != -1) { ++i; continue; }
+  for (int64_t i = 0; i < 2 * n + g;) {
+    if (b[i] != -1) { ++i; continue; }
     if (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count() > timeout_us)
       return -1;
   }
-  for (int64_t i = 0; i < n; ++i) {
-    int32_t e = r[i];
-    if (e < 0 || e >= num_experts) return -2;
-    if (t[e] == sentinel) return 0;
-  }
-  for (int64_t i = 0; i < n; ++i) st[t[r[i]]] = stamp;
-  for (int64_t i = 0; i < n; ++i) r[i] = -1;
+  for (int64_t i = n; i < 2 * n; ++i)
+    if (b[i] == sentinel) return 0;
+  for (int64_t i = n; i < 2 * n; ++i) st[b[i]] = stamp;
   events[handle].signaledValue = (uint64_t)counter;
   return 1;
 }

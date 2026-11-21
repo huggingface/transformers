@@ -544,7 +544,7 @@ class _MPSHostRouter:
             int, dict[str, float]
         ] = {}  # debug: per job, when it was routed / waited / picked up / landed
         self.spin_seconds = self.work_seconds = 0.0  # host thread: waiting for routings / resolving them
-        self.jobs_done = 0
+        self.jobs_done = self.ahead_reads = 0
         self.event = ext.event_new()
         self.counter = 0
         self.jobs = queue.SimpleQueue()
@@ -579,16 +579,26 @@ class _MPSHostRouter:
                 row_bytes = (info["data_offsets"][1] - info["data_offsets"][0]) // rows
                 self.layout[(layer, param)] = (self.files[path], start + info["data_offsets"][0], row_bytes)
 
-    def route(self, layer, top_k_index):
-        """Issue side, before pass 1: copy the routing into the layer's shared buffer and queue the job (no wait)."""
-        n = top_k_index.numel()
+    def guess(self, layer, hidden_states, top_k_index):
+        """The next streamed layer's experts as its router would pick them on this layer's input (decode only; an
+        empty tensor otherwise): what the host reads ahead."""
+        ahead = self.store.next_layers(layer)
+        router = self.store.routers.get(ahead[0]) if ahead else None
+        if router is None or top_k_index.shape[0] != 1:
+            return top_k_index.new_empty(0)
+        return _route(router, hidden_states, top_k_index.shape[-1]).reshape(-1).to(top_k_index.dtype)
+
+    def route(self, layer, top_k_index, slots, guess):
+        """Issue side, before pass 1: one copy of [routing | the slots pass 1 reads | next-layer guess] into the
+        layer's shared buffer (-1 = not landed), then queue the job (no wait)."""
+        n, g = top_k_index.numel(), guess.numel()
         buffer = self.buffers.get(layer)
-        if buffer is None or buffer.numel() < n:  # first call, or a longer prompt
-            buffer = self.buffers[layer] = self._host_written(torch.empty(max(n, 1 << 16), dtype=torch.int32))
-            ctypes.memset(self.ext.cpu_address(buffer), 0xFF, buffer.numel() * 4)  # -1: not landed
+        if buffer is None or buffer.numel() < 2 * n + g:  # first call, or a longer prompt
+            buffer = self.buffers[layer] = self._host_written(torch.empty(max(2 * n + g, 1 << 16), dtype=torch.int32))
+            ctypes.memset(self.ext.cpu_address(buffer), 0xFF, buffer.numel() * 4)
         if (layer, self.store.params[layer][0]) not in self.layout:
             self._locate(layer)
-        buffer[:n].copy_(top_k_index.reshape(-1))
+        buffer[: 2 * n + g].copy_(torch.cat([top_k_index.reshape(-1), slots.reshape(-1), guess]))
         self.counter += 1
         # Each wait commits a command buffer at most every `COMMIT_EVERY`: past ~64 in flight Metal stops the queue,
         # so the host stays at most `MAX_AHEAD` layers ahead of the device
@@ -596,8 +606,7 @@ class _MPSHostRouter:
             if self.error is not None:
                 break
             time.sleep(0)
-        self.jobs.put((layer, n, self.counter, self.ext.cpu_address(buffer)))
-        self.times.setdefault(self.counter, {})["route"] = time.perf_counter()
+        self.jobs.put((layer, n, g, self.counter, self.ext.cpu_address(buffer)))
         self.ext.flush()  # the copy's writes reach the host at its encoder's end: end it now, before pass 1
         if self.error is not None:
             raise RuntimeError("experts offload host thread failed") from self.error
@@ -653,70 +662,85 @@ class _MPSHostRouter:
         pool.dirty.add(key[0])
         return slot
 
-    def _publish_deferred(self):
-        """The main slot tables of the layers resolved before (their pass 1 and 2 are done once a later routing
-        landed): their new experts become visible to future calls, their pass-2 entries are reset."""
-        store = self.store
+    def _reset_pass2(self, exclude):
+        """Pass-2 entries of earlier calls back to "not a miss" (their pass 2 ran: a later routing landed)."""
+        keep = []
         for name, experts in self.deferred:
-            pool = store.pool_of[name]
-            entries = pool.tables[name]
-            ctypes.memmove(self.ext.cpu_address(store.device_tables[name]), entries.data_ptr(), entries.nbytes)
-            pass2 = (ctypes.c_int64 * entries.numel()).from_address(self.ext.cpu_address(store.pass2_tables[name]))
+            if name == exclude:
+                keep.append((name, experts))
+                continue
+            pool = self.store.pool_of[name]
+            pass2 = (ctypes.c_int64 * pool.tables[name].numel()).from_address(
+                self.ext.cpu_address(self.store.pass2_tables[name])
+            )
             for e in experts:
                 pass2[e] = pool.num_slots
-        self.deferred.clear()
+        self.deferred = keep
 
-    def _resolve(self, layer, n, counter, address):
+    def _install(self, pool, layer, e, keep):
+        """Read expert `e` of `layer` into a slot and publish it (data first, then the table entry)."""
+        slot = self._evict_into(pool, (layer, e), keep)
+        for param in pool.layout:
+            fd, base, row_bytes = self.layout[(layer, param)]
+            if not _read_into((fd, self._slot_address(pool, param, slot), row_bytes, base + e * row_bytes)):
+                raise OSError(f"short read of expert {e} of {layer}")
+        self.store.reads += 1
+        self._publish(pool)
+        return slot
+
+    def _publish(self, pool):
+        """The changed slot tables (installs, and the entries of evicted experts) to the device. Safe at any time: a
+        call's pass 1 reports the slots it read, so the host always knows what it missed."""
+        for name in pool.dirty:
+            entries = pool.tables[name]
+            ctypes.memmove(self.ext.cpu_address(self.store.device_tables[name]), entries.data_ptr(), entries.nbytes)
+        pool.dirty.clear()
+
+    def _resolve(self, layer, n, g, counter, address):
         store, pool = self.store, self.store.pool_of[layer]
         stamps = self._stamps(pool)
-        table = store.device_tables[layer]
         start = time.perf_counter()
-        # Hit path in C++ (no GIL): routing landed, all resident in the table pass 1 reads -> stamps, reset, signal
+        # Hit path in C++ (no GIL): all landed, every slot pass 1 read is resident -> stamps, reset, signal
         status = self.ext.resolve_hits(
-            address, n, self.ext.cpu_address(table), table.numel(), pool.num_slots, stamps.data_ptr(), counter,
-            self.event, counter, 10_000_000,
-        )  # fmt: skip
+            address, n, g, pool.num_slots, stamps.data_ptr(), counter, self.event, counter, 10_000_000
+        )
         if status == -1:
             raise TimeoutError(f"routing of {layer} never landed")
-        if status == -2:
-            raise ValueError(f"{layer}: routing out of range: {list((ctypes.c_int32 * n).from_address(address))[:20]}")
         landed = time.perf_counter()
-        self.times.setdefault(counter, {}).update(pickup=start, landed=landed)
         self.spin_seconds += landed - start
-        if status == 1:
-            self._publish_deferred()
-            store.hits += n
-            self.jobs_done += 1
-            return
-        view = (ctypes.c_int32 * n).from_address(address)
-        experts = set(view[:])
+        view = (ctypes.c_int32 * (2 * n + g)).from_address(address)
+        values = view[:]
+        experts, slots, guesses = values[:n], values[n : 2 * n], values[2 * n :]
         keep = {(layer, e) for e in experts}
-        device_table = (ctypes.c_int64 * table.numel()).from_address(self.ext.cpu_address(table))
-        # Misses as pass 1 sees them (the device table), even when the host already installed the expert
-        misses = [e for e in experts if device_table[e] == pool.num_slots]
-        pass2 = (ctypes.c_int64 * table.numel()).from_address(self.ext.cpu_address(store.pass2_tables[layer]))
-        for e in misses:
-            slot = pool.cache.get((layer, e))
-            if slot is None:  # not installed yet (an install of an earlier call is only published later)
-                slot = self._evict_into(pool, (layer, e), keep)
-                for param in pool.layout:
-                    fd, base, row_bytes = self.layout[(layer, param)]
-                    if not _read_into((fd, self._slot_address(pool, param, slot), row_bytes, base + e * row_bytes)):
-                        raise OSError(f"short read of expert {e} of {layer}")
-                store.reads += 1
-            pass2[e] = slot
-        # Evictions of other layers' experts: published now (those layers are not running); this layer's table later
-        for name in pool.dirty - {layer}:
-            entries = pool.tables[name]
-            ctypes.memmove(self.ext.cpu_address(store.device_tables[name]), entries.data_ptr(), entries.nbytes)
-        pool.dirty.clear()
-        stamps[[pool.cache[(layer, e)] for e in experts]] = counter
-        ctypes.memset(address, 0xFF, n * 4)
-        self.ext.cpu_signal(self.event, counter)
-        self._publish_deferred()
-        self.deferred.append((layer, misses))
-        store.hits += len(experts) - len(misses)
-        store.misses += len(misses)
+        if status == 1:
+            ctypes.memset(address, 0xFF, (2 * n + g) * 4)
+            store.hits += n
+        else:
+            misses = sorted({e for e, slot in zip(experts, slots) if slot == pool.num_slots})
+            pass2 = (ctypes.c_int64 * pool.tables[layer].numel()).from_address(
+                self.ext.cpu_address(store.pass2_tables[layer])
+            )
+            for e in misses:
+                slot = pool.cache.get((layer, e))  # installed since pass 1 gathered (read ahead): reuse it
+                pass2[e] = self._install(pool, layer, e, keep) if slot is None else slot
+            stamps[[pool.cache[(layer, e)] for e in set(experts)]] = counter
+            ctypes.memset(address, 0xFF, (2 * n + g) * 4)
+            self.ext.cpu_signal(self.event, counter)
+            self.deferred.append((layer, misses))
+            store.hits += n - len(misses)
+            store.misses += len(misses)
+        # Off the critical path: reset the pass-2 entries of earlier calls, read the next layer's guess ahead
+        self._reset_pass2(exclude=layer)
+        ahead = store.next_layers(layer)
+        if guesses and ahead:
+            nxt = ahead[0]
+            npool = store.pool_of[nxt]
+            self._stamps(npool)
+            wanted = {(nxt, e) for e in guesses}
+            for e in dict.fromkeys(guesses):
+                if (nxt, e) not in npool.cache:
+                    self._install(npool, nxt, e, keep | wanted)
+                    self.ahead_reads += 1
         self.work_seconds += time.perf_counter() - landed
         self.jobs_done += 1
 
@@ -744,18 +768,17 @@ class ExpertsOffloadLayer(TensorParallelLayer):
             if not hasattr(module, "offload_table"):  # first call only: no graph break once set up
                 setup(name)
             if store.mps_router is not None:
-                # MPS: pass 1 (resident experts) runs while a host thread checks the routing and installs misses; the
-                # device then waits (usually already signalled) and pass 2 adds the misses' routes only
-                torch.ops.transformers.experts_offload_mps_route(handle, top_k_index, [module.offload_table])
-                output = _run_pool(
-                    module, original_forward, hidden_states, module.offload_table[top_k_index], top_k_weights, kwargs
-                )
+                # MPS: pass 1 (resident experts) runs while a host thread reads what it used (the gathered slots) and
+                # installs the misses; the device then waits (usually already signalled) and pass 2 adds the misses.
+                # The host also gets a guess of the next layer's experts and reads them ahead.
+                slots = module.offload_table[top_k_index]
+                guess = store.mps_router.guess(name, hidden_states, top_k_index)
+                torch.ops.transformers.experts_offload_mps_route(handle, top_k_index, slots, guess)
+                output = _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwargs)
                 # Only the small pass-2 table is declared mutated: it orders pass 2 after the wait. The banks the host
                 # writes are not (compile would copy a mutated input around the op: the whole pool, per layer)
                 torch.ops.transformers.experts_offload_mps_wait(handle, [module.offload_pass2])
                 slots = module.offload_pass2[top_k_index]
-                if os.environ.get("TRANSFORMERS_DEBUG_SKIP_PASS2"):
-                    return output
                 if top_k_index.shape[0] == 1 and hasattr(module, "masked_decode"):
                     return output + module.masked_decode(hidden_states, slots, top_k_weights)
                 return output + _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwargs)
@@ -804,15 +827,17 @@ def _run_pool(module, original_forward, hidden_states, slots, top_k_weights, kwa
         module.num_experts = num_slots
 
 
-@torch.library.custom_op("transformers::experts_offload_mps_route", mutates_args=("state",))
-def experts_offload_mps_route(handle: int, top_k_index: torch.Tensor, state: list[torch.Tensor]) -> None:
-    """MPS: queue the routing for the host thread, before pass 1 (`state` orders it before the table read)."""
+@torch.library.custom_op("transformers::experts_offload_mps_route", mutates_args=())
+def experts_offload_mps_route(
+    handle: int, top_k_index: torch.Tensor, slots: torch.Tensor, guess: torch.Tensor
+) -> None:
+    """MPS: publish the routing, the slots pass 1 reads and the next layer's guess to the host thread."""
     module = _LAYERS[handle]
-    module.offload_store.mps_router.route(module.offload_name, top_k_index)
+    module.offload_store.mps_router.route(module.offload_name, top_k_index, slots, guess)
 
 
 @experts_offload_mps_route.register_fake
-def _(handle, top_k_index, state) -> None:
+def _(handle, top_k_index, slots, guess) -> None:
     return None
 
 
