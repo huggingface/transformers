@@ -22,7 +22,7 @@ from ...distributed.parallel_utils import with_fast_tp_all_reduce
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
-from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
+from .input_outputs import _CB_MTP_BT, _CB_MTP_QUERY, ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import RequestState, RequestStatus, create_warmup_future_states
 from .utils import (
     accelerator_graph_capture_context,
@@ -125,6 +125,13 @@ class ModelRunner:
             max_kv_read = pad_to_interval(
                 max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.max_tokens_read
             )
+        # gap3-mtp prototype: every request of a decode batch brings `_CB_MTP_QUERY` tokens, the requests are padded
+        elif _CB_MTP_BT:
+            num_requests = num_q_tokens // _CB_MTP_QUERY
+            num_q_tokens = _CB_MTP_QUERY * pad_to_pow2(num_requests, self.cb_config.max_requests_per_batch)
+            max_kv_read = 0
+            if num_q_tokens > max_batch_tokens:  # host-side bound check: the static inputs hold max_batch_tokens
+                raise RuntimeError(f"CB_MTP block table path: {num_q_tokens} query tokens > {max_batch_tokens}")
         # For decode fast path batches, we pad using powers of 2 and use no KV
         else:
             num_q_tokens = pad_to_pow2(num_q_tokens, self.cb_config.max_requests_per_batch)
@@ -417,7 +424,7 @@ class ModelRunner:
         if use_decode_fast_path:
             num_requests = num_q_tokens
             status = RequestStatus.DECODING
-            num_q_tokens = 1
+            num_q_tokens = _CB_MTP_QUERY if _CB_MTP_BT else 1  # gap3-mtp prototype: the last token and the draft
             max_kv_read = self.cb_config.page_size
             logger.debug(f"Warming up decode fast path for {num_requests = }.")
         else:
@@ -427,6 +434,9 @@ class ModelRunner:
         # To limit the compute cost of prefill warmup, we cap the past length to the page size
         past_length = min(max_kv_read, self.cb_config.page_size)
         future_states = create_warmup_future_states(num_requests, status, num_q_tokens, past_length, self.cache)
+        if use_decode_fast_path and _CB_MTP_BT:
+            for fs in future_states:
+                fs.state.mtp_has_draft = True  # gap3-mtp prototype: the decode graphs verify a draft
         if not future_states:
             logger.warning(
                 f"Failed to warm up: no blocks allocated for {num_requests = }, {num_q_tokens = }, {past_length = }."

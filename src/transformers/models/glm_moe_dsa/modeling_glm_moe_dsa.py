@@ -581,10 +581,46 @@ def _proto_block_table_row_state(table, cu_k, max_k, page, last_safe_row, write_
     return write_rows, rows_all, visible
 
 
+# gap3-mtp prototype (bench only): with CB_MTP=spec a block-table decode batch holds 1 + k query tokens per request (the
+# request's last token, then its drafts), so the rows are computed per query token instead of per request
+_CB_MTP_SPEC = _os.environ.get("CB_MTP", "") == "spec"
+
+
+def _proto_block_table_token_state(table, cu_q, cu_k, max_k, page, last_safe_row, write_trash_index, num_tokens):
+    """gap3-mtp prototype: `_proto_block_table_row_state` for a decode batch whose requests bring several query tokens
+    (`cu_q`). Query token `t` of request `r` sits at offset `seqlen_k[r] - q_len[r] + (t - cu_q[r])` of its request; it
+    writes its own row and sees the request's tokens up to itself (causal). Returns the write row of every query token
+    ([M]), the rows of the first `max_k` tokens of its request ([M, max_k]) and which of them it sees. Tokens past the
+    last request (padding) write to the trash row and see nothing. Every row is clamped to [0, last_safe_row]."""
+    table = table.long()  # [R, max_blocks], -1 for unused entries
+    cu_q, cu_k = cu_q.long(), cu_k.long()  # [R + 1]
+    num_requests = table.shape[0]
+    tok = torch.arange(num_tokens, device=table.device)
+    req = torch.searchsorted(cu_q[1:].contiguous(), tok, right=True)  # [M], num_requests past the last request
+    real = req < num_requests
+    req = req.clamp(max=num_requests - 1)
+    seqlen_k = cu_k[req + 1] - cu_k[req]
+    offset = seqlen_k - (cu_q[req + 1] - cu_q[req]) + (tok - cu_q[req])  # position of the token in its request
+    real = real & (seqlen_k > 0) & (offset >= 0)
+    offset = offset.clamp(min=0)
+    request_table = table[req]  # [M, max_blocks]
+    new_page = request_table.gather(1, (offset // page).clamp(max=table.shape[1] - 1)[:, None]).squeeze(1)
+    write_rows = torch.where(real & (new_page >= 0), new_page * page + offset % page, write_trash_index).clamp(
+        0, last_safe_row
+    )
+    offsets = torch.arange(max_k, device=table.device)
+    pages = request_table[:, (offsets // page).clamp(max=table.shape[1] - 1)]  # [M, max_k]
+    n_visible = torch.where(real, offset + 1, 0)
+    visible = (offsets[None] < n_visible[:, None]) & (pages >= 0)
+    rows_all = torch.where(visible, pages * page + offsets % page, 0).clamp(0, last_safe_row)
+    return write_rows, rows_all, visible
+
+
 def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_states, q_resid, position_embeddings,
                             prev_topk_indices, kwargs):
     """PROTOTYPE of the engine work package: a decode batch (one query token per request, token j belongs to request
-    j) served from CB's block table. Writes the new latents (and indexer keys), and returns the physical rows of the
+    j; with CB_MTP=spec, 1 + k query tokens per request, see `_proto_block_table_token_state`) served from CB's block
+    table. Writes the new latents (and indexer keys), and returns the physical rows of the
     top-k tokens of each query, -1 for empty slots. Neither the read index nor the mask is used."""
     page = allocator.tokens_per_page
     kv_latent_cache, rotated_key_cache = allocator._latent_token_views[module.layer_idx]
@@ -593,14 +629,26 @@ def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_stat
         # the smallest layer view is the one of the group's last layer, which starts `tokens_per_block - page` rows
         # later than the first
         last_safe_row = allocator.cache_tensor.shape[0] - allocator.tokens_per_block + page - 1
-        state = _proto_block_table_row_state(
-            kwargs["block_table"][allocator.index],
-            kwargs["cu_seq_lens_k"][allocator.layer_type],
-            kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
-            page,
-            last_safe_row,
-            allocator.write_trash_index,
-        )
+        if _CB_MTP_SPEC:  # gap3-mtp prototype: 1 + k query tokens per request
+            state = _proto_block_table_token_state(
+                kwargs["block_table"][allocator.index],
+                kwargs["cu_seq_lens_q"],
+                kwargs["cu_seq_lens_k"][allocator.layer_type],
+                kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
+                page,
+                last_safe_row,
+                allocator.write_trash_index,
+                hidden_states.shape[1],
+            )
+        else:
+            state = _proto_block_table_row_state(
+                kwargs["block_table"][allocator.index],
+                kwargs["cu_seq_lens_k"][allocator.layer_type],
+                kwargs["max_length_k"][allocator.layer_type],  # static bucket of the longest request
+                page,
+                last_safe_row,
+                allocator.write_trash_index,
+            )
         cache._proto_bt_state = state
     write_rows, rows_all, visible = state
     kv_latent_cache.index_copy_(0, write_rows, k_pass.reshape(-1, module.kv_lora_rank))
