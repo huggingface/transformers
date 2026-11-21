@@ -21,7 +21,7 @@ from inspect import isfunction, ismethod
 from typing import Any
 
 from ..chat_template_utils import get_json_schema
-from .content_parsers import STREAMABLE_PARSERS, process_field
+from .content_parsers import STREAMABLE_PARSERS, TYPED_STRUCTURED_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
 
 
@@ -377,7 +377,7 @@ class ResponseParser:
             return
         field = self._spec.fields[self._current]
         value = process_field(self._body, field, self._captures)
-        if self._tool_params:
+        if self._tool_params and field.content not in TYPED_STRUCTURED_PARSERS:
             value = self._coerce_tool_calls(value)
         if field.join is not None:
             if not isinstance(value, str):
