@@ -173,8 +173,8 @@ class ExpertsOffloadStore:
         self.device = torch.device(device)
         if self.device.type == "cuda" and self.device.index is None:
             self.device = torch.device("cuda", torch.cuda.current_device())
-        # CUDA: safetensors' prefetch loader (chunked parallel reads into a pinned pool, async copies to the device).
-        # MPS (unified memory): the loader's `pread` slices land on the device directly.
+        # CUDA: safetensors' `Reader` (reads into a pinned pool, async copies to the device), its prefetch loader
+        # before it had one. MPS (unified memory): the reads land in the slots directly.
         if self.device.type == "cuda" and not hasattr(safe_open, "prefetch"):
             raise ImportError(
                 "Streaming experts on CUDA needs safetensors' prefetch loader: `pip install 'safetensors>=0.9'`"
@@ -189,6 +189,7 @@ class ExpertsOffloadStore:
         self.row_readers: dict[str, _RowReader] = {}
         self.key_files: dict[str, str] | None = None  # checkpoint key -> file, set by the loader
         self.handles = {}  # file -> safe_open handle of the prefetch loaders
+        self.reader = None  # safetensors' `Reader` over the checkpoint files (CUDA), opened at the first read
         self.order: list[str] = []
         self.readers: dict[str, list] = {}  # module name -> [read(expert) -> {param: tensor}]
         self.pools: dict[str, _Pool] = {}
@@ -307,14 +308,14 @@ class ExpertsOffloadStore:
 
     def fetch(self, layer, experts):
         """Start reading the `experts` of `layer` that are neither resident nor already being read; returns the
-        Futures of all of `experts` that are not resident. On CUDA one prefetch plan covers the batch."""
+        Futures of all of `experts` that are not resident. On CUDA the batch is read together."""
         cache = self.pool_of[layer].cache
         new = [e for e in dict.fromkeys(experts) if (layer, e) not in self.pending and (layer, e) not in cache]
         if self.device.type == "cuda" and new:
             futures = {e: Future() for e in new}
             self.pending.update({(layer, e): future for e, future in futures.items()})
             self.pending_experts[layer].update(futures)
-            self.executor.submit(self._prefetch_batch, layer, futures)
+            self.executor.submit(self._read_batch if _reader_supported() else self._prefetch_batch, layer, futures)
         else:
             for e in new:
                 self.pending[(layer, e)] = self.executor.submit(self._read, layer, e)
@@ -325,6 +326,38 @@ class ExpertsOffloadStore:
         if file not in self.handles:
             self.handles[file] = safe_open(file, framework="pt")
         return self.handles[file]
+
+    def _read_batch(self, layer, futures):
+        """Read a batch of experts with safetensors' `Reader` (its threads, GIL released), each row straight into its
+        own device tensor, and hand each expert out once all its params have landed."""
+        from ..modeling_utils import str_to_torch_dtype
+
+        try:
+            self._mark("batch_start", layer, experts=len(futures))
+            if self.reader is None:
+                from safetensors import Reader
+
+                self.reader = Reader(sorted(set(self.key_files.values())), threads=16)
+            started = {}
+            for expert in futures:
+                parts = started[expert] = []
+                for reader in self.readers[layer]:
+                    for param, bank, rows, dtype, key in reader.sources(expert):
+                        out = torch.empty(
+                            (1, *bank.get_shape()[1:]), dtype=str_to_torch_dtype[bank.get_dtype()], device=self.device
+                        )
+                        parts.append((param, dtype, out, self.reader.read(key, rows, out)))
+            for expert, parts in started.items():
+                for *_, request in parts:
+                    request.wait()
+                if not futures[expert].cancelled():
+                    self.reads += 1
+                    self._mark("take_end", layer, expert=expert, bytes=sum(out.nbytes for _, _, out, _ in parts))
+                    futures[expert].set_result({param: out[0].to(dtype) for param, dtype, out, _ in parts})
+        except BaseException as error:
+            for future in futures.values():
+                if not future.done():
+                    future.set_exception(error)
 
     def _prefetch_batch(self, layer, futures):
         """Read a batch of experts with one prefetch loader per file (a list of row slices per bank) and hand each
@@ -519,17 +552,11 @@ class ExpertsOffloadStore:
         return self.order[index + 1 : index + 1 + self.lookahead]
 
 
-def _prefetch_to_mps_supported() -> bool:
-    """Whether safetensors' `prefetch` can read into existing MPS tensors (`device="mps"`, `out=`)."""
-    import inspect
+def _reader_supported() -> bool:
+    """Whether safetensors has its `Reader` (>= 0.9): reads into existing tensors by its own threads, GIL released."""
+    import safetensors
 
-    prefetch = getattr(safe_open, "prefetch", None)
-    if prefetch is None:
-        return False
-    try:
-        return "out" in inspect.signature(prefetch).parameters  # PyO3 methods expose their text signature
-    except (TypeError, ValueError):
-        return False
+    return hasattr(safetensors, "Reader")
 
 
 def _read_into(job) -> bool:
@@ -551,9 +578,8 @@ class _MPSHostRouter:
         self.store, self.ext = store, ext
         self.slot_bases = {}  # (pool, param) -> (CPU address of slot 0, slot bytes)
         self.keys: dict[tuple[str, str], tuple[str, str]] = {}  # (layer, param) -> (file, checkpoint key)
-        self.handles = {}  # file -> safe_open handle reading misses straight into the slots
-        # safetensors >= 0.9 with `prefetch(device="mps", out=...)` (safetensors#996): reads by its own threads
-        self.prefetch_to_mps = _prefetch_to_mps_supported()
+        # safetensors >= 0.9: its `Reader` over the checkpoint files, opened at the first miss; `preadv` without it
+        self.reader = None
         self.stamps: dict[int, torch.Tensor] = {}  # pool -> last use per slot (job counter), written by the hit path
         self.owners: dict[int, dict[int, tuple[str, int]]] = {}  # pool -> slot -> (layer, expert)
         self.deferred: list[tuple[str, list[int]]] = []  # resolved calls whose pass-2 entries reset later
@@ -692,20 +718,23 @@ class _MPSHostRouter:
         self.deferred = keep
 
     def _install_many(self, pool, layer, experts, keep):
-        """Read `experts` of `layer` into slots and publish them (data first, then the table entries): one
-        safetensors `prefetch` per bank straight into the slots (GIL released), else `preadv` per row."""
+        """Read `experts` of `layer` into slots and publish them (data first, then the table entries): by
+        safetensors' `Reader` straight into the slots (its threads, GIL released), else `preadv` per row."""
         slots = {e: self._evict_into(pool, (layer, e), keep) for e in experts}
-        for param in pool.layout:
-            if self.prefetch_to_mps:
-                path, key = self.keys[(layer, param)]
-                handle = self.handles.get(path)
-                if handle is None:
-                    handle = self.handles[path] = safe_open(path, framework="pt", device="mps")
+        if _reader_supported():
+            if self.reader is None:
+                from safetensors import Reader
+
+                self.reader = Reader(sorted(set(self.store.key_files.values())), threads=8)
+            requests = []
+            for param in pool.layout:
+                _, key = self.keys[(layer, param)]
                 bank = pool.banks[param]
-                rows = [slice(e, e + 1) for e in experts]
-                out = [bank[slots[e] : slots[e] + 1] for e in experts]
-                handle.prefetch({key: rows}, device="mps", threads=8, out={key: out}).take(key)
-            else:
+                requests += [self.reader.read(key, slice(e, e + 1), bank[slots[e] : slots[e] + 1]) for e in experts]
+            for request in requests:
+                request.wait()
+        else:
+            for param in pool.layout:
                 fd, base, row_bytes = self.layout[(layer, param)]
                 for e in experts:
                     if not _read_into(
