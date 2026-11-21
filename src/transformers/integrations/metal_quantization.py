@@ -155,7 +155,8 @@ class MetalLinear(nn.Linear):
             # faster in the model: Qwen3.8 synthetic 46.6 -> 47.9 tok/s on M3 Max)
             from .metal_qmv import qmv4
 
-            output = qmv4(input, self.weight, self.scales, self.qbiases, self.group_size)
+            scales, biases = self.scales.to(input.dtype), self.qbiases.to(input.dtype)  # no-op when already alike
+            output = qmv4(input, self.weight, scales, biases, self.group_size)
             return output if self.bias is None else output + self.bias
 
         kernel = _get_metal_kernel()
@@ -246,7 +247,7 @@ class MetalExperts(nn.Module):
             from .metal_qmv import experts_down_sum
 
             act = self._apply_gate(self._qmm(hidden_states.expand(top_k, -1), "gate_up_proj", ids, False))
-            down = (self.down_proj, self.down_proj_scales, self.down_proj_qbiases)
+            down = (self.down_proj, self.down_proj_scales.to(act.dtype), self.down_proj_qbiases.to(act.dtype))
             return experts_down_sum(act.contiguous(), *down, ids.contiguous(), weights.float(), self.group_size)
         if num_tokens == 1:
             # One token: every route reads the same row, and the routes reduce with a weighted sum (no scatter)

@@ -62,3 +62,12 @@ Measured bandwidth: 250 GB/s read (`x.sum()`), so 4-bit single-token decode tops
 
 Stub ablations of Q10 (24.15 ms): experts 6.81 ms, linear_attn proj 6.64, hyper-connections 3.08, self_attn+indexer 2.91,
 lm_head 1.82, shared expert 1.14, rest 3.46.
+| Q14 | 2026-11-21 | bf16 recurrent state (float32 compute, one rounding per token: 5.5e-3 rel. error, flat over 2048 tokens) | 46.6 | 21.8 | half the state traffic |
+| Q15 | 2026-11-21 | every batch-1 4-bit linear through `qmv4` (large ones too) | **48.1** | 21.2 | MLX at par alone, slower in the model |
+| Q16 | 2026-11-21 | tried: eager attention instead of sdpa / own gathered gate-up / 64-lane expert down / fused hyper-connection kernels | 42.3 / 46.9 / 48.1 / 47.6 | | kept only the 64-lane down kernel (239 vs 192 GB/s alone, neutral in the model) |
+
+Fine stub ablation of Q15 (`diag_qwen38_ablate_fine.py`, 20.80 ms): linear_attn in_proj 3.56 (at peak), experts gate/up 3.66
+(241 GB/s), experts down ~2.95 (150 GB/s; its stub also drops gate/up: 6.61 measured), linear_attn out_proj 1.77, lm_head 1.60
+(250 GB/s), hyper up 1.58, hyper down+inject 1.47 (130 GB/s), attention qkv+indexer 1.27, sdpa 0.98, shared expert 0.63+0.49,
+gated delta rule 0.53, conv 0.23. Per-dispatch Metal attribution is not available here: GPU counters are a time series
+(default set: RT unit) and `torch.mps.profiler(wait_until_completed)` does not sync custom / hub Metal kernels.

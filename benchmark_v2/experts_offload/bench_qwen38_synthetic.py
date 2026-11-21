@@ -74,6 +74,8 @@ def build(num_experts=64):
             module.__init__(module.config)
             module.to("mps")
     assert not any(t.is_meta for t in (*model.parameters(), *model.buffers()))
+    if os.environ.get("ATTN"):
+        model.set_attn_implementation(os.environ["ATTN"])
     if "--no-fuse" not in sys.argv:
         print(f"fused {fuse_sibling_linears(model)} sibling projection groups", flush=True)
     print(f"loaded {path}, resident {torch.mps.current_allocated_memory() / 2**30:.1f} GiB", flush=True)

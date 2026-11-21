@@ -46,42 +46,48 @@ template [[host_name("qmv4_" #T "_" #GS "_" #L)]] kernel void qmv4<T, GS, L>(dev
 #define QMV_ALL(L) QMV(float, 32, L) QMV(half, 32, L) QMV(bfloat, 32, L) QMV(float, 64, L) QMV(half, 64, L) QMV(bfloat, 64, L)
 QMV_ALL(16) QMV_ALL(32)
 
-// Experts decode, down projection + routing: y[h] = sum_r wt[r] * (down[e_r, h] . act[r]). One simdgroup per row h,
-// lanes stride over the (route, uint4 block of 32 inputs) pairs: the rows are short (I inputs), the routes fill lanes.
+// Experts decode, down projection + routing: y[h] = sum_r wt[r] * (down[e_r, h] . act[r]). Two simdgroups (64 lanes)
+// per row h stride over the (route, uint4 block of 32 inputs) pairs: the rows are short (I inputs), the routes fill
+// lanes (M3 Max: 239 GB/s vs 192 with one simdgroup per row).
 template <typename T, int GS>
 kernel void experts_down_sum(device const uint4* w, device const T* sc, device const T* bi, device const T* act,
                              device const int* ids, device const float* wt, device T* y, constant int& H,
                              constant int& I, constant int& R, uint gid [[thread_position_in_grid]],
-                             uint lane [[thread_index_in_simdgroup]]) {
-    int h = gid / 32;
-    if (h >= H) return;
+                             uint lane [[thread_index_in_simdgroup]], uint sg [[simdgroup_index_in_threadgroup]]) {
+    constexpr int LANES = 64;
+    threadgroup float partial[16];
+    int h = gid / LANES, t = gid % LANES;
     int blocks = I / 32, groups = I / GS, total = R * blocks;
     float acc = 0.0f;
-    for (int p = lane; p < total; p += 32) {
-        int r = p / blocks, blk = p % blocks;
-        long row = (long)ids[r] * H + h;
-        uint4 q = w[row * blocks + blk];
-        device const vec<T, 4>* xr = (device const vec<T, 4>*)(act + r * I + blk * 32);
-        float dot = 0.0f, xsum = 0.0f;
-        for (int word = 0; word < 4; ++word) {
-            float4 x0 = float4(xr[word * 2]), x1 = float4(xr[word * 2 + 1]);
-            uint qw = q[word];
-            float4 q0 = float4(qw & 0xF, (qw >> 4) & 0xF, (qw >> 8) & 0xF, (qw >> 12) & 0xF);
-            float4 q1 = float4((qw >> 16) & 0xF, (qw >> 20) & 0xF, (qw >> 24) & 0xF, (qw >> 28) & 0xF);
-            dot += metal::dot(q0, x0) + metal::dot(q1, x1);
-            xsum += x0.x + x0.y + x0.z + x0.w + x1.x + x1.y + x1.z + x1.w;
+    if (h < H) {
+        for (int p = t; p < total; p += LANES) {
+            int r = p / blocks, blk = p % blocks;
+            long row = (long)ids[r] * H + h;
+            uint4 q = w[row * blocks + blk];
+            device const vec<T, 4>* xr = (device const vec<T, 4>*)(act + r * I + blk * 32);
+            float dot = 0.0f, xsum = 0.0f;
+            for (int word = 0; word < 4; ++word) {
+                float4 x0 = float4(xr[word * 2]), x1 = float4(xr[word * 2 + 1]);
+                uint qw = q[word];
+                float4 q0 = float4(qw & 0xF, (qw >> 4) & 0xF, (qw >> 8) & 0xF, (qw >> 12) & 0xF);
+                float4 q1 = float4((qw >> 16) & 0xF, (qw >> 20) & 0xF, (qw >> 24) & 0xF, (qw >> 28) & 0xF);
+                dot += metal::dot(q0, x0) + metal::dot(q1, x1);
+                xsum += x0.x + x0.y + x0.z + x0.w + x1.x + x1.y + x1.z + x1.w;
+            }
+            int g = blk * 32 / GS;
+            acc += wt[r] * (float(sc[row * groups + g]) * dot + float(bi[row * groups + g]) * xsum);
         }
-        int g = blk * 32 / GS;
-        acc += wt[r] * (float(sc[row * groups + g]) * dot + float(bi[row * groups + g]) * xsum);
     }
     acc = simd_sum(acc);
-    if (lane == 0) y[h] = T(acc);
+    if (lane == 0) partial[sg] = acc;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    if (t == 0 && h < H) y[h] = T(partial[sg] + partial[sg + 1]);
 }
 
 #define DOWN(T, GS) \
 template [[host_name("experts_down_sum_" #T "_" #GS)]] kernel void experts_down_sum<T, GS>(device const uint4*, \
     device const T*, device const T*, device const T*, device const int*, device const float*, device T*, \
-    constant int&, constant int&, constant int&, uint, uint);
+    constant int&, constant int&, constant int&, uint, uint, uint);
 DOWN(float, 32) DOWN(half, 32) DOWN(bfloat, 32) DOWN(float, 64) DOWN(half, 64) DOWN(bfloat, 64)
 """
 
@@ -127,7 +133,7 @@ def experts_down_sum(
     out = torch.empty(1, hidden, dtype=act.dtype, device=act.device)
     getattr(_lib(), f"experts_down_sum_{_NAMES[act.dtype]}_{group_size}")(
         down, scales, biases, act, ids, weights, out,
-        hidden, inter, routes, threads=hidden * 32, group_size=128,
+        hidden, inter, routes, threads=hidden * 64, group_size=64,
     )  # fmt: skip
     return out
 
