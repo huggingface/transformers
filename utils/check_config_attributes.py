@@ -42,6 +42,10 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "GS1Config": [
+        "initialization_seed",  # Checkpoint initialization metadata consumed by the GS1 training stack.
+        "inference_limits",  # Request bounds consumed by the GS1 inference service.
+    ],
     "Dots3NoteAudioConfig": ["feature_size"],  # used in __post_init__ to compute conv_output_size
     "NemotronH_Omni_Reasoning_V3_Config": [
         "sound_context_token",  # used by the processor for `<audio>` placeholder expansion
