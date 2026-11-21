@@ -213,7 +213,7 @@ def _decode_layer(layer, hidden_states, cos, sin, cache_rows, write_index, rows,
 
 def _decode_layer_fused(
     layer, residual, hidden_states, cos, sin, cache_rows, write_index, rows, counts, w_kv_b, q_abs, next_weight,
-    next_eps: float, tp: bool, qkv_a=None,
+    next_eps: float, tp: bool, qkv_a=None, index_ctx=None,
 ):
     """Same layer with its fixed chains as fused kernels (FUSE_KERNELS=1). `hidden_states` is `residual` already
     normed by this layer's `input_layernorm` (done by the previous layer's last kernel); returns this layer's output
@@ -240,6 +240,10 @@ def _decode_layer_fused(
         q_a, attn.q_a_layernorm.weight, kv_a, attn.kv_a_layernorm.weight, cos, sin, write_index, cache_rows, index_key,
         ln_weight, ln_bias, attn.q_a_layernorm.variance_epsilon, attn.kv_a_layernorm.variance_epsilon, ln_eps,
     )
+    if index_ctx is not None:  # longctx WP: contexts past index_topk
+        if indexer is not None:  # this layer's own selection, which the next shared layers reuse
+            index_ctx["rows"] = _index_scores_rows(attn, indexer, hidden_states, q_resid, cos, sin, cache_rows, index_ctx)
+        rows, counts = index_ctx["rows"], index_ctx["counts"]
     q_b = attn.q_b_proj(q_resid)  # [1, M, heads * (nope + rope)]
     q_pass = q_b.view(seq_length, -1, attn.qk_head_dim)[:, :, : attn.qk_nope_head_dim].transpose(0, 1)  # [heads, M, nope]
     num_heads = q_pass.shape[0]
@@ -263,6 +267,34 @@ def _decode_layer_fused(
         ops.fuse_tp_all_reduce(hidden_states)
     # residual add + the next layer's input norm: one kernel
     return ops.fuse_add_rms_norm(residual, hidden_states, next_weight, next_eps)
+
+
+def _index_scores_rows(attn, indexer, hidden_states, q_resid, cos, sin, cache_rows, ctx):
+    """longctx WP: the cache rows a layer with its own indexer attends to when contexts exceed index_topk. Same
+    arithmetic as the scoring branch of `_proto_block_table_rows` with PROTO_PAGED_INDEXER=1 (whose key cache view is
+    this layer's cache rows past the latents)."""
+    from . import modeling_glm_moe_dsa as m
+
+    num_tokens = q_resid.shape[1]
+    q = indexer.wq_b(q_resid).view(1, num_tokens, indexer.n_heads, indexer.head_dim)
+    q_rot, q_pass = torch.split(q, [indexer.qk_rope_head_dim, indexer.head_dim - indexer.qk_rope_head_dim], dim=-1)
+    q_rot, _ = _rotary(q_rot, q_rot, cos, sin, unsqueeze_dim=2)
+    q = torch.cat([q_rot, q_pass], dim=-1)[0]  # [M, H, D]
+    weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
+    rows_all, visible, n_visible, num_selected = ctx["rows_all"], ctx["visible"], ctx["n_visible"], ctx["num_selected"]
+    latents = attn.kv_lora_rank + attn.qk_rope_head_dim
+    key_cache = cache_rows[:, latents : latents + indexer.head_dim]
+    top = m._proto_paged_top(q, weights, indexer, key_cache, ctx["kwargs"], ctx["allocator"], n_visible,
+                             rows_all.shape[1], num_selected, ctx["allocator"].tokens_per_page)
+    rows = torch.where(visible.gather(-1, top), rows_all.gather(-1, top), -1)
+    if ctx["topk_length"]:
+        # a query that sees at most `num_selected` keys selects them all, in window order (`_proto_block_table_rows`)
+        partial = (n_visible <= num_selected)[:, None]
+        rows = torch.where(partial, torch.where(visible, rows_all, -1)[:, :num_selected], rows)
+    rows = rows.to(torch.int32)
+    if rows.shape[-1] % 128:  # the kernel takes top-k lists in multiples of 128, -1 marks an empty slot
+        rows = F.pad(rows, (0, 128 - rows.shape[-1] % 128), value=-1)
+    return rows
 
 
 def _layer_fn():
@@ -353,8 +385,19 @@ def applies(model, hidden_states, cache, kwargs) -> bool:
         return False  # the adapters' low-rank terms of the absorbed attention are not in the compiled layer
     allocator = cache.layer_to_allocator[0]
     ok = kwargs["max_length_k"][allocator.layer_type] <= model.config.index_topk
+    if not ok and _long_context_scoring() and kwargs.get("block_table") is not None:
+        ok = True  # longctx WP: the indexer layers score in the layer loop (`_index_scores_rows`)
     STATS["fallbacks"] += not ok
     return ok
+
+
+def _long_context_scoring() -> bool:
+    """longctx WP: block-table decode batches whose contexts exceed index_topk stay on this path when the paged indexer
+    is on (PROTO_PAGED_INDEXER=1): each layer with its own indexer scores in the eager fused layer loop, the shared
+    layers reuse its rows. Only with FUSE_KERNELS=1 and FUSE_COMPILE=eager (the layer function is not traced)."""
+    from . import modeling_glm_moe_dsa as m
+
+    return m._PROTO_PAGED_INDEXER and m._PROTO_PAGED_FUSE and KERNELS and MODE == "eager"
 
 
 def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
@@ -367,9 +410,18 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
     # kv_b_proj per step, not cached with the state: training may refresh or rebind it (TRAIN_FIX_KV_B)
     w_kv_b = [m._proto_kv_b_dequantized(layer.self_attn) for layer in model.layers[: model.config.num_hidden_layers]]
     topk_length = TOPK_LENGTH or m._PROTO_TOPK_LENGTH
+    index_ctx = None
     if kwargs.get("block_table") is not None:
         write_index, rows, counts = _block_table_rows(model, cache, allocator, hidden_states, kwargs, topk_length)
         STATS["bt_steps"] = STATS.get("bt_steps", 0) + 1
+        if rows.shape[1] > model.config.index_topk:  # longctx WP: contexts past index_topk, the indexer layers score
+            _, rows_all, visible = cache._proto_bt_state
+            n_visible = visible.sum(-1)
+            num_selected = model.config.index_topk
+            index_ctx = {"kwargs": kwargs, "allocator": allocator, "rows_all": rows_all, "visible": visible,
+                         "n_visible": n_visible, "num_selected": num_selected, "topk_length": topk_length,
+                         "counts": n_visible.clamp(max=num_selected).to(torch.int32) if topk_length else None}
+            STATS["scored_steps"] = STATS.get("scored_steps", 0) + 1
     else:
         write_index, rows, counts = _index_rows(hidden_states, allocator, kwargs, topk_length)
     # the list width is CB's bucket of the longest context: only the opaque attention op reads it, so one artifact
@@ -377,7 +429,9 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
     torch._dynamo.mark_dynamic(rows, 1)
 
     if KERNELS:
-        return _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts, w_kv_b)
+        return _run_layers_fused(
+            model, state, hidden_states, position_embeddings, write_index, rows, counts, w_kv_b, index_ctx
+        )
 
     cos, sin = position_embeddings
     fn = _layer_fn()
@@ -493,7 +547,7 @@ def _qkv_a_weights(model):
     return weights
 
 
-def _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts, w_kv_b):
+def _run_layers_fused(model, state, hidden_states, position_embeddings, write_index, rows, counts, w_kv_b, index_ctx=None):
     """Layer loop of FUSE_KERNELS=1: every layer hands the next one its output and that output already normed."""
     cos, sin = position_embeddings
     layers = state["layers"]
@@ -518,7 +572,7 @@ def _run_layers_fused(model, state, hidden_states, position_embeddings, write_in
             start = time.perf_counter()
         args = (
             layer, residual, hidden_states, cos, sin, state["views"][i], write_index, rows, counts, w_kv_b[i], q_abs,
-            norms[i].weight, norms[i].variance_epsilon, tp, qkv_a[i],
+            norms[i].weight, norms[i].variance_epsilon, tp, qkv_a[i], index_ctx,
         )
         if ranges:
             with torch.autograd.profiler.record_function(f"M:L{i}:layer"):
