@@ -1108,6 +1108,41 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states, topk_indices
 
 
+# --- PROTOTYPE gap2-mtp (bench only): the checkpoint's multi-token-prediction module, off unless GLM_MTP=1 -------------
+# The checkpoint stores it as `model.layers.{num_hidden_layers}.*`: `enorm`, `hnorm`, `eh_proj`, one full decoder block
+# (its own latent attention, indexer and MoE) and `shared_head.norm`; the LM head and the embeddings are the main model's.
+# Kept under the checkpoint's own names as one more entry of `model.layers`, so the FP8 quantizer, the conversion mapping
+# and the TP plan treat it like any other layer. The main forward stops at `num_hidden_layers`.
+_GLM_MTP = _os.environ.get("GLM_MTP", "0") == "1"
+# vLLM zeroes the token embedding of the first position before `enorm` (DeepSeek's reference MTP does the same)
+_GLM_MTP_ZERO_FIRST = _os.environ.get("GLM_MTP_ZERO_FIRST", "1") == "1"
+
+
+class GlmMoeDsaMtpSharedHead(nn.Module):
+    def __init__(self, config: GlmMoeDsaConfig):
+        super().__init__()
+        self.norm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+class GlmMoeDsaMtpLayer(GlmMoeDsaDecoderLayer):
+    def __init__(self, config: GlmMoeDsaConfig):
+        import copy
+
+        # The MTP block is a sparse (MoE) layer with its own indexer; the per-layer lists of the config stop at the
+        # last main layer
+        layer_config = copy.copy(config)
+        layer_config.mlp_layer_types = list(config.mlp_layer_types) + ["sparse"]
+        layer_config.indexer_types = list(config.indexer_types) + ["full"]
+        super().__init__(layer_config, config.num_hidden_layers)
+        for module in self.modules():
+            if getattr(module, "config", None) is layer_config:
+                module.config = config
+        self.enorm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.hnorm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.eh_proj = nn.Linear(2 * config.hidden_size, config.hidden_size, bias=False)
+        self.shared_head = GlmMoeDsaMtpSharedHead(config)
+
+
 @auto_docstring
 class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     config: GlmMoeDsaConfig
@@ -1127,7 +1162,8 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(GlmMoeDsaTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    # gap2-mtp prototype: with GLM_MTP=1 the MTP module's weights are loaded, not ignored
+    _keys_to_ignore_on_load_unexpected = [] if _GLM_MTP else [r"model\.layers\.78.*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]
 
     @torch.no_grad()
@@ -1151,6 +1187,8 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
         self.layers = nn.ModuleList(
             [GlmMoeDsaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        if _GLM_MTP and getattr(config, "num_nextn_predict_layers", 0) > 0:
+            self.layers.append(GlmMoeDsaMtpLayer(config))  # gap2-mtp prototype, `layers[num_hidden_layers]`
         self.norm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GlmMoeDsaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -1314,6 +1352,48 @@ class GlmMoeDsaForCausalLM(GlmMoeDsaPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+    def mtp_forward(
+        self,
+        last_hidden_state: torch.Tensor,
+        input_ids: torch.LongTensor,
+        position_ids: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """gap2-mtp prototype. One pass of the MTP module over the same positions as a main forward.
+
+        `last_hidden_state` `[B, S, H]` is the main model's output (after its final norm) at positions `p`,
+        `input_ids` `[B, S]` holds the tokens at positions `p + 1`, `position_ids` are the main model's (`p`). The
+        module caches its own latents and indexer keys in slot `num_hidden_layers` of `cache`, at the main layers'
+        indices. Returns its hidden states after `shared_head.norm`: `lm_head` of row `p` predicts token `p + 2`.
+        """
+        layer = self.model.layers[self.config.num_hidden_layers]
+        inputs_embeds = self.model.embed_tokens(input_ids)
+        if _GLM_MTP_ZERO_FIRST:
+            inputs_embeds = inputs_embeds.masked_fill((position_ids == 0).unsqueeze(-1), 0.0)
+        hidden_states = layer.eh_proj(torch.cat([layer.enorm(inputs_embeds), layer.hnorm(last_hidden_state)], dim=-1))
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": hidden_states,
+                "attention_mask": attention_mask,
+                "cache": cache,
+                "position_ids": position_ids,
+                "allow_is_causal_skip": False,
+            }
+            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
+        position_embeddings = self.model.rotary_emb(hidden_states, position_ids=position_ids)
+        hidden_states, _ = layer(
+            hidden_states,
+            attention_mask=causal_mask_mapping["indexed_attention"],
+            position_embeddings=position_embeddings,
+            position_ids=position_ids,
+            cache=cache,
+            **kwargs,
+        )
+        return layer.shared_head.norm(hidden_states)
 
 
 __all__ = ["GlmMoeDsaPreTrainedModel", "GlmMoeDsaModel", "GlmMoeDsaForCausalLM"]

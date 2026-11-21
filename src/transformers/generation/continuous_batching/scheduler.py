@@ -234,6 +234,9 @@ class Scheduler(ABC):
 
             # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
+            # gap2-mtp prototype: a decoding request that carries a draft takes its two tokens together or waits
+            if state.status == RequestStatus.DECODING and len(request_tokens) > token_budget:
+                continue
             # Account for token budget
             request_len = min(len(request_tokens), token_budget)
 

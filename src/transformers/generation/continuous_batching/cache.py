@@ -14,6 +14,7 @@
 import inspect
 import os
 import warnings
+import os
 from math import ceil, lcm
 from typing import Any
 
@@ -75,6 +76,10 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
         if layer_type not in ATTN_TYPE_TO_ALLOCATOR:
             raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
+    # gap2-mtp prototype: the MTP module caches its latents and indexer keys like one more indexed layer, in slot
+    # `num_hidden_layers`, at the same rows of a block as the main layers
+    if os.environ.get("GLM_MTP", "0") == "1" and getattr(config, "num_nextn_predict_layers", 0) > 0:
+        layer_counts[INDEXED_ATTENTION] = layer_counts[INDEXED_ATTENTION] + [config.num_hidden_layers]
     return layer_counts
 
 # PROTOTYPES of the engine work package (bench only, off by default), see PagedAttentionMemoryHandler

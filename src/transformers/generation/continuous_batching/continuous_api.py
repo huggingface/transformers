@@ -15,6 +15,7 @@
 import os
 import asyncio
 import gc
+import math
 import queue
 import threading
 from abc import abstractmethod
@@ -305,6 +306,25 @@ _PROTO_UPLOADS_ON_COMPUTE_STREAM = os.environ.get("CB_PROTO_UPLOADS_ON_COMPUTE_S
 # WP train prototypes, see `ContinuousBatchingManager._proto_after_pause`
 _TRAIN_FIX_KV_B = os.environ.get("TRAIN_FIX_KV_B", "")
 _TRAIN_FIX_PREFIX = os.environ.get("TRAIN_FIX_PREFIX", "0") == "1"
+# gap2-mtp prototype (bench only), see input_outputs.py
+_CB_MTP = os.environ.get("CB_MTP", "")
+# Test hooks. `_MTP_TRACE`: when set to a dict, every draft the MTP module makes is recorded per request.
+# `_MTP_ORACLE`: when set to a dict {prompt tokens (tuple): reference continuation}, the drafts fed to the model come
+# from the reference instead: all correct ("accept"), all wrong ("reject") or a fixed mix ("mix").
+_MTP_TRACE: dict | None = None
+_MTP_ORACLE: dict | None = None
+_MTP_ORACLE_MODE = os.environ.get("CB_MTP_ORACLE", "accept")
+# Test switch: hash blocks from the scheduler's count, which includes the row of a draft that may be rejected
+_MTP_UNSAFE_HASH = os.environ.get("CB_MTP_UNSAFE_HASH", "0") == "1"
+
+
+def _mtp_oracle_draft(state: RequestState, draft: int) -> int:
+    reference = _MTP_ORACLE.get(tuple(state.initial_tokens))
+    index = state.generated_len()
+    if reference is None or index >= len(reference):
+        return draft
+    correct = _MTP_ORACLE_MODE == "accept" or (_MTP_ORACLE_MODE == "mix" and (index * 2654435761 >> 7) % 3 != 0)
+    return reference[index] if correct else (reference[index] + 1) % 1000
 
 
 class ContinuousBatchProcessor:
@@ -395,6 +415,13 @@ class ContinuousBatchProcessor:
             compute_stream=self.inputs_and_outputs.compute_stream,
             distributed_helper=self.distributed_helper,
         )
+
+        # gap2-mtp prototype
+        self.mtp_mode = _CB_MTP
+        self.mtp_stats = {"steps": 0, "emitted": 0, "drafted": 0, "accepted": 0}
+        self.mtp_step_times: list[float] = []
+        if self.mtp_mode and self.use_async_batching:
+            raise NotImplementedError("CB_MTP prototype: the number of tokens a step emits is only known on the host")
 
         # Setup the model runner
         self.model_runner = ModelRunner(
@@ -558,8 +585,98 @@ class ContinuousBatchProcessor:
             )
         return True
 
+    def _update_batch_mtp(self) -> None:
+        """gap2-mtp prototype: `update_batch` when the step verified drafts ("spec") or only produced them ("shadow").
+        A request emits one token, or two when its draft was accepted. The cache row of a rejected draft is given back
+        by not counting it in the request's length: the next step writes that position again."""
+        io = self.inputs_and_outputs
+        (first_tokens, first_logprobs, bonus_tokens, bonus_logprobs, accepted, next_drafts, prev_draft_logprobs,
+         next_draft_logprobs) = io.prepare_mtp_batch_update()
+        stats = self.mtp_stats
+        stats["steps"] += 1
+        self.mtp_step_times.append(perf_counter())
+        row = 0
+        pending_outputs = []
+        for future_state in io.requests_in_batch:
+            state = future_state.state
+            if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
+                raise RuntimeError(f"Tried to update {state.status.name} request {state.request_id} in sync mode.")
+            if not future_state.has_new_token:
+                if state.status == RequestStatus.PREFILLING:
+                    self.cache.mark_complete_blocks(state, future_state.complete_blocks)
+                continue
+            if state.generated_len() == 0:
+                state.status = RequestStatus.DECODING
+            had_draft, is_accepted = future_state.mtp_has_draft, bool(accepted[row])
+            token = first_tokens[row]
+            if had_draft:
+                stats["drafted"] += 1
+                stats["accepted"] += is_accepted
+                if not is_accepted:
+                    state.position_offset -= 1  # the draft's row is not part of the request
+                # Only the positions that are now trusted can complete a block: the scheduler counted the draft's row
+                past_length = state.position_offset - (2 if is_accepted else 1)
+                if not _MTP_UNSAFE_HASH:
+                    future_state.complete_blocks = {
+                        name: new_blocks
+                        for name, allocator in self.cache.cache_allocators.items()
+                        if self.cache.use_prefix_sharing
+                        and (
+                            new_blocks := state.position_offset // allocator.tokens_per_page
+                            - past_length // allocator.tokens_per_page
+                        )
+                    }
+            elif self.mtp_mode == "shadow" and state.mtp_draft is not None:
+                stats["drafted"] += 1
+                stats["accepted"] += token == state.mtp_draft
+                if self.do_sample:
+                    # probability that the ratio test accepts the draft: min(1, p(draft) / q(draft)), q = 1 for an
+                    # argmax draft. Its mean is the acceptance rate, without the noise of the match count
+                    ratio = math.exp(min(0.0, prev_draft_logprobs[row] - state.mtp_draft_logprob))
+                    stats["accept_prob"] = stats.get("accept_prob", 0.0) + ratio
+            logprob = first_logprobs[row] if self.return_logprobs else None
+            is_finished = state.update_and_check_completion(token, logprob)
+            stats["emitted"] += 1
+            if had_draft and is_accepted and not is_finished:
+                logprob = bonus_logprobs[row] if self.return_logprobs else None
+                is_finished = state.update_and_check_completion(bonus_tokens[row], logprob)
+                stats["emitted"] += 1
+            self.cache.mark_complete_blocks(state, future_state.complete_blocks)
+            if _MTP_TRACE is not None:
+                # test invariant: a block is only hashed (shareable) once every one of its rows is trusted
+                for allocator in self.cache.cache_allocators.values():
+                    hashed = sum(b in allocator.ledger.block_to_hash for b in allocator.block_table[state.request_id])
+                    stats["hash_violations"] = stats.get("hash_violations", 0) + (
+                        hashed > state.position_offset // allocator.tokens_per_page
+                    )
+            if is_finished:
+                self.scheduler.finish_request(state.request_id)
+                self.scheduler.block_new_requests = False
+            else:
+                draft = next_drafts[row]
+                if _MTP_TRACE is not None:
+                    # (index of the generated token the draft is for, draft) of every draft the module made
+                    _MTP_TRACE.setdefault(state.request_id, []).append((state.generated_len(), draft))
+                if _MTP_ORACLE is not None:
+                    draft = _mtp_oracle_draft(state, draft)
+                if self.mtp_mode == "spec":
+                    state.tokens_to_process = [state.tokens_to_process[0], draft]
+                    state.mtp_has_draft = True
+                else:
+                    state.mtp_draft = draft
+                    state.mtp_draft_logprob = next_draft_logprobs[row]  # 0 for an argmax draft
+            if state.streaming or state.status == RequestStatus.FINISHED:
+                pending_outputs.append(state.to_generation_output())
+            row += 1
+        if pending_outputs:
+            self.output_router.deliver_batch(pending_outputs)
+        if self.scheduler._requests_to_fork:
+            raise NotImplementedError("CB_MTP prototype: forked requests are not supported")
+
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
+        if self.mtp_mode:
+            return self._update_batch_mtp()
         requests_in_batch, new_tokens, logprobs = self.inputs_and_outputs.prepare_batch_update()
         current_logits_index = 0
         pending_outputs = []
