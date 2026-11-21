@@ -351,8 +351,7 @@ class ChatCompletionHandler(BaseHandler):
             generation_config.max_new_tokens = int(body["max_completion_tokens"])
         elif body.get("max_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_tokens"])
-        if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+        self._apply_frequency_penalty(body, generation_config)
         if body.get("logit_bias") is not None:
             generation_config.sequence_bias = {(int(k),): v for k, v in body["logit_bias"].items()}
         if body.get("stop") is not None:
