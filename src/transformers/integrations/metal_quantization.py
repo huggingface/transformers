@@ -145,9 +145,14 @@ class MetalLinear(nn.Linear):
         if self.weight.dtype != torch.uint32:
             return nn.functional.linear(input, self.weight, self.bias)
 
-        short = min(self.in_features, self.out_features) <= 1024 and self.group_size in (32, 64)
-        if self.bits == 4 and short and input.numel() == self.in_features and input.device.type == "mps":
-            # One token through a matrix with a short side: MLX's qmv leaves lanes idle there
+        if (
+            self.bits == 4
+            and self.group_size in (32, 64)
+            and input.numel() == self.in_features
+            and input.device.type == "mps"
+        ):
+            # One token: `qmv4` beats MLX's qmv in the decode step (short sides 1.3-5.7x, large ones at par alone and
+            # faster in the model: Qwen3.8 synthetic 46.6 -> 47.9 tok/s on M3 Max)
             from .metal_qmv import qmv4
 
             output = qmv4(input, self.weight, self.scales, self.qbiases, self.group_size)
@@ -237,7 +242,7 @@ class MetalExperts(nn.Module):
         weights = top_k_weights.reshape(-1) * (ids < self.num_experts)
         ids = ids.clamp(max=self.num_experts - 1).to(torch.int32)
         if num_tokens == 1 and self._fused_decode and hidden_states.device.type == "mps":
-            # One token: MLX gate/up for every route, then one dispatch for the short-row down projections + routing sum
+            # One token: MLX gate/up for every route (231 GB/s), then one dispatch for the down projections + routing sum
             from .metal_qmv import experts_down_sum
 
             act = self._apply_gate(self._qmm(hidden_states.expand(top_k, -1), "gate_up_proj", ids, False))
