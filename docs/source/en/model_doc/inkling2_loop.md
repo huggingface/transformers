@@ -176,6 +176,9 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 ## Notes
 
 - Attention runs in eager mode only because every layer adds a relative position bias and a sink.
+- The short convolutions use fast GPU kernels when available: Hub kernels when loading with `use_kernels=True`,
+  otherwise the [causal-conv1d](https://github.com/Dao-AILab/causal-conv1d) package if installed
+  (`pip install causal-conv1d`). Without them, they fall back to a slower PyTorch implementation.
 - Every pass through the loop layers keeps its own keys, values and convolution states, so the cache has one layer per layer visit (48 for the released checkpoint).
 - `output_hidden_states` and `output_attentions` return one entry per layer visit.
 
