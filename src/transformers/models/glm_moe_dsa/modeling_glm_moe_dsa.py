@@ -41,6 +41,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from . import _fuse_compile
 from .configuration_glm_moe_dsa import GlmMoeDsaConfig
 
 
@@ -924,6 +925,12 @@ class GlmMoeDsaMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
+        if _fuse_compile.KERNELS and not torch.is_grad_enabled() and x.is_cuda and x.dtype == torch.bfloat16:
+            # [scratch, bench only] FUSE_KERNELS: silu(gate) * up in one kernel (inference only)
+            gate, up = self.gate_proj(x), self.up_proj(x)
+            if type(gate) is torch.Tensor and self.config.hidden_act == "silu":
+                return self.down_proj(torch.ops.transformers.fuse_silu_mul(gate, up))
+            return self.down_proj(self.act_fn(gate) * up)
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -943,6 +950,22 @@ class GlmMoeDsaTopkRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
+        if (
+            _fuse_compile.KERNELS
+            and self.num_group == 1
+            and self.topk_group == 1
+            and not torch.is_grad_enabled()
+            and hidden_states.is_cuda
+            and hidden_states.dtype == self.weight.dtype == torch.bfloat16
+        ):
+            # [scratch, bench only] FUSE_KERNELS (inference only): the bf16 GEMM accumulates and returns fp32 (no fp32
+            # copy of the input and of the weight per call), then one kernel does sigmoid, bias, top-k, gather,
+            # normalize and scale
+            router_logits = torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
+            topk_indices, topk_weights = torch.ops.transformers.fuse_router(
+                router_logits, self.e_score_correction_bias, self.top_k, self.routed_scaling_factor, self.norm_topk_prob
+            )
+            return router_logits, topk_weights, topk_indices
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
@@ -1203,7 +1226,11 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
 
         topk_indices = None  # MAIN DIFF with DSV3.2
         normed_hidden_states = None
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+        # [scratch, bench only] FUSE_COMPILE: decode-shaped CB batches run one compiled function per layer
+        fuse_compile = _fuse_compile.MODE != "0" and _fuse_compile.applies(self, hidden_states, cache, kwargs)
+        if fuse_compile:
+            hidden_states = _fuse_compile.run_layers(self, hidden_states, position_embeddings, cache, kwargs)
+        for i, decoder_layer in enumerate(() if fuse_compile else self.layers[: self.config.num_hidden_layers]):
             if _TP_FUSED_ALL_REDUCE_NORM:
                 # [gap2 prototype] the layer also computes the norm that follows its MLP block: the next layer's
                 # input norm, or the final norm
@@ -1232,7 +1259,7 @@ class GlmMoeDsaModel(GlmMoeDsaPreTrainedModel):
                 **kwargs,
             )
 
-        hidden_states = normed_hidden_states if _TP_FUSED_ALL_REDUCE_NORM else self.norm(hidden_states)
+        hidden_states = normed_hidden_states if _TP_FUSED_ALL_REDUCE_NORM and not fuse_compile else self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             cache=cache,
