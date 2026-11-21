@@ -37,6 +37,7 @@ from ...processing_utils import MultiModalData, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
+from ...vision_utils import get_vision_pixel_shuffle_index
 from ..ernie4_5.modeling_ernie4_5 import apply_rotary_pos_emb  # noqa: F401
 from ..hunyuan_vl.configuration_hunyuan_vl import HunYuanVLVisionConfig
 from ..hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
@@ -47,6 +48,7 @@ from ..hunyuan_vl.modeling_hunyuan_vl import (
     HunYuanVLVisionPatchEmbed,
     HunYuanVLVisionPatchMerger,
     HunYuanVLVisionTransformer,
+    get_vision_merger_layout_index,
 )
 from ..hy_v4.configuration_hy_v4 import HYV4Config
 from ..hy_v4.modeling_hy_v4 import (
@@ -227,27 +229,18 @@ class HYV4VLVisionPatchMerger(HunYuanVLVisionPatchMerger):
 
         self.before_rms = HYV4VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
-        hidden_states = self.before_rms(hidden_states)
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> torch.Tensor:
+        merge_size = self.spatial_merge_size
+        hidden_states = self.before_rms(hidden_states[0])
         dtype = hidden_states.dtype
-        # Key difference: each video frame is merged on its own, so frames are moved to the batch dimension
-        hidden_states = hidden_states.reshape(-1, *size, hidden_states.shape[-1]).permute(0, 3, 1, 2)
-        hidden_states = self.proj_conv(hidden_states)
-        hidden_states = self.proj_act(hidden_states)
-        hidden_states = self.proj_out(hidden_states)
-        batch_size, channels, height, width = hidden_states.shape
-        hidden_states = torch.cat(
-            [
-                hidden_states,
-                self.image_newline.reshape(1, channels, 1, 1)
-                .expand(batch_size, channels, height, 1)
-                .to(dtype, non_blocking=True),
-            ],
-            dim=-1,
-        )
-        hidden_states = hidden_states.reshape(batch_size, channels, -1).permute(0, 2, 1)
-        # Key difference: the merged frames are packed back into a single sequence
-        return hidden_states.reshape(1, -1, channels)
+        # Key difference: each video frame is merged on its own
+        block_index = get_vision_pixel_shuffle_index(grid_thw, merge_size, kwargs=kwargs)
+        blocks = hidden_states[block_index].view(-1, merge_size, merge_size, hidden_states.shape[-1])
+        blocks = self.proj_out(self.proj_act(self.proj_conv(blocks.permute(0, 3, 1, 2)))).flatten(1)
+        # Key difference: no begin and end tokens, nor projection to the text model
+        tokens = torch.cat([blocks, self.image_newline[None].to(dtype)])
+        layout_index = get_vision_merger_layout_index(grid_thw, merge_size, begin_end=False, kwargs=kwargs)
+        return tokens[layout_index].unsqueeze(0)
 
 
 class HYV4VLVisionAttention(HunYuanVLVisionAttention):

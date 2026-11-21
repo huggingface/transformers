@@ -20,6 +20,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -40,7 +41,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested
+from ...utils.generic import accepts_precomputed_kwargs, get_max_seqlen, is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -507,6 +508,28 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         pooled_states.index_add_(0, destination_index, hidden_states.float() * frame_weight[:, None])
         return pooled_states.view(num_merged_tokens, kernel_size, -1).to(hidden_states.dtype)
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the position table's `interp_indices` and
+        `interp_weights` and each patch's `frame_index`, the rotary `position_ids`, the attention's `cu_seqlens` and
+        `max_seqlen`, and the merger's `temporal_merge_index`."""
+        position_embeddings = self.patch_embed.pos_emb
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            position_embeddings.num_grid_per_side,
+            mode=position_embeddings.interpolation_mode,
+            align_corners=position_embeddings.interpolation_align_corners,
+        )
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, merge_temporal=True)
+        return {
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "frame_index": get_vision_frame_index(grid_thw),
+            "position_ids": get_vision_position_ids(grid_thw, spatial_merge_size=1),
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "temporal_merge_index": get_vision_temporal_merge_index(grid_thw, *self.merge_kernel_size),
+        }
+
     @capture_outputs
     @auto_docstring
     def forward(
@@ -581,6 +604,23 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """The vision tower's data-dependent inputs (see [`Kimi_K25VisionModel.get_data_dependent_inputs`]) for the
+        images and the videos, prefixed `image_` and `video_` as `get_image_embeddings` and
+        `get_video_embeddings` take them."""
+        inputs = {}
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                tower_inputs = self.vision_tower.get_data_dependent_inputs(grid_thw)
+                inputs.update({f"{prefix}{name}": value for name, value in tower_inputs.items()})
+        return inputs
+
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(
@@ -595,6 +635,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // math.prod(self.vision_tower.merge_kernel_size)
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_embeddings(
@@ -734,6 +775,10 @@ class Kimi_K25ForConditionalGeneration(Kimi_K25PreTrainedModel, MultimodalMixin,
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Kimi_K25Model.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

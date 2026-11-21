@@ -20,6 +20,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch.nn as nn
@@ -626,6 +627,10 @@ class FunAsrNanoForConditionalGeneration(FunAsrNanoPreTrainedModel, GenerationMi
             attentions=outputs.attentions,
             audio_hidden_states=outputs.audio_hidden_states,
         )
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`FunAsrNanoModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
 
 __all__ = ["FunAsrNanoPreTrainedModel", "FunAsrNanoEncoder", "FunAsrNanoModel", "FunAsrNanoForConditionalGeneration"]

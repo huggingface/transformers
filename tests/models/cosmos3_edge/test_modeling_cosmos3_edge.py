@@ -196,6 +196,12 @@ class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Cosmos3EdgeVisionText2TextModelTester
     test_torch_exportable = False  # packed patch spans require data-dependent shape handling
 
+    @unittest.skip(
+        reason="The vision embeddings resize the position table per image with antialiasing, whose taps depend on the grid"
+    )
+    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     @unittest.skip("Packed vision attention outputs will be added in a follow-up.")
     def test_get_image_features_attentions(self):
         pass

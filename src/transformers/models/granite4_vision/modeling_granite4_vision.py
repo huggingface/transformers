@@ -22,6 +22,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from fractions import Fraction
+from typing import Any
 
 import numpy as np
 import torch
@@ -1062,6 +1063,10 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Mult
             vision_feature_select_strategy=vision_feature_select_strategy,
             image_newline=image_newline,
         )
+
+    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
+        r"""See [`Granite4VisionModel.get_data_dependent_inputs`]."""
+        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @merge_with_config_defaults
     @can_return_tuple
