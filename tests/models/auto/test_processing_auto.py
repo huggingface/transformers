@@ -642,8 +642,13 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertIsInstance(loaded_processor.image_processor, LlavaOnevisionImageProcessorPil)
             self.assertIsInstance(loaded_processor.video_processor, LlavaOnevisionVideoProcessor)
 
-            with self.assertRaisesRegex(ValueError, "feature_extractor_kwargs"):
-                AutoProcessor.from_pretrained(tmp_dir, feature_extractor_kwargs={"sampling_rate": 16000})
+            # One way only: a key given both flat and nested is refused rather than resolved
+            with self.assertRaisesRegex(
+                ValueError, r"\['backend'\] either as shared kwargs or in `image_processor_kwargs`"
+            ):
+                AutoProcessor.from_pretrained(
+                    tmp_dir, backend="torchvision", image_processor_kwargs={"backend": "pil"}
+                )
             with self.assertRaisesRegex(ValueError, "image_processor_kwargs"):
                 AutoProcessor.from_pretrained(
                     tmp_dir, image_processor=processor.image_processor, image_processor_kwargs={"backend": "pil"}

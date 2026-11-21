@@ -130,6 +130,17 @@ The other files are saved separately.
 
 When you load a processor with [`~ProcessorMixin.from_pretrained`], each sub-processor looks for its nested key in `processor_config.json` first. If the key isn't there, it falls back to a standalone file. Image processors and feature extractors read `preprocessor_config.json`, and video processors read `video_preprocessor_config.json` and then `preprocessor_config.json`. Older checkpoints that store each sub-processor in its own file still load this way.
 
+Keyword arguments passed to [`~ProcessorMixin.from_pretrained`] go to every sub-processor. To set an option for one sub-processor only, pass it in a dict named after that attribute, such as `image_processor_kwargs`, `video_processor_kwargs`, `feature_extractor_kwargs` or `tokenizer_kwargs`. Prefer this form whenever the sub-processors shouldn't all get the same value, for example a backend that only the image processor supports. A key can't be passed both ways in one call.
+
+```py
+from transformers import AutoProcessor
+
+# The image processor's PIL backend; the video processor, which has no PIL backend, loads as usual
+processor = AutoProcessor.from_pretrained(
+    "llava-hf/llava-onevision-qwen2-0.5b-ov-hf", image_processor_kwargs={"backend": "pil"}
+)
+```
+
 > [!NOTE]
 > A nested config takes priority over a standalone file. If a checkpoint has both, editing `preprocessor_config.json` or `video_preprocessor_config.json` has no effect. Edit the nested entry in `processor_config.json` instead.
 

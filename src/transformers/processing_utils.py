@@ -1834,8 +1834,8 @@ class ProcessorMixin(PushToHubMixin):
                 Additional keyword arguments passed along to both
                 [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and
                 [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Keyword arguments for a single
-                sub-processor go in `<attribute>_kwargs`, such as `image_processor_kwargs={"backend": "pil"}`, and
-                override the shared ones for that sub-processor.
+                sub-processor go in `<attribute>_kwargs`, such as `image_processor_kwargs={"backend": "pil"}`. A
+                key can't be passed both ways in one call.
         """
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
@@ -1965,24 +1965,18 @@ class ProcessorMixin(PushToHubMixin):
         # get args from processor init signature
         sub_processors = cls.get_attributes()
 
-        # `<attribute>_kwargs` go to that sub-processor only, on top of the shared kwargs
-        sub_processor_kwargs = {name: kwargs.pop(f"{name}_kwargs", None) or {} for name in sub_processors}
-        unknown = [
-            f"{name}_kwargs" for name in MODALITY_TO_AUTOPROCESSOR_MAPPING.keys() if kwargs.pop(f"{name}_kwargs", None)
-        ]
-        if unknown:
-            raise ValueError(
-                f"{cls.__name__} has no sub-processor for {unknown}. Its sub-processors are {sub_processors}."
-            )
-        for name, value in sub_processor_kwargs.items():
-            if value and kwargs.get(name) is not None:
+        # `<attribute>_kwargs` go to that sub-processor only, beside the shared kwargs
+        sub_processor_kwargs = {name: kwargs.pop(f"{name}_kwargs", {}) for name in sub_processors}
+        for name, own in sub_processor_kwargs.items():
+            if own and kwargs.get(name) is not None:
                 raise ValueError(f"Pass either `{name}` or `{name}_kwargs`, not both.")
+            if both := sorted(set(own) & set(kwargs)):
+                raise ValueError(f"Pass {both} either as shared kwargs or in `{name}_kwargs`, not both.")
 
         for sub_processor_type in sub_processors:
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
-            own_kwargs = sub_processor_kwargs[sub_processor_type]
-            loading_kwargs = {**kwargs, **own_kwargs}
+            loading_kwargs = {**kwargs, **sub_processor_kwargs[sub_processor_type]}
 
             if (
                 "tokenizer" in sub_processor_type
@@ -2029,13 +2023,7 @@ class ProcessorMixin(PushToHubMixin):
                             f"Config keys: {list(sub_processor_config.keys())}"
                         )
                     processor_class = cls.get_possibly_dynamic_module(class_name)
-                    for key in ("backend", "use_fast"):
-                        if key in own_kwargs:
-                            raise ValueError(
-                                f"`{key}` can't be set in `{sub_processor_type}_kwargs`: `{sub_processor_type}` is "
-                                "built from `processor_config.json`, not through an auto class."
-                            )
-                    sub_processor = processor_class(**{**sub_processor_config, **own_kwargs})
+                    sub_processor = processor_class(**sub_processor_config)
                     args.append(sub_processor)
                 else:
                     raise ValueError(
