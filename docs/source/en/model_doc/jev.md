@@ -81,6 +81,29 @@ and [d3](https://huggingface.co/vllm-sr/d3), whose Qwen3.5 backbone attends to t
 pipeline("decision", model="vllm-sr/d3")(request)  # or perplexity-ai/pplx-decider-v1.1-27b
 ```
 
+## Training
+
+[JEV](https://huggingface.co/autotrust/JEV-9B#training-details) uses KL divergence over the active options and adds
+a ranked probability score for ordered Score questions.
+Using the model and request above, train on the first option of each question:
+
+```python
+from transformers.decision import Question
+
+model.train()
+inputs, questions = config.prepare_inputs(request, tokenizer)[0]
+inputs = {name: tensor.to(model.device) for name, tensor in inputs.items()}
+counts = torch.tensor([[len(q.options) for q in questions]], device=model.device)
+types = torch.tensor([[Question.questions_types.index(q.type) for q in questions]], device=model.device)
+
+inputs["marks"] = inputs["marks"][None]
+outputs = model(**inputs, num_options=counts, question_type_ids=types, labels=torch.zeros_like(counts))
+outputs.loss.backward()
+```
+
+For a custom accumulation loop, pass the total valid-question count as `num_items_in_batch` to weight prompts with
+different numbers of questions correctly. The standard `Trainer` averages the microbatch losses.
+
 ## JevConfig
 
 [[autodoc]] JevConfig
