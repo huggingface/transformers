@@ -295,6 +295,8 @@ Specify a checkpoint path to resume from a particular point.
 trainer.train(resume_from_checkpoint="out/checkpoint-1000")
 ```
 
+When rolling back to an older checkpoint, use a new `output_dir` so later saves do not overwrite checkpoints from the previous run.
+
 When resuming, [`Trainer`] restores the optimizer state, scheduler state, and RNG state.
 
 Checkpoint resuming requires optimizer and scheduler state files in the checkpoint directory. If those files are missing (for example, when `save_only_model=True`), the optimizer restarts from scratch.

@@ -1447,6 +1447,32 @@ class Trainer:
 
     # ---- Training ----
 
+    def _warn_if_resuming_from_older_checkpoint(self, resume_from_checkpoint: str, output_dir: str) -> None:
+        output_dir = os.path.realpath(output_dir)
+        resume_from_checkpoint = os.path.realpath(resume_from_checkpoint)
+        if os.path.dirname(resume_from_checkpoint) != output_dir:
+            return
+
+        checkpoints = sort_checkpoints(output_dir)
+        try:
+            checkpoint_index = next(
+                i for i, checkpoint in enumerate(checkpoints) if os.path.realpath(checkpoint) == resume_from_checkpoint
+            )
+        except StopIteration:
+            return
+
+        newer_checkpoints = checkpoints[checkpoint_index + 1 :]
+        if newer_checkpoints:
+            newer_checkpoints = ", ".join(os.path.basename(checkpoint) for checkpoint in newer_checkpoints)
+            logger.warning(
+                "Resuming from an older checkpoint (%s) while newer checkpoints already exist in the same "
+                "output directory: %s. Subsequent saves may overwrite those checkpoints, and "
+                "`resume_from_checkpoint=True` can resume from them after an interruption. Use a new `output_dir` "
+                "when rolling back to avoid mixing checkpoints from different runs.",
+                resume_from_checkpoint,
+                newer_checkpoints,
+            )
+
     def train(
         self,
         resume_from_checkpoint: str | bool | None = None,
@@ -1557,6 +1583,9 @@ class Trainer:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
         if resume_from_checkpoint is not None:
+            if isinstance(resume_from_checkpoint, str):
+                self._warn_if_resuming_from_older_checkpoint(resume_from_checkpoint, args.output_dir)
+
             # Load model checkpoint before accelerator.prepare() for regular models,
             # so that buffers and parameters are on the right device after prepare.
             # Deepspeed/FSDP models are loaded after prepare in _prepare_for_training.
