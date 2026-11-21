@@ -314,10 +314,10 @@ def applies(model, hidden_states, cache, kwargs) -> bool:
         return False
     if cache is None or not hasattr(cache, "layer_to_allocator") or "read_index" not in kwargs:
         return False
-    if hidden_states.shape[1] > 512 or model.training or torch.is_grad_enabled():
+    if model.training or torch.is_grad_enabled():
         return False
-    if BLOCK_TABLE_ONLY and kwargs.get("block_table") is None:
-        return False
+    if kwargs.get("block_table") is None and (BLOCK_TABLE_ONLY or hidden_states.shape[1] > 512):
+        return False  # a block-table batch is a decode batch whatever its size (with CB_MTP=spec, 1 + k tokens each)
     if m._TRAIN_FIX_KV_B == "delta" and any(m._train_kv_b_adapters(layer.self_attn) for layer in model.layers):
         return False  # the adapters' low-rank terms of the absorbed attention are not in the compiled layer
     allocator = cache.layer_to_allocator[0]
@@ -337,7 +337,7 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
     w_kv_b = [m._proto_kv_b_dequantized(layer.self_attn) for layer in model.layers[: model.config.num_hidden_layers]]
     topk_length = TOPK_LENGTH or m._PROTO_TOPK_LENGTH
     if kwargs.get("block_table") is not None:
-        write_index, rows, counts = _block_table_rows(model, allocator, kwargs, topk_length)
+        write_index, rows, counts = _block_table_rows(model, cache, allocator, hidden_states, kwargs, topk_length)
         STATS["bt_steps"] = STATS.get("bt_steps", 0) + 1
     else:
         write_index, rows, counts = _index_rows(hidden_states, allocator, kwargs, topk_length)
@@ -372,22 +372,40 @@ def run_layers(model, hidden_states, position_embeddings, cache, kwargs):
     return hidden_states
 
 
-def _block_table_rows(model, allocator, kwargs, topk_length):
-    """[gap3] Rows of a block-table decode batch (one query token per request), once per step: the row each request
-    writes its new token to, the rows of its context (-1 = empty slot) and their count. Same arithmetic as
-    `_proto_block_table_rows` with the indexer scoring skipped."""
-    from .modeling_glm_moe_dsa import _proto_block_table_row_state
+def _block_table_rows(model, cache, allocator, hidden_states, kwargs, topk_length):
+    """[gap3] Rows of a block-table decode batch, once per step: the row each query token writes its latents to, the
+    rows of its context (-1 = empty slot) and their count. One query token per request, or 1 + k with CB_MTP=spec
+    (`_proto_block_table_token_state`). Same arithmetic as `_proto_block_table_rows` with the indexer scoring
+    skipped. The state is also left on the cache, where the regular path of a later layer of the same step (the MTP
+    module's) reads it."""
+    from . import modeling_glm_moe_dsa as m
 
     page = allocator.tokens_per_page
     last_safe_row = allocator.cache_tensor.shape[0] - allocator.tokens_per_block + page - 1
-    write_rows, rows_all, visible = _proto_block_table_row_state(
-        kwargs["block_table"][allocator.index],
-        kwargs["cu_seq_lens_k"][allocator.layer_type],
-        kwargs["max_length_k"][allocator.layer_type],
-        page,
-        last_safe_row,
-        allocator.write_trash_index,
-    )
+    if m._CB_MTP_SPEC:
+        state = m._proto_block_table_token_state(
+            kwargs["block_table"][allocator.index],
+            kwargs["cu_seq_lens_q"],
+            kwargs["cu_seq_lens_k"][allocator.layer_type],
+            kwargs["max_length_k"][allocator.layer_type],
+            page,
+            last_safe_row,
+            allocator.write_trash_index,
+            hidden_states.shape[1],
+        )
+    else:
+        state = m._proto_block_table_row_state(
+            kwargs["block_table"][allocator.index],
+            kwargs["cu_seq_lens_k"][allocator.layer_type],
+            kwargs["max_length_k"][allocator.layer_type],
+            page,
+            last_safe_row,
+            allocator.write_trash_index,
+        )
+    cache._proto_bt_state = state
+    write_rows, rows_all, visible = state
+    if write_rows.shape[0] != hidden_states.shape[1]:
+        raise RuntimeError(f"FUSE_COMPILE: {write_rows.shape[0]} write rows for {hidden_states.shape[1]} query tokens")
     rows = torch.where(visible, rows_all, -1).to(torch.int32)
     num_selected = min(model.config.index_topk, rows_all.shape[1])
     counts = visible.sum(-1).clamp(max=num_selected).to(torch.int32) if topk_length else None
