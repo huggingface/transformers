@@ -32,3 +32,35 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     integration_expected_token_ids = [100, 19, 3, 9, 794, 3, 2, 27, 47, 2170, 16, 668, 13527, 6, 11, 48, 19, 12553, 7, 154, 5, 3, 2, 2018, 8774, 2018, 8774, 8774, 3, 2, 7, 3155, 7102, 2, 7, 3155, 12137, 37, 826, 6108, 225, 36, 3085, 23734, 26, 10, 8774, 5, 299, 3, 23, 52, 26, 11, 3, 2, 3, 23, 52, 26, 3, 2, 9459, 149, 33, 25, 692]  # fmt: skip
     expected_tokens_from_ids = ['▁This', '▁is', '▁', 'a', '▁test', '▁', '<unk>', '▁I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fal', 's', 'é', '.', '▁', '<unk>', '▁Hi', '▁Hello', '▁Hi', '▁Hello', '▁Hello', '▁', '<unk>', 's', '>', '▁hi', '<unk>', 's', '>', 'there', '▁The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encode', 'd', ':', '▁Hello', '.', '▁But', '▁', 'i', 'r', 'd', '▁and', '▁', '<unk>', '▁', 'i', 'r', 'd', '▁', '<unk>', '▁Hey', '▁how', '▁are', '▁you', '▁doing']  # fmt: skip
     integration_expected_decoded_text = "This is a test <unk> I was born in 92000, and this is falsé. <unk> Hi Hello Hi Hello Hello <unk>s> hi<unk>s>there The following string should be properly encoded: Hello. But ird and <unk> ird <unk> Hey how are you doing"
+
+    def test_newline_token_preserved_when_in_vocab(self):
+        vocab_with_newline = [
+            ("<pad>", 0.0),
+            ("</s>", 0.0),
+            ("<unk>", 0.0),
+            ("\n", -1.0),
+            ("▁", -2.0),
+            ("▁line", -1.5),
+            ("line", -1.5),
+        ]
+        tokenizer = T5Tokenizer(vocab=vocab_with_newline, extra_ids=0)
+        ids = tokenizer("line\nline", add_special_tokens=False)["input_ids"]
+        self.assertEqual(ids, [5, 3, 6])
+        self.assertEqual(tokenizer.convert_ids_to_tokens(ids), ["▁line", "\n", "line"])
+
+        lone_ids = tokenizer("\n", add_special_tokens=False)["input_ids"]
+        self.assertEqual(lone_ids, [4, 3])
+        self.assertEqual(tokenizer.convert_ids_to_tokens(lone_ids), ["▁", "\n"])
+
+        # Vocabularies without explicit whitespace tokens keep WhitespaceSplit behavior
+        vocab_without_newline = [
+            ("<pad>", 0.0),
+            ("</s>", 0.0),
+            ("<unk>", 0.0),
+            ("▁", -2.0),
+            ("▁line", -1.5),
+            ("line", -1.5),
+        ]
+        std_tokenizer = T5Tokenizer(vocab=vocab_without_newline, extra_ids=0)
+        self.assertEqual(std_tokenizer("line\nline", add_special_tokens=False)["input_ids"], [4, 4])
+        self.assertEqual(std_tokenizer("\n", add_special_tokens=False)["input_ids"], [])
