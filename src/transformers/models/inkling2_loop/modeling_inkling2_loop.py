@@ -142,6 +142,30 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernel_func_from_hub_with_fallback("inkling2_loop_attention_residual", "inkling2_loop_attention_residual")
+def inkling2_loop_attention_residual(
+    block_states: torch.Tensor, partial_block_states: torch.Tensor, query: torch.Tensor, module: nn.Module
+) -> torch.Tensor:
+    """
+    Attention of the learned `query` (`(hidden_size,)` or `(num_queries, hidden_size)`) over the normalized block
+    states and the partial block, the same queries at every position: `(batch, seq_len, num_queries, hidden_size)`. A
+    hub kernel may replace it (on MPS: one dispatch).
+    """
+    stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
+    stacked_states = module.norm(stacked_states)
+
+    hidden_size = stacked_states.shape[-1]
+    query_states = query.float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
+
+    attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+        module.config._attn_implementation, eager_attention_forward
+    )
+    attn_output, _ = attention_interface(
+        module, query_states, stacked_states, stacked_states, None, scaling=hidden_size**-0.5
+    )
+    return attn_output.transpose(1, 2)
+
+
 class Inkling2LoopMessageAttentionResidual(nn.Module):
     """Retrieves messages from the block states of the previous block using learned queries."""
 
@@ -158,19 +182,10 @@ class Inkling2LoopMessageAttentionResidual(nn.Module):
     def forward(
         self, block_states: torch.Tensor, partial_block_states: torch.Tensor, loop_layer_idx: int
     ) -> torch.Tensor:
-        stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
-        stacked_states = self.norm(stacked_states)
+        return self.attend(block_states, partial_block_states, self.query[loop_layer_idx])
 
-        hidden_size = stacked_states.shape[-1]
-        query_states = self.query[loop_layer_idx].float()
-        query_states = query_states.expand(*stacked_states.shape[:-2], -1, -1)
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, _ = attention_interface(
-            self, query_states, stacked_states, stacked_states, None, scaling=hidden_size**-0.5
-        )
-        return attn_output.transpose(1, 2)
+    def attend(self, block_states: torch.Tensor, partial_block_states: torch.Tensor, query: torch.Tensor):
+        return inkling2_loop_attention_residual(block_states, partial_block_states, query, self)
 
 
 class Inkling2LoopL2Clip(nn.Module):
@@ -859,21 +874,10 @@ class Inkling2LoopBlockAttentionResidual(nn.Module):
         self.is_causal = False
 
     def forward(self, block_states: torch.Tensor, partial_block_states: torch.Tensor) -> tuple[torch.Tensor, ...]:
-        stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
-        stacked_states = self.norm(stacked_states)
+        return self.attend(block_states, partial_block_states, self.query).unbind(-2)
 
-        hidden_size = stacked_states.shape[-1]
-        # (batch, seq_len, num_queries, hidden_size), the same queries at every position
-        query_states = self.query.float().view(-1, hidden_size).expand(*stacked_states.shape[:-2], -1, -1)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, _ = attention_interface(
-            self, query_states, stacked_states, stacked_states, None, scaling=hidden_size**-0.5
-        )
-        return attn_output.transpose(1, 2).unbind(-2)
+    def attend(self, block_states: torch.Tensor, partial_block_states: torch.Tensor, query: torch.Tensor):
+        return inkling2_loop_attention_residual(block_states, partial_block_states, query, self)
 
 
 class Inkling2LoopSlidingDecoderLayer(GradientCheckpointingLayer):

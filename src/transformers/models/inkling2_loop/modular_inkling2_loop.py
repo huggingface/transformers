@@ -201,19 +201,7 @@ class Inkling2LoopMessageAttentionResidual(Inkling2BlockAttentionResidual):
     def forward(
         self, block_states: torch.Tensor, partial_block_states: torch.Tensor, loop_layer_idx: int
     ) -> torch.Tensor:
-        stacked_states = torch.cat([block_states, partial_block_states.unsqueeze(-2)], dim=-2).float()
-        stacked_states = self.norm(stacked_states)
-
-        hidden_size = stacked_states.shape[-1]
-        query_states = self.query[loop_layer_idx].float()
-        query_states = query_states.expand(*stacked_states.shape[:-2], -1, -1)
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-        attn_output, _ = attention_interface(
-            self, query_states, stacked_states, stacked_states, None, scaling=hidden_size**-0.5
-        )
-        return attn_output.transpose(1, 2)
+        return self.attend(block_states, partial_block_states, self.query[loop_layer_idx])
 
 
 class Inkling2LoopSlidingAttention(Inkling2SlidingAttention):
