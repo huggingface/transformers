@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_dots3_note import *
     from .configuration_dots3_note import *
     from .feature_extraction_dots3_note import *
     from .modeling_dots3_note import *

@@ -319,7 +319,7 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
     def _load_sample(self, name):
-        sampling_rate = self.processor.feature_extractor.sampling_rate
+        sampling_rate = self.processor.audio_processor.sampling_rate
         audio = load_audio(self.AUDIO_URL, sampling_rate=sampling_rate)
         num_seconds = self.SECONDS[name]
         return audio if num_seconds is None else audio[: num_seconds * sampling_rate]
@@ -363,7 +363,7 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
     def _speaker_probabilities(self, model, names):
         """Per-sample speaker probabilities on the valid frames, as in the reproducer."""
         inputs = self.processor(
-            [self._load_sample(name) for name in names], sampling_rate=self.processor.feature_extractor.sampling_rate
+            [self._load_sample(name) for name in names], sampling_rate=self.processor.audio_processor.sampling_rate
         )
         inputs = inputs.to(torch_device, dtype=model.dtype)
         with torch.no_grad():
@@ -414,7 +414,7 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         model = self._load_model()
         offline_model = self._low_latency_offline_model()
         processor = self.processor
-        inputs = processor(self._load_sample("long"), sampling_rate=processor.feature_extractor.sampling_rate)
+        inputs = processor(self._load_sample("long"), sampling_rate=processor.audio_processor.sampling_rate)
         inputs = inputs.to(torch_device, dtype=model.dtype)
         input_features, attention_mask = inputs.input_features, inputs.attention_mask
         self.assertEqual(processor.streaming_mode, "low_latency")
@@ -461,7 +461,7 @@ class Nemotron3DiarizationIntegrationTest(MemoryCleanupMixin, unittest.TestCase)
         self.assertEqual(processor.streaming_mode, "low_latency")
         self.assertEqual(processor.streaming_latency_ms, 1040)
         audio = self._load_sample("long")
-        sampling_rate = processor.feature_extractor.sampling_rate
+        sampling_rate = processor.audio_processor.sampling_rate
 
         def inputs_generator():
             def extract(start, stop, is_first, is_last):

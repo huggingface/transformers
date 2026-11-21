@@ -24,8 +24,7 @@ from transformers.testing_utils import (
     require_vision,
 )
 
-from ...test_processing_common import ProcessorTesterMixin
-from .test_feature_extraction_gemma3n import floats_list
+from ...test_processing_common import ProcessorTesterMixin, floats_list
 
 
 # TODO: omni-modal processor can't run tests from `ProcessorTesterMixin`
@@ -75,7 +74,7 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
 
-        sampling_rate = processor.feature_extractor.sampling_rate
+        sampling_rate = processor.audio_processor.sampling_rate
         audio_lengths = [sampling_rate, 4 * sampling_rate]
         inputs = processor(
             text=[f"This is an audio {processor.audio_token}"] * len(audio_lengths),
@@ -87,12 +86,12 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_audio_tokens_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)
         self.assertListEqual(num_audio_tokens_from_call, num_audio_tokens_from_helper["num_audio_tokens"])
 
-    def test_audio_feature_extractor(self):
+    def test_audio_audio_processor(self):
         processor = self.get_processor()
-        feature_extractor = self.get_component("feature_extractor")
+        audio_processor = self.get_component("audio_processor")
 
         raw_speech = floats_list((3, 1000))
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="pt")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="pt")
         input_processor = processor(text=f"Transcribe: {self.audio_token * 3}", audio=raw_speech, return_tensors="pt")
 
         for key in input_feat_extract:

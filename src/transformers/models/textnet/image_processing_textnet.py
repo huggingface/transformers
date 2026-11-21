@@ -37,7 +37,7 @@ class TextNetImageProcessorKwargs(ImagesKwargs, total=False):
         Ensures height and width are rounded to a multiple of this value after resizing.
     """
 
-    size_divisor: int
+    size_divisor: int | None
 
 
 @auto_docstring

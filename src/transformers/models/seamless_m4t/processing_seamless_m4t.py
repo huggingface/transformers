@@ -46,8 +46,8 @@ class DeprecatedSeamlessM4TProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class SeamlessM4TProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(

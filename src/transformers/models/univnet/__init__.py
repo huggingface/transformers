@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_univnet import *
     from .configuration_univnet import *
     from .feature_extraction_univnet import *
     from .modeling_univnet import *

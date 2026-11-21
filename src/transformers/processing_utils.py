@@ -22,6 +22,7 @@ import inspect
 import json
 import os
 import re
+import warnings
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -30,15 +31,15 @@ from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union, Unpack, i
 
 import numpy as np
 from huggingface_hub import is_offline_mode
-from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
-from .audio_utils import AudioInput, load_audio, make_list_of_audio
+from .audio_utils import AudioInput, SpectrogramConfig, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import (
     ChannelDimension,
     ImageInput,
+    SizeDict,
     is_vision_available,
     make_flat_list_of_images,
 )
@@ -79,12 +80,14 @@ from .utils.chat_template_utils import (
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
+    padding_side_validator,
     padding_validator,
     positive_any_number,
     positive_int,
     resampling_validator,
     tensor_type_validator,
     truncation_validator,
+    validate_present_kwargs,
     video_metadata_validator,
 )
 from .video_utils import VideoInput, VideoMetadataType, make_batched_videos
@@ -121,7 +124,7 @@ class _LazyAutoProcessorMapping(dict):
         "image_processor": ("transformers.models.auto.image_processing_auto", "AutoImageProcessor"),
         "video_processor": ("transformers.models.auto.video_processing_auto", "AutoVideoProcessor"),
         "feature_extractor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
-        "audio_processor": ("transformers.models.auto.feature_extraction_auto", "AutoFeatureExtractor"),
+        "audio_processor": ("transformers.models.auto.feature_extraction_auto", "AutoAudioProcessor"),
         "tokenizer": ("transformers.models.auto.tokenization_auto", "AutoTokenizer"),
     }
 
@@ -147,9 +150,9 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
         "DacModel",
         "PocketTTSAudioTokenizerModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
-    "audio_processor": "FeatureExtractionMixin",
+    "audio_processor": ("FeatureExtractionMixin", "BaseAudioProcessor"),
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
-    "feature_extractor": "FeatureExtractionMixin",
+    "feature_extractor": ("FeatureExtractionMixin", "BaseAudioProcessor", "MarkupLMFeatureExtractor"),
     "image_processor": "ImageProcessingMixin",
     "video_processor": "VideoProcessorMixin",
 }
@@ -232,12 +235,12 @@ class TextKwargs(TypedDict, total=False):
     text_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
     text_pair_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
     add_special_tokens: bool | None
-    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
-    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
-    max_length: Annotated[int | None, positive_int()]
-    stride: Annotated[int | None, positive_int()]
+    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator]
+    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator]
+    max_length: Annotated[int | None, positive_int]
+    stride: Annotated[int | None, positive_int]
     is_split_into_words: bool | None
-    pad_to_multiple_of: Annotated[int | None, positive_int()]
+    pad_to_multiple_of: Annotated[int | None, positive_int]
     return_token_type_ids: bool | None
     return_attention_mask: bool | None
     return_overflowing_tokens: bool | None
@@ -249,7 +252,7 @@ class TextKwargs(TypedDict, total=False):
     return_mm_token_type_ids: bool | None
     return_text_replacement_offsets: bool | None
     sanitize_control_tokens: bool | None
-    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -306,22 +309,26 @@ class ImagesKwargs(TypedDict, total=False):
 
     do_convert_rgb: bool | None
     do_resize: bool | None
-    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator]
     default_to_square: bool | None
-    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
-    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
+    crop_size: Annotated[
+        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
+    ]
+    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator]
     do_rescale: bool | None
     rescale_factor: float | None
     do_normalize: bool | None
     image_mean: float | list[float] | tuple[float, ...] | None
     image_std: float | list[float] | tuple[float, ...] | None
     do_pad: bool | None
-    pad_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    pad_size: Annotated[
+        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
+    ]
     do_center_crop: bool | None
     data_format: str | ChannelDimension | None
     input_data_format: str | ChannelDimension | None
-    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
-    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    device: Annotated[Union[str, "torch.device"] | None, device_validator]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
     disable_grouping: bool | None
     image_seq_length: int | None
 
@@ -381,9 +388,9 @@ class VideosKwargs(TypedDict, total=False):
 
     do_convert_rgb: bool | None
     do_resize: bool | None
-    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator]
     default_to_square: bool | None
-    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator()]
+    resample: Annotated[Union["PILImageResampling", int] | None, resampling_validator]
     do_rescale: bool | None
     rescale_factor: float | None
     do_normalize: bool | None
@@ -391,68 +398,93 @@ class VideosKwargs(TypedDict, total=False):
     image_std: float | list[float] | tuple[float, ...] | None
     do_center_crop: bool | None
     do_pad: bool | None
-    crop_size: Annotated[int | list[int] | tuple[int, ...] | dict[str, int] | None, image_size_validator()]
+    crop_size: Annotated[
+        int | list[int] | tuple[int, ...] | dict[str, int | None] | SizeDict | None, image_size_validator
+    ]
     data_format: str | ChannelDimension | None
     input_data_format: str | ChannelDimension | None
-    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
+    device: Annotated[Union[str, "torch.device"] | None, device_validator]
     do_sample_frames: bool | None
-    video_metadata: Annotated[VideoMetadataType | None, video_metadata_validator()]
-    fps: Annotated[int | float | None, positive_any_number()]
-    num_frames: Annotated[int | None, positive_int()]
+    video_metadata: Annotated[VideoMetadataType | None, video_metadata_validator]
+    fps: Annotated[int | float | None, positive_any_number]
+    num_frames: Annotated[int | None, positive_int]
     return_metadata: bool | None
-    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
 
 
 class AudioKwargs(TypedDict, total=False):
     """
-    Keyword arguments for audio processing.
+    Keyword arguments for audio processing. For extended documentation, check the appropriate AudioProcessor
+    class methods and docstrings.
+
+    Note on `sampling_rate`: a model's native sampling rate is a processor *identity* attribute, set once at
+    init time as `sampling_rate` (e.g. `WhisperAudioProcessor.sampling_rate == 16000`). The per-call
+    `sampling_rate` keyword below reuses the same name as the *caller's assertion* of the rate at which the
+    provided arrays were actually sampled; it never modifies the processor's own `sampling_rate`. A mismatch
+    resamples the input to the native rate. It describes a passed array only: audio referenced by URL or path
+    is always decoded at the native rate, so a `sampling_rate` given alongside such input is ignored with a
+    warning.
 
     Attributes:
         sampling_rate (`int`, *optional*):
-            The sampling rate at which the `raw_speech` input was sampled.
-        raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
-            The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-            values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
-            stereo, i.e. single float per timestep.
+            The sampling rate at which the provided audio arrays were sampled, asserted by the caller. If it
+            differs from the model's native `sampling_rate`, the audio is resampled to the native rate.
+        spectrogram_config (`dict` or [`~audio_utils.SpectrogramConfig`], *optional*):
+            Per-call override of the spectrogram extraction parameters (STFT, mel filterbank, log scaling).
+            A plain dict is coerced to [`~audio_utils.SpectrogramConfig`].
+        do_extract_spectrogram (`bool`, *optional*):
+            Whether to extract spectrogram features from the audio (otherwise padded raw waveforms are returned).
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*):
-            Select a strategy to pad the returned sequences (according to the model's padding side and padding
-            index) among:
+            Select a strategy to pad the returned sequences. Prefer the named string strategies in new code; the
+            boolean forms remain compatibility aliases:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                sequence if provided).
-            - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'`
+            - `True` or `'longest'`: Pad to the longest sequence in the batch (or add no padding if only one
+                sequence is provided).
+            - `'max_length'`: Pad shorter sequences to the length specified by `max_length`.
+            - `False` or `'do_not_pad'`: Do not pad. Items must still have compatible shapes to form a dense batch.
         max_length (`int`, *optional*):
-            Maximum length of the returned list and optionally padding length (see above).
+            Boundary used by `padding='max_length'` and `truncation=True`.
         truncation (`bool`, *optional*):
-            Activates truncation to cut input sequences longer than *max_length* to *max_length*.
+            Cut input sequences longer than `max_length`. Truncation runs before padding and requires
+            `max_length`.
         pad_to_multiple_of (`int`, *optional*):
-            If set, will pad the sequence to a multiple of the provided value.
-        return_attention_mask (`bool`, *optional*):
-            Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
-        device (`str` or `torch.device`, *optional*):
-            The device to compute the audio features on (e.g. "cpu", "cuda"), only relevant for feature
-            extractors that compute them with torch.
+            Round the padding or truncation boundary up to a multiple of the provided value.
+        padding_side (`str`, *optional*):
+            Side the padding is added on, `"left"` or `"right"`.
+        padding_value (`float`, *optional*):
+            Value used to fill the padded positions.
+        return_padding_mask (`bool`, *optional*):
+            Whether the processor should return a padding mask alongside its output. The mask accompanies
+            whichever output family the processor emits: `audio_features_mask`, `audio_values_mask` or
+            `audio_input_ids_mask`.
+        dither (`float`, *optional*):
+            Amount of dithering noise added to the waveform before feature extraction. `0.0` disables it.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
             - `'np'`: Return NumPy `np.ndarray` objects.
+        device (`str`, *optional*):
+            The device to use for processing (e.g. "cpu", "cuda"), only relevant for the torch backend; other
+            backends raise on a device other than CPU.
         load_audio_backend (`str`, *optional*):
             Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
             in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"soundfile"`, `"torchaudio"`
             (`"librosa"` is a deprecated alias of `"soundfile"`).
     """
 
-    sampling_rate: Annotated[int | None, positive_int()]
-    raw_speech: Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]] | None
-    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
-    max_length: Annotated[int | None, positive_int()]
-    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
-    pad_to_multiple_of: Annotated[int | None, positive_int()]
-    return_attention_mask: bool | None
-    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
-    return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    sampling_rate: Annotated[int | None, positive_int]
+    spectrogram_config: dict | SpectrogramConfig | None
+    do_extract_spectrogram: bool | None
+    padding: Annotated[bool | str | PaddingStrategy | None, padding_validator]
+    max_length: Annotated[int | None, positive_int]
+    truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator]
+    pad_to_multiple_of: Annotated[int | None, positive_int]
+    padding_side: Annotated[str | None, padding_side_validator]
+    padding_value: float | int | None
+    return_padding_mask: bool | None
+    dither: Annotated[float | int | None, positive_any_number]
+    return_tensors: Annotated[str | TensorType | None, tensor_type_validator]
+    device: Annotated[Union[str, "torch.device"] | None, device_validator]
     load_audio_backend: str | None
 
 
@@ -611,12 +643,14 @@ class ProcessorMixin(PushToHubMixin):
     # they are populated via setattr in __init__ based on each subclass's `attributes`.
     tokenizer: Any
     feature_extractor: Any
+    audio_processor: Any
     image_processor: Any
     video_processor: Any
     chat_template: str | dict[str, str] | None
 
     # Names need to be attr_class for attr in attributes
     _auto_class = None
+    _attribute_aliases: dict[str, str] = {"feature_extractor": "audio_processor"}
     valid_processor_kwargs = ProcessingKwargs
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets"]
 
@@ -632,8 +666,45 @@ class ProcessorMixin(PushToHubMixin):
     return_mm_token_type_ids = False
     return_text_replacement_offsets = False
 
+    def __init_subclass__(cls, **kwargs):
+        """Translate legacy keywords before Python binds required constructor arguments."""
+        super().__init_subclass__(**kwargs)
+        init = cls.__dict__.get("__init__")
+        if init is None or "audio_processor" not in inspect.signature(init).parameters:
+            return
+
+        @functools.wraps(init)
+        def init_with_audio_alias(self, *args, **kwargs):
+            kwargs = self._normalize_attribute_aliases(kwargs, warn=True)
+            return init(self, *args, **kwargs)
+
+        cls.__init__ = init_with_audio_alias
+
+    @property
+    def feature_extractor(self):
+        if "audio_processor" in self.get_attributes():
+            warnings.warn(
+                "`feature_extractor` is deprecated; use `audio_processor` instead.", FutureWarning, stacklevel=2
+            )
+            return self.audio_processor
+        try:
+            return self.__dict__["feature_extractor"]
+        except KeyError:
+            raise AttributeError("This processor has no feature_extractor") from None
+
+    @feature_extractor.setter
+    def feature_extractor(self, value):
+        if "audio_processor" in self.get_attributes():
+            warnings.warn(
+                "`feature_extractor` is deprecated; use `audio_processor` instead.", FutureWarning, stacklevel=2
+            )
+            self.audio_processor = value
+        else:
+            self.__dict__["feature_extractor"] = value
+
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
+        kwargs = self._normalize_attribute_aliases(kwargs, warn=True)
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
@@ -756,7 +827,10 @@ class ProcessorMixin(PushToHubMixin):
             text = list(text).copy()
 
         if audio is not None and self._audio_processor is not None:
-            audio = self._audio_processor.fetch_audio(audio, sampling_rate=self._audio_processor.sampling_rate)
+            # Always decode at the processor's own rate: `sampling_rate` describes arrays the caller passes,
+            # not a decode target. Honouring it here produced audio at the wrong rate, which the audio
+            # processor then reported as the caller's mistake.
+            audio = self._audio_processor.fetch_audio(audio)
             audio = make_list_of_audio(audio)
 
         if images is not None and hasattr(self, "image_processor"):
@@ -865,7 +939,7 @@ class ProcessorMixin(PushToHubMixin):
     @property
     def _audio_processor(self):
         # TODO: To be replaced with `audio_processor`
-        return getattr(self, "audio_processor", getattr(self, "feature_extractor", None))
+        return getattr(self, "audio_processor", None) or getattr(self, "feature_extractor", None)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         processed_audio = self._audio_processor(audio, **kwargs)
@@ -1555,7 +1629,8 @@ class ProcessorMixin(PushToHubMixin):
             [`~processing_utils.ProcessingMixin`]: The processor object instantiated from those
             parameters.
         """
-        processor_dict = processor_dict.copy()
+        processor_dict = cls._normalize_attribute_aliases(processor_dict)
+        kwargs = cls._normalize_attribute_aliases(kwargs)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
         # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
@@ -1567,7 +1642,11 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict.update(kwargs)
 
         # check if there is an overlap between args and processor_dict
-        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
+        accepted_args_and_kwargs = [
+            name
+            for name, parameter in inspect.signature(cls.__init__).parameters.items()
+            if name != "self" and parameter.kind not in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD)
+        ]
 
         # validate both processor_dict and given kwargs
         unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
@@ -1679,7 +1758,7 @@ class ProcessorMixin(PushToHubMixin):
         map_preprocessor_kwargs = {
             "text_kwargs": "tokenizer",
             "images_kwargs": "image_processor",
-            "audio_kwargs": "feature_extractor",
+            "audio_kwargs": "audio_processor" if "audio_processor" in self.get_attributes() else "feature_extractor",
             "videos_kwargs": "video_processor",
         }
 
@@ -1715,13 +1794,12 @@ class ProcessorMixin(PushToHubMixin):
             # 6): _defaults overrides (BC)
             output_kwargs[modality].update(processor_kwargs_defaults.get(modality, {}).copy())
 
-        # 5): update defaults with arguments from tokenizer init
+        # 5): the tokenizer's init kwargs are text defaults (and only text: an audio processor's `padding` or
+        # `max_length` means samples, not tokens)
         if tokenizer_init_kwargs is not None:
-            for key in valid_kwarg_to_modalities:
+            for key in modality_valid_kwargs["text_kwargs"]:
                 if key in tokenizer_init_kwargs:
-                    # Yes, we update all modalities with tokenizer defaults. This is no bug.
-                    for modality in valid_kwarg_to_modalities[key]:
-                        output_kwargs[modality][key] = getattr(self.tokenizer, key, tokenizer_init_kwargs[key])
+                    output_kwargs["text_kwargs"][key] = getattr(self.tokenizer, key, tokenizer_init_kwargs[key])
 
         # 4): `_defaults.common_kwargs` overrides (BC)
         common_kwargs = processor_kwargs_defaults.get("common_kwargs", {}).copy()
@@ -1772,13 +1850,30 @@ class ProcessorMixin(PushToHubMixin):
             elif key in output_kwargs["text_kwargs"]:
                 output_kwargs[key] = output_kwargs["text_kwargs"][key]
 
+        # `return_attention_mask` was an audio option until audio processors renamed it `return_padding_mask`.
+        # Accept it from every route it could arrive by -- class defaults, `audio_kwargs`, or a flat kwarg, which
+        # used to reach audio and text alike -- rather than rejecting it below. Removal target: v5.15.
+        if getattr(self, map_preprocessor_kwargs["audio_kwargs"], None) is not None:
+            audio_kwargs = output_kwargs["audio_kwargs"]
+            legacy = audio_kwargs.pop("return_attention_mask", "__empty__")
+            if legacy == "__empty__" and "return_attention_mask" in kwargs:
+                legacy = kwargs["return_attention_mask"]
+            if legacy != "__empty__":
+                warnings.warn(
+                    "`return_attention_mask` is deprecated for audio and will be removed in transformers v5.15. "
+                    "Use `return_padding_mask` instead.",
+                    FutureWarning,
+                    stacklevel=3,
+                )
+                audio_kwargs.setdefault("return_padding_mask", legacy)
+
         # Validate flat processor kwargs
         flat_kwargs = {
             key: value
             for key, value in output_kwargs.items()
             if not is_typeddict(ModelProcessorKwargs.__annotations__.get(key)) and key != "common_kwargs"
         }
-        validate_typed_dict(ModelProcessorKwargs, flat_kwargs)
+        validate_present_kwargs(ModelProcessorKwargs, flat_kwargs)
 
         # Validate modality-specific kwargs
         for modality, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
@@ -1793,7 +1888,7 @@ class ProcessorMixin(PushToHubMixin):
                 preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
                 typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
 
-            validate_typed_dict(typed_dict_obj, output_kwargs[modality])
+            validate_present_kwargs(typed_dict_obj, output_kwargs[modality])
 
         return output_kwargs
 
@@ -1855,6 +1950,21 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict, instantiation_kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **instantiation_kwargs)
+
+    @classmethod
+    def _normalize_attribute_aliases(cls, values, warn=False):
+        """Accept legacy component names while giving canonical names precedence."""
+        values = values.copy()
+        for alias, canonical in cls._attribute_aliases.items():
+            if canonical not in cls.get_attributes():
+                continue
+            if alias in values:
+                if warn:
+                    warnings.warn(f"`{alias}` is deprecated; use `{canonical}` instead.", FutureWarning, stacklevel=3)
+                value = values.pop(alias)
+                if values.get(canonical) is None:
+                    values[canonical] = value
+        return values
 
     @classmethod
     def get_attributes(cls):
@@ -1963,9 +2073,22 @@ class ProcessorMixin(PushToHubMixin):
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
+        from .models.auto.feature_extraction_auto import _backend_kwargs
+
+        audio_modalities = ("feature_extractor", "audio_processor")
+        # With an audio sub-processor, `backend=` selects the audio backend: it goes to the audio sub-processors
+        # only (refused for one that is not a `BaseAudioProcessor`), never to a tokenizer, which would take it for
+        # its own backend and save it. Without one, it is left in `kwargs` for the sub-processors' own `backend`.
+        audio_backend = None
+        if any(_get_modality_for_attribute(name) in audio_modalities for name in sub_processors):
+            audio_backend = kwargs.pop("backend", None)
+
         for sub_processor_type in sub_processors:
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
+            backend_kwargs = {}
+            if audio_backend is not None and modality in audio_modalities:
+                backend_kwargs = {"backend": audio_backend}
 
             if (
                 "tokenizer" in sub_processor_type
@@ -1993,8 +2116,10 @@ class ProcessorMixin(PushToHubMixin):
                         f"which is deprecated. Register the correct mapping in `{auto_processor_class.__name__}` instead.",
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
+                    if backend_kwargs:  # an auto class checks `backend` against the class it resolves
+                        backend_kwargs = _backend_kwargs(auto_processor_class, audio_backend)
                 sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs, **backend_kwargs
                 )
                 args.append(sub_processor)
 
@@ -2012,7 +2137,9 @@ class ProcessorMixin(PushToHubMixin):
                             f"Config keys: {list(sub_processor_config.keys())}"
                         )
                     processor_class = cls.get_possibly_dynamic_module(class_name)
-                    sub_processor = processor_class(**sub_processor_config)
+                    if backend_kwargs:
+                        backend_kwargs = _backend_kwargs(processor_class, audio_backend)
+                    sub_processor = processor_class(**{**sub_processor_config, **backend_kwargs})
                     args.append(sub_processor)
                 else:
                     raise ValueError(

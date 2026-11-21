@@ -41,7 +41,7 @@ model_id = "nvidia/Nemotron-3-Diarization"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto")
 
-sampling_rate = processor.feature_extractor.sampling_rate
+sampling_rate = processor.audio_processor.sampling_rate
 audio = load_audio(
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/diarization_example.mp3",
     sampling_rate=sampling_rate,
@@ -84,7 +84,7 @@ model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_ma
 processor.set_streaming_mode("low_latency")  # the default, can also be "very_low_latency" and "ultra_low_latency"
 print(f"Streaming latency: {processor.streaming_latency_ms} ms")
 
-sampling_rate = processor.feature_extractor.sampling_rate
+sampling_rate = processor.audio_processor.sampling_rate
 audio = load_audio(
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/diarization_example.mp3",
     sampling_rate=sampling_rate,

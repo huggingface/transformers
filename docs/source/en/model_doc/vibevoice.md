@@ -119,7 +119,7 @@ set_seed(42)  # for deterministic results
 # Load model
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
-sampling_rate = processor.feature_extractor.sampling_rate
+sampling_rate = processor.audio_processor.sampling_rate
 
 # Prepare input
 conversation = [

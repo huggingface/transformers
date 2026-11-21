@@ -27,12 +27,13 @@ from ...utils.deprecation import deprecate_attr
 @auto_docstring
 class Qwen2AudioProcessor(ProcessorMixin):
     audio_kwargs = {
-        "return_attention_mask": True,
+        "return_padding_mask": True,
+        "padding": "max_length",
     }
 
     def __init__(
         self,
-        feature_extractor=None,
+        audio_processor=None,
         tokenizer=None,
         chat_template=None,
         audio_token="<|AUDIO|>",
@@ -53,7 +54,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
     def validate_inputs(
         self,
@@ -72,12 +73,12 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 )
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        audio = self.feature_extractor.fetch_audio(audio)
+        audio = self.audio_processor.fetch_audio(audio)
 
         # Some kwargs should not be changed so we can expand text with audio tokens below
-        kwargs["return_attention_mask"] = True
+        kwargs["return_padding_mask"] = True
         kwargs["padding"] = "max_length"
-        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs = self.audio_processor(audio, **kwargs)
 
         # rename attention_mask to prevent conflicts later on
         audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
@@ -105,8 +106,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + audio_processor_input_names + ["feature_attention_mask"]))
 
     @property
     # NOTE: we don't have default templates anymore, and the below is kept only because the hub config is not yet updated!

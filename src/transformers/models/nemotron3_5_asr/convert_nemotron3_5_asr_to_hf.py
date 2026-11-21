@@ -262,7 +262,7 @@ def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=
     num_prompts, prompt_dictionary = _resolve_prompt_conditioning(nemo_config)
 
     processor = Nemotron3_5AsrProcessor(
-        feature_extractor=feature_extractor,
+        audio_processor=feature_extractor,
         tokenizer=tokenizer_converted_fast,
         supported_num_lookahead_tokens=supported_num_lookahead_tokens,
         default_num_lookahead_tokens=default_num_lookahead_tokens,

@@ -517,9 +517,9 @@ class DeprecatedAriaImagesKwargs(ImagesKwargs, total=False):
         to the maximum size constraint).
     """
 
-    split_image: bool
-    max_image_size: int
-    min_image_size: int
+    split_image: bool | None
+    max_image_size: int | None
+    min_image_size: int | None
 
 
 class DeprecatedAriaProcessorKwargs(ProcessingKwargs, total=False):

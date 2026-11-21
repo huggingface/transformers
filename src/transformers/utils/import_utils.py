@@ -2252,8 +2252,9 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 TORCHAUDIO_IMPORT_ERROR = """
-{0} requires the torchaudio library but it was not found in your environment. Please install it and restart your
-runtime.
+{0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
+`pip install transformers[audio]`
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore

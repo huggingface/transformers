@@ -22,8 +22,8 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     Qwen2TokenizerFast,
-    Qwen3ASRFeatureExtractor,
-    WhisperFeatureExtractor,
+    Qwen3ASRAudioProcessor,
+    WhisperAudioProcessor,
 )
 from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
 from transformers.testing_utils import require_torch
@@ -45,17 +45,17 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_save_load_pretrained_default(self):
         tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
         processor = Qwen3ASRProcessor.from_pretrained(self.tmpdirname)
-        feature_extractor = processor.feature_extractor
+        audio_processor = processor.audio_processor
 
-        processor = Qwen3ASRProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Qwen3ASRProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             processor.save_pretrained(tmpdir)
             reloaded = Qwen3ASRProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(reloaded.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(reloaded.feature_extractor, Qwen3ASRFeatureExtractor)
+        self.assertEqual(reloaded.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(reloaded.audio_processor, Qwen3ASRAudioProcessor)
         self.assertIsInstance(reloaded.tokenizer, Qwen2TokenizerFast)
 
     @require_torch
@@ -143,15 +143,16 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @require_torch
     def test_audio_longer_than_chunk_length_is_not_truncated(self):
-        # Original checkpoints use `WhisperFeatureExtractor`, which truncates by default
+        # Original checkpoints load as `WhisperAudioProcessor`, which truncates by default
         tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
-        feature_extractor = WhisperFeatureExtractor(feature_size=128, chunk_length=1)
-        processor = Qwen3ASRProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-        audio = np.zeros(2 * feature_extractor.n_samples, dtype=np.float32)
+        audio_processor = WhisperAudioProcessor(max_length=16000)
+        processor = Qwen3ASRProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
+        audio = np.zeros(2 * audio_processor.max_length, dtype=np.float32)
 
         inputs = processor(text="<|audio_start|><|audio_pad|><|audio_end|>", audio=audio, return_tensors="pt")
 
-        self.assertEqual(inputs["input_features"].shape[-1], 2 * feature_extractor.nb_max_frames)
+        hop_length = audio_processor.spectrogram_config["stft_config"]["hop_length"]
+        self.assertEqual(inputs["input_features"].shape[-1], 2 * audio_processor.max_length // hop_length)
 
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):

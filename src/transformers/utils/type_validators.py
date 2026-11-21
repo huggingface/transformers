@@ -1,8 +1,8 @@
 from collections.abc import Callable, Sequence
-from functools import partial
-from typing import Any, Union, cast
+from functools import lru_cache, partial
+from typing import Any, TypedDict, Union, cast
 
-from huggingface_hub.dataclasses import as_validated_field
+from huggingface_hub.dataclasses import as_validated_field, validate_typed_dict
 
 from ..tokenization_utils_base import PaddingStrategy, TruncationStrategy
 from ..video_utils import VideoMetadataType
@@ -21,6 +21,25 @@ else:
     ACT2FN = {}
 
 
+@lru_cache
+def _schema_restricted_to(schema: type, keys: frozenset[str]) -> type:
+    annotations = {key: value for key, value in schema.__annotations__.items() if key in keys}
+    restricted = TypedDict(schema.__name__, annotations, total=False)
+    restricted.__module__ = schema.__module__
+    return restricted
+
+
+def validate_present_kwargs(schema: type, kwargs: dict) -> None:
+    """Type- and value-validate the keys of `kwargs` against the `TypedDict` `schema`, and only those.
+
+    `huggingface_hub`'s `validate_typed_dict` gives every schema key absent from the dict an internal
+    placeholder and still runs that key's `Annotated` validator on it, so a validator that rejects
+    unknown values (`resampling_validator`, `device_validator`, ...) fails for a key nobody passed.
+    Validating against the schema restricted to the passed keys checks everything given and nothing else.
+    """
+    validate_typed_dict(_schema_restricted_to(schema, frozenset(kwargs)), kwargs)
+
+
 def positive_any_number(value: int | float | None = None):
     if value is not None and (not isinstance(value, (int, float)) or not value >= 0):
         raise ValueError(f"Value must be a positive integer or floating number, got {value}")
@@ -29,6 +48,12 @@ def positive_any_number(value: int | float | None = None):
 def positive_int(value: int | None = None):
     if value is not None and (not isinstance(value, int) or not value >= 0):
         raise ValueError(f"Value must be a positive integer, got {value}")
+
+
+def strictly_positive(value: int | float | None = None):
+    """`Annotated` validator for a number that must be greater than zero (a hop, a stride, a factor)."""
+    if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 0):
+        raise ValueError(f"Value must be strictly positive, got {value}")
 
 
 @as_validated_field
@@ -58,6 +83,14 @@ def truncation_validator(value: bool | str | TruncationStrategy | None = None):
         raise ValueError("Value for truncation must be either a boolean, a string or a `TruncationStrategy`")
     elif isinstance(value, str) and value not in possible_names:
         raise ValueError(f"If truncation is a string, value must be one of {possible_names}")
+
+
+def padding_side_validator(value: str | None = None):
+    possible_names = ["left", "right"]
+    if value is None:
+        pass
+    elif not isinstance(value, str) or value not in possible_names:
+        raise ValueError(f"Value for padding_side must be one of {possible_names} but got padding_side={value}")
 
 
 def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = None):

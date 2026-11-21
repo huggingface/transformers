@@ -1,0 +1,182 @@
+# Copyright 2026 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+from typing import Annotated
+
+from ...audio_processing_base import BatchFeature
+from ...audio_processing_utils import BaseAudioProcessor
+from ...processing_utils import AudioKwargs
+from ...utils.type_validators import strictly_positive
+
+
+class Xcodec2AudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    hop_length (`int`, *optional*, defaults to 320):
+        Codec frame size, in samples. Distinct from the STFT hop in `spectrogram_config`.
+    stride (`int`, *optional*, defaults to 2):
+        Number of mel frames stacked into each output frame.
+    feature_padding_value (`float`, *optional*, defaults to 1.0):
+        Value used to pad the extracted features.
+    """
+
+    hop_length: Annotated[int, strictly_positive]
+    stride: Annotated[int, strictly_positive]
+    feature_padding_value: float | int
+
+
+class Xcodec2AudioProcessor(BaseAudioProcessor):
+    # Acoustic waveforms and semantic fbank features are assembled together by `_preprocess`.
+    legacy_field_mapping = {
+        "feature_size": None,
+        "frame_length": None,
+        "frame_shift": None,
+        "num_mel_bins": None,
+        "hop_length": None,
+        "padding_value": "feature_padding_value",
+    }
+    model_input_names = ["audio_features", "audio_features_mask", "audio_values", "audio_values_mask"]
+    pad_to_multiple_of = 320
+    sampling_rate = 16000
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 400,
+            "hop_length": 160,
+            "window_fn": "povey",
+            "power": 2.0,
+            "center": False,
+            "periodic": False,
+            "left_align_fft": True,
+        },
+        "mel_scale_config": {
+            "n_mels": 80,
+            "f_min": 20.0,
+            "f_max": 8000.0,
+            "mel_scale": "kaldi",
+            "triangularize_in_mel_space": True,
+        },
+        "log_mode": "log",
+        "preemphasis": 0.97,
+        "remove_dc_offset": True,
+        "mel_floor": 1.192092955078125e-07,
+        "waveform_scale": 32768.0,
+        "transpose_features": True,  # kaldi's (time, n_mels) orientation
+    }
+
+    hop_length = 320
+    stride = 2
+    feature_padding_value = 1.0
+    valid_kwargs = Xcodec2AudioProcessorKwargs
+    # Dual-codec waveforms are padded on the right.
+    frozen_options = ("padding_side",)
+
+    def _prepare_waveform(self, audio_el, **kwargs):
+        # the legacy FE appends one zero sample to every waveform before padding
+        return self.ops.pad(audio_el, 0, 1, axis=-1)
+
+    def _pad_semantic_waveform(self, waveform, *, hop_length):
+        # half a codec hop of zeros on both sides, so the fbank frames line up with the codec frames
+        half_hop = hop_length // 2
+        return self.ops.pad(waveform, half_hop, half_hop, axis=-1)
+
+    def _pad_feature_single(self, feature, max_length, *, feature_padding_value, **kwargs):
+        return self.ops.pad(feature, 0, max_length - feature.shape[0], axis=0, value=feature_padding_value)
+
+    def _select_semantic_waveform(self, original, acoustic, start, end, *, hop_length):
+        """XCodec2's semantic encoder sees the acoustic-truncated clip rounded to codec hops."""
+        valid_length = min((end - start + hop_length - 1) // hop_length * hop_length, acoustic.shape[-1])
+        return acoustic[:valid_length]
+
+    def _preprocess(
+        self,
+        audio,
+        *,
+        padding,
+        max_length,
+        truncation,
+        pad_to_multiple_of,
+        padding_side,
+        padding_value,
+        return_padding_mask,
+        return_tensors,
+        spectrogram_config,
+        hop_length,
+        stride,
+        feature_padding_value,
+        **kwargs,
+    ):
+        """Assemble acoustic and semantic branches; `max_length` retains each branch's legacy units.
+
+        Acoustic padding uses samples, semantic padding uses frames. The semantic mask is
+        required by the model; `return_padding_mask` controls the optional acoustic mask.
+        """
+        padded, audio_ranges = self.pad(
+            audio,
+            padding,
+            max_length,
+            truncation,
+            pad_to_multiple_of,
+            padding_side=padding_side,
+            padding_value=padding_value,
+        )
+        audio_values = self._stack_waveforms(padded)
+        output = {"audio_values": audio_values}
+        if return_padding_mask:
+            output["audio_values_mask"] = self._get_mask(audio_ranges, audio_values.shape[-1])
+
+        semantic = [
+            self._pad_semantic_waveform(
+                self._select_semantic_waveform(audio[i], audio_values[i], start, end, hop_length=hop_length),
+                hop_length=hop_length,
+            )
+            for i, (start, end) in enumerate(audio_ranges)
+        ]
+        # One fbank over the zero-padded batch: every Kaldi step is frame-local, so each clip's leading valid
+        # frames are its legacy per-clip frames, up to the mel GEMM's reduction order (ADR 0001, 2026-09-30).
+        semantic, semantic_ranges = self.pad(
+            semantic, "longest", None, False, None, padding_side="right", padding_value=0.0
+        )
+        batch = self.spectrogram(
+            self._stack_waveforms(semantic),
+            spectrogram_config=spectrogram_config,
+            audio_ranges=semantic_ranges,
+            **kwargs,
+        )
+        frame_counts = self._valid_frame_counts(self._lengths_from_ranges(semantic_ranges), spectrogram_config)
+        batch, mean, variance = self._frame_moments(batch, frame_counts, ddof=1)
+        batch = self.ops.astype((batch - mean) / self.ops.sqrt(variance + 1e-7), "float32")
+        features = [batch[i, : int(count)] for i, count in enumerate(frame_counts)]
+
+        features, frame_ranges = self._pad_features(
+            features,
+            padding,
+            max_length,
+            truncation,
+            stride,
+            padding_value=padding_value,
+            feature_padding_value=feature_padding_value,
+            **kwargs,
+        )
+        batch = self.ops.stack(features)
+        mask = self._get_mask(frame_ranges, batch.shape[1])
+
+        batch_size, num_frames, num_mel_bins = batch.shape
+        output["audio_features"] = self.ops.reshape(batch, (batch_size, num_frames // stride, num_mel_bins * stride))
+        stride_groups = self.ops.reshape(mask, (batch_size, num_frames // stride, stride))
+        output["audio_features_mask"] = self.ops.amin(stride_groups, -1)
+        return BatchFeature(output, tensor_type=return_tensors)
+
+
+__all__ = ["Xcodec2AudioProcessor"]

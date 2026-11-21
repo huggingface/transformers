@@ -24,8 +24,8 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class GraniteSpeech5Processor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(
@@ -47,7 +47,7 @@ class GraniteSpeech5Processor(ProcessorMixin):
             **kwargs,
         )
 
-        expected_sampling_rate = self.feature_extractor.sampling_rate
+        expected_sampling_rate = self.audio_processor.sampling_rate
         if sampling_rate is None:
             logger.warning_once(
                 f"You've provided audio without specifying the sampling rate. It will be assumed to be {expected_sampling_rate}, which can result in silent errors."
@@ -65,8 +65,8 @@ class GraniteSpeech5Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["labels"]
 
 
 __getattr__ = deprecate_attr(__name__, rename={"GraniteSpeech5ProcessorKwargs": (ProcessingKwargs, "5.29.0")})

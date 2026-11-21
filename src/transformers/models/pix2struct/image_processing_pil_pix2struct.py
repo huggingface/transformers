@@ -52,7 +52,7 @@ class Pix2StructImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     max_patches: int
-    patch_size: dict[str, int]
+    patch_size: dict[str, int] | SizeDict
     is_vqa: bool
     header_text: list[str] | str | None
 

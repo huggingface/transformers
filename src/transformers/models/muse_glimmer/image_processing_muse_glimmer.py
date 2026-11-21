@@ -49,7 +49,7 @@ class MuseGlimmerImageProcessorKwargs(ImagesKwargs, total=False):
     temporal_patch_size: int
     merge_size: int
 
-    max_image_tokens: int
+    max_image_tokens: int | None
 
 
 def smart_resize(

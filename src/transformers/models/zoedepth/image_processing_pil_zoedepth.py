@@ -65,7 +65,7 @@ class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     keep_aspect_ratio: bool
-    ensure_multiple_of: int
+    ensure_multiple_of: float | int
 
 
 # Adapted from transformers.models.zoedepth.image_processing_zoedepth.get_resize_output_image_size

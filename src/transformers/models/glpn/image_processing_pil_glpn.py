@@ -39,7 +39,7 @@ class GLPNImageProcessorKwargs(ImagesKwargs, total=False):
         multiple of `size_divisor`.
     """
 
-    size_divisor: int
+    size_divisor: int | None
 
 
 @auto_docstring

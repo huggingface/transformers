@@ -100,7 +100,7 @@ class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
 
     image_processor_tester_class = CohereCompassImageProcessingTester
 
-    def test_image_processor_to_json_string(self):
+    def test_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())

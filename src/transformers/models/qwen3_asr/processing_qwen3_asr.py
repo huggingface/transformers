@@ -23,10 +23,9 @@ from ...audio_utils import (
     prepare_language_inputs,
 )
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
-from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
 
 
@@ -329,8 +328,24 @@ def _detect_and_fix_repetitions(text, threshold=20):
     return text
 
 
+class Qwen3ASRAudioKwargs(AudioKwargs, total=False):
+    """
+    n_window (`int`, *optional*, defaults to 50):
+        Attention window of the audio encoder, in feature frames. Used by the processor to compute how many
+        audio tokens each clip expands to. Should match `config.n_window`.
+    """
+
+    n_window: int | None
+
+
+class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: Qwen3ASRAudioKwargs
+
+
 @auto_docstring
 class Qwen3ASRProcessor(ProcessorMixin):
+    valid_processor_kwargs = Qwen3ASRProcessorKwargs
+
     text_kwargs = {
         "padding": True,
         "padding_side": "left",
@@ -340,13 +355,13 @@ class Qwen3ASRProcessor(ProcessorMixin):
         "sampling_rate": 16000,
         "padding": True,
         "truncation": False,
-        "return_attention_mask": True,
+        "return_padding_mask": True,
         "n_window": 50,  # should match config.n_window
     }
 
     def __init__(
         self,
-        feature_extractor=None,
+        audio_processor=None,
         tokenizer=None,
         chat_template=None,
         timestamp_segment_time: float = 80,
@@ -355,7 +370,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         timestamp_segment_time (`float`, *optional*):
             Milliseconds per timestamp class. Defaults to 80 ms.
         """
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
         self.timestamp_segment_time = timestamp_segment_time
         self.audio_token = self.tokenizer.audio_token
         self.audio_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_token)
@@ -370,7 +385,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput,
         output_labels: bool | None = False,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -419,7 +434,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         n_window = kwargs.get("n_window", 50)
-        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs = self.audio_processor(audio, **kwargs)
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
 
         audio_lengths = self._get_audio_token_length(audio_inputs["input_features_mask"].sum(-1), n_window)
@@ -438,7 +453,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
         tokenize: bool = True,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[Qwen3ASRProcessorKwargs],
     ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the chat template.
@@ -770,14 +785,12 @@ class Qwen3ASRProcessor(ProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["input_features_mask"]))
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + audio_processor_input_names + ["input_features_mask"]))
 
     @property
     def audio_token_ids(self):
         return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
-
-__getattr__ = deprecate_attr(__name__, rename={"Qwen3ASRProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Qwen3ASRProcessor"]

@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 class GlmAsrProcessor(AudioFlamingo3Processor):
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         tokenizer,
         chat_template=None,
         audio_token="<|pad|>",
@@ -71,7 +71,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
             655 gives approximately 8192 tokens, corresponding to the maximum sequence length of the text model.
         """
         super().__init__(
-            feature_extractor,
+            audio_processor,
             tokenizer,
             chat_template=chat_template,
             audio_token=audio_token,

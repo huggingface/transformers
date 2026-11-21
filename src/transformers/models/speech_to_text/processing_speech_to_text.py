@@ -21,8 +21,8 @@ from ...utils import auto_docstring
 
 @auto_docstring
 class Speech2TextProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(self, *args, **kwargs):
@@ -37,7 +37,7 @@ class Speech2TextProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            inputs = self.audio_processor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 

@@ -100,7 +100,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor,
+        audio_processor,
         image_processor,
         tokenizer,
         video_processor,
@@ -146,7 +146,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         self.eoa_token = getattr(tokenizer, "eoa_token", None)
 
         super().__init__(
-            feature_extractor=feature_extractor,
+            audio_processor=audio_processor,
             image_processor=image_processor,
             tokenizer=tokenizer,
             video_processor=video_processor,
@@ -225,6 +225,18 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             [f"{t} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}" for t in timestamp_str]
         )
         return video_replacement
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        # Rename to the model's input names
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
+        audio_inputs["input_features_mask"] = audio_inputs.pop("audio_features_mask")
+        audio_replacements = []
+        if self.audio_token is not None:
+            audio_replacements = [
+                self.replace_audio_token(audio_inputs, audio_idx=idx, **kwargs) for idx in range(len(audio))
+            ]
+        return audio_inputs, audio_replacements
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
@@ -310,7 +322,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
         if audio_lengths is not None:
             # Dynamically compute per-audio token counts from sample lengths.
             # audio_lengths are in number of samples; assume default sampling rate.
-            sampling_rate = getattr(self.feature_extractor, "sampling_rate", 16_000)
+            sampling_rate = getattr(self.audio_processor, "sampling_rate", 16_000)
             num_audio_tokens = [
                 self._compute_audio_num_tokens(np.zeros(length), sampling_rate) for length in audio_lengths
             ]
@@ -337,12 +349,14 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             The number of audio soft tokens to insert as placeholders.
         """
         num_samples = len(audio_waveform)
-        audio_samples_per_token = getattr(self.feature_extractor, "audio_samples_per_token", 640)
+        audio_samples_per_token = getattr(self.audio_processor, "audio_samples_per_token", 640)
         return math.ceil(num_samples / audio_samples_per_token)
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
+        # The audio processor's outputs are renamed in `_process_audio`
+        renamed = {"audio_features": "input_features", "audio_features_mask": "input_features_mask"}
+        return [renamed.get(name, name) for name in super().model_input_names] + ["mm_token_type_ids"]
 
     @property
     def unused_input_names(self) -> list[str]:

@@ -36,7 +36,7 @@ class ConvNextImageProcessorKwargs(ImagesKwargs, total=False):
         Percentage of the image to crop. Only has an effect if size < 384.
     """
 
-    crop_pct: float
+    crop_pct: float | None
 
 
 @auto_docstring

@@ -75,7 +75,7 @@ class HunYuanVLImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(output.pixel_values.shape), expected_output_shape)
         self.assertTrue((output.image_grid_thw == expected_grid_thw).all())
 
-    def test_image_processor_to_json_string(self):
+    def test_to_json_string(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())

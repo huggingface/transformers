@@ -1,0 +1,26 @@
+# Copyright 2026 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from ...audio_processing_utils import BaseAudioProcessor
+
+
+class SpeechT5AudioProcessor(BaseAudioProcessor):
+    # Not read by the legacy extractor either: its signature stops at `return_attention_mask`.
+    # `frame_signal_scale` and `reduction_factor` were removed from it as no-ops (the scale was
+    # applied nowhere; the reduction factor belongs to the model, not the features).
+    legacy_field_mapping = {"frame_signal_scale": None, "reduction_factor": None}
+    sampling_rate = 16000
+
+
+__all__ = ["SpeechT5AudioProcessor"]

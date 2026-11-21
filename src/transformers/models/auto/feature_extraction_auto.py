@@ -11,16 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""AutoFeatureExtractor class."""
+"""AutoAudioProcessor and (deprecated) AutoFeatureExtractor classes."""
 
 import importlib
 import os
+import warnings
 from collections import OrderedDict
 
-# Build the list of all feature extractors
+from ...audio_processing_base import AudioProcessingMixin
+from ...audio_processing_utils import BaseAudioProcessor
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import (
     CONFIG_NAME,
     FEATURE_EXTRACTOR_NAME,
@@ -31,7 +32,6 @@ from ...utils import (
     safe_load_json_file,
 )
 from .auto_factory import _LazyAutoMapping
-from .auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -42,71 +42,150 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
+# Each entry maps a `model_type` to its audio-processor class. The backend is not part of the mapping: it is
+# chosen at construction (`backend=`, torch if importable else numpy), see `BaseAudioProcessor`.
+FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("apertus1p5", "WavTokenizerFeatureExtractor"),
-        ("audioflamingo3", "WhisperFeatureExtractor"),
-        ("canary", "ParakeetFeatureExtractor"),
-        ("csm", "EncodecFeatureExtractor"),
-        ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
-        ("embedding_gemma2", "Gemma4AudioFeatureExtractor"),
-        ("glmasr", "WhisperFeatureExtractor"),
+        ("audio-spectrogram-transformer", "AudioSpectrogramTransformerAudioProcessor"),
+        ("audioflamingo3", "WhisperAudioProcessor"),
+        ("canary", "ParakeetAudioProcessor"),
+        ("clap", "ClapAudioProcessor"),
+        ("clvp", "ClvpAudioProcessor"),
+        ("cohere_asr", "CohereAsrAudioProcessor"),
+        ("csm", "EncodecAudioProcessor"),
+        ("dac", "DacAudioProcessor"),
+        ("data2vec-audio", "Wav2Vec2AudioProcessor"),
+        ("dia", "DiaAudioProcessor"),
+        ("dots3_note", "Dots3NoteAudioProcessor"),
+        ("embedding_gemma2", "Gemma4AudioProcessor"),
+        ("encodec", "EncodecAudioProcessor"),
+        ("fun_asr_nano", "FunAsrNanoAudioProcessor"),
+        ("fun_asr_nano_encoder", "FunAsrNanoAudioProcessor"),
+        ("gemma3n", "Gemma3nAudioProcessor"),
+        ("gemma4", "Gemma4AudioProcessor"),
+        ("gemma4_unified", "Gemma4UnifiedAudioProcessor"),
+        ("glmasr", "WhisperAudioProcessor"),
         ("gradium_phonon_tts", "PocketTTSFeatureExtractor"),
-        ("granite_speech5_ctc", "GraniteSpeech5FeatureExtractor"),
-        ("granite_speech5_encoder", "GraniteSpeech5FeatureExtractor"),
-        ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),
-        ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
-        ("hubert", "Wav2Vec2FeatureExtractor"),
-        ("inkling_mm_model", "InklingFeatureExtractor"),
-        ("lasr_ctc", "LasrFeatureExtractor"),
-        ("lasr_encoder", "LasrFeatureExtractor"),
-        ("mimi", "EncodecFeatureExtractor"),
-        ("moonshine", "Wav2Vec2FeatureExtractor"),
-        ("moshi", "EncodecFeatureExtractor"),
-        ("musicgen", "EncodecFeatureExtractor"),
-        ("nemo_speechlm", "NemotronAsrStreamingFeatureExtractor"),
-        ("nemotron3_5_asr", "NemotronAsrStreamingFeatureExtractor"),
-        ("nemotron3_diarization", "NemotronAsrStreamingFeatureExtractor"),
-        ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingFeatureExtractor"),
+        ("granite_speech", "GraniteSpeechAudioProcessor"),
+        ("granite_speech5_ctc", "GraniteSpeech5AudioProcessor"),
+        ("granite_speech5_encoder", "GraniteSpeech5AudioProcessor"),
+        ("granite_speech_plus", "GraniteSpeechAudioProcessor"),
+        ("higgs_audio_v2_tokenizer", "DacAudioProcessor"),
+        ("hubert", "Wav2Vec2AudioProcessor"),
+        ("inkling_mm_model", "InklingAudioProcessor"),
+        ("kyutai_speech_to_text", "KyutaiSpeechToTextAudioProcessor"),
+        ("lasr_ctc", "LasrAudioProcessor"),
+        ("lasr_encoder", "LasrAudioProcessor"),
+        ("markuplm", "MarkupLMFeatureExtractor"),
+        ("mimi", "EncodecAudioProcessor"),
+        ("moonshine", "Wav2Vec2AudioProcessor"),
+        ("moshi", "EncodecAudioProcessor"),
+        ("moss_transcribe_diarize", "MossTranscribeDiarizeAudioProcessor"),
+        ("muse_spark", "MuseSparkFeatureExtractor"),
+        ("musicgen", "EncodecAudioProcessor"),
+        ("musicgen_melody", "MusicgenMelodyAudioProcessor"),
+        ("nemo_speechlm", "NemotronAsrStreamingAudioProcessor"),
+        ("nemotron3_5_asr", "NemotronAsrStreamingAudioProcessor"),
+        ("nemotron3_diarization", "NemotronAsrStreamingAudioProcessor"),
+        ("nemotron_asr_streaming", "NemotronAsrStreamingAudioProcessor"),
+        ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingAudioProcessor"),
+        ("neucodec", "NeuCodecAudioProcessor"),
+        ("omniasr", "OmniASRFeatureExtractor"),
         ("omniasr_ctc", "OmniASRFeatureExtractor"),
-        ("parakeet_ctc", "ParakeetFeatureExtractor"),
-        ("parakeet_encoder", "ParakeetFeatureExtractor"),
-        ("parakeet_rnnt", "ParakeetFeatureExtractor"),
-        ("parakeet_tdt", "ParakeetFeatureExtractor"),
-        ("pe_audio_video", "PeAudioFeatureExtractor"),
-        ("pocket_tts_audio_tokenizer", "EncodecFeatureExtractor"),
-        ("qwen2_5_omni", "WhisperFeatureExtractor"),
-        ("qwen2_audio", "WhisperFeatureExtractor"),
-        ("qwen3_omni_moe", "WhisperFeatureExtractor"),
-        ("seamless_m4t_v2", "SeamlessM4TFeatureExtractor"),
-        ("sew", "Wav2Vec2FeatureExtractor"),
-        ("sew-d", "Wav2Vec2FeatureExtractor"),
-        ("unispeech", "Wav2Vec2FeatureExtractor"),
-        ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
-        ("vibevoice", "VibeVoiceAcousticTokenizerFeatureExtractor"),
-        ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
-        ("voxtral", "WhisperFeatureExtractor"),
-        ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
-        ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
-        ("wavlm", "Wav2Vec2FeatureExtractor"),
-        ("xcodec", "DacFeatureExtractor"),
+        ("parakeet_ctc", "ParakeetAudioProcessor"),
+        ("parakeet_encoder", "ParakeetAudioProcessor"),
+        ("parakeet_rnnt", "ParakeetAudioProcessor"),
+        ("parakeet_tdt", "ParakeetAudioProcessor"),
+        ("pe_audio", "PeAudioAudioProcessor"),
+        ("pe_audio_video", "PeAudioAudioProcessor"),
+        ("phi4_multimodal", "Phi4MultimodalAudioProcessor"),
+        ("pocket_tts", "PocketTTSFeatureExtractor"),
+        ("pocket_tts_audio_tokenizer", "EncodecAudioProcessor"),
+        ("pop2piano", "Pop2PianoAudioProcessor"),
+        ("qwen2_5_omni", "WhisperAudioProcessor"),
+        ("qwen2_audio", "WhisperAudioProcessor"),
+        ("qwen3_asr", "Qwen3ASRAudioProcessor"),
+        ("qwen3_omni_moe", "WhisperAudioProcessor"),
+        ("seamless_m4t", "SeamlessM4tAudioProcessor"),
+        ("seamless_m4t_v2", "SeamlessM4tAudioProcessor"),
+        ("sew", "Wav2Vec2AudioProcessor"),
+        ("sew-d", "Wav2Vec2AudioProcessor"),
+        ("speech_to_text", "SpeechToTextAudioProcessor"),
+        ("speecht5", "SpeechT5AudioProcessor"),
+        ("unispeech", "Wav2Vec2AudioProcessor"),
+        ("unispeech-sat", "Wav2Vec2AudioProcessor"),
+        ("univnet", "UnivNetAudioProcessor"),
+        ("vibevoice", "VibevoiceAcousticTokenizerAudioProcessor"),
+        ("vibevoice_acoustic_tokenizer", "VibevoiceAcousticTokenizerAudioProcessor"),
+        ("vibevoice_asr", "VibevoiceAcousticTokenizerAudioProcessor"),
+        ("voxtral", "WhisperAudioProcessor"),
+        ("voxtral_realtime", "VoxtralRealtimeAudioProcessor"),
+        ("wav2vec2", "Wav2Vec2AudioProcessor"),
+        ("wav2vec2-bert", "Wav2Vec2AudioProcessor"),
+        ("wav2vec2-conformer", "Wav2Vec2AudioProcessor"),
+        ("wavlm", "Wav2Vec2AudioProcessor"),
+        ("wavtokenizer", "WavTokenizerFeatureExtractor"),
+        ("whisper", "WhisperAudioProcessor"),
+        ("xcodec", "DacAudioProcessor"),
+        ("xcodec2", "Xcodec2AudioProcessor"),
     ]
 )
 
-FEATURE_EXTRACTOR_MAPPING_NAMES.update(MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES)
+
+# Irregular legacy `XxxFeatureExtractor` names that do not derive from the new
+# `XxxAudioProcessor` by simple suffix substitution. Used by
+# `feature_extractor_class_from_name` to resolve hub JSON `feature_extractor_type` strings.
+LEGACY_FEATURE_EXTRACTOR_NAME_MAP = {
+    "ASTFeatureExtractor": "AudioSpectrogramTransformerAudioProcessor",
+    "Gemma3nAudioFeatureExtractor": "Gemma3nAudioProcessor",
+    "Gemma4AudioFeatureExtractor": "Gemma4AudioProcessor",
+    "Gemma4UnifiedAudioFeatureExtractor": "Gemma4UnifiedAudioProcessor",
+    "Speech2TextFeatureExtractor": "SpeechToTextAudioProcessor",
+    "SeamlessM4TFeatureExtractor": "SeamlessM4tAudioProcessor",
+    "VibeVoiceAcousticTokenizerFeatureExtractor": "VibevoiceAcousticTokenizerAudioProcessor",
+    "PeAudioFeatureExtractor": "PeAudioAudioProcessor",
+}
+
+
 FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES)
 
 
-def feature_extractor_class_from_name(class_name: str):
-    for module_name, extractors in FEATURE_EXTRACTOR_MAPPING_NAMES.items():
-        if class_name in extractors:
-            module_name = model_type_to_module_name(module_name)
+def _legacy_name_candidates(class_name: str) -> list[str]:
+    """Translate a legacy `XxxFeatureExtractor` name into modern candidates.
 
-            module = importlib.import_module(f".{module_name}", "transformers.models")
-            try:
-                return getattr(module, class_name)
-            except AttributeError:
-                continue
+    Hub `preprocessor_config.json` files have `feature_extractor_type: "WhisperFeatureExtractor"`
+    (legacy) or `audio_processor_type: "WhisperAudioProcessor"` (new). When loading legacy
+    configs we need to find the new class by name. Tries, in order:
+      1. The name as-is (modern names already match)
+      2. An explicit override in `LEGACY_FEATURE_EXTRACTOR_NAME_MAP`
+      3. The simple `FeatureExtractor → AudioProcessor` suffix substitution
+    """
+    candidates = [class_name]
+    if class_name in LEGACY_FEATURE_EXTRACTOR_NAME_MAP:
+        # Explicit override wins over the generic suffix substitution
+        candidates.append(LEGACY_FEATURE_EXTRACTOR_NAME_MAP[class_name])
+    elif class_name.endswith("FeatureExtractor"):
+        candidates.append(class_name.replace("FeatureExtractor", "AudioProcessor"))
+    # De-duplicate while preserving order
+    seen = set()
+    return [c for c in candidates if not (c in seen or seen.add(c))]
+
+
+def feature_extractor_class_from_name(class_name: str):
+    """Resolve an audio-processor or legacy feature-extractor name to its class object.
+
+    Handles both modern names (`WhisperAudioProcessor`) and the legacy `XxxFeatureExtractor` names still
+    found in hub `preprocessor_config.json` files.
+    """
+    for candidate in _legacy_name_candidates(class_name):
+        for model_type, extractor in FEATURE_EXTRACTOR_MAPPING_NAMES.items():
+            if extractor == candidate:
+                module = importlib.import_module(f".{model_type_to_module_name(model_type)}", "transformers.models")
+                try:
+                    return getattr(module, candidate)
+                except AttributeError:
+                    continue
 
     for extractor in FEATURE_EXTRACTOR_MAPPING._extra_content.values():
         if getattr(extractor, "__name__", None) == class_name:
@@ -121,6 +200,20 @@ def feature_extractor_class_from_name(class_name: str):
     return None
 
 
+def _backend_kwargs(audio_processor_class, backend):
+    """The `backend` kwarg for `audio_processor_class.from_pretrained`: forwarded only when given (`None` lets the
+    class default decide). `backend=` selects an op table; only a `BaseAudioProcessor` has one, so it is refused
+    rather than dropped for any other class."""
+    if backend is None:
+        return {}
+    if not (isinstance(audio_processor_class, type) and issubclass(audio_processor_class, BaseAudioProcessor)):
+        raise ValueError(
+            f"`backend={backend!r}` selects an audio backend, but {audio_processor_class.__name__} is not a "
+            "`BaseAudioProcessor`."
+        )
+    return {"backend": backend}
+
+
 def get_feature_extractor_config(
     pretrained_model_name_or_path: str | os.PathLike,
     cache_dir: str | os.PathLike | None = None,
@@ -132,7 +225,7 @@ def get_feature_extractor_config(
     **kwargs,
 ):
     """
-    Loads the feature extractor configuration from a pretrained model feature extractor configuration.
+    Loads the audio-processor / feature-extractor configuration from a pretrained model.
 
     Args:
         pretrained_model_name_or_path (`str` or `os.PathLike`):
@@ -141,7 +234,7 @@ def get_feature_extractor_config(
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
               huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
-              [`~FeatureExtractionMixin.save_pretrained`] method, e.g., `./my_model_directory/`.
+              [`~AudioProcessingMixin.save_pretrained`] method, e.g., `./my_model_directory/`.
 
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -160,32 +253,11 @@ def get_feature_extractor_config(
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
-            If `True`, will only try to load the feature extractor configuration from local files.
-
-    <Tip>
-
-    Passing `token=True` is required when you want to use a private model.
-
-    </Tip>
+            If `True`, will only try to load the audio-processor configuration from local files.
 
     Returns:
-        `Dict`: The configuration of the feature extractor.
-
-    Examples:
-
-    ```python
-    # Download configuration from huggingface.co and cache.
-    feature_extractor_config = get_feature_extractor_config("facebook/wav2vec2-base-960h")
-    # This model does not have a feature extractor config so the result will be an empty dict.
-    feature_extractor_config = get_feature_extractor_config("FacebookAI/xlm-roberta-base")
-
-    # Save a pretrained feature extractor locally and you can reload its config
-    from transformers import AutoFeatureExtractor
-
-    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
-    feature_extractor.save_pretrained("feature-extractor-test")
-    feature_extractor_config = get_feature_extractor_config("feature-extractor-test")
-    ```"""
+        `Dict`: The configuration of the audio processor.
+    """
     # Load with a priority given to the nested processor config, if available in repo
     resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
@@ -212,31 +284,167 @@ def get_feature_extractor_config(
         _raise_exceptions_for_missing_entries=False,
     )
 
-    # An empty list if none of the possible files is found in the repo
     if not resolved_feature_extractor_file and not resolved_processor_file:
-        logger.info("Could not locate the feature extractor configuration file.")
+        logger.info("Could not locate the audio-processor configuration file.")
         return {}
 
     # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
     # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
-    feature_extractor_dict = None
+    feature_extractor_dict = {}
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
-        if "feature_extractor" in processor_dict:
+        # New nested key takes priority; legacy `feature_extractor` key is the fallback.
+        if "audio_processor" in processor_dict:
+            feature_extractor_dict = processor_dict["audio_processor"]
+        elif "feature_extractor" in processor_dict:
             feature_extractor_dict = processor_dict["feature_extractor"]
 
-    if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
+    if resolved_feature_extractor_file is not None and not feature_extractor_dict:
         feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
     return feature_extractor_dict or {}
 
 
-class AutoFeatureExtractor:
+def _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, **kwargs):
+    """Shared resolution logic used by `AutoAudioProcessor` and the deprecated `AutoFeatureExtractor`.
+
+    Reads the hub config and identifies the class via the new `audio_processor_type` key, falling
+    back to the legacy `feature_extractor_type` key. A given `backend` is passed to the class's
+    `from_pretrained` only (not to the config or remote-code lookups).
+    """
+    backend = kwargs.pop("backend", None)
+    config = kwargs.pop("config", None)
+    trust_remote_code = kwargs.pop("trust_remote_code", None)
+    kwargs["_from_auto"] = True
+
+    # Resolve the revision once, so that all the files below come from the same repository state.
+    kwargs["revision"] = resolve_revision(
+        pretrained_model_name_or_path,
+        kwargs.get("revision"),
+        token=kwargs.get("token"),
+        local_files_only=kwargs.get("local_files_only", False),
+        cache_dir=kwargs.get("cache_dir"),
+    )
+
+    config_dict, _ = AudioProcessingMixin.get_audio_processor_dict(pretrained_model_name_or_path, **kwargs)
+
+    class_name_in_config = config_dict.get("audio_processor_type") or config_dict.get("feature_extractor_type")
+    auto_map = config_dict.get("auto_map") or {}
+    audio_processor_auto_map = auto_map.get("AutoAudioProcessor") or auto_map.get("AutoFeatureExtractor")
+
+    if class_name_in_config is None and audio_processor_auto_map is None:
+        if not isinstance(config, PreTrainedConfig):
+            config = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+            )
+        class_name_in_config = getattr(config, "audio_processor_type", None) or getattr(
+            config, "feature_extractor_type", None
+        )
+        if hasattr(config, "auto_map"):
+            audio_processor_auto_map = config.auto_map.get("AutoAudioProcessor") or config.auto_map.get(
+                "AutoFeatureExtractor"
+            )
+
+    audio_processor_class = None
+    if class_name_in_config is not None:
+        # Try the modern (translated) name first, then the literal name (covers registered custom
+        # classes that keep a legacy-style name).
+        for candidate in reversed(_legacy_name_candidates(class_name_in_config)):
+            audio_processor_class = feature_extractor_class_from_name(candidate)
+            if audio_processor_class is not None:
+                break
+
+    has_remote_code = audio_processor_auto_map is not None
+    has_local_code = audio_processor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
+    if has_local_code and audio_processor_class is None:
+        audio_processor_class = FEATURE_EXTRACTOR_MAPPING[type(config)]
+    explicit_local_code = (
+        has_local_code
+        and audio_processor_class is not None
+        and not audio_processor_class.__module__.startswith("transformers.")
+    )
+
+    if has_remote_code:
+        class_ref = (
+            audio_processor_auto_map[0]
+            if isinstance(audio_processor_auto_map, (list, tuple))
+            else audio_processor_auto_map
+        )
+        upstream_repo = class_ref.split("--")[0] if "--" in class_ref else None
+        trust_remote_code = resolve_trust_remote_code(
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+        )
+
+    if has_remote_code and trust_remote_code and not explicit_local_code:
+        audio_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+        _ = kwargs.pop("code_revision", None)
+        audio_processor_class.register_for_auto_class()
+        return audio_processor_class.from_pretrained(
+            pretrained_model_name_or_path, **kwargs, **_backend_kwargs(audio_processor_class, backend)
+        )
+
+    if audio_processor_class is not None:
+        return audio_processor_class.from_pretrained(
+            pretrained_model_name_or_path, **kwargs, **_backend_kwargs(audio_processor_class, backend)
+        )
+
+    raise ValueError(
+        f"Unrecognized audio processor in {pretrained_model_name_or_path}. Should have an "
+        f"`audio_processor_type` or `feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} or {CONFIG_NAME}, "
+        f"or one of the following `model_type` keys in its {CONFIG_NAME}: "
+        f"{', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES)}"
+    )
+
+
+class AutoAudioProcessor:
     r"""
-    This is a generic feature extractor class that will be instantiated as one of the feature extractor classes of the
-    library when created with the [`AutoFeatureExtractor.from_pretrained`] class method.
+    This is a generic audio processor class that will be instantiated as one of the
+    [`~audio_processing_base.AudioProcessingMixin`] subclasses when created with the
+    [`AutoAudioProcessor.from_pretrained`] class method.
 
     This class cannot be instantiated directly using `__init__()` (throws an error).
+    """
+
+    def __init__(self):
+        raise OSError(
+            "AutoAudioProcessor is designed to be instantiated "
+            "using the `AutoAudioProcessor.from_pretrained(pretrained_model_name_or_path)` method."
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(FEATURE_EXTRACTOR_MAPPING_NAMES)
+    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+        r"""
+        Instantiate one of the audio processor classes of the library from a pretrained model.
+
+        The class to instantiate is selected by reading the `audio_processor_type`
+        (or legacy `feature_extractor_type`) entry in the hub `preprocessor_config.json`.
+
+        Params:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                A model identifier on huggingface.co, a path to a saved model directory, or a path to
+                a saved audio-processor JSON file.
+            backend (`str`, *optional*):
+                Which op table the processor computes with (`"torch"`, `"numpy"`, or a backend registered with
+                `register_audio_backend`, e.g. `"mlx"` after `import mlx_audio.transformers_backend`). Defaults to
+                torch when installed, else numpy. Not saved with the processor.
+
+        List options
+        """
+        return _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+    @staticmethod
+    def register(config_class, audio_processor_class, exist_ok=False):
+        """Register `audio_processor_class` for `config_class`. The backend is chosen when it is built."""
+        FEATURE_EXTRACTOR_MAPPING.register(config_class, audio_processor_class, exist_ok=exist_ok)
+
+
+class AutoFeatureExtractor:
+    r"""
+    Deprecated alias for [`AutoAudioProcessor`].
+
+    Returns the same class as `AutoAudioProcessor.from_pretrained`.
+    Removal target: transformers v5.15. See [ADR 0002](docs/adr/0002-legacy-field-mapping.md).
     """
 
     def __init__(self):
@@ -246,153 +454,26 @@ class AutoFeatureExtractor:
         )
 
     @classmethod
-    @replace_list_option_in_docstrings(FEATURE_EXTRACTOR_MAPPING_NAMES)
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r"""
-        Instantiate one of the feature extractor classes of the library from a pretrained model vocabulary.
-
-        The feature extractor class to instantiate is selected based on the `model_type` property of the config object
-        (either passed as an argument or loaded from `pretrained_model_name_or_path` if possible), or when it's
-        missing, by falling back to using pattern matching on `pretrained_model_name_or_path`:
-
-        List options
-
-        Params:
-            pretrained_model_name_or_path (`str` or `os.PathLike`):
-                This can be either:
-
-                - a string, the *model id* of a pretrained feature_extractor hosted inside a model repo on
-                  huggingface.co.
-                - a path to a *directory* containing a feature extractor file saved using the
-                  [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
-                  `./my_model_directory/`.
-                - a path to a saved feature extractor JSON *file*, e.g.,
-                  `./my_model_directory/preprocessor_config.json`.
-            cache_dir (`str` or `os.PathLike`, *optional*):
-                Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
-                standard cache should not be used.
-            force_download (`bool`, *optional*, defaults to `False`):
-                Whether or not to force to (re-)download the feature extractor files and override the cached versions
-                if they exist.
-            proxies (`dict[str, str]`, *optional*):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            token (`str` or *bool*, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `hf auth login` (stored in `~/.huggingface`).
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-                identifier allowed by git.
-            return_unused_kwargs (`bool`, *optional*, defaults to `False`):
-                If `False`, then this function returns just the final feature extractor object. If `True`, then this
-                functions returns a `Tuple(feature_extractor, unused_kwargs)` where *unused_kwargs* is a dictionary
-                consisting of the key/value pairs whose keys are not feature extractor attributes: i.e., the part of
-                `kwargs` which has not been used to update `feature_extractor` and is otherwise ignored.
-            trust_remote_code (`bool`, *optional*, defaults to `False`):
-                Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
-                should only be set to `True` for repositories you trust and in which you have read the code, as it will
-                execute code present on the Hub on your local machine.
-            kwargs (`dict[str, Any]`, *optional*):
-                The values in kwargs of any keys which are feature extractor attributes will be used to override the
-                loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
-                controlled by the `return_unused_kwargs` keyword parameter.
-
-        <Tip>
-
-        Passing `token=True` is required when you want to use a private model.
-
-        </Tip>
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoFeatureExtractor
-
-        >>> # Download feature extractor from huggingface.co and cache.
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
-
-        >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
-        >>> # feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
-        ```"""
-        config = kwargs.pop("config", None)
-        trust_remote_code = kwargs.pop("trust_remote_code", None)
-        kwargs["_from_auto"] = True
-
-        # Resolve the revision once, so that all the files below come from the same repository state.
-        kwargs["revision"] = resolve_revision(
-            pretrained_model_name_or_path,
-            kwargs.get("revision"),
-            token=kwargs.get("token"),
-            local_files_only=kwargs.get("local_files_only", False),
-            cache_dir=kwargs.get("cache_dir"),
+        r"""Deprecated alias for [`AutoAudioProcessor.from_pretrained`]."""
+        warnings.warn(
+            "`AutoFeatureExtractor` is deprecated and will be removed in transformers v5.15. "
+            "Use `AutoAudioProcessor` instead.",
+            FutureWarning,
+            stacklevel=2,
         )
-
-        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
-        feature_extractor_class = config_dict.get("feature_extractor_type", None)
-        feature_extractor_auto_map = None
-        if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
-            feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
-
-        # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
-        if feature_extractor_class is None and feature_extractor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
-            # It could be in `config.feature_extractor_type``
-            feature_extractor_class = getattr(config, "feature_extractor_type", None)
-            if hasattr(config, "auto_map") and "AutoFeatureExtractor" in config.auto_map:
-                feature_extractor_auto_map = config.auto_map["AutoFeatureExtractor"]
-
-        if feature_extractor_class is not None:
-            feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
-
-        has_remote_code = feature_extractor_auto_map is not None
-        has_local_code = feature_extractor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
-        explicit_local_code = has_local_code and not (
-            feature_extractor_class or FEATURE_EXTRACTOR_MAPPING[type(config)]
-        ).__module__.startswith("transformers.")
-        if has_remote_code:
-            if "--" in feature_extractor_auto_map:
-                upstream_repo = feature_extractor_auto_map.split("--")[0]
-            else:
-                upstream_repo = None
-            trust_remote_code = resolve_trust_remote_code(
-                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
-            )
-
-        if has_remote_code and trust_remote_code and not explicit_local_code:
-            feature_extractor_class = get_class_from_dynamic_module(
-                feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
-            )
-            _ = kwargs.pop("code_revision", None)
-            feature_extractor_class.register_for_auto_class()
-            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        elif feature_extractor_class is not None:
-            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
-        # Last try: we use the FEATURE_EXTRACTOR_MAPPING.
-        elif type(config) in FEATURE_EXTRACTOR_MAPPING:
-            feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[type(config)]
-            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
-
-        raise ValueError(
-            f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "
-            f"`feature_extractor_type` key in its {FEATURE_EXTRACTOR_NAME} of {CONFIG_NAME}, or one of the following "
-            f"`model_type` keys in its {CONFIG_NAME}: {', '.join(c for c in FEATURE_EXTRACTOR_MAPPING_NAMES)}"
-        )
+        return _resolve_audio_processor_from_pretrained(pretrained_model_name_or_path, **kwargs)
 
     @staticmethod
     def register(config_class, feature_extractor_class, exist_ok=False):
-        """
-        Register a new feature extractor for this class.
+        """Deprecated alias for [`AutoAudioProcessor.register`]."""
+        warnings.warn(
+            "`AutoFeatureExtractor.register` is deprecated and will be removed in transformers v5.15. "
+            "Use `AutoAudioProcessor.register` instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        AutoAudioProcessor.register(config_class, feature_extractor_class, exist_ok=exist_ok)
 
-        Args:
-            config_class ([`PreTrainedConfig`]):
-                The configuration corresponding to the model to register.
-            feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
-        """
-        FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
 
-
-__all__ = ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"]
+__all__ = ["FEATURE_EXTRACTOR_MAPPING", "AutoAudioProcessor", "AutoFeatureExtractor"]

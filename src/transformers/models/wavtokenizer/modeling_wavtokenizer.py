@@ -498,7 +498,7 @@ class WavTokenizerISTFTHead(nn.Module):
 class WavTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     config: WavTokenizerConfig
     base_model_prefix = "encoder_model"
-    main_input_name = "input_values"
+    main_input_name = "audio_values"
     input_modalities = ("audio",)
 
     def _init_weights(self, module):

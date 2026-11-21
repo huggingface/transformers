@@ -2377,7 +2377,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
         >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
-        >>> audio = load_audio(url, sampling_rate=processor.feature_extractor.sampling_rate)
+        >>> audio = load_audio(url, sampling_rate=processor.audio_processor.sampling_rate)
 
         >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
 

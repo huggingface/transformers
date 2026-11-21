@@ -2826,7 +2826,7 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         "sampling_rate": 16000,
         "padding": True,
         "truncation": False,
-        "return_attention_mask": True,
+        "return_padding_mask": True,
     }
     position_id_per_seconds = 13.0
     n_window = 50
@@ -2887,15 +2887,15 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor):
         Computes the output length of the convolutional layers and the output length of the audio encoder
         """
         n_window = kwargs.get("n_window", self.n_window)
-        input_lengths = audio_length // self.feature_extractor.hop_length
+        input_lengths = audio_length // self.audio_processor.spectrogram_config.stft_config.hop_length
         return int(_get_feat_extract_output_lengths(input_lengths, n_window))
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         n_window = kwargs.pop("n_window", self.n_window)
-        audio_inputs = self.feature_extractor(audio, **kwargs)
-        audio_inputs["feature_attention_mask"] = audio_inputs.pop(
-            "attention_mask"
-        )  # rename feature_attention_mask to prevent conflicts later on
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        # Rename to the model's input names; `feature_attention_mask` also avoids clashing with the text mask
+        audio_inputs["feature_attention_mask"] = audio_inputs.pop("audio_features_mask")
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
         audio_inputs["num_audio_tokens"] = _get_feat_extract_output_lengths(
             audio_inputs["feature_attention_mask"].sum(-1), n_window
         )

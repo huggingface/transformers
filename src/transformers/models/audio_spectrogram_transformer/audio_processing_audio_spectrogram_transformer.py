@@ -1,0 +1,111 @@
+# Copyright 2026 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from ...audio_processing_utils import BaseAudioProcessor
+from ...processing_utils import AudioKwargs
+
+
+class AudioSpectrogramTransformerAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    do_normalize (`bool`, *optional*, defaults to `True`):
+        Whether to normalize the mel features with `ast_mean` and `ast_std`.
+    ast_mean (`float`, *optional*, defaults to -4.2677393):
+        Dataset mean subtracted from the features when `do_normalize` is `True`.
+    ast_std (`float`, *optional*, defaults to 4.5689974):
+        Dataset standard deviation the features are divided by when `do_normalize` is `True`.
+    max_length_frames (`int`, *optional*, defaults to 1024):
+        Number of mel frames the features are padded or truncated to.
+    """
+
+    do_normalize: bool | None
+    ast_mean: float
+    ast_std: float
+    max_length_frames: int
+
+
+class AudioSpectrogramTransformerAudioProcessor(BaseAudioProcessor):
+    # The legacy FE saved `feature_size=1` (a raw-audio default) and kept the real mel count in
+    # `num_mel_bins`, so `feature_size` opts out of the base mapping rather than overwriting it.
+    # `mean`/`std` are the dataset normalisation statistics; without the mapping a checkpoint's
+    # own values were dropped and every AST model normalised with AudioSet's, which is what the
+    # class defaults happen to be. Its `max_length` counts mel frames, not samples.
+    legacy_field_mapping = {
+        "feature_size": None,
+        "mean": "ast_mean",
+        "std": "ast_std",
+        "max_length": "max_length_frames",
+    }
+    model_input_names = ["audio_values"]
+    return_padding_mask = False
+    sampling_rate = 16000
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 400,
+            "hop_length": 160,
+            "window_fn": "hann_window",
+            "power": 2.0,
+            "center": False,
+            "periodic": False,
+            "left_align_fft": True,
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "f_min": 20.0,
+            "f_max": 8000.0,
+            "mel_scale": "kaldi",
+            "triangularize_in_mel_space": True,
+        },
+        "log_mode": "log",
+        "preemphasis": 0.97,
+        "remove_dc_offset": True,
+        "mel_floor": 1.192092955078125e-07,
+        "transpose_features": True,  # kaldi's (time, num_mel_bins) orientation
+    }
+
+    do_normalize = True
+    ast_mean = -4.2677393
+    ast_std = 4.5689974
+    max_length_frames = 1024
+    valid_kwargs = AudioSpectrogramTransformerAudioProcessorKwargs
+
+    def _compute_batched_features(
+        self, audio, *, audio_ranges, spectrogram_config, max_length_frames, padding_value, **kwargs
+    ):
+        # The legacy extractor zero-padded or truncated each clip's fbank to `max_length_frames`.
+        features, frame_counts = super()._compute_batched_features(
+            audio,
+            audio_ranges=audio_ranges,
+            spectrogram_config=spectrogram_config,
+            padding_value=padding_value,
+            **kwargs,
+        )
+        features = features[:, :max_length_frames]
+        if features.shape[1] < max_length_frames:
+            features = self.ops.pad(features, 0, max_length_frames - features.shape[1], axis=1, value=padding_value)
+        frame_counts = frame_counts.clip(max=max_length_frames)
+        return self._mask_padded_frames(features, frame_counts, padding_value=padding_value), frame_counts
+
+    def _padded_frame_count(self, padded_length, spectrogram_config, *, max_length_frames, **kwargs) -> int:
+        return max_length_frames
+
+    def _finalize_output(self, output, *, do_normalize, ast_mean, ast_std, **kwargs):
+        features = output.pop("audio_features")
+        if do_normalize:
+            features = (features - ast_mean) / (ast_std * 2)
+        output["audio_values"] = features
+        return output
+
+
+__all__ = ["AudioSpectrogramTransformerAudioProcessor"]

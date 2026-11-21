@@ -29,8 +29,8 @@ from transformers import (
     AutoProcessor,
     GenerationConfig,
     MossTranscribeDiarizeAudioConfig,
+    MossTranscribeDiarizeAudioProcessor,
     MossTranscribeDiarizeConfig,
-    MossTranscribeDiarizeFeatureExtractor,
     MossTranscribeDiarizeForConditionalGeneration,
     MossTranscribeDiarizeProcessor,
     Qwen2Tokenizer,
@@ -241,7 +241,7 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
     }
     processor = MossTranscribeDiarizeProcessor(
         # The original `preprocessor_config.json` declares `WhisperFeatureExtractor`, which lacks the chunking and `padding_mask`
-        feature_extractor=MossTranscribeDiarizeFeatureExtractor.from_pretrained(checkpoint_dir),
+        audio_processor=MossTranscribeDiarizeAudioProcessor.from_pretrained(checkpoint_dir),
         tokenizer=Qwen2Tokenizer.from_pretrained(checkpoint_dir),
         chat_template=CHAT_TEMPLATE,
         **processor_kwargs,
@@ -251,7 +251,6 @@ def convert_checkpoint(checkpoint_dir, push_to_hub, bfloat16):
     processor.tokenizer.init_kwargs["padding_side"] = "left"
     processor.tokenizer.init_kwargs["padding"] = True
     processor.tokenizer.init_kwargs["return_tensors"] = "pt"
-    processor.feature_extractor.return_attention_mask = True
 
     # 2) Convert state dict to match HF model structure
     logger.info("Converting state dict")

@@ -60,12 +60,12 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCTC.from_pretrained(model_id, device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:5]]
 
 # `device` computes the log-mel front-end on the model's accelerator, saving a host-to-device copy
 inputs = processor(
-    speech_samples, sampling_rate=processor.feature_extractor.sampling_rate, device=model.device
+    speech_samples, sampling_rate=processor.audio_processor.sampling_rate, device=model.device
 )
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)

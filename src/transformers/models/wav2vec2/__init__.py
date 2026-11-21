@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_wav2vec2 import *
     from .configuration_wav2vec2 import *
     from .feature_extraction_wav2vec2 import *
     from .modeling_wav2vec2 import *

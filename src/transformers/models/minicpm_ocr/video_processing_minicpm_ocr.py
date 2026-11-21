@@ -24,7 +24,6 @@ from functools import partial
 
 import numpy as np
 import torch
-from huggingface_hub.dataclasses import validate_typed_dict
 from PIL.Image import Resampling as PILImageResampling
 
 from ...feature_extraction_utils import BatchFeature
@@ -32,6 +31,7 @@ from ...image_transforms import divide_to_patches
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, SizeDict, validate_kwargs
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring
+from ...utils.type_validators import validate_present_kwargs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata, group_videos_by_shape, reorder_videos
 
@@ -301,7 +301,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         )
 
         # Perform type validation on received kwargs
-        validate_typed_dict(self.valid_kwargs, kwargs)
+        validate_present_kwargs(self.valid_kwargs, kwargs)
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.

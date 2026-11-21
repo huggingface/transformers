@@ -362,7 +362,7 @@ class Step3p7ImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     patch_size: int
-    max_image_size: int
+    max_image_size: int | None
 
 
 @auto_docstring

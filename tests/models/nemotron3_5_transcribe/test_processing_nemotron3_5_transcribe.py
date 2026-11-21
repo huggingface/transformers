@@ -53,7 +53,7 @@ class Nemotron3_5TranscribeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         if return_tensors == "np":
             self.skipTest("Nemotron3_5Transcribe only supports PyTorch tensors")
         self._test_apply_chat_template(
-            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
+            "audio", batch_size, return_tensors, "audio_input_name", "audio_processor", MODALITY_INPUT_DATA["audio"]
         )
 
     def test_transcription_request_prompt(self):
@@ -163,7 +163,7 @@ class Nemotron3_5TranscribeWordTimestampAlignmentTest(unittest.TestCase):
         tokenizer.add_tokens([AddedToken("<ev:laughter>", normalized=False), AddedToken("▁是", normalized=True)])
         alignment_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer, unk_token="<unk>")
         cls.processor = Nemotron3_5TranscribeProcessor(
-            processor.feature_extractor, processor.tokenizer, alignment_tokenizer
+            processor.audio_processor, processor.tokenizer, alignment_tokenizer
         )
 
     @staticmethod

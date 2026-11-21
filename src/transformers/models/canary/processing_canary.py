@@ -71,8 +71,8 @@ class CanaryProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+    def __init__(self, audio_processor=None, tokenizer=None, chat_template=None):
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
     @auto_docstring
     def __call__(
@@ -175,8 +175,8 @@ class CanaryProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["decoder_input_ids", "labels"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["decoder_input_ids", "labels"]
 
 
 __getattr__ = deprecate_attr(__name__, rename={"CanaryProcessorKwargs": (ProcessingKwargs, "5.29.0")})

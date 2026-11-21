@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers import Nemotron3DiarizationProcessor, NemotronAsrStreamingFeatureExtractor
+from transformers import Nemotron3DiarizationProcessor, NemotronAsrStreamingAudioProcessor
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
@@ -31,8 +31,8 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
     LATENCIES = {"low_latency": 1040, "very_low_latency": 640, "ultra_low_latency": 320}
 
     def get_processor(self, **kwargs) -> Nemotron3DiarizationProcessor:
-        feature_extractor = NemotronAsrStreamingFeatureExtractor(feature_size=128)
-        return Nemotron3DiarizationProcessor(feature_extractor=feature_extractor, **kwargs)
+        audio_processor = NemotronAsrStreamingAudioProcessor.from_dict({"feature_size": 128})
+        return Nemotron3DiarizationProcessor(audio_processor=audio_processor, **kwargs)
 
     def test_streaming_modes(self):
         processor = self.get_processor()
@@ -134,12 +134,12 @@ class Nemotron3DiarizationProcessorTest(unittest.TestCase):
     def test_streaming_chunks_match_full_utterance(self):
         """Per-chunk extraction must reproduce, frame for frame, a single pass over the whole audio."""
         processor = self.get_processor(streaming_mode="low_latency")
-        feature_extractor = processor.feature_extractor
+        stft_config = processor.audio_processor.spectrogram_config.stft_config
         # The window of the last frame of the full pass ends `max_overhang - len(audio) % hop_length` samples past
         # the audio: the last chunk needs end padding for that frame with a multiple of `hop_length` samples, and
         # none with `max_overhang` more.
-        max_overhang = feature_extractor.n_fft // 2 - feature_extractor.hop_length
-        num_samples_multiple_of_hop = 400 * feature_extractor.hop_length
+        max_overhang = stft_config.n_fft // 2 - stft_config.hop_length
+        num_samples_multiple_of_hop = 400 * stft_config.hop_length
         for num_samples_audio in (num_samples_multiple_of_hop, num_samples_multiple_of_hop + max_overhang):
             with self.subTest(num_samples_audio=num_samples_audio):
                 audio = np.random.RandomState(0).randn(num_samples_audio).astype(np.float32)

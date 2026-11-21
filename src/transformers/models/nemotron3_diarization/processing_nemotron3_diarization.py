@@ -34,7 +34,9 @@ DEFAULT_STREAMING_MODES = {
 
 @auto_docstring
 class Nemotron3DiarizationProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, subsampling_factor=8, streaming_modes=None, streaming_mode="low_latency"):
+    audio_kwargs = {"return_padding_mask": True, "return_tensors": "pt"}
+
+    def __init__(self, audio_processor, subsampling_factor=8, streaming_modes=None, streaming_mode="low_latency"):
         r"""
         subsampling_factor (`int`, *optional*, defaults to 8):
             Number of mel frames per encoder frame, mirroring `Nemotron3DiarizationAudioConfig.subsampling_factor`.
@@ -50,7 +52,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         self.subsampling_factor = subsampling_factor
         self.streaming_modes = streaming_modes if streaming_modes is not None else DEFAULT_STREAMING_MODES
         self.set_streaming_mode(streaming_mode)
-        super().__init__(feature_extractor)
+        super().__init__(audio_processor)
 
     def set_streaming_mode(self, streaming_mode: str):
         """
@@ -76,8 +78,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
     ) -> BatchFeature:
         r"""
         sampling_rate (`int`, *optional*):
-            The sampling rate of the input audio in Hz. Validated against the feature extractor's expected sampling
-            rate (16000 Hz) when provided.
+            The sampling rate of the input audio in Hz. The audio processor resamples audio given at another rate.
         is_streaming (`bool`, *optional*, defaults to `False`):
             Whether the audio is one chunk of a streaming session, `is_first_audio_chunk` and `is_last_audio_chunk`
             telling the first and the last chunks from the others. The chunk sizes are those of `streaming_mode`,
@@ -85,7 +86,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
             `num_samples_first_audio_chunk` audio samples for the first one and `num_samples_per_audio_chunk` for
             the later ones.
         is_first_audio_chunk (`bool`, *optional*, defaults to `True`):
-            Whether this is the first chunk of a streaming session. The feature extractor centers the analysis
+            Whether this is the first chunk of a streaming session. The audio processor centers the analysis
             windows (`center=True`) for the first chunk and for offline use, and does not (`center=False`) for the
             later chunks, so that the per-chunk spectrogram reproduces, frame for frame, a single full-utterance
             pass. Must be `True` when `is_streaming=False`.
@@ -97,7 +98,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
             frames of the utterance. Must be `False` when `is_streaming=False`.
 
         Returns:
-            [`BatchFeature`]: the feature extractor outputs, `input_features` and `attention_mask`. In streaming mode
+            [`BatchFeature`]: the audio processor outputs, renamed to the model's `input_features` and `attention_mask`. In streaming mode
             the trailing frames whose analysis window reaches past a chunk other than the last are dropped, so `input_features` holds
             exactly the frames of the chunk and can be passed to the model as is, and every chunk but the last also
             carries `num_lookahead_frames`, the number of its trailing look-ahead encoder frames, which puts the
@@ -112,13 +113,17 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
 
         audio = make_list_of_audio(audio)
         output_kwargs = self._merge_kwargs(**kwargs)
-        inputs = self.feature_extractor(
+        inputs = self.audio_processor(
             audio,
             sampling_rate=sampling_rate,
             center=is_first_audio_chunk,
             is_last_audio_chunk=is_last_audio_chunk,
             **output_kwargs["audio_kwargs"],
         )
+        # The model takes the legacy names
+        inputs["input_features"] = inputs.pop("audio_features")
+        if "audio_features_mask" in inputs:
+            inputs["attention_mask"] = inputs.pop("audio_features_mask")
         if is_streaming:
             num_frames = int(inputs["attention_mask"].sum(-1).max())
             inputs["input_features"] = inputs["input_features"][:, :num_frames]
@@ -136,6 +141,10 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         return inputs
 
     @property
+    def _stft_config(self):
+        return self.audio_processor.spectrogram_config.stft_config
+
+    @property
     def _streaming_chunk_sizes(self) -> tuple[int, int]:
         """`(chunk_length, chunk_right_context)` of the streaming mode, in encoder frames."""
         # a list once reloaded from `processor_config.json`
@@ -150,7 +159,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         """
         chunk_length, chunk_right_context = self._streaming_chunk_sizes
         encoder_frame_ms = (
-            self.subsampling_factor * self.feature_extractor.hop_length / self.feature_extractor.sampling_rate * 1000
+            self.subsampling_factor * self._stft_config.hop_length / self.audio_processor.sampling_rate * 1000
         )
         return round((chunk_length + chunk_right_context) * encoder_frame_ms)
 
@@ -175,8 +184,8 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         Number of audio samples to feed for the first chunk of a session (`is_first_audio_chunk=True`, centered
         windows) so that the processor returns exactly `num_mel_frames_per_audio_chunk` frames.
         """
-        return (self.num_mel_frames_per_audio_chunk - 1) * self.feature_extractor.hop_length + (
-            self.feature_extractor.win_length // 2
+        return (self.num_mel_frames_per_audio_chunk - 1) * self._stft_config.hop_length + (
+            self._stft_config.win_length // 2
         )
 
     @property
@@ -185,9 +194,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         Number of audio samples to feed for a later chunk of a session (`is_first_audio_chunk=False`, uncentered
         windows) so that the processor returns exactly `num_mel_frames_per_audio_chunk` frames.
         """
-        return (
-            self.num_mel_frames_per_audio_chunk * self.feature_extractor.hop_length + self.feature_extractor.win_length
-        )
+        return self.num_mel_frames_per_audio_chunk * self._stft_config.hop_length + self._stft_config.win_length
 
     @requires(backends=("torch",))
     def extract_speaker_dict(
@@ -221,7 +228,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         [[{'Start': 0.0, 'End': 15.43, 'Speaker': 0}, {'Start': 15.43, 'End': 21.05, 'Speaker': 1}]]
         ```
         """
-        frame_duration = self.feature_extractor.hop_length / self.feature_extractor.sampling_rate
+        frame_duration = self._stft_config.hop_length / self.audio_processor.sampling_rate
         active = logits.sigmoid() > threshold
         if attention_mask is not None:
             active = active & attention_mask.to(device=active.device, dtype=torch.bool)[..., None]
@@ -253,11 +260,11 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         First audio sample of the chunk starting at `mel_frame_idx`. An uncentered window starts half a transform
         before the frame it belongs to, so a chunk starts `n_fft // 2` samples before its first frame.
         """
-        return mel_frame_idx * self.feature_extractor.hop_length - self.feature_extractor.n_fft // 2
+        return mel_frame_idx * self._stft_config.hop_length - self._stft_config.n_fft // 2
 
     @property
     def model_input_names(self):
-        return self.feature_extractor.model_input_names + ["num_lookahead_frames"]
+        return ["input_features", "attention_mask", "num_lookahead_frames"]
 
 
 __getattr__ = deprecate_attr(__name__, rename={"Nemotron3DiarizationProcessorKwargs": (ProcessingKwargs, "5.29.0")})

@@ -51,7 +51,7 @@ from transformers import (
     Nemotron3_5TranscribeConfig,
     Nemotron3_5TranscribeForConditionalGeneration,
     Nemotron3_5TranscribeProcessor,
-    NemotronAsrStreamingFeatureExtractor,
+    NemotronAsrStreamingAudioProcessor,
     PreTrainedTokenizerFast,
 )
 from transformers.audio_utils import load_audio
@@ -480,20 +480,23 @@ def write_processor(
     preprocessor = nemo_config["perception"]["preprocessor"]
     sampling_rate = preprocessor["sample_rate"]
     # the checkpoint stores the mel filter bank and the STFT window in a reduced precision and computes the features
-    # with those rounded constants: the extractor rounds its own float32 constants the same way
+    # with those rounded constants: the audio processor rounds its own float32 constants the same way
     with safe_open(nemo_dir / "model.safetensors", framework="pt") as weights:
         filterbank_dtype = weights.get_slice("perception.preprocessor.featurizer.fb").get_dtype()
-    feature_extractor = NemotronAsrStreamingFeatureExtractor(
-        feature_size=preprocessor["features"],
-        sampling_rate=sampling_rate,
-        hop_length=int(preprocessor["window_stride"] * sampling_rate),
-        n_fft=preprocessor["n_fft"],
-        win_length=int(preprocessor["window_size"] * sampling_rate),
-        return_attention_mask=True,
-        mel_filters_dtype={"BF16": "bfloat16", "F16": "float16", "F32": "float32"}[filterbank_dtype],
+    # flat legacy keys, mapped onto `spectrogram_config` by `from_dict`
+    audio_processor = NemotronAsrStreamingAudioProcessor.from_dict(
+        {
+            "feature_size": preprocessor["features"],
+            "sampling_rate": sampling_rate,
+            "hop_length": int(preprocessor["window_stride"] * sampling_rate),
+            "n_fft": preprocessor["n_fft"],
+            "win_length": int(preprocessor["window_size"] * sampling_rate),
+            "return_padding_mask": True,
+            "mel_filters_dtype": {"BF16": "bfloat16", "F16": "float16", "F32": "float32"}[filterbank_dtype],
+        }
     )
     processor = Nemotron3_5TranscribeProcessor(
-        feature_extractor,
+        audio_processor,
         tokenizer,
         alignment_tokenizer,
         chat_template=chat_template,
@@ -533,7 +536,7 @@ def main():
     model, loading_info = Nemotron3_5TranscribeForConditionalGeneration.from_pretrained(
         args.check_dir, device_map="auto", output_loading_info=True
     )
-    audio = load_audio(SANITY_CHECK_AUDIO_URL, sampling_rate=processor.feature_extractor.sampling_rate)
+    audio = load_audio(SANITY_CHECK_AUDIO_URL, sampling_rate=processor.audio_processor.sampling_rate)
     inputs = processor.apply_transcription_request(audio).to(model.device)
     outputs = model.generate(**inputs, max_new_tokens=100)
     print("Greedy transcription:", processor.decode(outputs[:, inputs["input_ids"].shape[1] :])[0])

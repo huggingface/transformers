@@ -856,8 +856,11 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
 class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
     return_mm_token_type_ids = AttributeError()
 
+    @property
     def model_input_names(self):
-        raise AttributeError("Deleted: Gemma 4 appended `mm_token_type_ids`, which we no longer produce.")
+        # Unlike Gemma 4, no `mm_token_type_ids`; the audio processor's outputs are renamed in `_process_audio`
+        renamed = {"audio_features": "input_features", "audio_features_mask": "input_features_mask"}
+        return [renamed.get(name, name) for name in OmniModalProcessorMixin.model_input_names.fget(self)]
 
     def prepare_inputs_layout(
         self,
@@ -1073,9 +1076,11 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         num_samples = len(audio_waveform)
 
         # Step 1: mel frames (matches feature_extraction_embedding_gemma2.py)
-        frame_size_for_unfold = self.feature_extractor.frame_length + 1
-        pad_left = self.feature_extractor.frame_length // 2  # semicausal time padding
-        num_mel_frames = (num_samples + pad_left - frame_size_for_unfold) // self.feature_extractor.hop_length + 1
+        frame_size_for_unfold = self.audio_processor.spectrogram_config.stft_config.win_length + 1
+        pad_left = self.audio_processor.spectrogram_config.stft_config.win_length // 2  # semicausal time padding
+        num_mel_frames = (
+            num_samples + pad_left - frame_size_for_unfold
+        ) // self.audio_processor.spectrogram_config.stft_config.hop_length + 1
         if num_mel_frames <= 0:
             return 0
 
@@ -1091,10 +1096,10 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         if seconds == 0:
             return 0
 
-        input_raw_length = round(seconds * self.feature_extractor.sampling_rate)
+        input_raw_length = round(seconds * self.audio_processor.sampling_rate)
         boundary = (
-            input_raw_length - self.feature_extractor.frame_length // 2 - 1
-        ) // self.feature_extractor.hop_length + 1
+            input_raw_length - self.audio_processor.spectrogram_config.stft_config.win_length // 2 - 1
+        ) // self.audio_processor.spectrogram_config.stft_config.hop_length + 1
         mels_per_chunk = max(boundary, 0)
         return self.compute_sscp(mels_per_chunk)
 

@@ -59,7 +59,7 @@ class ZoeDepthImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     keep_aspect_ratio: bool
-    ensure_multiple_of: int
+    ensure_multiple_of: float | int
 
 
 def get_resize_output_image_size(

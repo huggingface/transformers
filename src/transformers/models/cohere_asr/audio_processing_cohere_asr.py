@@ -1,0 +1,178 @@
+# Copyright 2026 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from ...audio_processing_utils import BaseAudioProcessor
+from ...processing_utils import AudioKwargs
+
+
+class CohereAsrAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    max_audio_clip_s (`float`, *optional*, defaults to 35.0):
+        Maximum length, in seconds, of a single audio chunk. Longer audio is split into chunks.
+    overlap_chunk_second (`float`, *optional*, defaults to 5.0):
+        Width, in seconds, of the window at the end of each chunk searched for a split point, so a
+        boundary lands in silence rather than mid-word.
+    min_energy_window_samples (`int`, *optional*, defaults to 1600):
+        Size, in samples, of the non-overlapping windows scanned when locating the quietest split point.
+    """
+
+    max_audio_clip_s: float
+    overlap_chunk_second: float
+    min_energy_window_samples: int
+
+
+class CohereAsrAudioProcessor(BaseAudioProcessor):
+    sampling_rate = 16000
+    padding = "longest"
+    dither: float = 1e-5
+
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "hop_length": 160,
+            "win_length": 400,
+            "window_fn": "hann_window",
+            "power": 2.0,
+            "pad_mode": "constant",
+            "periodic": False,
+            "magnitude_mode": "sqrt_sum_squares",
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "f_min": 0.0,
+            "norm": "slaney",
+            "mel_scale": "slaney",
+            "matmul_order": "filters_first_matmul",  # the legacy extractor does `mel_filters @ magnitudes`
+            "bank_rounding": "librosa",
+            "frequency_bin_mode": "linspace",
+        },
+        "preemphasis": 0.97,
+        "preemphasis_mode": "waveform",
+        "log_mode": "log",
+        "mel_floor": 0.0,
+        "pre_log_offset": 2**-24,
+        "transpose_features": True,
+    }
+
+    skip_tensor_conversion = ["audio_chunk_index"]
+    extra_model_input_names = ["audio_chunk_index"]
+
+    max_audio_clip_s: float = 35.0
+    overlap_chunk_second: float = 5.0
+    min_energy_window_samples: int = 1600
+    # NeMo-era keys the *legacy extractor does not read either* — its signature is
+    # (feature_size, sampling_rate, hop_length, n_fft, win_length, preemphasis, padding_value,
+    # dither, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples). `n_window_size`
+    # and `n_window_stride` are the pre-HF spellings of `win_length`/`hop_length`, which the config
+    # also carries under the names the extractor takes; honouring these would let the two disagree.
+    legacy_field_mapping = {
+        "frame_splicing": None,
+        "log": None,
+        "n_window_size": None,
+        "n_window_stride": None,
+        "pad_to": None,
+    }
+    valid_kwargs = CohereAsrAudioProcessorKwargs
+    feature_normalization = "per_feature_standardize"
+
+    def _dither_waveform(self, audio, audio_ranges=None, *, dither):
+        """Each clip's valid samples get noise from a private stream seeded with their count, so a clip's dither
+        does not depend on the batch it is in (the legacy extractor's rule); samples past the clip get none.
+        Each backend draws from its own generator: torch reproduces the legacy `torch.Generator` stream bit for
+        bit, numpy and MLX draw their own deterministic streams (D7)."""
+        if dither <= 0 or audio_ranges is None:
+            return audio
+        width = audio.shape[1]
+        dtype = self.ops.dtype_name(audio)
+        rows = []
+        for start, end in audio_ranges:
+            valid = max(0, min(end - start, width))
+            noise = (
+                self.ops.randn((valid,), seed=valid, like=audio)
+                if valid
+                else self.ops.zeros((0,), dtype=dtype, like=audio)
+            )
+            rows.append(self.ops.pad(noise, 0, width - valid))
+        return audio + dither * self.ops.stack(rows)
+
+    def _preprocess(self, audio, *args, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples, **kwargs):
+        """Split prepared waveforms, run the default feature workflow, and attach chunk ownership."""
+        chunked, audio_chunk_index = self._split_audio_chunks(
+            audio,
+            max_audio_clip_s=max_audio_clip_s,
+            overlap_chunk_second=overlap_chunk_second,
+            min_energy_window_samples=min_energy_window_samples,
+        )
+        result = super()._preprocess(chunked, *args, **kwargs)
+        result["audio_chunk_index"] = audio_chunk_index
+        return result
+
+    def _split_audio_chunks(
+        self, prepared_audio, *, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples
+    ):
+        """Split audio longer than ``max_audio_clip_s - overlap_chunk_second`` at the
+        quietest window. Returns (chunks, [(sample_idx, chunk_idx or None)])."""
+        threshold_s = max(0.0, max_audio_clip_s - overlap_chunk_second)
+        chunked, chunk_index = [], []
+        for sample_idx, waveform in enumerate(prepared_audio):
+            if waveform.shape[0] / self.sampling_rate <= threshold_s:
+                chunked.append(waveform)
+                chunk_index.append((sample_idx, None))
+                continue
+            for chunk_idx, chunk in enumerate(
+                self._split_single_audio(
+                    waveform,
+                    max_audio_clip_s=max_audio_clip_s,
+                    overlap_chunk_second=overlap_chunk_second,
+                    min_energy_window_samples=min_energy_window_samples,
+                )
+            ):
+                chunked.append(chunk)
+                chunk_index.append((sample_idx, chunk_idx))
+        return chunked, chunk_index
+
+    def _split_single_audio(self, waveform, *, max_audio_clip_s, overlap_chunk_second, min_energy_window_samples):
+        """Cut into ``max_audio_clip_s`` chunks, each ending at the quietest window within the
+        final ``overlap_chunk_second`` so the boundary lands in silence rather than mid-word."""
+        chunk_size = max(1, int(round(max_audio_clip_s * self.sampling_rate)))
+        context = max(1, int(round(overlap_chunk_second * self.sampling_rate)))
+        total = waveform.shape[0]
+        chunks, start = [], 0
+        while start + chunk_size < total:
+            split = self._find_split_point_energy(
+                waveform,
+                max(start, start + chunk_size - context),
+                start + chunk_size,
+                min_energy_window_samples=min_energy_window_samples,
+            )
+            split = max(start + 1, min(split, total))
+            chunks.append(waveform[start:split])
+            start = split
+        chunks.append(waveform[start:total])
+        return chunks
+
+    def _find_split_point_energy(self, waveform, start_idx: int, end_idx: int, *, min_energy_window_samples) -> int:
+        """Start of the quietest non-overlapping ``min_energy_window_samples`` window in
+        ``waveform[start_idx:end_idx]``, or the midpoint when the span is too short to scan."""
+        segment = waveform[start_idx:end_idx]
+        size = min_energy_window_samples
+        if segment.shape[0] <= size:
+            return (start_idx + end_idx) // 2
+        count = len(range(0, segment.shape[0] - size, size))  # window starts strictly before `len - size`
+        windows = self.ops.frame(segment, size, size)[:count]  # non-overlapping windows
+        quietest = self.ops.to_numpy(self.ops.argmin(self.ops.mean(windows * windows, -1), -1))
+        return int(start_idx + size * int(quietest))
+
+
+__all__ = ["CohereAsrAudioProcessor"]

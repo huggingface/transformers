@@ -62,9 +62,9 @@ class DPTImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     ensure_multiple_of: int
-    size_divisor: int
+    size_divisor: int | None
     keep_aspect_ratio: bool
-    do_reduce_labels: bool
+    do_reduce_labels: bool | None
 
 
 def get_resize_output_image_size(

@@ -25,8 +25,8 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class ClvpProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(self, *args, text=None, audio=None, **kwargs):
@@ -48,7 +48,7 @@ class ClvpProcessor(ProcessorMixin):
         # The CLVP model relies on the *text* attention mask. When both text and audio are provided, prevent the
         # feature extractor's audio attention mask from overriding the tokenizer's attention mask in the merged output.
         if audio is not None and text is not None:
-            merged_kwargs["audio_kwargs"]["return_attention_mask"] = False
+            merged_kwargs["audio_kwargs"]["return_padding_mask"] = False
 
         return super().__call__(*args, text=text, audio=audio, **merged_kwargs)
 

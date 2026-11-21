@@ -192,7 +192,7 @@ class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         num_patches = video_processing.get_num_of_video_patches(num_frames=8, height=480, width=640, videos_kwargs={})
         self.assertEqual(num_patches, 192)
 
-    def test_video_processor_to_json_string(self):
+    def test_to_json_string(self):
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class(**self.video_processor_dict)
             obj = json.loads(video_processor.to_json_string())

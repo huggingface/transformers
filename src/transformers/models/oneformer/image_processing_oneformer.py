@@ -63,7 +63,7 @@ class OneFormerImageProcessorKwargs(ImagesKwargs, total=False):
     num_text: int | None
     num_labels: int | None
     ignore_index: int | None
-    do_reduce_labels: bool
+    do_reduce_labels: bool | None
 
 
 def prepare_metadata(class_info):

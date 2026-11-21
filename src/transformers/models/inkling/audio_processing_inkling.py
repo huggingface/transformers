@@ -1,0 +1,122 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import math
+
+from ...audio_processing_utils import BaseAudioProcessor
+
+
+def _hop_length_from_token_duration(value, config_dict):
+    """`audio_token_duration_s` is the hop expressed in seconds: the legacy extractor computes
+    `hop_length = audio_token_duration_s * sampling_rate`. Written with `setdefault` so a config
+    carrying the sample-valued `hop_length` as well keeps the stored one."""
+    config_dict["audio_token_duration_s"] = value
+    sampling_rate = config_dict.get("sampling_rate") or InklingAudioProcessor.sampling_rate
+    stft_config = config_dict.setdefault("spectrogram_config", {}).setdefault("stft_config", {})
+    stft_config.setdefault("hop_length", round(value * sampling_rate))
+
+
+def _win_length_from_multiplier(value, config_dict):
+    """`window_size_multiplier` scales the hop into the window:
+    `window_size = audio_token_duration_s * window_size_multiplier * sampling_rate`."""
+    config_dict["window_size_multiplier"] = value
+    duration = config_dict.get("audio_token_duration_s")
+    sampling_rate = config_dict.get("sampling_rate") or InklingAudioProcessor.sampling_rate
+    if duration is not None:
+        stft_config = config_dict.setdefault("spectrogram_config", {}).setdefault("stft_config", {})
+        stft_config.setdefault("win_length", round(duration * value * sampling_rate))
+
+
+_hop_length_from_token_duration.legacy_target = "spectrogram_config.stft_config.hop_length"
+_win_length_from_multiplier.legacy_target = "spectrogram_config.stft_config.win_length"
+
+
+class InklingAudioProcessor(BaseAudioProcessor):
+    # The legacy extractor derives its window from `audio_token_duration_s *
+    # window_size_multiplier * sampling_rate` and takes no `window_size`; a config carrying one is
+    # stating a derived value, and honouring it could contradict the three it is derived from.
+    legacy_field_mapping = {
+        "window_size": None,
+        "audio_token_duration_s": _hop_length_from_token_duration,
+        "window_size_multiplier": _win_length_from_multiplier,
+    }
+    sampling_rate = 16000
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 1600,
+            "hop_length": 800,
+            "win_length": 1600,
+            "window_fn": "hann_window",
+            "power": 1.0,
+            "center": False,
+            "periodic": True,
+        },
+        "mel_scale_config": {
+            "n_mels": 80,
+            "f_min": 0.0,
+            "f_max": 8000.0,
+            "norm": "slaney",
+            "mel_scale": "slaney",
+            # The legacy extractor builds its filters with the numpy `mel_filter_bank` util
+            # (float64) and only casts to float32 at the end. Without `computation_dtype` the bank
+            # is built in float32 throughout, which differs by ~1e-07 in the filters and ~2e-06 in
+            # the output. Building in float64 and casting back reproduces the legacy exactly.
+            "computation_dtype": "float64",
+        },
+        "log_mode": "log10",
+        "mel_floor": 1e-10,
+        "transpose_features": True,
+        # `_waveform_to_spectrum` left-pads by `n_fft - hop`, so frame k is centred on sample k*hop and counts as
+        # valid whenever that centre lies in the real audio, even if its window reaches padding.
+        "count_frames_by_hop": True,
+    }
+
+    def _waveform_to_spectrum(self, audio, *, spectrogram_config, audio_ranges=None, **kwargs):
+        # Inkling's fixed framing: left-pad (n_fft - hop) and right-pad up to a hop multiple, center=False.
+        stft_cfg = spectrogram_config.stft_config
+        hop, n_fft = stft_cfg.hop_length, stft_cfg.n_fft
+        right_pad = math.ceil(audio.shape[-1] / hop) * hop - audio.shape[-1]
+        audio = self.ops.pad(audio, max(n_fft - hop, 0), right_pad, axis=-1)
+        return super()._waveform_to_spectrum(
+            audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs
+        )
+
+    def _spectrum_magnitude(self, stft_out, spectrogram_config, **kwargs):
+        # The legacy extractor clamps at 1e-10 *inside* the sqrt
+        # (`magnitudes.pow(2).sum(-1).clamp_min(1e-10).sqrt()`), not at the config's `mel_floor`
+        # after it. Moving the clamp or using `mel_floor` here breaks bit-equality.
+        real, imag = self.ops.real(stft_out), self.ops.imag(stft_out)
+        magnitudes = self.ops.pow(self.ops.clamp_min(real * real + imag * imag, 1e-10), 0.5)
+        power = spectrogram_config.stft_config.power
+        return self.ops.pow(magnitudes, power) if power != 1.0 else magnitudes
+
+    def _padded_frame_count(self, padded_length, spectrogram_config, **kwargs) -> int:
+        # Inkling right-pads to a whole number of hops, so it emits ceil(length / hop) frames.
+        hop = spectrogram_config.stft_config.hop_length
+        return int((padded_length + hop - 1) // hop)
+
+    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+        # No normalization; just zero the padded frames. Output keys stay canonical
+        # (`audio_features` / `audio_features_mask`); consumers still reading the legacy
+        # `input_features` names get them through the deprecated-key alias.
+        features = output.pop("audio_features")
+        mask = output.pop("audio_features_mask", None)
+        if mask is not None:
+            features = features * self.ops.astype(mask, self.ops.dtype_name(features))[..., None]
+            output["audio_features_mask"] = mask
+        output["audio_features"] = features
+        return output
+
+
+__all__ = ["InklingAudioProcessor"]

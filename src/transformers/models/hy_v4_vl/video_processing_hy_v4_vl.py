@@ -55,10 +55,10 @@ class HYV4VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     """
 
     patch_size: int
-    temporal_patch_size: int
-    merge_size: int
-    min_frames: int
-    max_frames: int
+    temporal_patch_size: int | None
+    merge_size: int | None
+    min_frames: int | None
+    max_frames: int | None
     max_image_size: dict[str, int]
 
 

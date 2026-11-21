@@ -77,7 +77,7 @@ class Sam2ImageProcessorKwargs(ImagesKwargs, total=False):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
     """
 
-    mask_size: dict[str, int]
+    mask_size: dict[str, int] | SizeDict
 
 
 @auto_docstring

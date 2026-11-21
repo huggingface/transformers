@@ -36,7 +36,7 @@ class PoolFormerImageProcessorKwargs(ImagesKwargs, total=False):
         Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
     """
 
-    crop_pct: float
+    crop_pct: float | None
 
 
 @auto_docstring
