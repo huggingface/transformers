@@ -33,7 +33,8 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...utils import ModelOutput, auto_docstring
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import (
     is_mambapy_available,
@@ -41,6 +42,7 @@ from ...utils.import_utils import (
     is_torchdynamo_compiling,
     is_torchdynamo_exporting,
 )
+from ...utils.output_capturing import capture_outputs
 from .configuration_falcon_mamba import FalconMambaConfig
 
 
@@ -577,6 +579,7 @@ class FalconMambaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["FalconMambaBlock", "FalconMambaMixer"]
     supports_gradient_checkpointing = True
     _is_stateful = True
+    _can_record_outputs = {"hidden_states": FalconMambaBlock}
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -672,6 +675,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
+    @capture_outputs
     @auto_docstring
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
@@ -680,10 +684,8 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         inputs_embeds: torch.LongTensor | None = None,
         cache: Cache | None = None,
         use_cache: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         attention_mask: torch.LongTensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | FalconMambaOutput:
         r"""
         cache (`Cache`, *optional*):
@@ -692,11 +694,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
         use_cache (`bool`, *optional*):
             If set to `True`, the `cache` is returned and can be used to quickly generate the next logits.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -711,7 +709,6 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
             cache = DynamicCache(config=self.config)
 
         hidden_states = inputs_embeds
-        all_hidden_states = () if output_hidden_states else None
         for mixer_block in self.layers:
             hidden_states = mixer_block(
                 hidden_states,
@@ -719,21 +716,11 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
                 attention_mask=attention_mask,
             )
 
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
         hidden_states = self.norm_f(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, cache, all_hidden_states] if v is not None)
 
         return FalconMambaOutput(
             last_hidden_state=hidden_states,
             cache=cache if use_cache else None,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -785,6 +772,7 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
 
         return model_inputs
 
+    @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
@@ -794,11 +782,9 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         inputs_embeds: torch.Tensor | None = None,
         cache: Cache | None = None,
         labels: torch.LongTensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,  # for now we need this for generation
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | FalconMambaCausalLMOutput:
         r"""
         cache (`Cache`, *optional*):
@@ -811,29 +797,23 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         use_cache (`bool`, *optional*):
             If set to `True`, the `cache` is returned and can be used to quickly generate the next logits.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         falcon_mamba_outputs = self.backbone(
             input_ids,
             cache=cache,
             inputs_embeds=inputs_embeds,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             use_cache=use_cache,
             attention_mask=attention_mask,
+            return_dict=True,
+            **kwargs,
         )
 
-        hidden_states = falcon_mamba_outputs[0]
+        hidden_states = falcon_mamba_outputs.last_hidden_state
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + falcon_mamba_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return FalconMambaCausalLMOutput(
             loss=loss,
