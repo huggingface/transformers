@@ -2338,6 +2338,29 @@ class CacheCroppingTests(unittest.TestCase):
     conv_state_shape = (2, 32, 45)
     indexer_shape = (2, 45, 32)
 
+    def test_linear_attention_recording_window(self):
+        """With `max_tokens`, recording keeps fixed-size conv states updated in place (compileable), and a `crop`
+        brings them back to what they were before the removed tokens."""
+        kernel_size, channels = self.conv_kernel_size, 8
+        prompt, verify, step = torch.rand(1, channels, 6), torch.rand(1, channels, 3), torch.rand(1, channels, 1)
+
+        layer = LinearAttentionLayer()
+        layer.activate_past_recording(max_tokens=3)
+        layer.update_conv_state(prompt, conv_kernel_size=kernel_size)
+        window = layer.conv_states[0]
+        self.assertTrue(layer.is_compileable)
+        self.assertEqual(window.shape[-1], kernel_size + 3)
+        full = layer.update_conv_state(verify)
+        torch.testing.assert_close(full, torch.cat([prompt[..., -kernel_size:], verify], dim=-1))
+        layer.crop(-2)  # the last 2 verified tokens are rejected
+        full = layer.update_conv_state(step)
+        self.assertIs(layer.conv_states[0], window)  # in place, same address
+
+        kept = torch.cat([prompt, verify[..., :1]], dim=-1)
+        torch.testing.assert_close(full, torch.cat([kept[..., -kernel_size:], step], dim=-1))
+        with self.assertRaises(ValueError):
+            layer.update_conv_state(torch.rand(1, channels, 4))  # more than the window
+
     def test_crop_with_past(self):
         """Test that `crop` works correctly for all general layer classes, even with past recording activated"""
         keys = torch.rand(*self.attention_shape)

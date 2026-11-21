@@ -1,3 +1,4 @@
+import inspect
 from abc import ABC, abstractmethod
 from collections import UserDict
 from collections.abc import Iterable
@@ -1094,6 +1095,8 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.device = None
         self.dtype = None
         self.record_past = False
+        # With a window, recorded conv states keep a fixed size (see `activate_past_recording`)
+        self.past_window = None
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -1165,15 +1168,20 @@ class LinearAttentionCacheLayerMixin(ABC):
         be able to `crop` later: the conv states then grow, and they are assigned instead of copied in place, so they lose their
         static address and may alias a cudagraph output.
         """
-        return not self.record_past
+        return not self.record_past or self.past_window is not None
 
-    def activate_past_recording(self):
+    def activate_past_recording(self, max_tokens: int | None = None):
         """
         Calling this function will activate past state recording, meaning that a call to `update_conv_states` will
         wait for a call to `crop` before restricting the size of the `conv_states` to `conv_kernel_size`, to be able
         to retrieve previous full states.
+
+        With `max_tokens`, the most tokens a `forward` adds before the next `crop` (e.g. the candidates of a verify step),
+        the conv states keep instead a fixed window of `conv_kernel_size + max_tokens` inputs, updated in place: the
+        layer stays compileable.
         """
         self.record_past = True
+        self.past_window = max_tokens
 
     def crop(self, tokens_to_remove: int):
         """
@@ -1190,6 +1198,15 @@ class LinearAttentionCacheLayerMixin(ABC):
             raise RuntimeError(
                 "Linear attention layers can only be cropped by passing a negative int, to specify how many tokens to remove"
             )
+        if self.past_window is not None:
+            # The fixed window shifts right in place: its last inputs are again those before the removed tokens
+            tokens_to_remove = abs(tokens_to_remove)
+            for i in range(self.number_of_states):
+                window = self.conv_states[i]
+                if tokens_to_remove and window is not None:
+                    removed = window.new_zeros(*window.shape[:-1], tokens_to_remove)
+                    window.copy_(torch.cat([removed, window[..., :-tokens_to_remove]], dim=-1))
+            return
         for i in range(self.number_of_states):
             tokens_to_remove = abs(tokens_to_remove)
             # In this case, simply restrict the size back to `conv_kernel_size` without cropping
@@ -1222,14 +1239,15 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             # self.record_past is true and conv_kernel_size is provided explicitly
             conv_kernel_size = conv_states.shape[-1] if conv_kernel_size is None else conv_kernel_size
             self.conv_kernel_size[state_idx] = conv_kernel_size
-            # The shape is always static, so we init as such
+            # The shape is always static, so we init as such (a recording window holds `past_window` more inputs)
+            width = conv_kernel_size + (self.past_window or 0) if self.record_past else conv_kernel_size
             self.conv_states[state_idx] = torch.zeros(
-                (*conv_states.shape[:-1], conv_kernel_size),
+                (*conv_states.shape[:-1], width),
                 dtype=conv_states.dtype,
                 device=conv_states.device,
             )
             # Mark as static address to be able to use cudagraphs
-            if not is_torchdynamo_compiling() and not self.record_past:
+            if not is_torchdynamo_compiling() and (not self.record_past or self.past_window is not None):
                 torch._dynamo.mark_static_address(self.conv_states[state_idx])
             self.is_conv_states_initialized[state_idx] = True
 
@@ -1257,6 +1275,9 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         if not self.is_conv_states_initialized[state_idx]:
             self.lazy_initialization(conv_states=conv_states, state_idx=state_idx, conv_kernel_size=conv_kernel_size)
 
+        if self.record_past and self.past_window is not None:
+            return self._update_conv_window(conv_states, state_idx)
+
         # This is prefill, simply pad the conv_states if necessary
         if not self.has_previous_state[state_idx]:
             full_conv_states = conv_states
@@ -1279,6 +1300,25 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.conv_states[state_idx] = full_conv_states
 
         # Return full states no matter what
+        return full_conv_states
+
+    def _update_conv_window(self, conv_states: torch.Tensor, state_idx: int) -> torch.Tensor:
+        """Recording with a fixed window: the last `conv_kernel_size + past_window` inputs, kept in place."""
+        window, kernel_size = self.conv_states[state_idx], self.conv_kernel_size[state_idx]
+        if conv_states.shape[-1] > window.shape[-1] - kernel_size and self.has_previous_state[state_idx]:
+            raise ValueError(
+                f"{conv_states.shape[-1]} new tokens exceed the recording window of {window.shape[-1] - kernel_size}: "
+                "pass a larger `max_tokens` to `activate_past_recording`."
+            )
+        if not self.has_previous_state[state_idx]:  # prefill: as without recording
+            self.has_previous_state[state_idx] = True
+            full_conv_states = conv_states
+            if full_conv_states.shape[-1] < kernel_size:
+                padding_length = kernel_size - full_conv_states.shape[-1]
+                full_conv_states = torch.nn.functional.pad(full_conv_states, (padding_length, 0), value=0)
+        else:
+            full_conv_states = torch.cat([window[..., -kernel_size:], conv_states], dim=-1)
+        window.copy_(torch.cat([window, conv_states], dim=-1)[..., -window.shape[-1] :])
         return full_conv_states
 
     def update_recurrent_state(self, recurrent_states: torch.Tensor, state_idx: int = 0, **kwargs) -> torch.Tensor:
@@ -1898,14 +1938,18 @@ class Cache:
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].batch_select_indices(indices)
 
-    def activate_past_recording(self):
+    def activate_past_recording(self, max_tokens: int | None = None):
         """
         Calling this function will activate past state recording, meaning that cache with fixed size such as a linear cache will
         wait for a call to `crop` before restricting the size of its cached states, in order to be able to retrieve previous full states.
         """
-        for layer_idx in range(len(self.layers)):
-            if hasattr(self.layers[layer_idx], "activate_past_recording"):
-                self.layers[layer_idx].activate_past_recording()
+        for layer in self.layers:
+            if not hasattr(layer, "activate_past_recording"):
+                continue
+            if max_tokens is not None and "max_tokens" in inspect.signature(layer.activate_past_recording).parameters:
+                layer.activate_past_recording(max_tokens=max_tokens)
+            else:
+                layer.activate_past_recording()
 
     def is_recording_past(self, layer_idx: int) -> bool:
         """Returns a boolean indicating if the layer at index `layer_idx` is recording past states. If the layer cannot
