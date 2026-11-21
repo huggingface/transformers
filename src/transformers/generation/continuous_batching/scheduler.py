@@ -31,11 +31,28 @@ _PROTO_PREFILLS_APART = int(os.environ.get("CB_PROTO_PREFILLS_APART", "-1"))
 # gap3-mtp prototype: with CB_MTP=spec and the block table decode path, a decoding request brings its last token and
 # its draft (2 query tokens) and still takes the decode fast path
 _MTP_BT_QUERY = 2 if os.environ.get("CB_MTP", "") == "spec" and _PROTO_MLA_BLOCK_TABLE else 1
+# gap3-mtpa prototype (CB_MTP_ASYNC=1): a request whose last drafted step is in flight may hold one more token than the
+# host counts (accepted draft), so it gets one slack row; a request whose prefill ended in the step in flight already
+# counts as decoding (its two next tokens come from the device); prefills and decodes are kept in separate batches
+_MTP_ASYNC = _MTP_BT_QUERY > 1 and os.environ.get("CB_MTP_ASYNC", "0") == "1"
+
+
+def _mtp_async_decoding(state: RequestState) -> bool:
+    """gap3-mtpa: a request that decodes in the next step (its prefill may have ended in the step in flight)."""
+    return state.status == RequestStatus.DECODING or (
+        state.status == RequestStatus.PREFILLING and not state.remaining_prefill_tokens and state.mtp_has_draft
+    )
 
 
 def _decode_eligible(state: RequestState, request_len: int, max_length: int) -> bool:
     """Whether a request of `request_len` query tokens can take the decode fast path (block table)."""
     if _MTP_BT_QUERY > 1:  # gap3-mtp prototype: only a decoding request with its draft, as a whole
+        if _MTP_ASYNC:
+            return (
+                request_len == _MTP_BT_QUERY
+                and _mtp_async_decoding(state)
+                and state.position_offset + request_len + min(state.mtp_pending_acc, 1) <= max_length
+            )
         return (
             request_len == _MTP_BT_QUERY
             and state.status == RequestStatus.DECODING
@@ -267,7 +284,10 @@ class Scheduler(ABC):
                 continue
 
             # Final check before we schedule the request: can the cache handle it, or is the request starved?
-            request_fits = self.cache.can_store_request_tokens(state, request_len)
+            # gap3-mtpa: one slack row while the outcome of the request's last draft is unknown
+            request_fits = self.cache.can_store_request_tokens(
+                state, request_len + (min(state.mtp_pending_acc, 1) if _MTP_ASYNC else 0)
+            )
             if not request_fits:
                 one_allocation_failed = True
                 # If the request is active and cannot be scheduled, we mark it as starved
@@ -350,7 +370,7 @@ class FIFOScheduler(Scheduler):
         second_priority_states: list[RequestState] = []
 
         for state in self.active_requests.values():
-            if state.status == RequestStatus.DECODING:
+            if state.status == RequestStatus.DECODING or (_MTP_ASYNC and _mtp_async_decoding(state)):
                 priority_states.append(state)
             elif state.status == RequestStatus.PREFILLING:
                 second_priority_states.append(state)
@@ -362,8 +382,10 @@ class FIFOScheduler(Scheduler):
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
         # PROTOTYPE: prefills apart from decodes
-        if _PROTO_PREFILLS_APART >= 0 and priority_states and second_priority_states:
-            if self._proto_decode_only_batches >= _PROTO_PREFILLS_APART:
+        # gap3-mtpa: with CB_MTP_ASYNC, prefills are always apart from decodes (every other batch when both wait)
+        prefills_apart = _PROTO_PREFILLS_APART if _PROTO_PREFILLS_APART >= 0 or not _MTP_ASYNC else 1
+        if prefills_apart >= 0 and priority_states and second_priority_states:
+            if self._proto_decode_only_batches >= prefills_apart:
                 self._proto_decode_only_batches = 0
                 prefill_batch = self._process_candidates(
                     second_priority_states, token_budget, cache_budget, request_ids_to_remove_from_waiting
