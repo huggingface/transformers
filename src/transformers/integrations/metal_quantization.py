@@ -145,8 +145,9 @@ class MetalLinear(nn.Linear):
         if self.weight.dtype != torch.uint32:
             return nn.functional.linear(input, self.weight, self.bias)
 
-        if self.bits == 4 and self.out_features <= 1024 and input.numel() == self.in_features:
-            # One token through a thin matrix (few output rows, long input): MLX's qmv leaves the GPU idle there
+        short = min(self.in_features, self.out_features) <= 1024 and self.group_size in (32, 64)
+        if self.bits == 4 and short and input.numel() == self.in_features and input.device.type == "mps":
+            # One token through a matrix with a short side: MLX's qmv leaves lanes idle there
             from .metal_qmv import qmv4
 
             output = qmv4(input, self.weight, self.scales, self.qbiases, self.group_size)
