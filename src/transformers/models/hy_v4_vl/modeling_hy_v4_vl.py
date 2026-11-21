@@ -1505,7 +1505,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
             batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)[:, -seq_length:]
                 position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
             else:
                 position_ids = torch.arange(cache_length, cache_length + seq_length)
