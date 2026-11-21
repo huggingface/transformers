@@ -45,6 +45,9 @@ from .utils import (
 )
 
 
+# WP train (prototype): `release_memory` keeps on the host only the byte ranges of the blocks in use
+_RELEASE_LIVE_ONLY = os.environ.get("CB_RELEASE_LIVE_ONLY", "0") == "1"
+
 # Maps each attention type to the allocator class handling its cache
 ATTN_TYPE_TO_ALLOCATOR = {
     FULL_ATTENTION: FullAttentionCacheAllocator,
@@ -477,10 +480,50 @@ class PagedAttentionCache:
         indexer_key_states = self.layer_to_allocator[layer_idx].update_indexer(indexer_key_states[0], layer_idx)
         return indexer_key_states.unsqueeze(0)
 
+    def _live_byte_ranges(self) -> list[tuple[int, int]]:
+        """Byte ranges of the cache tensor that hold blocks in use, adjacent ranges merged. Left out: the two trash
+        sectors (the read trash is zeros, the write trash is never read), free sectors and the free blocks of allocated
+        sectors. Block `b` of an allocator spans bytes `[b, b + 1) * bytes_per_block` of the tensor, sector `s` spans
+        `[s, s + 1) * bytes_per_sector`."""
+        free = [(0, 2 * self.bytes_per_sector)]
+        free += [(s * self.bytes_per_sector, (s + 1) * self.bytes_per_sector) for s in self.pool.free_sectors]
+        for allocator in self.cache_allocators.values():
+            size = allocator.bytes_per_block
+            for leaves in self.pool._free_blocks[allocator.index].trees.values():
+                free += [(leaf * size, (leaf + 1) * size) for leaf in leaves]
+        keep, start = [], 0
+        for free_start, free_end in sorted(free):
+            if free_start > start:
+                keep.append((start, free_start))
+            start = max(start, free_end)
+        if start < self.cache_tensor.numel():
+            keep.append((start, self.cache_tensor.numel()))
+        return keep
+
     def release_memory(self) -> int:
         """Copies the cache tensor to host memory and frees its GPU memory, returning the number of bytes released.
         The tensor and every view of it stay valid objects and the requests keep their blocks, but nothing may read or
         write the cache until `restore_memory` copies it back."""
+        if _RELEASE_LIVE_ONLY:
+            # WP train: only the blocks in use go to the host, so host memory follows the requests in flight instead
+            # of the cache size (the whole cache, pinned, is 139 GiB per rank on GLM-5.3 at TP8). Prefix-only blocks
+            # are dropped first: after a weight update they are stale anyway.
+            self.evict_cached_blocks()
+            ranges = self._live_byte_ranges()
+            nbytes = sum(end - begin for begin, end in ranges)
+            if self._host_copy is None or self._host_copy.numel() < nbytes:
+                # pinning is slow (2-6 GB/s): grow with headroom so a slowly growing set of requests re-pins rarely
+                self._host_copy = None
+                self._host_copy = torch.empty(int(nbytes * 1.25) + 1, dtype=torch.uint8, pin_memory=True)
+            offset = 0
+            for begin, end in ranges:
+                self._host_copy[offset : offset + end - begin].copy_(self.cache_tensor[begin:end], non_blocking=True)
+                offset += end - begin
+            self._live_ranges, self._host_live_bytes = ranges, nbytes
+            torch.accelerator.synchronize()
+            self._released_address = self.cache_tensor.data_ptr()
+            self.cache_tensor.untyped_storage().resize_(0)
+            return self.cache_tensor.numel()
         if self._host_copy is None:
             self._host_copy = torch.empty(self.cache_tensor.numel(), dtype=torch.uint8, pin_memory=True)
         self._host_copy.copy_(self.cache_tensor, non_blocking=True)
@@ -498,6 +541,16 @@ class PagedAttentionCache:
         if hasattr(device_module := torch.get_device_module(), "empty_cache"):
             device_module.empty_cache()
         self.cache_tensor.untyped_storage().resize_(self.cache_tensor.numel())
+        if _RELEASE_LIVE_ONLY:
+            # what was not kept comes back as zeros, as the cache was created: the read trash must be zeros, and no
+            # bytes left by the caller's use of the memory (NaN patterns included) sit in rows a kernel may mask out
+            self.cache_tensor.zero_()
+            offset = 0
+            for begin, end in self._live_ranges:
+                self.cache_tensor[begin:end].copy_(self._host_copy[offset : offset + end - begin], non_blocking=True)
+                offset += end - begin
+            torch.accelerator.synchronize()
+            return self.cache_tensor.data_ptr() == self._released_address
         self.cache_tensor.copy_(self._host_copy, non_blocking=True)
         # The generation loop reads the cache on its own stream
         torch.accelerator.synchronize()
