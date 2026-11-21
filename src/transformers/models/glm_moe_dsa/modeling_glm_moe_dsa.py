@@ -638,15 +638,17 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     if skip_scoring:
         return pos, visible, lengths
     if _PROTO_PREFILL_MQA and seq_len > 512:
-        from ...integrations._proto_mqa_kernels import mqa_logits_masked
+        from ...integrations._proto_mqa_kernels import mqa_logits_window
 
         # each query sees the packed keys [lo, hi) of its own request; padded queries see nothing
         lo = torch.where(real, k_start, 0).to(torch.int32)
         hi = (lo + n_visible).to(torch.int32)
         weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
         weights = weights * (indexer.n_heads**-0.5 * indexer.softmax_scale)
-        logits = mqa_logits_masked(q.contiguous(), keys, weights, lo, hi)  # [M, N], -inf outside [lo, hi)
-        index_scores = logits.gather(1, pos).masked_fill(~visible, float("-inf"))  # [M, max_k]
+        # longctx WP: scores in each query's own window ([M, max_k]), the same values as the packed [M, N] scores
+        # gathered at `pos`, without the [M, N] matrix (a varlen batch that packs the decodes of long requests next to
+        # a prefill chunk has N ~ 500k: 16 GB per layer, and int32 offsets past 2^31 faulted on B300, job 467381)
+        index_scores = mqa_logits_window(q.contiguous(), keys, weights, lo, hi, max_k)  # -inf outside [lo, hi)
         # the kernel takes an unordered list; PROTO_PREFILL_MQA_SORTED=1 keeps the order of the torch path (checks)
         top = index_scores.topk(num_selected, dim=-1, sorted=_PROTO_PREFILL_MQA_SORTED).indices
         return _proto_selected(pos, visible, top, n_visible, num_selected, lengths)
