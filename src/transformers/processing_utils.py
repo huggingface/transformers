@@ -602,6 +602,70 @@ def _merge_typed_dict(preprocessor_typed_dict: type, modality_typed_dict: type) 
     )
 
 
+def _tool_result_id(obj) -> str:
+    """The id chat templates match tool results with: `tool_call_id`, else `id`, as text."""
+    if not isinstance(obj, dict):
+        return ""
+    for key in ("tool_call_id", "id"):
+        if obj.get(key):
+            return str(obj[key])
+    return ""
+
+
+def _split_tool_results(message: dict) -> list[dict]:
+    """
+    Split an aggregated tool message (`content=[{"id": ..., "output": [...]}, ...]`) into one message per result,
+    holding the typed content parts of its `output` for multimodal input extraction.
+    """
+    content = message.get("content")
+    if not (isinstance(content, list) and content and isinstance(content[0], dict) and "output" in content[0]):
+        return [message]
+    results = []
+    for entry in content:
+        result = {key: entry[key] for key in ("tool_call_id", "id") if key in entry} if isinstance(entry, dict) else {}
+        output = entry.get("output") if isinstance(entry, dict) else None
+        has_parts = isinstance(output, (list, tuple)) and not (
+            output and isinstance(output[0], dict) and output[0].get("type") == "tool_reference"
+        )
+        result["content"] = [part for part in output if isinstance(part, dict) and "type" in part] if has_parts else []
+        results.append(result)
+    return results
+
+
+def _tool_results_in_template_order(conversation: list[dict]) -> list[dict]:
+    """
+    Lay out each block of consecutive tool messages in call order: one message per result, sorted by the
+    `tool_calls` of the preceding assistant message when every result matches a unique call (all ids present
+    and unique), else in message order.
+    """
+    laid_out, start = [], 0
+    while start < len(conversation):
+        if conversation[start].get("role") != "tool":
+            laid_out.append(conversation[start])
+            start += 1
+            continue
+        end = start
+        while end < len(conversation) and conversation[end].get("role") == "tool":
+            end += 1
+        results = [result for message in conversation[start:end] for result in _split_tool_results(message)]
+        previous = conversation[start - 1] if start > 0 else {}
+        tool_calls = (previous.get("tool_calls") if previous.get("role") == "assistant" else None) or []
+        call_ids = [_tool_result_id(call) for call in tool_calls]
+        result_ids = [_tool_result_id(result) for result in results]
+        if (
+            call_ids
+            and all(call_ids)
+            and all(result_ids)
+            and len(set(call_ids)) == len(call_ids)
+            and len(set(result_ids)) == len(result_ids)
+            and set(result_ids) <= set(call_ids)
+        ):
+            results.sort(key=lambda result: call_ids.index(_tool_result_id(result)))
+        laid_out.extend(results)
+        start = end
+    return laid_out
+
+
 class ProcessorMixin(PushToHubMixin):
     """
     This is a mixin used to provide saving/loading functionality for all processor classes.
@@ -631,6 +695,9 @@ class ProcessorMixin(PushToHubMixin):
 
     return_mm_token_type_ids = False
     return_text_replacement_offsets = False
+    # Opt-in for models whose chat template reorders consecutive tool results to match the preceding
+    # assistant's `tool_calls` order and expands aggregated `{"id": ..., "output": [...]}` tool entries.
+    reorder_tool_results_in_template_order = False
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -2137,6 +2204,9 @@ class ProcessorMixin(PushToHubMixin):
         including URL/path or already decoded inputs. Images and video are returned
         in nested format while audio is flattened into a single list for all batches.
         """
+        if self.reorder_tool_results_in_template_order:
+            conversations = [_tool_results_in_template_order(conversation) for conversation in conversations]
+
         batch_images, batch_videos, batch_audios = [], [], []
         for conversation in conversations:
             images, videos = [], []
@@ -2151,7 +2221,7 @@ class ProcessorMixin(PushToHubMixin):
                 # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                 for block, next_block in zip(content, [*content[1:], None]):
                     new_content.append(block)
-                    block_type = block["type"]
+                    block_type = block.get("type") if isinstance(block, dict) else None
                     if block_type == "image":
                         images.extend(block[key] for key in ["image", "url", "path", "base64"] if key in block)
                     elif block_type == "video":
@@ -2848,6 +2918,9 @@ class OmniModalProcessorMixin(ProcessorMixin):
         If `load_audio_from_video=True`, then each video is linked to audio within
         a batch via `audio_from_video_indices`
         """
+        if self.reorder_tool_results_in_template_order:
+            conversations = [_tool_results_in_template_order(conversation) for conversation in conversations]
+
         batch_images, batch_videos = [], []
         batch_audios, batch_audio_from_video_indices = [], []
         video_idx = 0
@@ -2862,20 +2935,25 @@ class OmniModalProcessorMixin(ProcessorMixin):
                     content_block[key]
                     for content_block in content
                     for key in ["image", "url", "path", "base64"]
-                    if key in content_block and content_block["type"] == "image"
+                    if isinstance(content_block, dict)
+                    and key in content_block
+                    and content_block.get("type") == "image"
                 ]
                 images.extend(image_fnames)
 
                 # Keep track of audio inputs and whether they comes from video or not
                 for content_block in content:
-                    if content_block["type"] == "video":
+                    if not isinstance(content_block, dict):
+                        continue
+                    block_type = content_block.get("type")
+                    if block_type == "video":
                         video = next(v for k in ("video", "url", "path") if (v := content_block.get(k)) is not None)
                         videos.append(video)
                         if load_audio_from_video:
                             batch_audio_from_video_indices.append(video_idx)
 
                         video_idx += 1
-                    elif content_block["type"] == "audio":
+                    elif block_type == "audio":
                         audio = next(v for k in ("audio", "url", "path") if (v := content_block.get(k)) is not None)
                         batch_audios.append(load_audio(audio, **audio_loading_params))
                         batch_audio_from_video_indices.append(None)
