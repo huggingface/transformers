@@ -160,9 +160,11 @@ class MetalExpertsOffloadTest(unittest.TestCase):
                 torch.testing.assert_close(streamed.generate(ids, max_new_tokens=8, do_sample=False), expected)
             store = streamed._experts_offload
             self.assertEqual(next(iter(store.pools.values())).layout["gate_up_proj"][1], torch.uint32)
-            from transformers.integrations.mps_events import load
+            from transformers.integrations.hub_kernels import metal_kernel
+            from transformers.utils import is_kernels_available
 
-            if load() is not None:  # misses resolved by the host thread while the device waits
+            if is_kernels_available():  # misses resolved by the host thread while the device waits
+                self.assertIsNotNone(metal_kernel("mps-events"), "the mps-events hub kernel did not load")
                 self.assertIsNotNone(store.mps_router)
                 self.assertGreater(store.misses, 0)
             self.assertGreater(store.reads, 0)

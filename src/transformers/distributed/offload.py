@@ -271,9 +271,9 @@ class ExpertsOffloadStore:
             self.device_tables[name] = pool.tables[name].to(self.device)
         logger.info(f"Streaming experts through {[p.num_slots for p in self.pools.values()]} device slots")
         if self.device.type == "mps" and os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_MPS_EVENTS", "1") == "1":
-            from ..integrations.mps_events import load
+            from ..integrations.hub_kernels import metal_kernel
 
-            ext = load()
+            ext = metal_kernel("mps-events")
             if ext is not None and self.key_files is not None:
                 torch.mps.synchronize()
                 self.mps_router = _MPSHostRouter(self, ext)
@@ -539,10 +539,7 @@ class _MPSHostRouter:
         self.slot_bases = {}  # (pool, param) -> (CPU address of slot 0, slot bytes)
         self.stamps: dict[int, torch.Tensor] = {}  # pool -> last use per slot (job counter), written by the hit path
         self.owners: dict[int, dict[int, tuple[str, int]]] = {}  # pool -> slot -> (layer, expert)
-        self.deferred: list[tuple[str, list[int]]] = []  # resolved calls whose tables publish later
-        self.times: dict[
-            int, dict[str, float]
-        ] = {}  # debug: per job, when it was routed / waited / picked up / landed
+        self.deferred: list[tuple[str, list[int]]] = []  # resolved calls whose pass-2 entries reset later
         self.spin_seconds = self.work_seconds = 0.0  # host thread: waiting for routings / resolving them
         self.jobs_done = self.ahead_reads = 0
         self.event = ext.event_new()
@@ -613,7 +610,6 @@ class _MPSHostRouter:
 
     def wait(self, layer):
         """Issue side, after pass 1: the device waits until the host thread resolved this call (pass 2 table set)."""
-        self.times.setdefault(self.counter, {})["wait"] = time.perf_counter()
         self.ext.gpu_wait(self.event, self.counter, self.counter % self.COMMIT_EVERY == 0)
 
     def _run(self):

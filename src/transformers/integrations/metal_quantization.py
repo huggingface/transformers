@@ -45,6 +45,18 @@ logger = logging.get_logger(__name__)
 _metal_kernel = None
 
 
+_decode_kernels = []
+
+
+def _decode_kernel():
+    """The pinned `metal-moe-decode` hub kernel (batch-1 decode matvecs), or None where it does not load."""
+    if not _decode_kernels:
+        from .hub_kernels import metal_kernel
+
+        _decode_kernels.append(metal_kernel("metal-moe-decode"))
+    return _decode_kernels[0]
+
+
 def _get_metal_kernel():
     """Lazily load the quantization-mlx kernel from Hugging Face Hub."""
     global _metal_kernel
@@ -150,10 +162,11 @@ class MetalLinear(nn.Linear):
             and self.group_size in (32, 64)
             and input.numel() == self.in_features
             and input.device.type == "mps"
+            and _decode_kernel() is not None
         ):
             # One token: `qmv4` beats MLX's qmv in the decode step (short sides 1.3-5.7x, large ones at par alone and
             # faster in the model: Qwen3.8 synthetic 46.6 -> 47.9 tok/s on M3 Max)
-            from .metal_qmv import qmv4
+            qmv4 = _decode_kernel().qmv4
 
             scales, biases = self.scales.to(input.dtype), self.qbiases.to(input.dtype)  # no-op when already alike
             output = qmv4(input, self.weight, scales, biases, self.group_size)
@@ -214,7 +227,10 @@ class MetalExperts(nn.Module):
     def masked_decode(self, hidden_states, top_k_index, top_k_weights):
         """One token through only its routes with an in-range id (`< num_experts`), reading nothing for the others:
         a correction pass over a few routes (streamed misses)."""
-        from .metal_qmv import experts_down_sum, experts_gate_up_masked
+        kernel = _decode_kernel()
+        if kernel is None:  # no decode kernel: the regular path, the masked routes weighted 0
+            return self.forward(hidden_states, top_k_index, top_k_weights)
+        experts_down_sum, experts_gate_up_masked = kernel.experts_down_sum, kernel.experts_gate_up_masked
 
         ids = top_k_index.reshape(-1)
         weights = (top_k_weights.reshape(-1) * (ids < self.num_experts)).float()
@@ -256,9 +272,14 @@ class MetalExperts(nn.Module):
         # unfilled slots are zeros), so the product is 0
         weights = top_k_weights.reshape(-1) * (ids < self.num_experts)
         ids = ids.clamp(max=self.num_experts - 1).to(torch.int32)
-        if num_tokens == 1 and self._fused_decode and hidden_states.device.type == "mps":
+        if (
+            num_tokens == 1
+            and self._fused_decode
+            and hidden_states.device.type == "mps"
+            and _decode_kernel() is not None
+        ):
             # One token: MLX gate/up for every route (231 GB/s), then one dispatch for the down projections + routing sum
-            from .metal_qmv import experts_down_sum
+            experts_down_sum = _decode_kernel().experts_down_sum
 
             act = self._apply_gate(self._qmm(hidden_states.expand(top_k, -1), "gate_up_proj", ids, False))
             down = (self.down_proj, self.down_proj_scales.to(act.dtype), self.down_proj_qbiases.to(act.dtype))
