@@ -114,6 +114,12 @@ class MetalHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
+    @property
+    def is_compileable(self) -> bool:
+        # The Metal ops have fake implementations (MLX's registered in `_register_fake_kernels`, the decode kernels'
+        # by their hub package), so `torch.compile` traces through them
+        return True
+
     def get_quantize_ops(self):
         from ..integrations.metal_quantization import MetalQuantize
 

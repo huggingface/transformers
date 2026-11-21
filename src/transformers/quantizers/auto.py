@@ -215,7 +215,11 @@ class AutoHfQuantizer:
         # e.g. `{"*": MetalConfig()}` on a checkpoint storing only its experts quantized
         added = {}
         if pre_quantized and is_quantization_plan(loading):
-            added = {p: c for p, c in loading.items() if p not in plan and (c is None or isinstance(c, QuantizationConfigMixin))}
+            added = {
+                p: c
+                for p, c in loading.items()
+                if p not in plan and (c is None or isinstance(c, QuantizationConfigMixin))
+            }
         if not is_quantization_plan(loading):
             loading = dict.fromkeys(plan, loading)
 

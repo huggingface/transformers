@@ -282,6 +282,20 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
+@use_kernel_func_from_hub_with_fallback("inkling2_short_convolution_step", "inkling2_short_convolution_step")
+def inkling2_short_convolution_step(
+    hidden_states: torch.Tensor, conv_state: torch.Tensor, weight: torch.Tensor, conv_kernel_size: int
+) -> torch.Tensor:
+    """
+    One decode token through a bias-free short convolution: `conv_state` advanced in place, then
+    `(conv + hidden_states) / sqrt(conv_kernel_size + 1)` in the input dtype. A hub kernel may replace it (on MPS: one
+    dispatch).
+    """
+    input_dtype, residual = hidden_states.dtype, hidden_states.float()
+    hidden_states = causal_conv1d_update(residual.transpose(1, 2), conv_state, weight.squeeze(1), None).transpose(1, 2)
+    return ((hidden_states + residual) / math.sqrt(conv_kernel_size + 1)).to(input_dtype)
+
+
 @use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
 class Inkling2ShortConvolution(nn.Module):
     def __init__(self, hidden_size: int, conv_kernel_size: int, layer_idx: int, conv_idx: int):
@@ -318,14 +332,22 @@ class Inkling2ShortConvolution(nn.Module):
         """
         cache_layer_idx = self.layer_idx + cache_offset
         input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.float()
+        seq_len = hidden_states.shape[1]
+        conv_state = None if cache is None else cache.get_conv_state(cache_layer_idx, state_idx=self.conv_idx)
+        if (
+            conv_state is not None
+            and seq_len == 1
+            and conv_mask is None
+            and not cache.is_recording_past(cache_layer_idx)
+        ):
+            return inkling2_short_convolution_step(
+                hidden_states, conv_state, self.conv1d.weight, self.conv_kernel_size
+            )
 
+        hidden_states = hidden_states.float()
         residual = hidden_states
         hidden_states = apply_mask_to_padding_states(hidden_states, conv_mask)
-        seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
-
-        conv_state = None if cache is None else cache.get_conv_state(cache_layer_idx, state_idx=self.conv_idx)
 
         if conv_state is not None and seq_len == 1 and not cache.is_recording_past(cache_layer_idx):
             hidden_states = causal_conv1d_update(
