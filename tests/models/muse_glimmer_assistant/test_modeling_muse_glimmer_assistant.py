@@ -156,6 +156,31 @@ class MuseGlimmerAssistantModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
+@require_torch
+class MuseGlimmerAssistantMaskTest(unittest.TestCase):
+    def test_sliding_window_without_cache(self):
+        tester = MuseGlimmerAssistantModelTester(self, batch_size=1)
+        config, noise_embeds, context_hidden_states, _ = tester.prepare_config_and_inputs()
+        config.sliding_window = 6
+        config._attn_implementation = "eager"
+        model = MuseGlimmerAssistantModel(config).to(torch_device).eval()
+
+        kv_length = tester.seq_length + tester.block_size
+        query_positions = torch.arange(tester.seq_length, kv_length, device=torch_device)
+        key_positions = torch.arange(kv_length, device=torch_device)
+        visible = (query_positions[:, None] - key_positions).abs() <= config.sliding_window
+        reference_mask = torch.zeros_like(visible, dtype=noise_embeds.dtype).masked_fill(~visible, float("-inf"))
+
+        with torch.no_grad():
+            reference = model(
+                noise_embeds, context_hidden_states, attention_mask=reference_mask[None, None], use_cache=False
+            )
+            for attention_mask in (None, torch.ones(1, kv_length, device=torch_device)):
+                actual = model(noise_embeds, context_hidden_states, attention_mask=attention_mask, use_cache=False)
+                self.assertIsNone(actual.cache)
+                torch.testing.assert_close(actual.last_hidden_state, reference.last_hidden_state, rtol=1e-5, atol=1e-6)
+
+
 @slow
 @require_torch_accelerator
 class MuseGlimmerAssistantIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
