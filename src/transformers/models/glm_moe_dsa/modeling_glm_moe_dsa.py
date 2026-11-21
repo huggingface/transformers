@@ -471,6 +471,16 @@ _PROTO_PREFILL = _os.environ.get("PROTO_PREFILL", "0") == "1"
 # bf16 values cast to fp32, which TF32's 10-bit mantissa holds exactly, so only the summation order changes
 if _os.environ.get("PROTO_TF32", "0") == "1":
     torch.backends.cuda.matmul.allow_tf32 = True
+# WP train: the same gain without the process-wide switch (which also reaches every fp32 matmul of a trainer in the
+# process, forward and backward). Forwards without gradients (the engine's) compute the router logits and the indexer
+# scores as bf16 GEMMs with fp32 output: the operands are bf16 values either way, the products are exact and the sum
+# accumulates in fp32, so only the summation order changes. Forwards with gradients keep the fp32 GEMMs.
+_PROTO_TF32_SCOPED = _os.environ.get("PROTO_TF32", "0") == "scoped"
+
+
+def _proto_scores_bf16(q, keys):
+    """[M, H, D] x [M, K, D] -> fp32 [M, H, K], bf16 operands, fp32 accumulation and output."""
+    return torch.bmm(q.to(torch.bfloat16), keys.to(torch.bfloat16).transpose(1, 2), out_dtype=torch.float32)
 # WP prefill (bench only): when a prefill batch has to score (some context longer than index_topk), one Triton launch
 # computes the masked scores of the packed batch (`integrations/_proto_mqa_kernels.py`) instead of gathering every
 # query's keys into [M, max_k, D] and scoring in fp32
@@ -541,7 +551,10 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
         # the kernel takes an unordered list; PROTO_PREFILL_MQA_SORTED=1 keeps the order of the torch path (checks)
         top = index_scores.topk(num_selected, dim=-1, sorted=_PROTO_PREFILL_MQA_SORTED).indices
         return _proto_selected(pos, visible, top, n_visible, num_selected, lengths)
-    scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys[pos].float()) * indexer.softmax_scale)
+    if _PROTO_TF32_SCOPED:
+        scores = F.relu(_proto_scores_bf16(q, keys[pos]) * indexer.softmax_scale)
+    else:
+        scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys[pos].float()) * indexer.softmax_scale)
     weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
     index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
     index_scores = index_scores.masked_fill(~visible, float("-inf"))
@@ -635,7 +648,10 @@ def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_stat
     if skip_scoring:
         return torch.where(visible, rows_all, -1), None, lengths
     keys = indexer_key_cache[rows_all]  # [M, max_k, D], the keys of each query's own request, straight from the cache
-    scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys.float()) * indexer.softmax_scale)
+    if _PROTO_TF32_SCOPED:
+        scores = F.relu(_proto_scores_bf16(q, keys) * indexer.softmax_scale)
+    else:
+        scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys.float()) * indexer.softmax_scale)
     weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
     index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
     index_scores = index_scores.masked_fill(~visible, float("-inf"))
@@ -943,7 +959,14 @@ class GlmMoeDsaTopkRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        if (
+            _PROTO_TF32_SCOPED
+            and not torch.is_grad_enabled()
+            and hidden_states.dtype == self.weight.dtype == torch.bfloat16
+        ):
+            router_logits = torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
+        else:
+            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.sigmoid()
         scores_for_choice = scores + self.e_score_correction_bias
         if _GLUE_ROUTER and self.num_group == 1 and self.topk_group == 1:
