@@ -70,6 +70,10 @@ _CB_MTP_DRAFT_SAMPLE = _glue_os.environ.get("CB_MTP_DRAFT", "greedy") == "sample
 # and prints the largest difference at exit.
 _CB_FUSED_SAMPLE = _glue_os.environ.get("CB_FUSED_SAMPLE", "0") == "1"
 _CB_FUSED_SAMPLE_CHECK = _glue_os.environ.get("CB_FUSED_SAMPLE_CHECK", "0") == "1"
+# CB_FUSED_SAMPLE_SHARDED=1 (with CB_FUSED_SAMPLE=1, MTP spec verification with one draft): when the lm_head is
+# vocabulary-sharded (TP plan `colwise_gather_output`), each rank samples its own shard of the logits and the ranks
+# all-gather 4 numbers per row instead of the [rows, vocab] logits; the next draft's argmax likewise
+_CB_FUSED_SAMPLE_SHARDED = _glue_os.environ.get("CB_FUSED_SAMPLE_SHARDED", "0") == "1"
 
 
 def infer_max_single_request_tokens(cache: PagedAttentionCache) -> int:
@@ -503,7 +507,12 @@ class ModelRunner:
         has_draft = mtp["has_draft"].bool()
         row_b = row_a + mtp["has_draft"]
         num_rows = row_a.shape[0]
-        logits = model.lm_head(hidden_states[:, torch.cat([row_a, row_b])])[0]  # [2 * num_rows, vocab]
+        vocab_shard = self._vocab_shard(model)
+        if vocab_shard is not None:
+            # this rank's vocabulary shard of the logits, no all-gather
+            logits = nn.functional.linear(hidden_states[:, torch.cat([row_a, row_b])], vocab_shard[0])[0]
+        else:
+            logits = model.lm_head(hidden_states[:, torch.cat([row_a, row_b])])[0]  # [2 * num_rows, vocab]
         if self._fused_sampler is None:
             logits = logits.float()
         logits_a, logits_b = logits[:num_rows], logits[num_rows:]
@@ -513,14 +522,22 @@ class ModelRunner:
         if self._fused_sampler is not None:
             # row a verifies the draft (ratio test, residual sample if rejected), row b samples the bonus token
             verify = torch.cat([torch.where(has_draft, draft, -1), torch.full_like(draft, -1)])
-            tokens, logprobs, logz, _, accepted = self._fused_sampler(logits, None, verify)
-            self._maybe_check_fused(logits, None, tokens, logprobs)
+            if vocab_shard is not None:
+                _, group, offset = vocab_shard
+                tokens, logprobs, logz, _, accepted = self._fused_sampler(logits, None, verify, group, offset)
+                if _CB_FUSED_SAMPLE_CHECK:
+                    full = model.lm_head(hidden_states[:, torch.cat([row_a, row_b])])[0]
+                    self._maybe_check_fused(full, None, tokens, logprobs)
+            else:
+                tokens, logprobs, logz, _, accepted = self._fused_sampler(logits, None, verify)
+                self._maybe_check_fused(logits, None, tokens, logprobs)
+                # measurement: the target's logprob of the draft the previous step made for this position (read
+                # by the "shadow" mode only, not written by the vocabulary-parallel path)
+                prev_draft_logit = logits_a.gather(1, mtp["prev_draft"].long()[:, None]).squeeze(1).float()
+                output_ids[6, :num_rows].copy_((prev_draft_logit - logz[:num_rows]).view(dtype=torch.int32))
             first_tokens, bonus_tokens, accepted = tokens[:num_rows], tokens[num_rows:], accepted[:num_rows]
             if self.return_logprobs:
                 logprobs_first, logprobs_bonus = logprobs[:num_rows], logprobs[num_rows:]
-            # measurement: the target's logprob of the draft the previous step made for this position
-            prev_draft_logit = logits_a.gather(1, mtp["prev_draft"].long()[:, None]).squeeze(1).float()
-            output_ids[6, :num_rows].copy_((prev_draft_logit - logz[:num_rows]).view(dtype=torch.int32))
         elif self.do_sample:
             logprobs_a = nn.functional.log_softmax(logits_a, dim=-1)
             draft_logprob = logprobs_a.gather(1, draft[:, None]).squeeze(1)
@@ -560,14 +577,23 @@ class ModelRunner:
         mtp_kwargs = {k: v for k, v in model_kwargs.items() if k != "input_ids"}
         mtp_hidden_states = model.mtp_forward(hidden_states, mtp_input_ids[None], **mtp_kwargs)
         draft_rows = torch.where(accepted, row_b, row_a)
-        draft_logits = model.lm_head(mtp_hidden_states[:, draft_rows])[0]
-        if _CB_MTP_DRAFT_SAMPLE and self.do_sample:
-            draft_logprobs = nn.functional.log_softmax(draft_logits.float(), dim=-1)
-            next_draft = torch.argmax(draft_logprobs - torch.empty_like(draft_logprobs).exponential_().log_(), dim=-1)
-            next_draft_logprob = draft_logprobs.gather(1, next_draft[:, None]).squeeze(1)
-            output_ids[7, :num_rows].copy_(next_draft_logprob.view(dtype=torch.int32))
+        if vocab_shard is not None:
+            # argmax of each rank's shard, then of the gathered (max, id) pairs: ties go to the lowest id, as argmax
+            weight, group, offset = vocab_shard
+            best, index = nn.functional.linear(mtp_hidden_states[:, draft_rows], weight)[0].max(-1)
+            pair = torch.stack([best.float(), (index + offset).float()], -1)  # ids below 2^24 are exact in fp32
+            pairs = pair.new_empty(torch.distributed.get_world_size(group), *pair.shape)
+            torch.distributed.all_gather_into_tensor(pairs, pair, group=group)
+            next_draft = pairs[..., 1].gather(0, pairs[..., 0].argmax(0, keepdim=True))[0].long()
         else:
-            next_draft = torch.argmax(draft_logits, dim=-1)
+            draft_logits = model.lm_head(mtp_hidden_states[:, draft_rows])[0]
+            if _CB_MTP_DRAFT_SAMPLE and self.do_sample:
+                draft_logprobs = nn.functional.log_softmax(draft_logits.float(), dim=-1)
+                next_draft = torch.argmax(draft_logprobs - torch.empty_like(draft_logprobs).exponential_().log_(), dim=-1)
+                next_draft_logprob = draft_logprobs.gather(1, next_draft[:, None]).squeeze(1)
+                output_ids[7, :num_rows].copy_(next_draft_logprob.view(dtype=torch.int32))
+            else:
+                next_draft = torch.argmax(draft_logits, dim=-1)
 
         output_ids[0, :num_rows].copy_(first_tokens)
         output_ids[2, :num_rows].copy_(bonus_tokens)
@@ -576,6 +602,20 @@ class ModelRunner:
         if logprobs_first is not None:
             output_ids[1, :num_rows].copy_(logprobs_first.view(dtype=torch.int32))
             output_ids[3, :num_rows].copy_(logprobs_bonus.view(dtype=torch.int32))
+
+    def _vocab_shard(self, model: nn.Module):
+        """(local lm_head weight, TP group, first vocabulary id of this rank) when CB_FUSED_SAMPLE_SHARDED applies."""
+        if not (_CB_FUSED_SAMPLE_SHARDED and self._fused_sampler is not None):
+            return None
+        from torch.distributed.tensor import DTensor
+
+        weight = model.lm_head.weight
+        if not isinstance(weight, DTensor):
+            return None
+        local = weight.to_local()
+        group = weight.device_mesh.get_group()
+        assert weight.shape[0] % torch.distributed.get_world_size(group) == 0, "uneven vocabulary shards"
+        return local, group, torch.distributed.get_rank(group) * local.shape[0]
 
     def _maybe_check_fused(self, logits, temperature, tokens, logprobs) -> None:
         """CB_FUSED_SAMPLE_CHECK: largest |fused logprob - log_softmax(fp32 logits / T)[token]| so far, on device."""

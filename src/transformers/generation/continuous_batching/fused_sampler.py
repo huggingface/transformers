@@ -54,10 +54,13 @@ def _block_partials_kernel(
 
 @triton.jit
 def _select_kernel(
-    logits_ptr, stride_row, temp_ptr, draft_ptr, part_max_ptr, part_sum_ptr, seed, counter_ptr,
-    token_ptr, logprob_ptr, logz_ptr, draft_logprob_ptr, accepted_ptr, V, NB,
+    logits_ptr, stride_row, temp_ptr, draft_ptr, part_max_ptr, part_sum_ptr, seed, counter_ptr, parts_ptr,
+    vocab_offset, shard, V, NB,
     HAS_TEMP: tl.constexpr, HAS_DRAFT: tl.constexpr, BLOCK: tl.constexpr, NB_P2: tl.constexpr,
 ):
+    """Per row of one vocabulary shard: a sample of the shard's distribution without the draft, and the four numbers
+    the combine step needs, `parts[row] = (token id, its logit, log of the shard's mass without the draft, the draft's
+    logit or -inf)`, every logit divided by T."""
     row = tl.program_id(0)
     row_ptr = logits_ptr + row.to(tl.int64) * stride_row
     step = tl.load(counter_ptr).to(tl.uint32)
@@ -72,23 +75,22 @@ def _select_kernel(
     m = tl.max(part_max, 0)
     mass = tl.where(part_sum > 0, part_sum * tl.exp(part_max - m), 0.0)
     total = tl.sum(mass, 0)
+    logz_without_draft = tl.where(total > 0, m + tl.log(total), float("-inf"))
 
-    # Log of the normalizer over every token, the draft added back
     draft = -1
+    x_draft = float("-inf")
     if HAS_DRAFT:
-        draft = tl.load(draft_ptr + row)
+        draft = tl.load(draft_ptr + row)  # index in this shard, -1 when the row has no draft or it is elsewhere
         has_draft = (draft >= 0) & (draft < V)
         x_draft = tl.load(row_ptr + tl.where(has_draft, draft, 0)).to(tl.float32)
         if HAS_TEMP:
             x_draft = x_draft / temp
         x_draft = tl.where(has_draft, x_draft, float("-inf"))
-        m_all = tl.maximum(m, x_draft)
-        logz = m_all + tl.log(total * tl.exp(m - m_all) + tl.exp(x_draft - m_all))
-    else:
-        logz = m + tl.log(total)
 
-    # Exponential race over the blocks (stream 0), then over the chosen block's tokens (stream 1)
-    block_key = tl.where(mass > 0, tl.log(mass) - tl.log(_exponential(seed, blocks, row, 0, step)), float("-inf"))
+    # Exponential race over the blocks (stream 0), then over the chosen block's tokens (stream 1); streams differ
+    # per shard, so shards draw independent numbers
+    block_key = tl.log(mass) - tl.log(_exponential(seed, blocks, row, 4 * shard, step))
+    block_key = tl.where(mass > 0, block_key, float("-inf"))
     chosen = tl.argmax(block_key, 0)
     offs = chosen * BLOCK + tl.arange(0, BLOCK)
     x = tl.load(row_ptr + offs, mask=offs < V, other=float("-inf")).to(tl.float32)
@@ -96,16 +98,44 @@ def _select_kernel(
         x = x / temp
     if HAS_DRAFT:
         x = tl.where(offs == draft, float("-inf"), x)
-    score = x - tl.log(_exponential(seed, offs, row, 1, step))
+    score = x - tl.log(_exponential(seed, offs, row, 4 * shard + 1, step))
     j = tl.argmax(score, 0)
-    token = tl.minimum(chosen * BLOCK + j, V - 1).to(tl.int64)
-    logprob = tl.max(tl.where(tl.arange(0, BLOCK) == j, x, float("-inf")), 0) - logz
+    token = tl.minimum(chosen * BLOCK + j, V - 1) + vocab_offset
+    token_logit = tl.max(tl.where(tl.arange(0, BLOCK) == j, x, float("-inf")), 0)
+    tl.store(parts_ptr + row * 4, token.to(tl.float32))  # exact: vocabulary ids are below 2^24
+    tl.store(parts_ptr + row * 4 + 1, token_logit)
+    tl.store(parts_ptr + row * 4 + 2, logz_without_draft)
+    tl.store(parts_ptr + row * 4 + 3, x_draft)
 
+
+@triton.jit
+def _combine_kernel(
+    parts_ptr, draft_ptr, seed, counter_ptr, token_ptr, logprob_ptr, logz_ptr, draft_logprob_ptr, accepted_ptr,
+    rows, NS, HAS_DRAFT: tl.constexpr, NS_P2: tl.constexpr,
+):
+    """Per row: pick a shard with probability proportional to its mass without the draft (exponential race, stream
+    2), take its sample, and run the ratio test of the draft (stream 3). `parts` is [shards, rows, 4]."""
+    row = tl.program_id(0)
+    step = tl.load(counter_ptr).to(tl.uint32)
+    shards = tl.arange(0, NS_P2)
+    base = parts_ptr + (shards * rows + row) * 4
+    logz_shard = tl.load(base + 2, mask=shards < NS, other=float("-inf"))
+    x_draft = tl.max(tl.load(base + 3, mask=shards < NS, other=float("-inf")), 0)
+    m = tl.max(logz_shard, 0)
+    logz_without_draft = m + tl.log(tl.sum(tl.where(logz_shard > float("-inf"), tl.exp(logz_shard - m), 0.0), 0))
+    m_all = tl.maximum(logz_without_draft, x_draft)
+    logz = m_all + tl.log(tl.exp(logz_without_draft - m_all) + tl.exp(x_draft - m_all))
+
+    key = logz_shard - tl.log(_exponential(seed, shards, row, 2, step))
+    chosen = tl.argmax(tl.where(logz_shard > float("-inf"), key, float("-inf")), 0)
+    token = tl.load(parts_ptr + (chosen * rows + row) * 4).to(tl.int64)
+    logprob = tl.load(parts_ptr + (chosen * rows + row) * 4 + 1) - logz
     if HAS_DRAFT:
-        # Ratio test of the draft (stream 2): accepted with probability p(draft), else the residual sample above
+        # Ratio test of the draft: accepted with probability p(draft), else the sample above (of p without the draft)
+        draft = tl.load(draft_ptr + row)
         draft_logprob = x_draft - logz
-        accepted = has_draft & (_uniform(seed, 0, row, 2, step) < tl.exp(draft_logprob))
-        token = tl.where(accepted, draft.to(tl.int64), token)
+        accepted = (draft >= 0) & (_uniform(seed, 0, row, 3, step) < tl.exp(draft_logprob))
+        token = tl.where(accepted, draft, token)
         logprob = tl.where(accepted, draft_logprob, logprob)
         tl.store(draft_logprob_ptr + row, draft_logprob)
         tl.store(accepted_ptr + row, accepted)
@@ -117,11 +147,16 @@ def _select_kernel(
 class FusedSampler:
     """Samples one token per row of `logits` ([rows, vocab], bf16 or fp32, vocab contiguous) from softmax(logits / T)
     and returns `(tokens, logprobs, logz, draft_logprobs, accepted)`: the token, log softmax(logits / T)[token], the
-    log of the row's normalizer over every token. With `draft` ([rows], -1 where none), a row's draft is accepted with
-    probability p(draft) and emitted, else the token is a sample of p without the draft; `draft_logprobs` and
-    `accepted` are then filled. `temperature` is per row ([rows] fp32). Random numbers come from Philox keyed by `seed`
-    and a device-side step counter advanced after every call (CUDA-graph safe; every tensor-parallel rank holds the
-    same seed and the same gathered logits, so every rank samples the same tokens)."""
+    log of the row's normalizer over every token. With `draft` ([rows] vocabulary ids, -1 where none), a row's draft is
+    accepted with probability p(draft) and emitted, else the token is a sample of p without the draft;
+    `draft_logprobs` and `accepted` are then filled. `temperature` is per row ([rows] fp32).
+
+    Vocabulary-parallel: with `group`, `logits` is this rank's shard of the vocabulary (ids `vocab_offset` to
+    `vocab_offset + logits.shape[1]`, the same shard size on every rank). Each rank samples its shard, one all-gather
+    of 4 numbers per row and rank replaces the all-gather of the logits, and every rank combines the same way.
+
+    Random numbers come from Philox keyed by `seed` and a device-side step counter advanced after every call (CUDA-graph
+    safe). Every tensor-parallel rank holds the same seed, so every rank emits the same tokens."""
 
     BLOCK = 2048
     PARTIALS_WARPS = 4
@@ -131,32 +166,65 @@ class FusedSampler:
         self.seed = seed & ((1 << 63) - 1)
         self.counter = torch.zeros(1, dtype=torch.int64, device=device)
 
-    def __call__(self, logits: torch.Tensor, temperature: torch.Tensor | None = None, draft: torch.Tensor | None = None):
+    def __call__(
+        self,
+        logits: torch.Tensor,
+        temperature: torch.Tensor | None = None,
+        draft: torch.Tensor | None = None,
+        group=None,
+        vocab_offset: int = 0,
+    ):
+        shard = 0 if group is None else torch.distributed.get_rank(group)
+        parts = self.sample_shard(logits, temperature, draft, vocab_offset, shard)
+        if group is not None:
+            gathered = parts.new_empty(torch.distributed.get_world_size(group), *parts.shape)
+            torch.distributed.all_gather_into_tensor(gathered, parts, group=group)
+            parts = gathered
+        outputs = self.combine(parts[None] if group is None else parts, draft)
+        self.counter.add_(1)
+        return outputs
+
+    def sample_shard(self, logits, temperature, draft, vocab_offset: int, shard: int) -> torch.Tensor:
+        """The [rows, 4] parts of one vocabulary shard (`_select_kernel`)."""
         rows, vocab = logits.shape
-        assert logits.stride(1) == 1 and vocab < 2**31
-        block = self.BLOCK
-        num_blocks = triton.cdiv(vocab, block)
-        device = logits.device
-        part_max = torch.empty(rows, num_blocks, dtype=torch.float32, device=device)
+        assert logits.stride(1) == 1 and vocab_offset + vocab < 2**24
+        num_blocks = triton.cdiv(vocab, self.BLOCK)
+        part_max = torch.empty(rows, num_blocks, dtype=torch.float32, device=logits.device)
         part_sum = torch.empty_like(part_max)
+        parts = torch.empty(rows, 4, dtype=torch.float32, device=logits.device)
+        if rows == 0:
+            return parts
+        temp = temperature if temperature is not None else parts  # unused pointers when the flags are off
+        local_draft = parts
+        if draft is not None:
+            in_shard = (draft >= vocab_offset) & (draft < vocab_offset + vocab)
+            local_draft = draft if vocab_offset == 0 and shard == 0 else torch.where(in_shard, draft - vocab_offset, -1)
+        flags = {"HAS_TEMP": temperature is not None, "HAS_DRAFT": draft is not None, "BLOCK": self.BLOCK}
+        _block_partials_kernel[(rows, num_blocks)](
+            logits, logits.stride(0), temp, local_draft, part_max, part_sum, vocab, num_blocks, **flags,
+            num_warps=self.PARTIALS_WARPS,
+        )
+        _select_kernel[(rows,)](
+            logits, logits.stride(0), temp, local_draft, part_max, part_sum, self.seed, self.counter, parts,
+            vocab_offset, shard, vocab, num_blocks, **flags, NB_P2=triton.next_power_of_2(num_blocks),
+            num_warps=self.SELECT_WARPS,
+        )
+        return parts
+
+    def combine(self, parts: torch.Tensor, draft: torch.Tensor | None):
+        """`(tokens, logprobs, logz, draft_logprobs, accepted)` from the [shards, rows, 4] parts (`_combine_kernel`)."""
+        num_shards, rows, _ = parts.shape
+        device = parts.device
         tokens = torch.empty(rows, dtype=torch.int64, device=device)
         logprobs = torch.empty(rows, dtype=torch.float32, device=device)
         logz = torch.empty_like(logprobs)
         draft_logprobs = torch.empty_like(logprobs) if draft is not None else None
         accepted = torch.empty(rows, dtype=torch.bool, device=device) if draft is not None else None
-        if rows == 0:
-            return tokens, logprobs, logz, draft_logprobs, accepted
-        temp = temperature if temperature is not None else logprobs  # unused pointers when the flags are off
-        draft_arg = draft if draft is not None else tokens
-        flags = {"HAS_TEMP": temperature is not None, "HAS_DRAFT": draft is not None, "BLOCK": block}
-        _block_partials_kernel[(rows, num_blocks)](
-            logits, logits.stride(0), temp, draft_arg, part_max, part_sum, vocab, num_blocks, **flags,
-            num_warps=self.PARTIALS_WARPS,
-        )
-        _select_kernel[(rows,)](
-            logits, logits.stride(0), temp, draft_arg, part_max, part_sum, self.seed, self.counter, tokens, logprobs,
-            logz, draft_logprobs if draft is not None else logz, accepted if draft is not None else tokens, vocab,
-            num_blocks, **flags, NB_P2=triton.next_power_of_2(num_blocks), num_warps=self.SELECT_WARPS,
-        )
-        self.counter.add_(1)
+        if rows > 0:
+            _combine_kernel[(rows,)](
+                parts, draft if draft is not None else tokens, self.seed, self.counter, tokens, logprobs, logz,
+                draft_logprobs if draft is not None else logz, accepted if draft is not None else tokens, rows,
+                num_shards, HAS_DRAFT=draft is not None, NS_P2=max(2, triton.next_power_of_2(num_shards)),
+                num_warps=1,
+            )
         return tokens, logprobs, logz, draft_logprobs, accepted
