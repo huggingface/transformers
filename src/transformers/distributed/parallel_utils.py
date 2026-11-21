@@ -139,6 +139,18 @@ if is_torch_distributed_available():
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
 
+    class _ScaleBackward(torch.autograd.Function):
+        """Identity forward, gradient multiplied by `scale` in backward."""
+
+        @staticmethod
+        def forward(ctx, x, scale):
+            ctx.scale = scale
+            return x.view_as(x)
+
+        @staticmethod
+        def backward(ctx, grad):
+            return grad * ctx.scale, None
+
     class _WaitTensor(torch.autograd.Function):
         """Wait on a functional collective's result, identity backward (`wait_tensor` has no autograd kernel before
         torch 2.11)."""
