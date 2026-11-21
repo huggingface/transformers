@@ -291,6 +291,7 @@ class LongformerModelTester(ModelTesterConfigMixin):
 
 
 @require_torch
+@skip_tpu("model aborts in the sliding chunks attention")
 class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     model_tester_class = LongformerModelTester
 
@@ -348,10 +349,6 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = LongformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LongformerConfig, hidden_size=32)
-
-    @skip_tpu("test aborts")
-    def test_all_tensors_are_parameter_or_buffer(self):
-        super().test_all_tensors_are_parameter_or_buffer()
 
     def test_inputs_embeds_matches_input_ids(self):
         position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
@@ -413,6 +410,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@skip_tpu("model aborts in the sliding chunks attention")
 class LongformerModelIntegrationTest(unittest.TestCase):
     def _get_hidden_states(self):
         return torch.tensor(

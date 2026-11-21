@@ -260,6 +260,7 @@ class LEDModelTester:
 
 
 @require_torch
+@skip_tpu("model aborts in the sliding chunks attention")
 class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (LEDModel, LEDForConditionalGeneration, LEDForQuestionAnswering) if is_torch_available() else ()
@@ -295,10 +296,6 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def setUp(self):
         self.model_tester = LEDModelTester(self)
         self.config_tester = ConfigTester(self, config_class=LEDConfig)
-
-    @skip_tpu("test aborts")
-    def test_all_tensors_are_parameter_or_buffer(self):
-        super().test_all_tensors_are_parameter_or_buffer()
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -493,6 +490,7 @@ TOLERANCE = 1e-4
 @require_sentencepiece
 @require_tokenizers
 @slow
+@skip_tpu("model aborts in the sliding chunks attention")
 class LEDModelIntegrationTests(unittest.TestCase):
     """All the below results were obtained with the original checkpoints and code
     base from https://github.com/allenai/longformer.

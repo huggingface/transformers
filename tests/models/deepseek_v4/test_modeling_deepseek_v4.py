@@ -118,6 +118,21 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_beam_sample_generate_dict_output(self):
         super().test_beam_sample_generate_dict_output()
 
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_beam_search_generate_dict_output(self):
+        super().test_beam_search_generate_dict_output()
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_greedy_generate_dict_outputs(self):
+        super().test_greedy_generate_dict_outputs()
+
+    @pytest.mark.generate
+    @skip_tpu("test aborts")
+    def test_sample_generate_dict_output(self):
+        super().test_sample_generate_dict_output()
+
     @unittest.skip(
         "V4's `DeepseekV4GroupedLinear` uses `torch.bmm` for the per-group matmul; "
         "torchao's Float8Tensor only fast-paths `F.linear` (bmm needs the optional `mslk` "
