@@ -1456,11 +1456,21 @@ class GenerationMixin(ContinuousMixin):
             generation_config.encoder_repetition_penalty is not None
             and generation_config.encoder_repetition_penalty != 1.0
         ):
-            if has_encoder_input_ids:
+            if has_encoder_input_ids and encoder_input_ids is not None:
+                # `attention_mask` is already expanded for beams / multiple returns, the encoder ids are not
+                encoder_attention_mask = (model_kwargs or {}).get("attention_mask")
+                if not (
+                    encoder_attention_mask is not None
+                    and encoder_attention_mask.dim() == 2
+                    and encoder_attention_mask.shape[1] == encoder_input_ids.shape[1]
+                    and encoder_attention_mask.shape[0] % encoder_input_ids.shape[0] == 0
+                ):
+                    encoder_attention_mask = None
                 processors.append(
                     EncoderRepetitionPenaltyLogitsProcessor(
                         penalty=generation_config.encoder_repetition_penalty,
                         encoder_input_ids=encoder_input_ids,
+                        encoder_attention_mask=encoder_attention_mask,
                     )
                 )
             else:
