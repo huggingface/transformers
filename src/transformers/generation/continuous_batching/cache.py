@@ -575,7 +575,12 @@ class PagedAttentionCache:
         # Whatever used the memory in between can leave it reserved by the caching allocator in pieces, none of them
         # large enough for the cache: hand them back to the device first
         t0 = perf_counter()
-        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+        # [scratch, gap4 pause] CB_RESTORE_KEEP_CACHED=1: no empty_cache here. The cache's old segment is still reserved
+        # by the caching allocator, so once the caller freed what it allocated the cache gets it back (same address, no
+        # cudaFree / cudaMalloc, ~6 ms/GiB at TP8 as the ranks' driver calls serialize); if something the caller kept
+        # sits in it, the allocator takes new memory, and frees its unused cached segments first if it runs out
+        keep_cached = self._vmm is None and os.environ.get("CB_RESTORE_KEEP_CACHED", "0") == "1"
+        if not keep_cached and hasattr(device_module := torch.get_device_module(), "empty_cache"):
             device_module.empty_cache()
         t1 = perf_counter()
         if self._vmm is not None:
