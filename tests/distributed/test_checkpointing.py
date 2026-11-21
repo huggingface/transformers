@@ -30,6 +30,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from safetensors.torch import save_file as safe_save_file
 
     from transformers import LlamaConfig, LlamaForCausalLM, MixtralConfig, MixtralForCausalLM
     from transformers.distributed import DistributedConfig
@@ -105,13 +106,31 @@ def _test_save_sharded_model_files(rank, directory, source_config):
 
 def _test_save_for_consolidation(rank, directory):
     with _distributed_context(rank, directory):
-        model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=DistributedConfig(tp_size=4))
+        model = MixtralForCausalLM.from_pretrained(
+            f"{directory}/seed", distributed_config=DistributedConfig(tp_size=4)
+        )
         model.save_pretrained(f"{directory}/checkpoint", distributed_checkpoint=True)
+
+
+def _test_consolidate_on_every_rank(rank, directory):
+    # A separate rendezvous file from the save.
+    with _distributed_context(rank, f"{directory}/rendezvous_consolidate"):
+        with patch("transformers.distributed.checkpoint.safe_save_file", wraps=safe_save_file) as save_file:
+            consolidate_distributed_checkpoint(
+                f"{directory}/checkpoint",
+                f"{directory}/consolidated",
+                max_shard_size="10KB",
+                model=MixtralForCausalLM.from_pretrained(f"{directory}/seed"),
+            )
+        written = [os.path.basename(call.args[1]) for call in save_file.call_args_list]
+        Path(f"{directory}/written_{rank}.json").write_text(json.dumps(written), encoding="utf-8")
 
 
 def _test_save_and_push_to_hub(rank, directory):
     with _distributed_context(rank, directory):
-        model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=DistributedConfig(tp_size=4))
+        model = MixtralForCausalLM.from_pretrained(
+            f"{directory}/seed", distributed_config=DistributedConfig(tp_size=4)
+        )
         save_directory = os.path.join(directory, "checkpoint")
         output_dir = os.path.join(save_directory, "consolidated")
         with (
@@ -131,17 +150,19 @@ def _test_save_and_push_to_hub(rank, directory):
                 save_directory,
                 distributed_checkpoint=True,
                 push_to_hub=True,
+                max_shard_size="10KB",
                 repo_id="test/repo",
                 commit_message="Export DCP",
                 token="test-token",
                 create_pr=True,
                 private=True,
             )
+            # Every rank writes some of the consolidated files.
+            consolidate.assert_called_once_with(save_directory, output_dir, max_shard_size="10KB", model=model)
             if rank == 0:
                 api.return_value.create_repo.assert_called_once_with(
                     "test/repo", exist_ok=True, token="test-token", private=True
                 )
-                consolidate.assert_called_once_with(save_directory, output_dir)
                 model_card.return_value.save.assert_called_once_with(os.path.join(output_dir, "README.md"))
                 upload.assert_called_once_with(
                     output_dir,
@@ -153,7 +174,6 @@ def _test_save_and_push_to_hub(rank, directory):
                 )
             else:
                 api.return_value.create_repo.assert_not_called()
-                consolidate.assert_not_called()
                 model_card.assert_not_called()
                 upload.assert_not_called()
 
@@ -216,6 +236,17 @@ class DistributedUtilsTest(unittest.TestCase):
             num_attention_heads=4,
             num_key_value_heads=4,
         )
+        # Its fused experts are reverted to one tensor per expert on save, and its `lm_head` is tied.
+        self.moe_config = MixtralConfig(
+            vocab_size=16,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            num_local_experts=4,
+            tie_word_embeddings=True,
+        )
 
     @parameterized.expand(
         [
@@ -245,18 +276,8 @@ class DistributedUtilsTest(unittest.TestCase):
     def test_save_sharded_model_files(self, _, source_config):
         # The fused experts are reverted to one tensor per expert on save, the tied `lm_head` is dropped, and the
         # files outnumber the ranks, so every rank writes files over several rounds.
-        config = MixtralConfig(
-            vocab_size=16,
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            num_local_experts=4,
-            tie_word_embeddings=True,
-        )
         with tempfile.TemporaryDirectory() as directory:
-            reference = MixtralForCausalLM(config)
+            reference = MixtralForCausalLM(self.moe_config)
             reference.save_pretrained(f"{directory}/seed", max_shard_size="10KB")
             mp.spawn(_test_save_sharded_model_files, args=(directory, source_config), nprocs=4, join=True)
 
@@ -272,24 +293,51 @@ class DistributedUtilsTest(unittest.TestCase):
                 MixtralForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
             )
 
-    def test_consolidate_distributed_checkpoint_round_trip(self):
+    @parameterized.expand([("single_process", False), ("every_rank", True)])
+    @require_torch_greater_or_equal("2.9")
+    def test_consolidate_distributed_checkpoint_round_trip(self, _, on_every_rank):
         with tempfile.TemporaryDirectory() as directory:
-            reference = LlamaForCausalLM(self.config)
-            reference.save_pretrained(f"{directory}/seed")
+            reference = MixtralForCausalLM(self.moe_config)
+            reference.save_pretrained(f"{directory}/seed", max_shard_size="10KB")
             mp.spawn(_test_save_for_consolidation, args=(directory,), nprocs=4, join=True)
 
             output_dir = os.path.join(directory, "consolidated")
-            consolidate_distributed_checkpoint(os.path.join(directory, "checkpoint"), output_dir)
-            restored = LlamaForCausalLM.from_pretrained(
-                output_dir, config=self.config, generation_config=reference.generation_config
+            if on_every_rank:
+                os.makedirs(f"{directory}/rendezvous_consolidate")
+                mp.spawn(_test_consolidate_on_every_rank, args=(directory,), nprocs=4, join=True)
+            else:
+                consolidate_distributed_checkpoint(
+                    os.path.join(directory, "checkpoint"),
+                    output_dir,
+                    max_shard_size="10KB",
+                    model=MixtralForCausalLM.from_pretrained(f"{directory}/seed"),
+                )
+
+            # Same weight names as a non-distributed save (one tensor per expert, no tied `lm_head`), split in files
+            # of at most `max_shard_size`.
+            seed_index = json.loads(Path(f"{directory}/seed/{SAFE_WEIGHTS_INDEX_NAME}").read_text(encoding="utf-8"))
+            index = json.loads(Path(output_dir, SAFE_WEIGHTS_INDEX_NAME).read_text(encoding="utf-8"))
+            self.assertEqual(set(index["weight_map"]), set(seed_index["weight_map"]))
+            files = set(index["weight_map"].values())
+            self.assertGreater(len(files), 4)
+            if on_every_rank:
+                # Every file is written exactly once, and every rank writes some of them.
+                written = [
+                    json.loads(Path(f"{directory}/written_{rank}.json").read_text(encoding="utf-8"))
+                    for rank in range(4)
+                ]
+                self.assertTrue(all(written))
+                self.assertEqual(sorted(sum(written, [])), sorted(files))
+            restored = MixtralForCausalLM.from_pretrained(
+                output_dir, config=self.moe_config, generation_config=reference.generation_config
             )
             torch.testing.assert_close(restored.state_dict(), reference.state_dict())
 
     @require_torch_greater_or_equal("2.9")
     def test_save_and_push_to_hub(self):
         with tempfile.TemporaryDirectory() as directory:
-            reference = LlamaForCausalLM(self.config)
-            reference.save_pretrained(f"{directory}/seed")
+            reference = MixtralForCausalLM(self.moe_config)
+            reference.save_pretrained(f"{directory}/seed", max_shard_size="10KB")
             mp.spawn(_test_save_and_push_to_hub, args=(directory,), nprocs=4, join=True)
 
             checkpoint_dir = Path(directory) / "checkpoint"
@@ -299,8 +347,18 @@ class DistributedUtilsTest(unittest.TestCase):
             self.assertTrue((output_dir / "config.json").is_file())
             self.assertTrue((output_dir / "generation_config.json").is_file())
             self.assertTrue((output_dir / "README.md").is_file())
+
+            # The uploaded checkpoint has the original weight names (one tensor per expert, no tied `lm_head`) and is
+            # split in files of at most `max_shard_size`, like a non-distributed save.
+            seed_index = json.loads(Path(f"{directory}/seed/{SAFE_WEIGHTS_INDEX_NAME}").read_text(encoding="utf-8"))
+            saved_index = json.loads((output_dir / SAFE_WEIGHTS_INDEX_NAME).read_text(encoding="utf-8"))
+            self.assertEqual(set(saved_index["weight_map"]), set(seed_index["weight_map"]))
+            self.assertGreater(len(set(saved_index["weight_map"].values())), 1)
+
             for path in (checkpoint_dir, output_dir):
-                torch.testing.assert_close(LlamaForCausalLM.from_pretrained(path).state_dict(), reference.state_dict())
+                torch.testing.assert_close(
+                    MixtralForCausalLM.from_pretrained(path).state_dict(), reference.state_dict()
+                )
 
     def test_load_model_checkpoint_distributed(self):
         with tempfile.TemporaryDirectory() as directory:

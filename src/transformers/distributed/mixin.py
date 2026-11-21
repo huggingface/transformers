@@ -355,12 +355,13 @@ class DistributedMixin:
         *,
         push_to_hub: bool = False,
         save_on_this_rank: bool = True,
+        max_shard_size: int | str = "50GB",
         repo_id: str | None = None,
         commit_message: str | None = None,
         token: str | bool | None = None,
         create_pr: bool = False,
     ) -> None:
-        """Save rank-local DCP files, optionally consolidating into consolidated/ on rank 0 for Hub upload."""
+        """Save rank-local DCP files, optionally consolidating them into consolidated/ for Hub upload by rank 0."""
         if not _check_distributed_checkpointing_available():
             raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.8.")
 
@@ -377,12 +378,18 @@ class DistributedMixin:
         _save_model_checkpoint_distributed(model_to_save, save_directory)
 
         if push_to_hub:
+            output_dir = os.path.join(save_directory, "consolidated")
             try:
                 if self.should_save_on_this_rank(save_on_this_rank):
-                    output_dir = os.path.join(save_directory, "consolidated")
                     # Everything in output_dir is uploaded, so drop leftovers from a previous save.
                     shutil.rmtree(output_dir, ignore_errors=True)
-                    consolidate_distributed_checkpoint(save_directory, output_dir)
+                _distributed_barrier()
+                # Every rank calls it, so that the ranks split the files. The model is passed so that its own weight
+                # conversions are reverted.
+                consolidate_distributed_checkpoint(
+                    save_directory, output_dir, max_shard_size=max_shard_size, model=model_to_save
+                )
+                if self.should_save_on_this_rank(save_on_this_rank):
                     if self.is_remote_code():
                         custom_object_save(model_to_save, output_dir, config=model_to_save.config)
                     model_to_save.config.save_pretrained(output_dir)
