@@ -34,15 +34,17 @@ def _exponential(seed, c0, c1, c2, c3):
 
 @triton.jit
 def _block_partials_kernel(
-    logits_ptr, stride_row, temp_ptr, draft_ptr, part_max_ptr, part_sum_ptr, V, NB,
-    HAS_TEMP: tl.constexpr, HAS_DRAFT: tl.constexpr, BLOCK: tl.constexpr,
+    logits_ptr, stride_row, temp_ptr, temp_scalar, draft_ptr, part_max_ptr, part_sum_ptr, V, NB,
+    TEMP_MODE: tl.constexpr, HAS_DRAFT: tl.constexpr, BLOCK: tl.constexpr,
 ):
     row = tl.program_id(0)
     block = tl.program_id(1)
     offs = block * BLOCK + tl.arange(0, BLOCK)
     x = tl.load(logits_ptr + row.to(tl.int64) * stride_row + offs, mask=offs < V, other=float("-inf")).to(tl.float32)
-    if HAS_TEMP:
+    if TEMP_MODE == 2:  # per row
         x = x / tl.load(temp_ptr + row)
+    elif TEMP_MODE == 1:  # one temperature for the batch
+        x = x / temp_scalar
     if HAS_DRAFT:
         x = tl.where(offs == tl.load(draft_ptr + row), float("-inf"), x)
     m = tl.max(x, 0)
@@ -54,9 +56,9 @@ def _block_partials_kernel(
 
 @triton.jit
 def _select_kernel(
-    logits_ptr, stride_row, temp_ptr, draft_ptr, part_max_ptr, part_sum_ptr, seed, counter_ptr, parts_ptr,
+    logits_ptr, stride_row, temp_ptr, temp_scalar, draft_ptr, part_max_ptr, part_sum_ptr, seed, counter_ptr, parts_ptr,
     vocab_offset, shard, V, NB,
-    HAS_TEMP: tl.constexpr, HAS_DRAFT: tl.constexpr, BLOCK: tl.constexpr, NB_P2: tl.constexpr,
+    TEMP_MODE: tl.constexpr, HAS_DRAFT: tl.constexpr, BLOCK: tl.constexpr, NB_P2: tl.constexpr,
 ):
     """Per row of one vocabulary shard: a sample of the shard's distribution without the draft, and the four numbers
     the combine step needs, `parts[row] = (token id, its logit, log of the shard's mass without the draft, the draft's
@@ -64,8 +66,8 @@ def _select_kernel(
     row = tl.program_id(0)
     row_ptr = logits_ptr + row.to(tl.int64) * stride_row
     step = tl.load(counter_ptr).to(tl.uint32)
-    temp = 1.0
-    if HAS_TEMP:
+    temp = temp_scalar
+    if TEMP_MODE == 2:
         temp = tl.load(temp_ptr + row)
 
     # The row's mass per block (relative to the largest block max), without the draft
@@ -83,7 +85,7 @@ def _select_kernel(
         draft = tl.load(draft_ptr + row)  # index in this shard, -1 when the row has no draft or it is elsewhere
         has_draft = (draft >= 0) & (draft < V)
         x_draft = tl.load(row_ptr + tl.where(has_draft, draft, 0)).to(tl.float32)
-        if HAS_TEMP:
+        if TEMP_MODE != 0:
             x_draft = x_draft / temp
         x_draft = tl.where(has_draft, x_draft, float("-inf"))
 
@@ -94,7 +96,7 @@ def _select_kernel(
     chosen = tl.argmax(block_key, 0)
     offs = chosen * BLOCK + tl.arange(0, BLOCK)
     x = tl.load(row_ptr + offs, mask=offs < V, other=float("-inf")).to(tl.float32)
-    if HAS_TEMP:
+    if TEMP_MODE != 0:
         x = x / temp
     if HAS_DRAFT:
         x = tl.where(offs == draft, float("-inf"), x)
@@ -149,7 +151,7 @@ class FusedSampler:
     and returns `(tokens, logprobs, logz, draft_logprobs, accepted)`: the token, log softmax(logits / T)[token], the
     log of the row's normalizer over every token. With `draft` ([rows] vocabulary ids, -1 where none), a row's draft is
     accepted with probability p(draft) and emitted, else the token is a sample of p without the draft;
-    `draft_logprobs` and `accepted` are then filled. `temperature` is per row ([rows] fp32).
+    `draft_logprobs` and `accepted` are then filled. `temperature` is a float or per row ([rows] fp32).
 
     Vocabulary-parallel: with `group`, `logits` is this rank's shard of the vocabulary (ids `vocab_offset` to
     `vocab_offset + logits.shape[1]`, the same shard size on every rank). Each rank samples its shard, one all-gather
@@ -169,7 +171,7 @@ class FusedSampler:
     def __call__(
         self,
         logits: torch.Tensor,
-        temperature: torch.Tensor | None = None,
+        temperature: torch.Tensor | float | None = None,
         draft: torch.Tensor | None = None,
         group=None,
         vocab_offset: int = 0,
@@ -194,19 +196,22 @@ class FusedSampler:
         parts = torch.empty(rows, 4, dtype=torch.float32, device=logits.device)
         if rows == 0:
             return parts
-        temp = temperature if temperature is not None else parts  # unused pointers when the flags are off
+        per_row = isinstance(temperature, torch.Tensor)
+        temp_mode = 2 if per_row else (0 if temperature is None or temperature == 1.0 else 1)
+        temp = temperature if per_row else parts  # unused pointers when the flags are off
+        temp_scalar = 1.0 if per_row or temperature is None else float(temperature)
         local_draft = parts
         if draft is not None:
             in_shard = (draft >= vocab_offset) & (draft < vocab_offset + vocab)
             local_draft = draft if vocab_offset == 0 and shard == 0 else torch.where(in_shard, draft - vocab_offset, -1)
-        flags = {"HAS_TEMP": temperature is not None, "HAS_DRAFT": draft is not None, "BLOCK": self.BLOCK}
+        flags = {"TEMP_MODE": temp_mode, "HAS_DRAFT": draft is not None, "BLOCK": self.BLOCK}
         _block_partials_kernel[(rows, num_blocks)](
-            logits, logits.stride(0), temp, local_draft, part_max, part_sum, vocab, num_blocks, **flags,
+            logits, logits.stride(0), temp, temp_scalar, local_draft, part_max, part_sum, vocab, num_blocks, **flags,
             num_warps=self.PARTIALS_WARPS,
         )
         _select_kernel[(rows,)](
-            logits, logits.stride(0), temp, local_draft, part_max, part_sum, self.seed, self.counter, parts,
-            vocab_offset, shard, vocab, num_blocks, **flags, NB_P2=triton.next_power_of_2(num_blocks),
+            logits, logits.stride(0), temp, temp_scalar, local_draft, part_max, part_sum, self.seed, self.counter,
+            parts, vocab_offset, shard, vocab, num_blocks, **flags, NB_P2=triton.next_power_of_2(num_blocks),
             num_warps=self.SELECT_WARPS,
         )
         return parts

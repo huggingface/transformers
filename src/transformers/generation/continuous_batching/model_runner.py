@@ -22,6 +22,7 @@ from ...distributed.parallel_utils import with_fast_tp_all_reduce
 from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList, ContinuousBatchingTemperatureLogitsWarper
+from ..logits_process import TemperatureLogitsWarper
 from .fused_sampler import FusedSampler
 from .input_outputs import (
     _CB_MTP_ASYNC,
@@ -116,9 +117,13 @@ class ModelRunner:
         self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
         self._proto_eager_seen: set[tuple[bool, int]] = set()  # (decode path, padded query tokens) that ran eagerly
         self._fused_sampler = None
-        if _CB_FUSED_SAMPLE and do_sample and all(
-            isinstance(p, ContinuousBatchingTemperatureLogitsWarper) for p in logit_processor.logits_processor
-        ):
+        processors = list(logit_processor.logits_processor)
+        temperature_types = (TemperatureLogitsWarper, ContinuousBatchingTemperatureLogitsWarper)
+        only_temperature = len(processors) <= 1 and all(isinstance(p, temperature_types) for p in processors)
+        if _CB_FUSED_SAMPLE and do_sample and only_temperature:
+            # the temperature is applied in the kernel: one for every request, or per request (CB processor)
+            self._fused_temperature = processors[0].temperature if processors else None
+            self._fused_temperature_per_row = isinstance(processors[0] if processors else None, temperature_types[1])
             # the CB seed is the same on every TP rank (`set_tp_seed`), so every rank samples the same tokens
             self._fused_sampler = FusedSampler(cache.device, torch.initial_seed())
             if _CB_FUSED_SAMPLE_CHECK:
@@ -279,9 +284,7 @@ class ModelRunner:
             kwargs = {k: v for k, v in batch_data.items() if k != "logits_to_keep"}
             hidden_states = model.model(**kwargs).last_hidden_state[:, batch_data["logits_indices"]]
             logits = nn.functional.linear(hidden_states, vocab_shard[0])[0]  # [num_logits, vocab / tp]
-            temperature = None
-            if self.logit_processor.do_processing:
-                temperature = batch_data["logits_processor_args"][0, : logits.shape[0]].view(dtype=torch.float32)
+            temperature = self._fused_rows_temperature(batch_data, logits.shape[0])
             tokens, logprobs, _, _, _ = self._fused_sampler(logits, temperature, None, vocab_shard[1], vocab_shard[2])
             if _CB_FUSED_SAMPLE_CHECK:
                 self._maybe_check_fused(model.lm_head(hidden_states)[0], temperature, tokens, logprobs)
@@ -298,9 +301,7 @@ class ModelRunner:
         if "logits_to_keep" not in batch_data:
             logits = logits[:, logits_indices, :]  # shape [1, num_logits, vocab_size]
         if self._fused_sampler is not None:
-            temperature = None
-            if self.logit_processor.do_processing:
-                temperature = batch_data["logits_processor_args"][0, : logits.shape[1]].view(dtype=torch.float32)
+            temperature = self._fused_rows_temperature(batch_data, logits.shape[1])
             tokens, logprobs, _, _, _ = self._fused_sampler(logits[0], temperature)
             self._maybe_check_fused(logits[0], temperature, tokens, logprobs)
             output_ids[0, : tokens.size(0)].copy_(tokens)
@@ -401,7 +402,7 @@ class ModelRunner:
         the MTP layer drafts the next k tokens: once over every query token (as with one draft), then k - 1 times on
         one token per request, each pass taking the previous pass's output and draft, at the next position, through the
         block table. Static shapes; rows without a draft (the step that ends a prefill) verify nothing."""
-        if self.logit_processor.do_processing:
+        if self.logit_processor.do_processing and self._fused_sampler is None:
             raise NotImplementedError("CB_MTP prototype: logits processors are not supported")
         k = _CB_MTP_K
         mtp = batch_data["mtp"]
@@ -425,8 +426,9 @@ class ModelRunner:
         if self._fused_sampler is not None:
             # rows 0..k-1 verify their draft (ratio test, residual sample if rejected), row k samples the bonus token
             verify = torch.cat([torch.where(has_draft[None], drafts, -1), torch.full_like(drafts[:1], -1)])
-            tokens, token_logprobs, _, _, accepted = self._fused_sampler(logits, None, verify.reshape(-1))
-            self._maybe_check_fused(logits, None, tokens, token_logprobs)
+            temperature = self._fused_rows_temperature(batch_data, num_rows, k + 1)
+            tokens, token_logprobs, _, _, accepted = self._fused_sampler(logits, temperature, verify.reshape(-1))
+            self._maybe_check_fused(logits, temperature, tokens, token_logprobs)
             candidates = tokens.view(k + 1, num_rows)
             accepted = accepted.view(k + 1, num_rows)[:k]
             if self.return_logprobs:
@@ -513,7 +515,7 @@ class ModelRunner:
         Sampling stays exact: the draft is a point mass, so it is accepted with probability p(draft) under the target
         distribution and a rejected draft is replaced by a sample from the target distribution without that token.
         The logprobs written are the target model's logprobs of the emitted tokens."""
-        if self.logit_processor.do_processing:
+        if self.logit_processor.do_processing and self._fused_sampler is None:
             raise NotImplementedError("CB_MTP prototype: logits processors are not supported")
         mtp = batch_data["mtp"]
         if _CB_MTP_ASYNC:
@@ -540,18 +542,22 @@ class ModelRunner:
         if self._fused_sampler is not None:
             # row a verifies the draft (ratio test, residual sample if rejected), row b samples the bonus token
             verify = torch.cat([torch.where(has_draft, draft, -1), torch.full_like(draft, -1)])
+            temperature = self._fused_rows_temperature(batch_data, num_rows, 2)
             if vocab_shard is not None:
                 _, group, offset = vocab_shard
-                tokens, logprobs, logz, _, accepted = self._fused_sampler(logits, None, verify, group, offset)
+                tokens, logprobs, logz, _, accepted = self._fused_sampler(logits, temperature, verify, group, offset)
                 if _CB_FUSED_SAMPLE_CHECK:
                     full = model.lm_head(hidden_states[:, torch.cat([row_a, row_b])])[0]
-                    self._maybe_check_fused(full, None, tokens, logprobs)
+                    self._maybe_check_fused(full, temperature, tokens, logprobs)
             else:
-                tokens, logprobs, logz, _, accepted = self._fused_sampler(logits, None, verify)
-                self._maybe_check_fused(logits, None, tokens, logprobs)
+                tokens, logprobs, logz, _, accepted = self._fused_sampler(logits, temperature, verify)
+                self._maybe_check_fused(logits, temperature, tokens, logprobs)
                 # measurement: the target's logprob of the draft the previous step made for this position (read
                 # by the "shadow" mode only, not written by the vocabulary-parallel path)
                 prev_draft_logit = logits_a.gather(1, mtp["prev_draft"].long()[:, None]).squeeze(1).float()
+                if temperature is not None:
+                    per_row = self._fused_temperature_per_row
+                    prev_draft_logit = prev_draft_logit / (temperature[:num_rows] if per_row else temperature)
                 output_ids[6, :num_rows].copy_((prev_draft_logit - logz[:num_rows]).view(dtype=torch.int32))
             first_tokens, bonus_tokens, accepted = tokens[:num_rows], tokens[num_rows:], accepted[:num_rows]
             if self.return_logprobs:
@@ -636,11 +642,22 @@ class ModelRunner:
         assert weight.shape[0] % torch.distributed.get_world_size(group) == 0, "uneven vocabulary shards"
         return local, group, torch.distributed.get_rank(group) * local.shape[0]
 
+    def _fused_rows_temperature(self, batch_data: dict, num_rows: int, copies: int = 1):
+        """The temperature of the fused sampler's rows: None, one float, or per row (`copies` blocks of the batch's
+        requests, as the MTP paths lay out their logits rows)."""
+        if not self._fused_temperature_per_row:
+            return self._fused_temperature
+        return batch_data["logits_processor_args"][0, :num_rows].view(dtype=torch.float32).repeat(copies)
+
     def _maybe_check_fused(self, logits, temperature, tokens, logprobs) -> None:
         """CB_FUSED_SAMPLE_CHECK: largest |fused logprob - log_softmax(fp32 logits / T)[token]| so far, on device."""
         if not _CB_FUSED_SAMPLE_CHECK:
             return
-        scaled = logits.float() if temperature is None else logits.float() / temperature[:, None]
+        scaled = logits.float()
+        if isinstance(temperature, torch.Tensor):
+            scaled = scaled / temperature[:, None]
+        elif temperature is not None:
+            scaled = scaled / temperature
         ref = nn.functional.log_softmax(scaled, dim=-1).gather(1, tokens[:, None]).squeeze(1)
         diff = (ref - logprobs).abs().max().double()
         torch.maximum(self._fused_check[:1], diff[None], out=self._fused_check[:1])
