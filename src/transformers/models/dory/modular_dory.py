@@ -350,6 +350,15 @@ class DoryForCausalLM(LlamaForCausalLM):
         super().__init__(config)
         self.lm_head = DoryLMHead(config)
 
+    def _get_resized_lm_head(self, old_lm_head, new_num_tokens=None, transposed=False, mean_resizing=True):
+        new_lm_head = super()._get_resized_lm_head(old_lm_head, new_num_tokens, transposed, mean_resizing)
+        if new_lm_head is not old_lm_head:
+            pad = new_lm_head.out_features - old_lm_head.logit_scale.shape[0]
+            scale = nn.functional.pad(old_lm_head.logit_scale.data, (0, pad), value=self.config.initializer_range)
+            old_lm_head.logit_scale = nn.Parameter(scale)
+            old_lm_head.weight, old_lm_head.out_features = new_lm_head.weight, new_lm_head.out_features
+        return old_lm_head
+
     @can_return_tuple
     @auto_docstring
     def forward(self, **super_kwargs):

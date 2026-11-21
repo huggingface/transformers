@@ -35,6 +35,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -51,20 +52,12 @@ if is_torch_available():
     )
 
 
-class Cohere2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        downsample_factor=2,
-        alignment_intermediate_size=32,
-        ignore_index=-100,
-        image_token_id=2,
-        num_channels=3,
-        image_size=64,
-        is_training=True,
-        text_config={
+class Cohere2VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_id": 2,
+        "text_config": {
             "model_type": "cohere2",
             "vocab_size": 99,
             "hidden_size": 128,
@@ -79,7 +72,7 @@ class Cohere2VisionText2TextModelTester:
             "eos_token_id": 0,
             "pad_token_id": 0,
         },
-        vision_config={
+        "vision_config": {
             "model_type": "siglip_vision_model",
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -89,28 +82,34 @@ class Cohere2VisionText2TextModelTester:
             "patch_size": 8,
             "vision_use_head": False,
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = image_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.downsample_factor = downsample_factor
-        self.alignment_intermediate_size = alignment_intermediate_size
-        self.is_training = is_training
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.image_seq_length = 16
-        self.seq_length = seq_length + self.image_seq_length
+        "batch_size": 3,
+        "downsample_factor": 2,
+        "alignment_intermediate_size": 32,
+        "is_training": True,
+        "num_channels": 3,
+        "image_size": 64,
+        "seq_length": 7,
+        "image_seq_length": 16,
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["bos_token_id"] = text_config["bos_token_id"]
+        values["eos_token_id"] = text_config["eos_token_id"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Cohere2VisionConfig(
@@ -145,6 +144,8 @@ class Cohere2VisionText2TextModelTester:
 
 @require_torch
 class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Cohere2VisionText2TextModelTester
+
     all_model_classes = (
         (
             Cohere2VisionModel,

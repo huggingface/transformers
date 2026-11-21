@@ -945,6 +945,8 @@
         title: RWKV
       - local: model_doc/sarvam_mla
         title: SarvamMLA
+      - local: model_doc/sarvam_moe
+        title: SarvamMoE
       - local: model_doc/seed_oss
         title: Seed-Oss
       - local: model_doc/smollm3
@@ -1449,6 +1451,8 @@
         title: Inkling
       - local: model_doc/inkling2
         title: Inkling2
+      - local: model_doc/inkling2_loop
+        title: Inkling2Loop
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo

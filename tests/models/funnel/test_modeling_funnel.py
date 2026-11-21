@@ -19,6 +19,7 @@ from transformers import FunnelConfig, FunnelTokenizer, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -40,73 +41,58 @@ if is_torch_available():
     )
 
 
-class FunnelModelTester:
+class FunnelModelTester(ModelTesterConfigMixin):
     """You can also import this e.g, from .test_modeling_funnel import FunnelModelTester"""
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        block_sizes=[1, 1, 2],
-        num_decoder_layers=1,
-        d_model=32,
-        n_head=4,
-        d_head=8,
-        d_inner=37,
-        hidden_act="gelu_new",
-        hidden_dropout=0.1,
-        attention_dropout=0.1,
-        activation_dropout=0.0,
-        max_position_embeddings=512,
-        type_vocab_size=3,
-        initializer_std=0.02,  # Set to a smaller value, so we can keep the small error threshold (1e-5) in the test
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-        base=False,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.block_sizes = block_sizes
-        self.num_decoder_layers = num_decoder_layers
-        self.d_model = d_model
-        self.n_head = n_head
-        self.d_head = d_head
-        self.d_inner = d_inner
-        self.hidden_act = hidden_act
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = 2
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.initializer_std = initializer_std
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "block_sizes": [1, 1, 2],
+        "num_decoder_layers": 1,
+        "d_model": 32,
+        "n_head": 4,
+        "d_head": 8,
+        "d_inner": 37,
+        "hidden_act": "gelu_new",
+        "hidden_dropout": 0.1,
+        "attention_dropout": 0.1,
+        "activation_dropout": 0.0,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 3,
+        "type_sequence_label_size": 2,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+        "initializer_std": 0.02,  # Set to a smaller value, so we can keep the small error threshold (1e-5) in the test
+    }
+    # True for the base model (no decoder): FunnelBaseModelTester.
+    base = False
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Used in the tests to check the size of the first attention layer
-        self.num_attention_heads = n_head
+        values["num_attention_heads"] = values["n_head"]
         # Used in the tests to check the size of the first hidden state
-        self.hidden_size = self.d_model
+        values["hidden_size"] = values["d_model"]
         # Used in the tests to check the number of output hidden states/attentions
-        self.num_hidden_layers = sum(self.block_sizes) + (0 if base else self.num_decoder_layers)
+        values["num_hidden_layers"] = sum(values["block_sizes"]) + (0 if cls.base else values["num_decoder_layers"])
         # FunnelModel adds two hidden layers: input embeddings and the sum of the upsampled encoder hidden state with
         # the last hidden state of the first block (which is the first hidden state of the decoder).
-        if not base:
-            self.expected_num_hidden_layers = self.num_hidden_layers + 2
+        if not cls.base:
+            values["expected_num_hidden_layers"] = values["num_hidden_layers"] + 2
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -350,8 +336,14 @@ class FunnelModelTester:
         return config, inputs_dict
 
 
+class FunnelBaseModelTester(FunnelModelTester):
+    base = True
+
+
 @require_torch
 class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = FunnelModelTester
+
     all_model_classes = (
         (
             FunnelModel,
@@ -428,12 +420,14 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 @require_torch
 class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = FunnelBaseModelTester
+
     all_model_classes = (
         (FunnelBaseModel, FunnelForMultipleChoice, FunnelForSequenceClassification) if is_torch_available() else ()
     )
 
     def setUp(self):
-        self.model_tester = FunnelModelTester(self, base=True)
+        self.model_tester = FunnelBaseModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FunnelConfig)
 
     def test_config(self):
