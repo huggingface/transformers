@@ -523,7 +523,8 @@ class WhisperGenerationMixin(GenerationMixin):
             return_token_timestamps (`bool`, *optional*):
                 Whether to return token-level timestamps with the text. This can be used with or without the
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
-                words.
+                words. Encoder self-attention maps are not returned for this option unless `output_attentions=True`
+                is also passed.
             return_segments (`bool`, *optional*, defaults to `False`):
                 Whether to additionally return a list of all segments. Note that this option can only be enabled
                 when doing long-form transcription.
@@ -1378,6 +1379,22 @@ class WhisperGenerationMixin(GenerationMixin):
         if no_speech_threshold is not None:
             logger.warning(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
 
+    def _prepare_text_encoder_decoder_kwargs_for_generation(
+        self, inputs_tensor, model_kwargs, model_input_name, generation_config
+    ):
+        if getattr(generation_config, "_encoder_attentions_unused", False) and generation_config.output_attentions:
+            # The encoder self-attention maps are not consumed by token timestamps. Only the
+            # encoder call sees the copied config; the decoder still needs `output_attentions=True`.
+            generation_config = copy.copy(generation_config)
+            generation_config.output_attentions = False
+
+        return super()._prepare_text_encoder_decoder_kwargs_for_generation(
+            inputs_tensor=inputs_tensor,
+            model_kwargs=model_kwargs,
+            model_input_name=model_input_name,
+            generation_config=generation_config,
+        )
+
     @staticmethod
     def _set_return_outputs(return_dict_in_generate, return_token_timestamps, logprob_threshold, generation_config):
         if return_dict_in_generate is None:
@@ -1385,6 +1402,13 @@ class WhisperGenerationMixin(GenerationMixin):
         else:
             generation_config.return_dict_in_generate = return_dict_in_generate
 
+        # Token timestamps only consume decoder cross-attentions. `output_attentions` may be
+        # enabled internally below; remember whether the caller explicitly requested it so an
+        # explicit request keeps returning encoder attentions. The marker lives on the per-call
+        # config so concurrent generate calls cannot race on model state.
+        generation_config._encoder_attentions_unused = bool(
+            return_token_timestamps and not generation_config.output_attentions
+        )
         generation_config.return_token_timestamps = return_token_timestamps
         if return_token_timestamps:
             generation_config.return_dict_in_generate = True
