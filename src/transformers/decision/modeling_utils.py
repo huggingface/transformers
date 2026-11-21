@@ -125,4 +125,4 @@ class DecisionMixin:
         )
 
 
-__all__ = ["DecisionMixin"]
+__all__ = ["DecisionMixin", "process_scores"]

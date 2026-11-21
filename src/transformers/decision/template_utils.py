@@ -60,6 +60,7 @@ We support arbitrary kind of inputs, users should be able to expand it to his ne
 
 import functools
 import json
+import math
 import re
 import string
 from dataclasses import asdict, dataclass
@@ -107,6 +108,15 @@ class ScoreQuestion:
     criteria: list[Content]
     type: Literal["score"] = "score"
     instructions: Content | None = None
+    values: list[float | int] | None = None
+
+    def validate_levels(self):
+        if self.values is not None and (
+            len(self.values) != len(self.criteria)
+            or any(isinstance(value, bool) or not math.isfinite(value) for value in self.values)
+            or any(right <= left for left, right in zip(self.values, self.values[1:]))
+        ):
+            raise ValueError("Score values must be finite, strictly increasing, and match the criteria.")
 
 
 # Models that don't ship a decision_template.jinja default to this one, the prompt of the `v1/systemone` endpoint of
@@ -145,6 +155,8 @@ class Question:
     options: list[str]
     labels: list[str]
     descriptions: list[Any]
+    allow_null: bool = False
+    values: list[float | int] | None = None
     questions_schemes = {"noul": NoulQuestion, "choice": ChoiceQuestion, "score": ScoreQuestion}
     questions_types = tuple(questions_schemes)
 
@@ -171,14 +183,25 @@ class Question:
         elif kind == "score":
             criteria = {str(index): level for index, level in enumerate(criteria)}
 
-        labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
+        if kind in config.labels and config.labels[kind] is None:
+            labels = [str(index) for index in range(len(criteria))]
+        else:
+            labels = config.labels.get(kind) or (["Yes", "No"] if kind == "noul" else list(string.ascii_uppercase))
         if len(labels) < len(criteria):
             raise ValueError(
                 f"Question {name!r}: this model reads at most {len(labels)} options for a {kind} question, got "
                 f"{len(criteria)} (`labels.{kind}` in its decision config)."
             )
         options, descriptions = list(criteria), list(criteria.values())
-        return cls(name, kind, question.get("instructions"), options, labels[: len(options)], descriptions)
+        return cls(
+            name,
+            kind,
+            question.get("instructions"),
+            options,
+            labels[: len(options)],
+            descriptions,
+            values=question.get("values"),
+        )
 
     def answer(self, probabilities: list[float]) -> dict[str, Any]:
         """The System One answer, from the probabilities of the options."""
@@ -194,7 +217,8 @@ class Question:
         distance = sum(probability * abs(level - int(best)) for level, probability in enumerate(probabilities))
         uniform_distance = sum(abs(level - (n_options - 1) / 2) for level in range(n_options)) / n_options
         confidence = 1.0 if n_options == 1 else max(0.0, 1 - distance / uniform_distance)
-        score = sum(level * probability for level, probability in enumerate(probabilities))
+        values = list(range(n_options)) if self.values is None else self.values
+        score = sum(value * probability for value, probability in zip(values, probabilities))
         return {
             "type": "score",
             "score": score,
