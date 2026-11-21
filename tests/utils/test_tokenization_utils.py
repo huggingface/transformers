@@ -311,6 +311,13 @@ class ExtensionsTrieTest(unittest.TestCase):
 
         self.assertEqual(len(values), 0)
 
+    def test_no_extension_match_non_empty_trie(self):
+        trie = ExtensionsTrie(["foo", "food", "foodie", "helium"])
+        # Neither a missing first character nor a later mismatch may produce
+        # fabricated extensions.
+        self.assertEqual(trie.extensions("unknown"), [])
+        self.assertEqual(trie.extensions("foe"), [])
+
     def test_update_value(self):
         trie = ExtensionsTrie()
         # Test updating the value of an existing key
