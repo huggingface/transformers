@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3 model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -23,6 +24,7 @@ from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_tensor_parallel_test,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
@@ -40,6 +42,27 @@ if is_torch_available():
     )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...distributed_testing_utils import run_distributed
+from ...test_tensor_parallel_mixin import _load_tp_and_reference_models
+
+
+def _test_tp_gradient_accumulation(_rank, model_path, input_ids):
+    model_tp, model, device = _load_tp_and_reference_models(model_path, Qwen3ForCausalLM)
+    model_tp.train()
+    model.train()
+    input_ids = input_ids.to(device)
+
+    for step in range(3):
+        batch = input_ids.roll(step, dims=-1)
+        (model(batch, labels=batch).loss / 3).backward()
+        (model_tp(batch, labels=batch).loss / 3).backward()
+        for layer_idx, (layer, layer_tp) in enumerate(zip(model.model.layers, model_tp.model.layers)):
+            for name in ("q_norm", "k_norm"):
+                expected = getattr(layer.self_attn, name).weight.grad
+                actual = getattr(layer_tp.self_attn, name).weight.grad
+                context = f"layer {layer_idx} {name}, accumulated microbatches: {step + 1}"
+                assert actual is not None and expected is not None, context
+                torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-4, msg=lambda msg: f"{context}\n{msg}")
 
 
 class Qwen3ModelTester(CausalLMModelTester):
@@ -57,6 +80,17 @@ class Qwen3ModelTester(CausalLMModelTester):
 @require_torch
 class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen3ModelTester
+
+    @is_tensor_parallel_test
+    def test_tp_gradient_accumulation(self):
+        self._skip_if_not_supported()
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            set_seed(42)
+            Qwen3ForCausalLM(config).save_pretrained(tmp_dir, save_original_format=True)
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_gradient_accumulation)(
+                tmp_dir, inputs["input_ids"]
+            )
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
