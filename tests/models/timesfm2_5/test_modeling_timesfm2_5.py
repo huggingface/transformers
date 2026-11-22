@@ -120,56 +120,45 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
         results = model(**inputs_dict)
         assert results.mean_predictions is not None
 
-    def test_loss_ignores_point_forecast_channel(self):
-        # `num_quantiles = len(quantiles) + 1` and `_decode_and_project` builds all of them with the same
-        # layout: channel 0 is the point-forecast head from `output_projection_point`, channels `1..N-1`
-        # are the quantile levels in `config.quantiles` order. The training loss must therefore pair
-        # `config.quantiles` with channels `1..N-1`; selecting them with `i != decode_index` shifted the
-        # lower half down one level and trained the point head as `q=0.1` (#50612).
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_loss_uses_quantile_channels_from_one(self):
+        # `_decode_and_project` projects `num_quantiles = len(quantiles) + 1` channels with the same layout
+        # as the released checkpoint: channel 0 is the point-forecast head, channels `1..N-1` hold
+        # `config.quantiles` in order. The training loss therefore has to pair the quantiles with channels
+        # `1..N-1`; selecting them with `i != decode_index` shifted the lower half down one level and
+        # trained the point-forecast head as `q=0.1` (#50612).
+        config, _ = self.model_tester.prepare_config_and_inputs()
+        config.quantiles = [0.1, 0.5, 0.9]
+        config.decode_index = 2
         model = TimesFm2_5ModelForPrediction(config)
         model.to(torch_device)
         model.eval()
 
-        batch_size = inputs_dict["past_values"].shape[0]
+        # `_revin` is an affine map built from the context statistics, so a context with zero mean and unit
+        # scale makes it the identity: `full_predictions` then comes back in the normalized space the loss
+        # is computed in, and the expected loss can be rebuilt from the public outputs alone.
+        time = torch.linspace(0, 20, config.context_length, device=torch_device)
+        past_values = torch.stack([torch.sin(time), torch.cos(time)])
+        past_values = (past_values - past_values.mean(dim=1, keepdim=True)) / past_values.std(dim=1, keepdim=True)
         rng = random.Random(42)
-        inputs_dict["future_values"] = floats_tensor([batch_size, config.horizon_length], rng=rng)
-
-        num_quantiles = len(config.quantiles) + 1
-        self.assertEqual(
-            model.output_projection_point.output_layer.out_features, config.horizon_length * num_quantiles
-        )
-
-        def loss_with_channel_scaled(channel):
-            # `output_projection_point` returns `(batch, num_patches, horizon_length * num_quantiles)`,
-            # so the values of `channel` sit at flat indices `channel::num_quantiles`.
-            def scale_channel(module, args, output):
-                scaled = output.clone()
-                scaled[..., channel::num_quantiles] *= 3
-                return scaled
-
-            handle = model.output_projection_point.register_forward_hook(scale_channel)
-            try:
-                with torch.no_grad():
-                    return model(**inputs_dict).loss
-            finally:
-                handle.remove()
+        future_values = floats_tensor([past_values.shape[0], config.horizon_length], rng=rng)
 
         with torch.no_grad():
-            baseline = model(**inputs_dict).loss
-        # The point-forecast channel is not a quantile level, so it must not reach the loss at all.
+            outputs = model(past_values=past_values, future_values=future_values, return_dict=True)
+
+        predictions = outputs.full_predictions
+        expected = torch.nn.functional.mse_loss(predictions[..., config.decode_index], future_values)
+        pinball = []
+        for channel, quantile in enumerate(config.quantiles, start=1):
+            errors = future_values - predictions[..., channel]
+            pinball.append(torch.max((quantile - 1) * errors, quantile * errors).mean())
+        expected = expected + torch.stack(pinball).mean()
+
         torch.testing.assert_close(
-            loss_with_channel_scaled(0),
-            baseline,
-            atol=1e-6,
-            rtol=1e-6,
-            msg="the loss must not depend on the point-forecast channel",
-        )
-        # ...while the quantile channels must, otherwise the assertion above would also pass on a loss
-        # that silently dropped the quantile term.
-        self.assertFalse(
-            torch.allclose(loss_with_channel_scaled(1), baseline, atol=1e-6, rtol=1e-6),
-            "the loss must depend on the quantile channels",
+            outputs.loss,
+            expected,
+            atol=1e-5,
+            rtol=1e-5,
+            msg="the loss must pair config.quantiles with channels 1..N-1",
         )
 
     @parameterized.expand(
