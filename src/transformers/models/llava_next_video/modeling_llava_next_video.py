@@ -716,10 +716,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Mult
             image_newline=image_newline,
         )
 
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`LlavaNextVideoModel.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
-
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring

@@ -1135,10 +1135,6 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Multim
             image_outputs=outputs.image_outputs,
         )
 
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`MistralLarge4Model.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
-
 
 __all__ = [
     "MistralLarge4PreTrainedModel",

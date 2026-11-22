@@ -20,7 +20,6 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -1104,10 +1103,6 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, MultimodalMixin, G
 
     def pack_image_features(self):
         raise NotImplementedError("Step3p7 does not use pack_image_features")
-
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`Step3p7Model.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring
