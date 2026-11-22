@@ -91,6 +91,13 @@ class MetalHfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        from ..integrations.metal_quantization import fuse_sibling_linears
+
+        # one token's small matvecs are latency-bound: the projections reading the same input run as one
+        fuse_sibling_linears(model)
+        return model
+
     def quantized_module(self, name, module):
         from ..integrations.metal_quantization import MetalLinear
 

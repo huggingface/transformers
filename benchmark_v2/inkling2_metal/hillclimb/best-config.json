@@ -1,0 +1,1 @@
+{"config": "best", "harness": "speed_plan.py", "plan": {"model.visual.*": null, "*_message_gate": null, "lm_head": "MetalConfig(4, 64)", "*": "MetalConfig(4, 64)"}, "hub_kernel": "ArthurZ/metal-moe-decode@8d84318f15ece7e2334a89573dcbeac1952b37e4", "branch": "inkling2-metal-perf", "levers": ["HC_GROUP (sibling projections fused)"], "decode_tok_s": 57.49}
