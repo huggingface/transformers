@@ -117,7 +117,8 @@ class DynamoConfig(ExportConfigMixin):
             [`~exporters.quantizers.NNCFTorchFXQuantizer`] on the FX graph for every backend,
             [`~exporters.quantizers.OnnxRuntimeQuantizer`] on the converted ONNX model, or
             [`~exporters.quantizers.NNCFOpenVINOQuantizer`] / [`~exporters.quantizers.NNCFOnnxQuantizer`] on the
-            converted OpenVINO / ONNX model.
+            converted OpenVINO / ONNX model, or [`~exporters.quantizers.ModelOptOnnxQuantizer`] on the converted ONNX
+            model for TensorRT.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
@@ -149,6 +150,9 @@ class OnnxConfig(DynamoConfig):
         ort_fusions (`str`, *optional*):
             Fuse the graph into ONNX Runtime's ops for the execution provider it runs on: `"cpu"`, `"cuda"`,
             `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`.
+        for_tensorrt (`bool`, *optional*, defaults to `False`):
+            Prepare the graph for ONNX Runtime's TensorRT provider: attention masks kept boolean, which TensorRT builds
+            a faster engine from, at opset 22 by default. Takes no `ort_fusions`: TensorRT fuses the graph itself.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX
@@ -156,10 +160,13 @@ class OnnxConfig(DynamoConfig):
     opset_version: int | None = None
     optimize: bool = True
     ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | None = None
+    for_tensorrt: bool = False
 
     def __post_init__(self):
         if self.ort_fusions not in (None, "cpu", "cuda", "webgpu", "dml"):
             raise ValueError(f"`ort_fusions` must be None, 'cpu', 'cuda', 'webgpu' or 'dml', got {self.ort_fusions!r}")
+        if self.for_tensorrt and self.ort_fusions is not None:
+            raise ValueError("`for_tensorrt` takes no `ort_fusions`: TensorRT fuses the graph itself.")
         if self.ort_fusions is not None and not self.optimize:
             raise ValueError("`ort_fusions` requires `optimize=True`.")
 
