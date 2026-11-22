@@ -757,7 +757,10 @@ jobs:
         working-directory: vllm
         run: |
           # Imports every registered model module (most import transformers at module level).
-          pytest -v -s tests/models/test_registry.py::test_registry_imports
+          # MistralLarge4*: its module raises NotImplementedError on non-GPU platforms (vLLM runs this test on GPU only).
+          pytest -v -s tests/models/test_registry.py::test_registry_imports \
+            --deselect 'tests/models/test_registry.py::test_registry_imports[MistralLarge4ForCausalLM]' \
+            --deselect 'tests/models/test_registry.py::test_registry_imports[MistralLarge4DSparkModel]'
 
       - name: "Test: tokenizers and chat templates"
         if: ${{ !cancelled() }}
@@ -787,13 +790,23 @@ jobs:
             tests/transformers_utils/ \
             --ignore tests/transformers_utils/test_utils.py \
             --ignore tests/transformers_utils/test_repo_utils.py \
-            tests/test_config.py \
             tests/config/test_model_arch_config.py \
             tests/config/test_config_generation.py \
             tests/config/test_bailing_mtp_config.py \
             tests/config/test_step5_mtp_config.py \
             tests/config/test_speculative_draft_*.py \
             --deselect tests/config/test_config_generation.py::test_ray_runtime_env
+
+      - name: "Test: vLLM config from Hub configs"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # tests/test_config.py builds vLLM configs from real Hub configs, but it also tests vLLM's own parallelism /
+          # scheduling / compilation settings, which don't involve transformers: those need Ray or expect GPU defaults
+          # (vLLM runs this file on GPU only). Leave them out by name. In its own step, so that the `-k` filter
+          # can't match tests in other files.
+          pytest -v -s tests/test_config.py \
+            -k "not (eplb or async_scheduling or all2all or vllm_config_defaults or ir_op_priority)"
 
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
