@@ -90,6 +90,7 @@ def _button(text, url):
 
 def _commit_line(name, repo, sha, date):
     """E.g. "vllm commit: <link to the commit on GitHub, showing its first 12 characters> (<date>)"."""
+    name, repo, sha, date = (_escape(value) if value else value for value in (name, repo, sha, date))
     if not sha:
         text = "(unknown)"
     elif repo:
