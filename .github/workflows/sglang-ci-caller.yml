@@ -99,6 +99,7 @@ jobs:
 
   sglang-inference:
     needs: find-sglang-image
+    if: false  # [Temporary] fast run to check the Slack report
     permissions:
       contents: read
     name: SGLang integration (${{ matrix.suite }})
