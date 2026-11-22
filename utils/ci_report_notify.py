@@ -11,8 +11,8 @@ Usage:
   python utils/ci_report_notify.py --reports-dir <DIR> --hub-repo <ORG/NAME> --slack-channel <#channel> \
       [--commit <NAME>=<SHA> ...] [--dry-run]
 
-The Slack message shows the transformers commit of the run, followed by one line per --commit
-(e.g. `--commit vllm=<SHA>` for the vLLM commit that was tested).
+Below its title, the Slack message shows the transformers commit of the run, followed by one line per
+--commit (e.g. `--commit vllm=<SHA>` for the vLLM commit that was tested).
 
 Environment:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN   Hub token with write access to --hub-repo
@@ -108,16 +108,16 @@ def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failur
 
     blocks = [
         {"type": "header", "text": {"type": "plain_text", "text": title[:150]}},
-        {
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": status},
-            "accessory": _button("Check Action results", run["url"]),
-        },
         _section(
             "\n".join(
                 f"{name} commit: {sha or '(unknown)'}" for name, sha in [("transformers", run["head_sha"]), *commits]
             )
         ),
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": status},
+            "accessory": _button("Check Action results", run["url"]),
+        },
     ]
 
     if no_summary:
