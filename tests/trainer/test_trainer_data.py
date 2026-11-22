@@ -319,15 +319,8 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
         for eps, steps, training in [(0.0, 1, True), (1e-8, 1, True), (0.1, 1, True), (0.1, 2, True), (0.1, 2, False)]:
             with self.subTest(eps=eps, steps=steps, training=training), tempfile.TemporaryDirectory() as tmp_dir:
                 model.train(training)
-                trainer = Trainer(
-                    model=model,
-                    args=TrainingArguments(
-                        output_dir=tmp_dir,
-                        use_cpu=True,
-                        report_to="none",
-                        label_smoothing_factor=eps,
-                    ),
-                )
+                args = TrainingArguments(tmp_dir, use_cpu=True, report_to="none", label_smoothing_factor=eps)
+                trainer = Trainer(model=model, args=args)
                 trainer.current_gradient_accumulation_steps = steps
                 num_items = input_ids[:, 1:].numel() * (steps if training else 1) if steps > 1 else None
                 loss, outputs = trainer.compute_loss(
