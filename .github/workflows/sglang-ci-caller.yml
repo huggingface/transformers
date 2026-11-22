@@ -190,9 +190,6 @@ jobs:
           # Install the candidate last so the SGLang release pin cannot replace it.
           uv pip install -e "${TRANSFORMERS_SOURCE}"
 
-      - name: Pip freeze
-        run: uv pip freeze
-
       - name: System info
         run: |
           echo "=== CPU ===" && lscpu | grep -E "^CPU\(s\)|^Model name|^Socket"
@@ -238,6 +235,9 @@ jobs:
               except ImportError:
                   pass
           CONFTEST
+
+      - name: Pip freeze
+        run: uv pip freeze
 
       - name: Run canonical SGLang integration tests
         run: |
