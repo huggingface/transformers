@@ -1,4 +1,4 @@
-FROM rocm/pytorch:rocm10.1.0_ubuntu26.04_py3.14_pytorch_release_2.13.0
+FROM rocm/pytorch:rocm10.2.0_ubuntu26.04_py3.14_pytorch_release_2.13.0
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
