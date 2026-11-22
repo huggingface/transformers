@@ -23,11 +23,12 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
-from transformers import DecisionConfig
+from transformers import DecisionConfig, GenerationConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
@@ -39,6 +40,7 @@ from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
     BaseHandler,
+    GenerateManager,
     GenerationState,
     Modality,
     ToolCall,
@@ -62,7 +64,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils.chat_parsing import ResponseParser
-from transformers.utils.import_utils import is_serve_available
+from transformers.utils.import_utils import is_serve_available, is_torch_available
 
 from ..test_decision_head_common import tiny_qwen2
 from ..test_memory_cleanup_mixin import MemoryCleanupMixin
@@ -72,6 +74,9 @@ if is_serve_available():
     from fastapi import HTTPException
     from openai import OpenAI
     from openai.types.responses import Response, ResponseCreatedEvent
+
+if is_torch_available():
+    import torch
 
 
 def _find_free_port() -> int:
@@ -523,6 +528,102 @@ class TestBuildGenerationConfig(unittest.TestCase):
 
         result = self._make_handler()._build_generation_config({"max_tokens": 50}, GenerationConfig(max_new_tokens=20))
         self.assertEqual(result.max_new_tokens, 50)
+
+
+@require_serve
+@require_torch
+class TestGenerateManager(unittest.TestCase):
+    def test_generate_streaming_unwraps_processor_tokenizer(self):
+        """Multimodal processors (ProcessorMixin) must be unwrapped to .tokenizer for model.generate()."""
+        mgr = GenerateManager()
+        mock_tokenizer = SimpleNamespace(_tokenizer=MagicMock(), get_vocab=MagicMock(return_value={"hello": 0}))
+        # Multimodal processor has .tokenizer but does NOT implement .get_vocab() (needed by StopStringCriteria)
+        processor = SimpleNamespace(tokenizer=mock_tokenizer)
+        captured = {}
+
+        def fake_generate(**kwargs):
+            captured.update(kwargs)
+            kwargs["streamer"].end()
+
+        model = SimpleNamespace(generate=fake_generate)
+
+        async def _run():
+            queue, _ = mgr.generate_streaming(
+                model=model,
+                processor=processor,
+                inputs={"input_ids": torch.tensor([[1, 2]])},
+                gen_config=GenerationConfig(stop_strings=["END"]),
+                request_id="req-stream-1",
+            )
+            item = await queue.get()
+            self.assertIsNone(item)
+
+        asyncio.run(_run())
+        self.assertIs(captured["tokenizer"], mock_tokenizer)
+        self.assertEqual(captured["tokenizer"].get_vocab(), {"hello": 0})
+
+    def test_generate_non_streaming_unwraps_processor_tokenizer(self):
+        """Non-streaming generation must also pass processor.tokenizer to model.generate()."""
+        mgr = GenerateManager()
+        mock_tokenizer = SimpleNamespace(_tokenizer=MagicMock(), get_vocab=MagicMock(return_value={"world": 1}))
+        processor = SimpleNamespace(tokenizer=mock_tokenizer, decode=MagicMock(return_value="world"))
+        captured = {}
+
+        def fake_generate(**kwargs):
+            captured.update(kwargs)
+            return torch.tensor([[1, 2, 3]])
+
+        model = SimpleNamespace(generate=fake_generate)
+
+        text, input_len, generated_ids = asyncio.run(
+            mgr.generate_non_streaming(
+                model=model,
+                processor=processor,
+                inputs={"input_ids": torch.tensor([[1, 2]])},
+                gen_config=GenerationConfig(stop_strings=["END"]),
+                request_id="req-nonstream-1",
+            )
+        )
+        self.assertIs(captured["tokenizer"], mock_tokenizer)
+        self.assertEqual(text, "world")
+        self.assertEqual(input_len, 2)
+        self.assertEqual(generated_ids.tolist(), [3])
+
+    def test_generate_passes_plain_tokenizer_unchanged(self):
+        """A plain PreTrainedTokenizerFast (without .tokenizer) is forwarded directly."""
+        mgr = GenerateManager()
+        plain_tokenizer = SimpleNamespace(_tokenizer=MagicMock(), decode=MagicMock(return_value="ok"))
+        captured_stream = {}
+        captured_non_stream = {}
+
+        def fake_stream_generate(**kwargs):
+            captured_stream.update(kwargs)
+            kwargs["streamer"].end()
+
+        def fake_non_stream_generate(**kwargs):
+            captured_non_stream.update(kwargs)
+            return torch.tensor([[1, 2, 3]])
+
+        async def _run():
+            queue, _ = mgr.generate_streaming(
+                model=SimpleNamespace(generate=fake_stream_generate),
+                processor=plain_tokenizer,
+                inputs={"input_ids": torch.tensor([[1, 2]])},
+                gen_config=GenerationConfig(),
+                request_id="req-plain-stream",
+            )
+            self.assertIsNone(await queue.get())
+            await mgr.generate_non_streaming(
+                model=SimpleNamespace(generate=fake_non_stream_generate),
+                processor=plain_tokenizer,
+                inputs={"input_ids": torch.tensor([[1, 2]])},
+                gen_config=GenerationConfig(),
+                request_id="req-plain-nonstream",
+            )
+
+        asyncio.run(_run())
+        self.assertIs(captured_stream["tokenizer"], plain_tokenizer)
+        self.assertIs(captured_non_stream["tokenizer"], plain_tokenizer)
 
 
 @require_serve

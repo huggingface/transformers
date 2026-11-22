@@ -852,9 +852,10 @@ class GenerateManager(BaseGenerateManager):
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
-        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
+        tokenizer = getattr(processor, "tokenizer", processor)
+        rust_tokenizer = tokenizer._tokenizer  # type: ignore[union-attr]
         streamer = DirectStreamer(rust_tokenizer, loop, queue, response_parser=response_parser)
-        gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
+        gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": tokenizer}
         if hasattr(model, "has_talker"):
             gen_kwargs["generation_mode"] = "text"
 
@@ -878,9 +879,10 @@ class GenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, "torch.Tensor"]:
         """Run generation to completion via ``model.generate()`` on the inference thread."""
+        tokenizer = getattr(processor, "tokenizer", processor)
         # Multimodal models (e.g. Qwen2.5-Omni) may generate audio alongside text by default;
         # force text-only output since the serve layer only handles text
-        generate_kwargs = {**inputs, "generation_config": gen_config, "tokenizer": processor}
+        generate_kwargs = {**inputs, "generation_config": gen_config, "tokenizer": tokenizer}
         if hasattr(model, "has_talker"):
             generate_kwargs["generation_mode"] = "text"
         sequences = await self.async_submit(model.generate, **generate_kwargs)
