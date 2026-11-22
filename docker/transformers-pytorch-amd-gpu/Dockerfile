@@ -1,4 +1,4 @@
-FROM rocm/pytorch:rocm10.2.0_ubuntu26.04_py3.14_pytorch_release_2.13.0
+FROM rocm/pytorch:rocm10.2.0_ubuntu26.04_py3.14_pytorch_release_2.15.0
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -49,9 +49,9 @@ RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
 # `kernels` may causes many failing tests
 RUN python3 -m pip uninstall -y kernels
 
-# On ROCm, torchcodec is required to decode audio files. 0.13 matches the
-# torch 2.13 C++ ABI in the base image above;
-RUN python3 -m pip install --no-cache-dir "torchcodec==0.13.0"
+# On ROCm, torchcodec is required to decode audio files. Use the CPU build: the PyPI wheel links its image
+# library against CUDA (libnvrtc) and fails to import on ROCm.
+RUN python3 -m pip install --no-cache-dir --no-deps "torchcodec==0.17.0+cpu" --index-url https://download.pytorch.org/whl/cpu
 
 # Install pre-built flash-attention wheel from AMD's mirror. Wheel is pinned
 # to the (ROCm, Ubuntu, Python, torch) ABI of the base image above; bumping
