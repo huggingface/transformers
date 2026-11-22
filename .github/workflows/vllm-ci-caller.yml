@@ -85,6 +85,7 @@ jobs:
           echo "vLLM commit date: $VLLM_COMMIT_DATE"
 
       - name: Set up Python 3.12 environment
+        if: false  # [Temporary] fast run to check the Slack report
         run: |
           uv venv /opt/venv312 --python 3.12
           echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
@@ -92,6 +93,7 @@ jobs:
           echo "UV_PYTHON=" >> $GITHUB_ENV
 
       - name: Install dependencies
+        if: false  # [Temporary] fast run to check the Slack report
         # TODO: Better to build a dedicated Docker image for vLLM CI.
         # But the workflow only runs once a day, so installing at runtime is fine for now.
         run: |
@@ -127,6 +129,7 @@ jobs:
           "
 
       - name: Patch vLLM for CPU
+        if: false  # [Temporary] fast run to check the Slack report
         # Probably not needed on the larger aws-m8i-8xl-cache runner, but not verified yet. Keeping for now.
         run: |
           # Lower hardcoded value in test_initialization.py. Kept in case other tests hit the same OOM issue.
@@ -137,9 +140,11 @@ jobs:
           fi
 
       - name: Pip freeze
+        if: false  # [Temporary] fast run to check the Slack report
         run: pip freeze
 
       - name: System info
+        if: false  # [Temporary] fast run to check the Slack report
         run: |
           echo "=== CPU ===" && lscpu | grep -E "^CPU\(s\)|^Model name|^Socket"
           echo "=== Memory ===" && free -h
@@ -169,22 +174,22 @@ jobs:
                        tests/models/multimodal/processing/test_transformers_audio.py
 
       - name: "Test: test_mapping"
-        if: always()
+        if: false  # [Temporary] fast run to check the Slack report
         working-directory: vllm
         run: pytest -v -s tests/models/multimodal/test_mapping.py
 
       - name: "Example: chat"
-        if: always()
+        if: false  # [Temporary] fast run to check the Slack report
         working-directory: vllm
         run: python3 examples/basic/offline_inference/chat.py
 
       - name: "Example: vision language"
-        if: always()
+        if: false  # [Temporary] fast run to check the Slack report
         working-directory: vllm
         run: python3 examples/generate/multimodal/vision_language_offline.py --model-type qwen2_5_vl
 
       - name: "Example: audio language (whisper)"
-        if: always()
+        if: false  # [Temporary] fast run to check the Slack report
         working-directory: vllm
         run: VLLM_WORKER_MULTIPROC_METHOD=spawn python3 examples/generate/multimodal/audio_language_offline.py --model-type whisper
 
@@ -197,6 +202,7 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] fast run to check the Slack report
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -346,6 +352,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] fast run to check the Slack report
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -561,6 +568,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] fast run to check the Slack report
     runs-on:
       group: aws-m8i-8xl-cache
     container:
