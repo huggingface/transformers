@@ -14,6 +14,7 @@
 
 import math
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import torch
@@ -1435,6 +1436,21 @@ class Glm5NextModel(Exaone4_5_Model, Glm5NextPreTrainedModel):
         self.visual = Glm5NextVisionModel._from_config(config.vision_config)
         self.language_model = Glm5NextTextModel._from_config(config.text_config)
         del self.rope_deltas
+
+    def get_data_dependent_inputs(
+        self,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """The vision tower's inputs (see [`Glm5NextVisionModel.get_data_dependent_inputs`]) prefixed `image_` and
+        `video_`, as `get_image_embeddings` and `get_video_embeddings` take them. The text model takes plain positions."""
+        inputs = {}
+        for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
+            if grid_thw is not None:
+                tower_inputs = self.get_encoder(modality="image").get_data_dependent_inputs(grid_thw)
+                inputs.update({prefix + name: value for name, value in tower_inputs.items()})
+        return inputs
 
     def get_video_embeddings(
         self,
