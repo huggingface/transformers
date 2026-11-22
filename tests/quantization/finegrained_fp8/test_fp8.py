@@ -477,10 +477,10 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 if drop_experts_only:
                     config_path = os.path.join(tmpdirname, "config.json")
-                    with open(config_path) as f:
+                    with open(config_path, encoding="utf-8") as f:
                         config = json.load(f)
                     del config["quantization_config"]["experts_only"]
-                    with open(config_path, "w") as f:
+                    with open(config_path, "w", encoding="utf-8") as f:
                         json.dump(config, f)
                 reloaded = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
             reloaded_state_dict = reloaded.state_dict()
