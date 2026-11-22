@@ -717,7 +717,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
             and self.config.image_token_id is not None
         ):
             mm_encoder_outputs["image"] = self.get_image_embeddings(
-                pixel_values[:1], target_sizes, downsample_mode=downsample_mode
+                pixel_values[:1], target_sizes, downsample_mode=downsample_mode, **kwargs
             )
 
         if (
