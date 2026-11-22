@@ -35,6 +35,7 @@ from .cache_allocators import (
     MLACacheAllocator,
     SlidingAttentionCacheAllocator,
 )
+from .cache_allocators.cache_allocator import compute_block_hash
 from .distributed import DistributedHelper
 from .requests import RequestState, RequestStatus
 from .utils import (
@@ -349,8 +350,61 @@ class PagedAttentionCache:
     def free_blocks(self, request_id: str, no_cache: bool = False) -> None:
         """Signals all cache allocators that a request's cache can be freed. If the `no_cache` flag is passed, the freed
         blocks go straight to the free pool, and cannot be reused later."""
+        self.clear_pending_prefix(request_id)
         for allocator in self.cache_allocators.values():
             allocator.free_blocks(request_id, no_cache)
+
+    # [scratch, bench only] CB_PROTO_PREFIX_WAIT: prompt pages being computed by a forward in flight, so a request whose
+    # next uncached page is one of them waits for the hash to be registered instead of computing the same page again
+    def _prefix_page_hashes(self, token_ids: list[int], num_pages: int) -> list[int]:
+        allocator = next(iter(self.cache_allocators.values()))
+        tokens_per_page = allocator.tokens_per_page
+        current_hash, hashes = allocator.ledger.epoch or None, []
+        for b in range(num_pages):
+            current_hash = compute_block_hash(current_hash, token_ids[b * tokens_per_page : (b + 1) * tokens_per_page])
+            hashes.append(current_hash)
+        return hashes
+
+    def prefix_wait_key(self, prompt_ids: list[int]) -> int | None:
+        """The hash of the first page of the prompt that is not in the cache yet (only full pages that leave at least
+        one token to prefill, as `match_prefix_blocks`), or None if there is none."""
+        allocator = next(iter(self.cache_allocators.values()))
+        num_pages = (len(prompt_ids) - 1) // allocator.tokens_per_page
+        for page_hash in self._prefix_page_hashes(prompt_ids, num_pages):
+            if allocator.ledger.hash_to_block.get(page_hash) is None:
+                return page_hash
+        return None
+
+    def note_pending_prefix(self, state: RequestState, request_len: int) -> None:
+        """Records the prompt pages the coming forward completes for a prefilling request, until they are registered."""
+        allocator = next(iter(self.cache_allocators.values()))
+        tokens_per_page = allocator.tokens_per_page
+        start = state.current_len()
+        end = min(start + request_len, len(state.initial_tokens))
+        first_page, end_page = start // tokens_per_page, end // tokens_per_page
+        if end_page <= first_page:
+            return
+        hashes = self._prefix_page_hashes(state.initial_tokens, end_page)[first_page:]
+        pending = self.__dict__.setdefault("_prefix_pending", {})
+        by_request = self.__dict__.setdefault("_prefix_pending_by_request", {})
+        for page_hash in hashes:
+            if allocator.ledger.hash_to_block.get(page_hash) is None:
+                pending[page_hash] = pending.get(page_hash, 0) + 1
+                by_request.setdefault(state.request_id, []).append(page_hash)
+
+    def clear_pending_prefix(self, request_id: str) -> None:
+        pending = self.__dict__.get("_prefix_pending")
+        if not pending:
+            return
+        for page_hash in self.__dict__["_prefix_pending_by_request"].pop(request_id, []):
+            count = pending.get(page_hash, 0) - 1
+            if count > 0:
+                pending[page_hash] = count
+            else:
+                pending.pop(page_hash, None)
+
+    def is_prefix_pending(self, page_hash: int) -> bool:
+        return page_hash in self.__dict__.get("_prefix_pending", {})
 
     def free_all_requests(self, clear_ledgers: bool = False) -> None:
         """Signals all cache allocators that all requests' caches can be freed. Also clears the ledgers if requested."""
@@ -409,6 +463,7 @@ class PagedAttentionCache:
         token_ids = state.initial_tokens + state.generated_tokens
         for name, new_complete_blocks in complete_blocks.items():
             self.cache_allocators[name].mark_complete_blocks(state.request_id, token_ids, new_complete_blocks)
+        self.clear_pending_prefix(state.request_id)  # its pages are registered now
 
     def evict_cached_blocks(self) -> bool:
         """Evicts all the blocks kept cached for de-duplication, returning them to the pool. Returns True if any block
