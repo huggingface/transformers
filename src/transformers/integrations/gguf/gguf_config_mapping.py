@@ -117,10 +117,42 @@ def _lfm2_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     }
 
 
+def _qwen2vl_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+    """Qwen2-VL and Qwen2.5-VL. llama.cpp writes their vision encoder to a separate mmproj file, so this file holds
+    the language model alone.
+
+    That language model is Qwen2 with an mrope. A text token has the same position on every mrope axis, which makes the
+    mrope plain RoPE, so the file loads as a text-only Qwen2 and `rope.dimension_sections` has nothing to set.
+    """
+    key = lambda name: metadata[f"qwen2vl.{name}"]  # noqa: E731
+
+    return {
+        "model_type": "qwen2",
+        "architectures": ["Qwen2ForCausalLM"],
+        "max_position_embeddings": key("context_length"),
+        "hidden_size": key("embedding_length"),
+        "intermediate_size": key("feed_forward_length"),
+        "num_hidden_layers": key("block_count"),
+        "num_attention_heads": key("attention.head_count"),
+        "num_key_value_heads": key("attention.head_count_kv"),
+        "rms_norm_eps": key("attention.layer_norm_rms_epsilon"),
+        "rope_parameters": {"rope_type": "default", "rope_theta": key("rope.freq_base")},
+        # `read_gguf_metadata` leaves the vocabulary as its length
+        "vocab_size": metadata["tokenizer.ggml.tokens"],
+        # llama.cpp writes the output projection only when it is not the embedding matrix
+        "tie_word_embeddings": "output.weight" not in tensor_names,
+        # absent ids stay `None`, as they are on a config by default
+        "eos_token_id": metadata.get("tokenizer.ggml.eos_token_id"),
+        "bos_token_id": metadata.get("tokenizer.ggml.bos_token_id"),
+        "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
+    }
+
+
 GGUF_CONFIG_ARCHS = {
     "qwen35": _qwen35_config,
     "qwen35moe": _qwen35moe_config,
     "lfm2": _lfm2_config,
+    "qwen2vl": _qwen2vl_config,
 }
 
 

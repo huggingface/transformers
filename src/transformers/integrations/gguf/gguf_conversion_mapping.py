@@ -233,11 +233,25 @@ def _lfm2(config) -> list[WeightTransform]:
     return renamings + [conv_kernel]
 
 
+def _qwen2vl(config) -> list[WeightTransform]:
+    """Qwen2-VL and Qwen2.5-VL, whose language model loads as a Qwen2.
+
+    llama.cpp only renames, and the norms carry no offset, so every quantized weight stays packed.
+    """
+    norms = [
+        WeightRenaming(r"^output_norm\.", "model.norm."),
+        WeightRenaming(r"\.attn_norm\.", ".input_layernorm."),
+        WeightRenaming(r"\.ffn_norm\.", ".post_attention_layernorm."),
+    ]
+    return DENSE_DECODER_RENAMINGS + norms
+
+
 # gguf `general.architecture` -> builder taking the model config
 GGUF_ARCHS = {
     "qwen35": _qwen35,
     "qwen35moe": _qwen35moe,
     "lfm2": _lfm2,
+    "qwen2vl": _qwen2vl,
 }
 
 
