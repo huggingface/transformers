@@ -517,8 +517,12 @@ class ContinuousBatchingIOs:
         )
 
         # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
+        use_varlen_block_table = self.use_block_table and self.cache.use_varlen_block_table
         if use_padding:  # TODO: add per-path padding
-            self.max_length_q = q_size  # keep max_length_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q
+            # Keep max_length_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q, except for the decode-only
+            # steps of the varlen block table path, where max_length_q = 1 picks FA's decode kernel
+            if not (use_varlen_block_table and self.max_length_q == 1):
+                self.max_length_q = q_size
             # Additionally, if there are CUDA graphs, we need to pad max_length_k so graph capture will work regardless
             # of the future Q / KV lengths of the next batches
             if not self.use_block_table and self.use_cuda_graph_varlen:
@@ -528,8 +532,7 @@ class ContinuousBatchingIOs:
                 }
 
         # With varlen block tables, every step goes through flash_attn_with_kvcache with varlen queries: it needs the
-        # past length of each sequence and max_length_q, which is the padded query size so it is static per graph
-        use_varlen_block_table = self.use_block_table and self.cache.use_varlen_block_table
+        # past length of each sequence and max_length_q, which is part of the graph key
         if use_varlen_block_table:
             kwargs["cache_seqlens"] = self.cache_seqlens[:num_sequences]
 
@@ -569,9 +572,9 @@ class ContinuousBatchingIOs:
         return self.carry_over_ids, self.output_ids, self.output_ids
 
     def _get_graph_key(self) -> tuple[int, ...]:
-        # Keys for decode fast path
+        # Keys for the block table path: with varlen block tables, decode-only steps (max_length_q = 1) get their own
         if self.use_block_table:
-            return (self.num_q_tokens,)
+            return (self.num_q_tokens, self.max_length_q)
         # Keys for varlen path
         return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values())
 
