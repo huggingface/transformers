@@ -467,6 +467,11 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
             q_proj_weight, dequantized_state_dict["model.layers.0.self_attn.q_proj.weight"], rtol=0, atol=0
         )
 
+        # The config keeps the checkpoint's unquantized layers and adds the dequantized ones
+        modules_to_not_convert = model.config.quantization_config.modules_to_not_convert
+        self.assertEqual(modules_to_not_convert[:3], ["gate", "e_score_correction_bias", "lm_head"])
+        self.assertIn("model.layers.0.self_attn.q_proj", modules_to_not_convert)
+
         input_ids = torch.arange(10, 20, device=self.device_map).unsqueeze(0)
         with torch.no_grad():
             logits = model(input_ids).logits

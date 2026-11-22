@@ -1749,11 +1749,11 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError(f"expert_dtype must be 'fp8' or 'fp4'; got {self.expert_dtype!r}")
 
     def get_loading_attributes(self):
-        return {
-            "dequantize": self.dequantize,
-            "modules_to_not_convert": self.modules_to_not_convert,
-            "experts_only": self.experts_only,
-        }
+        attributes = {"dequantize": self.dequantize, "experts_only": self.experts_only}
+        # Without a list of its own, the checkpoint's list stays: it names the layers stored unquantized
+        if self.modules_to_not_convert is not None:
+            attributes["modules_to_not_convert"] = self.modules_to_not_convert
+        return attributes
 
 
 class QuarkConfig(QuantizationConfigMixin):

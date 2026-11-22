@@ -138,12 +138,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
             from ..integrations.finegrained_fp8 import FP8Linear
 
-            # The saved config names every linear layer left out of FP8, so that loaders that don't read
-            # `experts_only` (e.g. vLLM) don't take their weights for FP8 ones
-            self.quantization_config.modules_to_not_convert = [
+            # The saved config adds every linear layer left out of FP8 to the layers the checkpoint stores unquantized,
+            # so that loaders that don't read `experts_only` (e.g. vLLM) don't take their weights for FP8 ones
+            not_converted = [
                 name
                 for name, module in model.named_modules()
                 if isinstance(module, nn.Linear) and not isinstance(module, FP8Linear)
+            ]
+            skip = self.quantization_config.modules_to_not_convert or []
+            self.quantization_config.modules_to_not_convert = skip + [
+                name for name in not_converted if name not in skip
             ]
 
     def _process_model_after_weight_loading(self, model, **kwargs):
