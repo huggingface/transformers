@@ -760,20 +760,21 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
             video_features=visual_features if is_video else None,
         )
         visual_mask = video_mask if is_video else image_mask
-        inputs_embeds = inputs_embeds.masked_scatter(
+        merged_embeds = inputs_embeds.masked_scatter(
             visual_mask,
             visual_features.to(inputs_embeds.device, inputs_embeds.dtype),
         )
 
         visual_indicator_features = self.multi_modal_projector.get_visual_indicator_features(visual_features.device)
-        if is_video:
-            boundary_token_ids = (self.config.video_start_token_id, self.config.video_end_token_id)
-            indicator_indexes = (2, 3)
-        else:
-            boundary_token_ids = (self.config.image_start_token_id, self.config.image_end_token_id)
-            indicator_indexes = (0, 1)
+        visual_indicator_features = visual_indicator_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        boundaries = (
+            (self.config.image_start_token_id, False),
+            (self.config.image_end_token_id, False),
+            (self.config.video_start_token_id, True),
+            (self.config.video_end_token_id, True),
+        )
 
-        for boundary_token_id, indicator_index in zip(boundary_token_ids, indicator_indexes):
+        for indicator_index, (boundary_token_id, boundary_is_video) in enumerate(boundaries):
             if input_ids is None:
                 boundary_embedding = self.get_input_embeddings()(
                     torch.tensor(boundary_token_id, dtype=torch.long, device=inputs_embeds.device)
@@ -781,25 +782,22 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel):
                 boundary_mask = (inputs_embeds == boundary_embedding).all(dim=-1)
             else:
                 boundary_mask = input_ids == boundary_token_id
-            num_boundary_tokens = boundary_mask.sum()
-            torch_compilable_check(
-                num_boundary_tokens == num_visual_inputs,
-                lambda: (
-                    f"Expected {num_visual_inputs} visual boundary tokens with id {boundary_token_id}, but found "
-                    f"{num_boundary_tokens}."
-                ),
-            )
-            boundary_features = visual_indicator_features[indicator_index].to(
-                inputs_embeds.device,
-                inputs_embeds.dtype,
-            )
-            inputs_embeds = torch.where(
+            if boundary_is_video == is_video:
+                num_boundary_tokens = boundary_mask.sum()
+                torch_compilable_check(
+                    num_boundary_tokens == num_visual_inputs,
+                    lambda: (
+                        f"Expected {num_visual_inputs} visual boundary tokens with id {boundary_token_id}, but found "
+                        f"{num_boundary_tokens}."
+                    ),
+                )
+            merged_embeds = torch.where(
                 boundary_mask.unsqueeze(-1),
-                boundary_features.expand_as(inputs_embeds),
-                inputs_embeds,
+                visual_indicator_features[indicator_index],
+                merged_embeds,
             )
 
-        return inputs_embeds
+        return merged_embeds
 
 
 @auto_docstring(custom_intro="The Ovis2.5 multimodal model with a language modeling head.")
