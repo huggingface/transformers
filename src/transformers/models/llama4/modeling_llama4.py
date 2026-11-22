@@ -1315,7 +1315,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_outputs=outputs.image_outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
             router_logits=outputs.router_logits,
         )
 

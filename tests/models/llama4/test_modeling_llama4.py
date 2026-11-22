@@ -18,6 +18,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
+    require_torch,
     require_torch_large_accelerator,
     slow,
     torch_device,
@@ -31,9 +32,62 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        Llama4Config,
         Llama4ForConditionalGeneration,
         Llama4Processor,
     )
+
+
+@require_torch
+class Llama4ForConditionalGenerationTinyTest(unittest.TestCase):
+    def get_tiny_model(self):
+        text_config = {
+            "vocab_size": 99,
+            "hidden_size": 32,
+            "intermediate_size": 37,
+            "intermediate_size_mlp": 48,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "head_dim": 8,
+            "num_local_experts": 4,
+            "num_experts_per_tok": 1,
+            "interleave_moe_layer_step": 2,
+            "no_rope_layers": [1, 0],
+            "attention_chunk_size": 4,
+            "max_position_embeddings": 64,
+        }
+        vision_config = {
+            "hidden_size": 32,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 4,
+            "intermediate_size": 128,
+            "image_size": 28,
+            "patch_size": 14,
+            "vision_output_dim": 32,
+            "projector_input_dim": 32,
+            "projector_output_dim": 32,
+        }
+        config = Llama4Config(text_config=text_config, vision_config=vision_config, image_token_index=98)
+        return Llama4ForConditionalGeneration(config).to(torch_device).eval()
+
+    def test_forward_without_images(self):
+        model = self.get_tiny_model()
+        input_ids = torch.tensor([[1, 5, 6, 7]], device=torch_device)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids)
+        self.assertEqual(outputs.logits.shape, (1, 4, 99))
+        self.assertIsNone(outputs.image_outputs)
+
+    def test_forward_with_images_returns_image_outputs(self):
+        model = self.get_tiny_model()
+        pixel_values = torch.randn(1, 3, 28, 28, device=torch_device)
+        # 28x28 image, 14x14 patches, pixel shuffle ratio 0.5: one image token
+        input_ids = torch.tensor([[1, 98, 5, 6]], device=torch_device)
+        with torch.no_grad():
+            outputs = model(input_ids=input_ids, pixel_values=pixel_values)
+        self.assertEqual(outputs.logits.shape, (1, 4, 99))
+        self.assertEqual(outputs.image_outputs.last_hidden_state.shape, (1, 1, 32))
 
 
 @slow
