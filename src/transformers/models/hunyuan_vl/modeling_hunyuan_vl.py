@@ -820,6 +820,7 @@ class HunYuanVLTextModel(HunYuanVLPreTrainedModel):
 
         if position_ids.ndim == 3 and position_ids.shape[0] == num_mrope_axes + 1:
             text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
         else:
             # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
             text_position_ids = None
@@ -1060,10 +1061,11 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
+        if image_features is not None:
+            torch_compilable_check(
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match: tokens: {n_image_tokens}, "
-                f"features {image_features.shape[0]}"
+                f"features {image_features.shape[0]}",
             )
         return special_image_mask
 
@@ -1159,7 +1161,9 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_grid_thw, return_dict=True)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
 
         if mm_encoder_outputs.get("image") is not None:
             image_embeds = mm_encoder_outputs["image"].pooler_output

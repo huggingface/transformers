@@ -530,6 +530,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel, MultimodalMixin):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
+                **kwargs,
             )
 
         if mm_encoder_outputs.get("image") is not None:
