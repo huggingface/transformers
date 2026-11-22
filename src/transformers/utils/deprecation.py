@@ -43,6 +43,7 @@ def deprecate_kwarg(
     raise_if_greater_or_equal_version: bool = False,
     raise_if_both_names: bool = False,
     additional_message: str | None = None,
+    expose_in_signature: bool = False,
 ):
     """
     Function or method decorator to notify users about deprecated keyword arguments, replacing them with a new name if specified.
@@ -71,6 +72,10 @@ def deprecate_kwarg(
             Whether to raise `ValueError` if both deprecated and new keyword arguments are set.
         additional_message (`Optional[str]`, *optional*):
             An additional message to append to the default deprecation message.
+        expose_in_signature (`bool`, *optional*, defaults to `False`):
+            Whether to add the deprecated keyword argument to the signature of the wrapped function, so that callers
+            which filter their kwargs with `inspect.signature` (e.g. remote code supporting several versions) keep
+            passing it.
 
     Raises:
         ValueError:
@@ -171,6 +176,13 @@ def deprecate_kwarg(
                 warnings.warn(message, FutureWarning, stacklevel=2)
 
             return func(*args, **kwargs)
+
+        if expose_in_signature and old_name not in function_named_args:
+            parameters = list(sig.parameters.values())
+            deprecated = inspect.Parameter(old_name, inspect.Parameter.KEYWORD_ONLY, default=None)
+            has_var_keyword = parameters and parameters[-1].kind is inspect.Parameter.VAR_KEYWORD
+            parameters.insert(len(parameters) - has_var_keyword, deprecated)
+            wrapped_func.__signature__ = sig.replace(parameters=parameters)
 
         return wrapped_func
 
