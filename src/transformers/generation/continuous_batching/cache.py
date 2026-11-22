@@ -20,6 +20,7 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
+from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
@@ -227,6 +228,7 @@ class PagedAttentionCache:
         # Helper attributes for the scheduler
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
+        self.use_varlen_block_table = self._infer_use_varlen_block_table()
         # Helper attribute for the input/output classes
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
 
@@ -247,6 +249,14 @@ class PagedAttentionCache:
         for allocator in self.cache_allocators.values():
             acc = min(acc, allocator.tokens_per_page * self.max_blocks_per_request)
         return int(acc)
+
+    def _infer_use_varlen_block_table(self) -> bool:
+        """Every step (prefill, mixed, decode) goes through the block table when the paged kernel takes varlen queries,
+        i.e. FA3's `flash_attn_with_kvcache` with `cu_seqlens_q`. FA2 only takes one query token per sequence."""
+        if self.max_decode_fast_path_length == 0:
+            return False
+        flash_attn_with_kvcache = lazy_import_flash_attention(self.config._attn_implementation)[0][2]
+        return "cu_seqlens_q" in inspect.signature(flash_attn_with_kvcache).parameters
 
     def can_store_request_tokens(self, state: RequestState, request_len: int, dry_run: bool = False) -> bool:
         """Checks if the new tokens for a request can be stored in the cache. If they can, actual cache allocation is
@@ -617,7 +627,7 @@ class PagedAttentionMemoryHandler:
             + self.kv_heads_at_peak * head_dim  # their copy in the K and V read back from the cache # TODO: optimize
         )
         io_bytes = self.io_multiplier * (
-            7 * i  # bulk_input: [7, M] int32, packed as 7 rows
+            8 * i  # bulk_input: [8, M] int32, packed as 8 rows
             + self.num_output_rows * i  # output_ids: [num_output_rows, M] int32
             + self.num_groups * self.max_blocks_per_request * i  # block_table (zero when fast-decode is off)
             + self.num_groups * 8  # write_index: [num_groups, M] int64

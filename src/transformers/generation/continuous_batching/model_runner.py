@@ -13,6 +13,7 @@
 # limitations under the License.
 import time
 from collections.abc import Callable
+from math import ceil, log2
 
 import torch
 from torch import nn
@@ -109,9 +110,11 @@ class ModelRunner:
             max_kv_read = pad_to_interval(
                 max_kv_read, self.cb_config.kv_padding_interval_size, self.cache.max_tokens_read
             )
-        # For decode fast path batches, we pad using powers of 2 and use no KV
+        # For block table batches, we pad using powers of 2 and use no KV. With varlen block tables, any batch can go
+        # through the block table, so the padded size is the number of query tokens rather than of requests
         else:
-            num_q_tokens = pad_to_pow2(num_q_tokens, self.cb_config.max_requests_per_batch)
+            max_q = max_batch_tokens if self.cache.use_varlen_block_table else self.cb_config.max_requests_per_batch
+            num_q_tokens = pad_to_pow2(num_q_tokens, max_q)
             max_kv_read = 0
         return num_q_tokens, max_kv_read
 
@@ -259,6 +262,17 @@ class ModelRunner:
         total_duration = 0
         iterations = 2 if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs) else 1
         for _ in range(iterations):
+            # With varlen block tables, every step goes through the block table: one graph per padded number of query
+            # tokens, largest first to get the biggest pool and avoid fragmentation
+            if self.cache.use_varlen_block_table:
+                max_batch_tokens = self.cache.max_batch_tokens
+                buckets = {pad_to_pow2(2**i, max_batch_tokens) for i in range(ceil(log2(max_batch_tokens)) + 1)}
+                for num_q_tokens in sorted(buckets, reverse=True):
+                    total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=None)
+                if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs):
+                    self.inputs_and_outputs.swap_io_pairs()
+                continue
+
             # Warm up the varlen path, w/ the largest possible sizes to get the biggest pool and avoid fragmentation
             num_q_tokens = self.cache.max_batch_tokens
             max_kv_read = max(0, infer_max_single_request_tokens(self.cache) - num_q_tokens)
@@ -286,7 +300,14 @@ class ModelRunner:
         matching the terminology used by `prepare_batch_tensors` and the scheduler."""
         # Make up fake request states according to the chosen path
         use_decode_fast_path = max_kv_read is None
-        if use_decode_fast_path:
+        if use_decode_fast_path and self.cache.use_varlen_block_table:
+            # Prefills of num_q_tokens tokens in all, as few requests as the block table allows
+            num_requests = ceil(num_q_tokens / self.cache.max_decode_fast_path_length)
+            num_q_tokens = num_q_tokens // num_requests
+            status = RequestStatus.PREFILLING
+            max_kv_read = 0
+            logger.debug(f"Warming up varlen block table path for {num_requests = }, {num_q_tokens = }.")
+        elif use_decode_fast_path:
             num_requests = num_q_tokens
             status = RequestStatus.DECODING
             num_q_tokens = 1

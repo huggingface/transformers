@@ -56,6 +56,7 @@ class PagedAttentionArgs(TypedDict):
         cache: The [`PagedAttentionCache`] instance managing the KV cache.
         block_table: Block table for paged KV cache. If provided, uses `flash_attn_with_kvcache` for fused attention +
             cache update. More information in src/transformers/integrations/flash_attention.py
+        cache_seqlens: Number of cache tokens of each sequence before this step, only for varlen block table steps.
         logits_processor_args: List of tensors containing the arguments for the logits processors, one per request.
         use_cache: Whether to use caching (always `False` in continuous batching as the cache is managed externally).
         is_causal: Determined internally. SDPA / eager are never causal (custom mask) while flash always is (no mask)
@@ -73,6 +74,7 @@ class PagedAttentionArgs(TypedDict):
     logits_indices: torch.Tensor
     cache: PagedAttentionCache
     block_table: torch.Tensor | None
+    cache_seqlens: torch.Tensor
     logits_processor_args: torch.Tensor
     use_cache: bool
     is_causal: bool
@@ -84,7 +86,7 @@ class ContinuousBatchingIOs:
     batch alone.
     """
 
-    static_inputs: int = 7  # Number of static inputs always present in the bulk tensor
+    static_inputs: int = 8  # Number of static inputs always present in the bulk tensor
 
     def __init__(
         self,
@@ -165,6 +167,7 @@ class ContinuousBatchingIOs:
         full_attention_cumulative_seqlens_k = self._bulk_input_tensor[4, : max_requests_per_batch + 1]
         sliding_attention_cumulative_seqlens_k = self._bulk_input_tensor[5, : max_requests_per_batch + 1]
         self.carry_over_ids = self._bulk_input_tensor[6, :max_batch_tokens]  # only used for async API
+        self.cache_seqlens = self._bulk_input_tensor[7, :max_requests_per_batch]  # only used with varlen block tables
 
         # For sequence length of KV, the entries in the dict depend on the model
         self.cumulative_seqlens_k: dict[str, torch.Tensor] = {}
@@ -375,6 +378,7 @@ class ContinuousBatchingIOs:
         input_ids = []
         position_ids = []
         cumulative_seqlens_q = [0]
+        cache_seqlens = []
         logits_indices = []
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
         write_index = [[] for _ in range(num_attn_types)]
@@ -394,6 +398,7 @@ class ContinuousBatchingIOs:
             input_ids.extend(state.tokens_to_process)
             position_ids.extend(range(past_length, past_length + query_length))
             cumulative_seqlens_q.append(cumulative_seqlens_q[-1] + query_length)
+            cache_seqlens.append(past_length)
             self.max_length_q = max(self.max_length_q, query_length)
 
             # Accumulate the key sequence lengths for the current request
@@ -458,6 +463,7 @@ class ContinuousBatchingIOs:
         self.input_ids[: len(input_ids)] = to_tensor(input_ids)
         self.position_ids[: len(position_ids)] = to_tensor(position_ids)
         self.cumulative_seqlens_q[: len(cumulative_seqlens_q)] = to_tensor(cumulative_seqlens_q)
+        self.cache_seqlens[: len(cache_seqlens)] = to_tensor(cache_seqlens)  # padded sequences keep their 0
         self.logits_indices[: len(logits_indices)] = to_tensor(logits_indices)
 
         # Those kwargs are either dict of tensors or tensors, so we need to handle both cases
@@ -521,9 +527,15 @@ class ContinuousBatchingIOs:
                     for layer_type in self.max_length_k.keys()
                 }
 
+        # With varlen block tables, every step goes through flash_attn_with_kvcache with varlen queries: it needs the
+        # past length of each sequence and max_length_q, which is the padded query size so it is static per graph
+        use_varlen_block_table = self.use_block_table and self.cache.use_varlen_block_table
+        if use_varlen_block_table:
+            kwargs["cache_seqlens"] = self.cache_seqlens[:num_sequences]
+
         # When using block table, max_length_q and max_length_k are not used by flash_attn_with_kvcache, so we set them
         # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
-        kwargs["max_length_q"] = 1 if self.use_block_table else self.max_length_q
+        kwargs["max_length_q"] = 1 if self.use_block_table and not use_varlen_block_table else self.max_length_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(len(self.cache.cache_allocators)):
