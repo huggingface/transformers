@@ -380,6 +380,9 @@ class Ovis2_5VisualTokenProjector(nn.Module):
         )
         self.norm = nn.LayerNorm(self.visual_token_vocab_size)
         self.indicator_padding = nn.Buffer(torch.zeros(config.num_visual_indicator_tokens), persistent=False)
+        self.visual_indicator_token_ids = nn.Buffer(
+            torch.arange(self.visual_token_vocab_size, self.vocab_size, dtype=torch.long), persistent=False
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = hidden_states.reshape(hidden_states.shape[0] // self.spatial_merge_unit, -1)
@@ -389,12 +392,7 @@ class Ovis2_5VisualTokenProjector(nn.Module):
         return torch.cat((visual_tokens, indicator_padding), dim=-1)
 
     def get_visual_indicator_token_ids(self, device: torch.device) -> torch.Tensor:
-        return torch.arange(
-            self.visual_token_vocab_size,
-            self.vocab_size,
-            dtype=torch.long,
-            device=device,
-        )
+        return self.visual_indicator_token_ids.to(device)
 
 
 class Ovis2_5MultiModalProjector(nn.Module):
@@ -426,6 +424,15 @@ class Ovis2_5PreTrainedModel(VideoLlama3PreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Ovis2_5VisualTokenProjector):
             init.zeros_(module.indicator_padding)
+            init.copy_(
+                module.visual_indicator_token_ids,
+                torch.arange(
+                    module.visual_token_vocab_size,
+                    module.vocab_size,
+                    dtype=torch.long,
+                    device=module.visual_indicator_token_ids.device,
+                ),
+            )
 
 
 @auto_docstring(custom_intro="The Ovis2.5 vision tower, without the visual tokenizer or language model.")
