@@ -645,17 +645,22 @@ def _proto_indexer_per_query(indexer, hidden_states, q_resid, position_embedding
     if skip_scoring:
         return pos, visible, lengths
     if _PROTO_PREFILL_MQA and seq_len > 512:
-        from ...integrations._proto_mqa_kernels import mqa_logits_masked
+        from ...integrations._proto_mqa_kernels import mqa_logits_window
 
         # each query sees the packed keys [lo, hi) of its own request; padded queries see nothing
         lo = torch.where(real, k_start, 0).to(torch.int32)
         hi = (lo + n_visible).to(torch.int32)
         weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
         weights = weights * (indexer.n_heads**-0.5 * indexer.softmax_scale)
-        logits = mqa_logits_masked(q.contiguous(), keys, weights, lo, hi)  # [M, N], -inf outside [lo, hi)
-        index_scores = logits.gather(1, pos).masked_fill(~visible, float("-inf"))  # [M, max_k]
+        # longctx WP: scores in each query's own window ([M, max_k]), the same values as the packed [M, N] scores
+        # gathered at `pos`, without the [M, N] matrix (a varlen batch that packs the decodes of long requests next to
+        # a prefill chunk has N ~ 500k: 16 GB per layer, and int32 offsets past 2^31 faulted on B300, job 467381)
+        index_scores = mqa_logits_window(q.contiguous(), keys, weights, lo, hi, max_k)  # -inf outside [lo, hi)
         # the kernel takes an unordered list; PROTO_PREFILL_MQA_SORTED=1 keeps the order of the torch path (checks)
-        top = index_scores.topk(num_selected, dim=-1, sorted=_PROTO_PREFILL_MQA_SORTED).indices
+        if _PROTO_PAGED_TOPK == "vllm" and num_selected == 2048 and not _PROTO_PREFILL_MQA_SORTED:
+            top = _proto_vllm_topk(index_scores, n_visible, num_selected, max_k)  # longctx WP
+        else:
+            top = index_scores.topk(num_selected, dim=-1, sorted=_PROTO_PREFILL_MQA_SORTED).indices
         return _proto_selected(pos, visible, top, n_visible, num_selected, lengths)
     if _PROTO_TF32_SCOPED:
         scores = F.relu(_proto_scores_bf16(q, keys[pos]) * indexer.softmax_scale)
@@ -802,15 +807,20 @@ def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_stat
     lengths = n_visible.clamp(max=num_selected).to(torch.int32)
     if skip_scoring:
         return torch.where(visible, rows_all, -1), None, lengths
-    keys = indexer_key_cache[rows_all]  # [M, max_k, D], the keys of each query's own request, straight from the cache
-    if _PROTO_TF32_SCOPED:
-        scores = F.relu(_proto_scores_bf16(q, keys) * indexer.softmax_scale)
-    else:
-        scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys.float()) * indexer.softmax_scale)
     weights = indexer.weights_proj(hidden_states.to(indexer.weights_proj.weight.dtype))[0].float()
-    index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
-    index_scores = index_scores.masked_fill(~visible, float("-inf"))
-    top = index_scores.topk(num_selected, dim=-1).indices
+    if _PROTO_PAGED_INDEXER:
+        # longctx WP: the scores read the keys in place through the block table, only up to each query's context
+        top = _proto_paged_top(q, weights, indexer, indexer_key_cache, kwargs, allocator, n_visible, rows_all.shape[1],
+                               num_selected, page)
+    else:
+        keys = indexer_key_cache[rows_all]  # [M, max_k, D], the keys of each query's own request, straight from the cache
+        if _PROTO_TF32_SCOPED:
+            scores = F.relu(_proto_scores_bf16(q, keys) * indexer.softmax_scale)
+        else:
+            scores = F.relu(torch.einsum("mhd,mkd->mhk", q.float(), keys.float()) * indexer.softmax_scale)
+        index_scores = torch.einsum("mh,mhk->mk", weights * indexer.n_heads**-0.5, scores)
+        index_scores = index_scores.masked_fill(~visible, float("-inf"))
+        top = index_scores.topk(num_selected, dim=-1).indices
     rows = torch.where(visible.gather(-1, top), rows_all.gather(-1, top), -1)
     if _PROTO_TOPK_LENGTH:
         # a query that sees at most `num_selected` keys selects them all: list them in window order, as the prefill
@@ -818,6 +828,62 @@ def _proto_block_table_rows(module, allocator, cache, k_pass, k_rot, hidden_stat
         partial = (n_visible <= num_selected)[:, None]
         rows = torch.where(partial, torch.where(visible, rows_all, -1)[:, :num_selected], rows)
     return rows, None, lengths
+
+
+# longctx WP (bench only): PROTO_PAGED_INDEXER=1 scores a block-table decode batch whose contexts exceed index_topk with
+# one Triton launch that reads the indexer keys in place through the block table (`paged_mqa_logits`), up to each
+# query's own context, instead of gathering [M, bucket, D] keys and building [M, H, bucket] fp32 scores. Same values
+# up to the fp32 summation order (the softmax scale is folded into the head weights), same top-k sets.
+# PROTO_PAGED_TOPK: `torch` (default, torch.topk unsorted), `sorted` (check only: torch.topk sorted, the list order of
+# the gather path, so outputs can be compared bit for bit) or `vllm` (vLLM's persistent radix top-k, also on the
+# varlen path of PROTO_PREFILL_MQA).
+# PROTO_PAGED_FUSE=0 (check only): long-context batches leave the fused layer loop (FUSE_KERNELS) as without the flag.
+_PROTO_PAGED_INDEXER = _os.environ.get("PROTO_PAGED_INDEXER", "0") == "1"
+_PROTO_PAGED_TOPK = _os.environ.get("PROTO_PAGED_TOPK", "torch")
+_PROTO_PAGED_FUSE = _os.environ.get("PROTO_PAGED_FUSE", "1") == "1"
+_proto_topk_workspace = {}
+
+
+def _proto_vllm_topk(logits, n_visible, num_selected, max_k):
+    """longctx WP: vLLM's persistent radix top-k of every row of `logits` ([M, max_k] fp32, row m valid up to
+    n_visible[m]): the unordered top `num_selected` offsets as torch.topk's indices would give them."""
+    import vllm._C_stable_libtorch  # noqa: F401  (registers torch.ops._C.persistent_topk)
+
+    workspace = _proto_topk_workspace.get(logits.device)
+    if workspace is None:
+        workspace = _proto_topk_workspace[logits.device] = torch.empty(1 << 20, dtype=torch.uint8, device=logits.device)
+    top = torch.empty(logits.shape[0], num_selected, dtype=torch.int32, device=logits.device)
+    torch.ops._C.persistent_topk(logits, n_visible.to(torch.int32), top, workspace, num_selected, max_k)
+    # -1 fills the lists of queries that see fewer than `num_selected` tokens: point those slots past the context
+    # (offset max_k - 1 >= n_visible there), so they come out invalid like torch.topk's -inf picks
+    return torch.where(top >= 0, top, max_k - 1).long()
+
+
+def _proto_paged_request_ids(kwargs, num_tokens, num_requests, device):
+    """Request of every query token of a block-table batch: token j is request j, or with CB_MTP=spec (1 + k tokens
+    per request) the request whose query range holds it. Padding tokens get the last request (they see nothing)."""
+    if not _CB_MTP_SPEC:
+        return torch.arange(num_tokens, device=device, dtype=torch.int32).clamp(max=num_requests - 1)
+    tok = torch.arange(num_tokens, device=device)
+    req = torch.searchsorted(kwargs["cu_seq_lens_q"][1:].contiguous(), tok, right=True)
+    return req.clamp(max=num_requests - 1).to(torch.int32)
+
+
+def _proto_paged_top(q, weights, indexer, key_cache, kwargs, allocator, n_visible, max_k, num_selected, page):
+    """Top `num_selected` context offsets of every query of a block-table batch ([M, num_selected], offsets into its
+    request, unordered) from the paged indexer scores."""
+    from ...integrations._proto_mqa_kernels import paged_mqa_logits
+
+    table = kwargs["block_table"][allocator.index]
+    if table.dtype != torch.int32:
+        table = table.to(torch.int32)
+    req = _proto_paged_request_ids(kwargs, q.shape[0], table.shape[0], q.device)
+    w = weights * (indexer.n_heads**-0.5 * indexer.softmax_scale)
+    logits = paged_mqa_logits(q.contiguous(), w.contiguous(), key_cache, table, req, n_visible.to(torch.int32),
+                              max_k, page)
+    if _PROTO_PAGED_TOPK == "vllm" and num_selected in (512, 1024, 2048):
+        return _proto_vllm_topk(logits, n_visible, num_selected, max_k)
+    return logits.topk(num_selected, dim=-1, sorted=_PROTO_PAGED_TOPK == "sorted").indices
 
 
 def _proto_sparse_mla_attention(module, q_pass, q_rot, k_pass, k_rot, hidden_states, q_resid, position_embeddings,

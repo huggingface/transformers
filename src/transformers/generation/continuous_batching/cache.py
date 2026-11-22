@@ -16,6 +16,7 @@ import os
 import warnings
 import os
 from math import ceil, lcm
+from time import perf_counter
 from typing import Any
 
 import torch
@@ -226,7 +227,17 @@ class PagedAttentionCache:
         # The cache holds two trash sectors followed by the data sectors. The trash sectors are never allocated.
         non_trash_bytes = self.num_sectors * self.bytes_per_sector
         trash_bytes = 2 * self.bytes_per_sector
-        self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
+        self._vmm = None
+        self._pause_detail: dict = {}  # [scratch, gap4 pause] timings of the last release / restore
+        if os.environ.get("CB_CACHE_VMM", "0") == "1":
+            # [scratch, gap4 pause] a fixed virtual address range, mapped chunk by chunk (see `_proto_vmm.py`)
+            from ._proto_vmm import VmmBuffer
+
+            chunk_bytes = int(float(os.environ.get("CB_CACHE_VMM_CHUNK_MIB", 64)) * 2**20)
+            self._vmm = VmmBuffer(non_trash_bytes + trash_bytes, torch.device(self.device), chunk_bytes)
+            self.cache_tensor = self._vmm.make_tensor().zero_()
+        else:
+            self.cache_tensor = torch.zeros(non_trash_bytes + trash_bytes, dtype=torch.uint8, device=self.device)
         self._host_copy: torch.Tensor | None = None  # where the cache waits while it is released, see release_memory
         # Cache pool, which keeps track of the free sectors and their allocation
         self.pool = CachePool(self.num_sectors, len(self.cache_allocators))
@@ -503,10 +514,34 @@ class PagedAttentionCache:
             keep.append((start, self.cache_tensor.numel()))
         return keep
 
-    def release_memory(self) -> int:
+    def release_memory(self, nbytes: int | None = None) -> int:
         """Copies the cache tensor to host memory and frees its GPU memory, returning the number of bytes released.
         The tensor and every view of it stay valid objects and the requests keep their blocks, but nothing may read or
         write the cache until `restore_memory` copies it back."""
+        if self._vmm is not None:
+            # [scratch, gap4 pause] the chunks holding blocks in use stay mapped where they are, the others go back to
+            # the device. Prefix-only blocks are dropped first, as with CB_RELEASE_LIVE_ONLY
+            t0 = perf_counter()
+            self.evict_cached_blocks()
+            chunk = self._vmm.chunk
+            keep = set()
+            live = 0
+            for begin, end in self._live_byte_ranges():
+                keep.update(range(begin // chunk, (end - 1) // chunk + 1))
+                live += end - begin
+            t1 = perf_counter()
+            torch.accelerator.synchronize()  # nothing in flight may touch a chunk once it is unmapped
+            t2 = perf_counter()
+            self._released_address = self.cache_tensor.data_ptr()
+            free_chunks = [i for i in range(self._vmm.num_chunks) if i not in keep]
+            if nbytes is not None:
+                # [scratch, gap4 pause] only what the caller asks for, from the start of the cache (the pool hands out
+                # sectors from the end): unmapping and mapping cost ~1.5 ms per GiB, whatever the chunk size
+                free_chunks = free_chunks[: -(-nbytes // chunk)]
+            freed = self._vmm.unmap_chunks(free_chunks)
+            self._pause_detail = {"live_gib": round(live / 2**30, 3), "kept_chunks": len(keep), "chunks": self._vmm.num_chunks,
+                                  "ranges_s": round(t1 - t0, 4), "sync_s": round(t2 - t1, 4), "unmap_s": round(perf_counter() - t2, 4)}
+            return freed
         if _RELEASE_LIVE_ONLY:
             # WP train: only the blocks in use go to the host, so host memory follows the requests in flight instead
             # of the cache size (the whole cache, pinned, is 139 GiB per rank on GLM-5.3 at TP8). Prefix-only blocks
@@ -524,6 +559,7 @@ class PagedAttentionCache:
                 offset += end - begin
             self._live_ranges, self._host_live_bytes = ranges, nbytes
             torch.accelerator.synchronize()
+            self._pause_detail = {"live_gib": round(nbytes / 2**30, 3)}
             self._released_address = self.cache_tensor.data_ptr()
             self.cache_tensor.untyped_storage().resize_(0)
             return self.cache_tensor.numel()
@@ -541,18 +577,54 @@ class PagedAttentionCache:
         came back at the same address, which captured CUDA graphs rely on."""
         # Whatever used the memory in between can leave it reserved by the caching allocator in pieces, none of them
         # large enough for the cache: hand them back to the device first
-        if hasattr(device_module := torch.get_device_module(), "empty_cache"):
+        t0 = perf_counter()
+        # [scratch, gap4 pause] CB_RESTORE_KEEP_CACHED=1: no empty_cache here. The cache's old segment is still reserved
+        # by the caching allocator, so once the caller freed what it allocated the cache gets it back (same address, no
+        # cudaFree / cudaMalloc, ~6 ms/GiB at TP8 as the ranks' driver calls serialize); if something the caller kept
+        # sits in it, the allocator takes new memory, and frees its unused cached segments first if it runs out
+        keep_cached = os.environ.get("CB_RESTORE_KEEP_CACHED", "0") == "1"
+        if not keep_cached and hasattr(device_module := torch.get_device_module(), "empty_cache"):
             device_module.empty_cache()
+        t1 = perf_counter()
+        if self._vmm is not None:
+            # [scratch, gap4 pause] new physical memory at the same addresses, zeroed as the cache was created (the
+            # read trash must be zeros, and no bytes of the caller's use of the memory may sit in the cache). With
+            # CB_RESTORE_KEEP_CACHED=1 the caller's cached segments are only handed back if the device runs short
+            chunks = self._vmm.unmapped_chunks()
+            try:
+                self._vmm.map_chunks(chunks)
+            except RuntimeError:
+                if not keep_cached:
+                    raise
+                torch.get_device_module().empty_cache()
+                self._vmm.map_chunks(self._vmm.unmapped_chunks())
+            t2 = perf_counter()
+            runs = []  # [first, last + 1) runs of consecutive chunks, one memset each
+            for i in chunks:
+                if runs and runs[-1][1] == i:
+                    runs[-1][1] = i + 1
+                else:
+                    runs.append([i, i + 1])
+            chunk, numel = self._vmm.chunk, self.cache_tensor.numel()
+            for first, end in runs:
+                self.cache_tensor[first * chunk : min(end * chunk, numel)].zero_()
+            torch.accelerator.synchronize()
+            self._pause_detail.update({"empty_cache_s": round(t1 - t0, 4), "map_s": round(t2 - t1, 4),
+                                       "zero_s": round(perf_counter() - t2, 4), "mapped_chunks": len(chunks)})
+            return True
         self.cache_tensor.untyped_storage().resize_(self.cache_tensor.numel())
         if _RELEASE_LIVE_ONLY:
             # what was not kept comes back as zeros, as the cache was created: the read trash must be zeros, and no
             # bytes left by the caller's use of the memory (NaN patterns included) sit in rows a kernel may mask out
+            t2 = perf_counter()
             self.cache_tensor.zero_()
             offset = 0
             for begin, end in self._live_ranges:
                 self.cache_tensor[begin:end].copy_(self._host_copy[offset : offset + end - begin], non_blocking=True)
                 offset += end - begin
             torch.accelerator.synchronize()
+            self._pause_detail.update({"empty_cache_s": round(t1 - t0, 4), "alloc_s": round(t2 - t1, 4),
+                                       "zero_copy_s": round(perf_counter() - t2, 4)})
             return self.cache_tensor.data_ptr() == self._released_address
         self.cache_tensor.copy_(self._host_copy, non_blocking=True)
         # The generation loop reads the cache on its own stream

@@ -119,6 +119,8 @@ def trtllm_relayout_(weight, swap_halves, inverse, chunk_bytes=256 << 20):
 
     num_experts, m, k = weight.shape
     assert weight.dtype == FP8 and weight.is_contiguous() and k % 128 == 0, (weight.dtype, weight.shape)
+    if os.environ.get("PROTO_EXPERTS_RELAYOUT_FAST", "0") == "1":
+        return _trtllm_relayout_fast_(weight, swap_halves, inverse, chunk_bytes)
     rows = get_shuffle_matrix_a_row_indices(torch.empty(m, 1, dtype=torch.uint8), 64)  # rows[new_row] = old_row
     if swap_halves:
         rows = (rows + m // 2) % m
@@ -135,6 +137,44 @@ def trtllm_relayout_(weight, swap_halves, inverse, chunk_bytes=256 << 20):
         else:  # [n, rows, K / 128, 128] -> [n, K / 128, rows, 128]
             new = chunk.view(n, m, k // 128, 128).permute(0, 2, 1, 3)[:, :, rows]
         chunk.copy_(new.reshape(n, m, k))
+
+
+_RELAYOUT_ROWS = {}
+
+
+def _trtllm_relayout_fast_(weight, swap_halves, inverse, chunk_bytes):
+    """[scratch, gap4 pause] PROTO_EXPERTS_RELAYOUT_FAST=1: the same permutation as `trtllm_relayout_`, byte for
+    byte, in two passes per chunk: one `index_select` that gathers whole 128-byte K blocks (as 16 int64 words, not 128
+    single bytes) straight into the permuted order of a temporary, then one flat copy back. The rows index is built once
+    per shape (`trtllm_relayout_` builds it on the host and argsorts it at every call)."""
+    from flashinfer.utils import get_shuffle_matrix_a_row_indices
+
+    num_experts, m, k = weight.shape
+    key = (m, swap_halves, inverse, weight.device)
+    rows = _RELAYOUT_ROWS.get(key)
+    if rows is None:
+        rows = get_shuffle_matrix_a_row_indices(torch.empty(m, 1, dtype=torch.uint8), 64)  # rows[new_row] = old_row
+        if swap_halves:
+            rows = (rows + m // 2) % m
+        if inverse:
+            rows = torch.argsort(rows)  # old_row -> new_row
+        assert rows.min().item() == 0 and rows.max().item() == m - 1 and rows.unique().numel() == m
+        rows = _RELAYOUT_ROWS[key] = rows.to(device=weight.device, dtype=torch.int64)
+    kb = k // 128
+    words = weight.view(torch.int64)  # [E, m, k / 8]: one K block is 16 words
+    step = max(1, chunk_bytes // (m * k))
+    tmp = torch.empty(min(step, num_experts) * m * k // 8, dtype=torch.int64, device=weight.device)
+    for start in range(0, num_experts, step):
+        chunk = words[start : start + step]
+        n = chunk.shape[0]
+        out = tmp[: n * m * k // 8]
+        if inverse:  # [n, K / 128, rows, 16] -> [n, rows, K / 128, 16]: out[e, r, j] = chunk[e, j, rows[r]]
+            src = chunk.reshape(n, kb, m, 16).permute(0, 2, 1, 3)
+            torch.index_select(src, 1, rows, out=out.view(n, m, kb, 16))
+        else:  # [n, rows, K / 128, 16] -> [n, K / 128, rows, 16]: out[e, j, r] = chunk[e, rows[r], j]
+            src = chunk.reshape(n, m, kb, 16).permute(0, 2, 1, 3)
+            torch.index_select(src, 2, rows, out=out.view(n, kb, m, 16))
+        chunk.view(-1).copy_(out)
 
 
 def trtllm_scales_(s13, s2, gate_up_scale, down_scale):
