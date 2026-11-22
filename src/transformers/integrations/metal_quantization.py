@@ -222,6 +222,11 @@ class MetalFp4Experts(nn.Module):
         # every (token, route) pair is a gathered matvec straight from the banks: no dequantized copy, no host sync
         kernel = _decode_kernel()
         ids, weights = top_k_index, top_k_weights  # int64 / any float: read as they are in-kernel, no cast dispatches
+        if hidden_states.shape[0] >= 64 and hasattr(kernel, "fp4_experts_prefill"):  # prefill: grouped GEMMs
+            return kernel.fp4_experts_prefill(
+                hidden_states, *self._bank("gate_up_proj"), *self._bank("down_proj"), ids, weights, self.gate_cap,
+                self.up_cap,
+            )
         act = kernel.fp4_gate_up_act(
             hidden_states, *self._bank("gate_up_proj"), ids, weights, self.gate_cap, self.up_cap
         )

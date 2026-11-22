@@ -100,3 +100,8 @@ Verdict: ACCEPTED (+1.4%). The pin is now a2400044 and the casts are dropped.
 Findings: a dispatch under compile costs ~1.1 us (400 chained kernels = 498 us), so the 1218 dispatches/token
 (761 custom + 457 inductor) are only ~1.4 ms. The rest of the non-expert gap is the fixed latency of small dependent kernels
 (router selection ~5 us after its last-threadgroup sync, message gate's two grid syncs ~15 us). Experts run at ~80% of 290 GB/s.
+
+### E6 prefill: grouped fp4 expert GEMMs (T >= 64), hub rev e00b93b7
+Baseline prefill (4-bit dense, compiled decode, eager prefill): 173 tok/s @512, 111 @2048. Experts were 3.57 of 4.64 s @512 (matvec per pair).
+GEMM (pairs sorted by expert, bf16 exact tiles, fp32 MMA): 3.1-4.7x per layer; prefill 321 tok/s @512, 213 @2048 (+86% / +92%).
+Locals reference (M4 Pro): plain decode 37 tok/s, prose 36; 63-76 only with drafts on copy-heavy tool output.
