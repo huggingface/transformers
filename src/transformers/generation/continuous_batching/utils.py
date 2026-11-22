@@ -119,6 +119,13 @@ def pad_to_pow2(value: int, max_value: int, min_value: int = 0) -> int:
     return min(padded, max_value)
 
 
+def pad_to_token_bucket(value: int, max_value: int) -> int:
+    """Return the token bucket of (value), capped at (max_value): the next power of 2 up to 512, then the next multiple
+    of 512, so large steps waste at most 511 padded tokens."""
+    padded = pad_to_pow2(value, 512) if value <= 512 else 512 * ceil(value / 512)
+    return min(padded, max_value)
+
+
 def aligned_divide(x: int, divide_by: int, align_to: int) -> int:
     x = int(ceil(x / divide_by))
     if x % align_to:

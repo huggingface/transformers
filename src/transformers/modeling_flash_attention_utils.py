@@ -765,6 +765,7 @@ def _flash_attention_forward(
     block_table: torch.Tensor | None = None,
     k_cache: torch.Tensor | None = None,
     v_cache: torch.Tensor | None = None,
+    cache_seqlens: torch.Tensor | None = None,
     **kwargs,
 ):
     """
@@ -819,6 +820,18 @@ def _flash_attention_forward(
         deterministic=deterministic,
         **kwargs,
     )
+
+    # Varlen queries on the paged cache (FA3): each sequence appends its new K/V to its pages and attends over them. The
+    # padded tail of the queries belongs to no sequence (cu_seq_lens_q plateaus) and max_length_q is the padded size
+    if is_fa_with_paged_kwargs and cache_seqlens is not None:
+        q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
+        flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=cache_seqlens)
+        out = flash_kvcache_fn(
+            q, k_cache, v_cache, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k_new=cu_seq_lens_q, pack_gqa=True,
+            num_splits=1, **flash_kwargs,
+        )  # fmt: skip
+        out = out[0] if isinstance(out, tuple) else out
+        return out.view(batch_size, -1, *out.shape[-2:])
 
     # There is a block table: we use the paged flash function to compute attention and update the cache
     if is_fa_with_paged_kwargs:

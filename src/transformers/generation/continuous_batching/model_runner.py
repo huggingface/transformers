@@ -14,6 +14,7 @@
 import os
 import time
 from collections.abc import Callable
+from math import ceil
 
 import torch
 from torch import nn
@@ -42,6 +43,7 @@ from .utils import (
     memory_pool_context,
     pad_to_interval,
     pad_to_pow2,
+    pad_to_token_bucket,
     stream_context,
 )
 
@@ -189,6 +191,11 @@ class ModelRunner:
             max_kv_read = 0
             if num_q_tokens > max_batch_tokens:  # host-side bound check: the static inputs hold max_batch_tokens
                 raise RuntimeError(f"CB_MTP block table path: {num_q_tokens} query tokens > {max_batch_tokens}")
+        # With varlen block tables, any batch can go through the block table: we pad the number of query tokens to its
+        # token bucket and use no KV
+        elif self.cache.use_varlen_block_table:
+            num_q_tokens = pad_to_token_bucket(num_q_tokens, max_batch_tokens)
+            max_kv_read = 0
         # For decode fast path batches, we pad using powers of 2 and use no KV
         else:
             num_q_tokens = pad_to_pow2(num_q_tokens, self.cb_config.max_requests_per_batch)
@@ -753,10 +760,18 @@ class ModelRunner:
         total_duration = 0
         iterations = 2 if isinstance(self.inputs_and_outputs, ContinuousBatchingAsyncIOs) else 1
         for _ in range(iterations):
-            # Warm up the varlen path, w/ the largest possible sizes to get the biggest pool and avoid fragmentation
-            num_q_tokens = self.cache.max_batch_tokens
-            max_kv_read = max(0, infer_max_single_request_tokens(self.cache) - num_q_tokens)
-            total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=max_kv_read)
+            # With varlen block tables, steps with prompt tokens also go through the block table. Warm up its largest
+            # token bucket to get the biggest pool and avoid fragmentation: the other buckets, few and fixed, are
+            # captured on first use
+            if self.cache.use_varlen_block_table:
+                num_q_tokens = self.cache.max_batch_tokens
+                total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=0)
+            # Otherwise, warm up the varlen path, w/ the largest possible sizes to get the biggest pool and avoid
+            # fragmentation
+            else:
+                num_q_tokens = self.cache.max_batch_tokens
+                max_kv_read = max(0, infer_max_single_request_tokens(self.cache) - num_q_tokens)
+                total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=max_kv_read)
 
             # Warm up the decode fast path if it is available
             if self.cache.max_decode_fast_path_length > 0:
@@ -827,13 +842,19 @@ class ModelRunner:
         specific number of query and cache-resident tokens. `max_kv_read` is the number of tokens already in cache,
         matching the terminology used by `prepare_batch_tensors` and the scheduler."""
         # Make up fake request states according to the chosen path
-        use_decode_fast_path = max_kv_read is None
-        if use_decode_fast_path:
+        use_decode_fast_path = max_kv_read is None or self.cache.use_varlen_block_table
+        if max_kv_read is None:
             num_requests = num_q_tokens
             status = RequestStatus.DECODING
             num_q_tokens = _CB_MTP_QUERY if _CB_MTP_BT else 1  # gap3-mtp prototype: the last token and the draft
             max_kv_read = self.cb_config.page_size
             logger.debug(f"Warming up decode fast path for {num_requests = }.")
+        elif use_decode_fast_path:
+            # Prefills of num_q_tokens tokens in all through the block table, as few requests as it allows
+            num_requests = ceil(num_q_tokens / self.cache.max_decode_fast_path_length)
+            num_q_tokens = num_q_tokens // num_requests
+            status = RequestStatus.PREFILLING
+            logger.debug(f"Warming up varlen block table path for {num_requests = }, {num_q_tokens = }.")
         else:
             num_requests = 1
             status = RequestStatus.PREFILLING

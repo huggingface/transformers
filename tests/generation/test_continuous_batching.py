@@ -2765,7 +2765,7 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         fixed.append(torch.empty((num_sectors + 2) * bytes_per_sector, dtype=torch.uint8, device=device))
         # IO tensors below are allocated k times (once per IO instance)
         for _ in range(k):
-            fixed.append(torch.empty((7, M), dtype=torch.int32, device=device))  # bulk_input
+            fixed.append(torch.empty((8, M), dtype=torch.int32, device=device))  # bulk_input
             fixed.append(torch.empty((num_output_rows, M), dtype=torch.int32, device=device))  # output_ids
             for _ in range(num_attn_masks):  # attention_mask: [1, 1, M, N + M] per mask type
                 fixed.append(torch.empty((1, 1, M, N + M), dtype=dtype, device=device))

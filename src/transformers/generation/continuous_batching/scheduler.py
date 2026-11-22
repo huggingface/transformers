@@ -308,7 +308,7 @@ class Scheduler(ABC):
             # This block checks cache budget: decode batches have infinite budget, but varlen batches don't, because KV
             # cache is read through a fixed-sized index tensor. We keep track of the current budget in case the batch
             # goes from decode to varlen
-            is_decode_eligible = _decode_eligible(state, request_len, self.cache.max_decode_fast_path_length)
+            is_decode_eligible = self._fits_block_table(state, request_len)
             read_cache_needed = state.current_len()
             if self.cache.read_cache_limit is not None:
                 read_cache_needed = min(read_cache_needed, self.cache.read_cache_limit)
@@ -333,8 +333,8 @@ class Scheduler(ABC):
             self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)  # it may change after scheduling
 
-            # The decode fast path is only used if the request is a single token and its length is less than the max blocks per request
-            decode_fast_path &= _decode_eligible(state, request_len, self.cache.max_decode_fast_path_length)
+            # The block table path is only used if every request of the batch fits in it
+            decode_fast_path &= self._fits_block_table(state, request_len)
 
             # Update the token and cache budgets
             token_budget -= request_len
@@ -363,6 +363,13 @@ class Scheduler(ABC):
         num_q_tokens = original_token_budget - token_budget
         max_kv_read = original_cache_budget - cache_budget
         return scheduled_requests, one_allocation_failed, decode_fast_path, num_q_tokens, max_kv_read
+
+    def _fits_block_table(self, state: RequestState, request_len: int) -> bool:
+        """Whether the request can go through the block table: its whole sequence must fit in the block table and,
+        unless the kernel takes varlen queries, it must be eligible for the decode fast path."""
+        if self.cache.use_varlen_block_table:
+            return state.position_offset + request_len <= self.cache.max_decode_fast_path_length
+        return _decode_eligible(state, request_len, self.cache.max_decode_fast_path_length)
 
     def _get_waiting_candidates(self) -> list[RequestState]:
         """Returns waiting requests in priority order. Since CPU-offloaded requests are cheaper to restore than fresh
