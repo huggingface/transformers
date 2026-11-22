@@ -4571,7 +4571,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            data_dependent_inputs = model.base_model.get_data_dependent_inputs(**inputs)
+            get_data_dependent_inputs = getattr(model.base_model, "get_data_dependent_inputs", None)
+            data_dependent_inputs = (
+                get_data_dependent_inputs(**inputs) if get_data_dependent_inputs is not None else {}
+            )
             for modality in ("image", "video", "audio"):
                 encoder = getattr(model.base_model, f"get_{modality}_embeddings", None) or getattr(
                     model.base_model, f"get_{modality}_features", None

@@ -1187,10 +1187,6 @@ class Cosmos3EdgeForConditionalGeneration(Cosmos3EdgePreTrainedModel, Multimodal
 
         self.post_init()
 
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`Cosmos3EdgeModel.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
