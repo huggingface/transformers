@@ -418,9 +418,5 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, MultimodalMixin,
             image_outputs=outputs.image_outputs,
         )
 
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`Mistral3Model.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
-
 
 __all__ = ["Mistral3Model", "Mistral3PreTrainedModel", "Mistral3ForConditionalGeneration"]
