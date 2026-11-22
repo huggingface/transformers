@@ -1027,10 +1027,6 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             return False
         return self.prefill_max_cache_len <= self.prefill_length
 
-    # We never want to set it, but this is needed as the parent tries it - so just do nothing
-    @is_croppable.setter
-    def is_croppable(self, x): ...
-
 
 def create_reference_sliding_window_causal_mask(
     config: PreTrainedConfig,

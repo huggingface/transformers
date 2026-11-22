@@ -486,7 +486,12 @@ class DeferredStopCheck(StopCheck):
             self.cache.crop(-steps_to_undo)
             # We also need to deactivate past_recording, since we are giving the cache back to the user and it may lead to unneeded
             # memory spike on the next prefill
-            for layer in self.cache.layers:
+            cache_layers = (
+                self.cache.self_attention_cache.layers
+                if isinstance(self.cache, EncoderDecoderCache)
+                else self.cache.layers
+            )
+            for layer in cache_layers:
                 if hasattr(layer, "record_past"):
                     layer.record_past = False
         return steps_to_undo
@@ -3471,6 +3476,8 @@ class GenerationMixin(ContinuousMixin):
                 nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
             )
             topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
+            topk_log_probs, order = topk_log_probs.sort(dim=-1, descending=True)
+            topk_indices = topk_indices.gather(dim=-1, index=order)
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
 

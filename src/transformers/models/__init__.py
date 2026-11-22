@@ -248,6 +248,7 @@ if TYPE_CHECKING:
     from .informer import *
     from .inkling import *
     from .inkling2 import *
+    from .inkling2_loop import *
     from .instructblip import *
     from .instructblipvideo import *
     from .internlm3 import *
@@ -473,6 +474,7 @@ if TYPE_CHECKING:
     from .sam_hq import *
     from .sapiens2 import *
     from .sarvam_mla import *
+    from .sarvam_moe import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *

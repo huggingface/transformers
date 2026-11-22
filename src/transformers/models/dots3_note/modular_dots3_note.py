@@ -884,7 +884,7 @@ class Dots3NoteVisionMoE(MiMoV2FlashMoE):
         layer_config = config.per_layer_config[layer_idx]
         self.experts = Dots3NoteExperts(layer_config)
         self.gate = Dots3NoteVisionTopKRouter(layer_config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         super().forward(hidden_states)
@@ -922,7 +922,7 @@ class Dots3NoteVisionPreTrainedModel(Qwen2VLPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
     _no_split_modules = ["Dots3NoteVisionBlock"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
 
     def _init_weights(self, module: nn.Module):
         PreTrainedModel._init_weights(self, module)
