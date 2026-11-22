@@ -29,7 +29,6 @@ from torch import nn
 from transformers import (
     GPT2Config,
     GPT2LMHeadModel,
-    Qwen3MoeConfig,
     Qwen3MoeForCausalLM,
     Trainer,
     TrainingArguments,
@@ -59,6 +58,7 @@ from transformers.trainer_pt_utils import (
 )
 from transformers.trainer_utils import RemoveColumnsCollator, find_executable_batch_size
 
+from ..models.qwen3_moe.test_modeling_qwen3_moe import Qwen3MoeModelTester
 from .trainer_test_utils import (
     AlmostAccuracy,
     CustomDataloaderTrainer,
@@ -313,17 +313,7 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
 
     @require_accelerate
     def test_label_smoothing_preserves_router_aux_loss(self):
-        config = Qwen3MoeConfig(
-            vocab_size=32,
-            hidden_size=32,
-            moe_intermediate_size=16,
-            num_hidden_layers=1,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            num_experts=8,
-            num_experts_per_tok=2,
-            output_router_logits=True,
-        )
+        config = Qwen3MoeModelTester(self, output_router_logits=True).get_config()
         model = Qwen3MoeForCausalLM(config)
         input_ids = torch.randint(0, config.vocab_size, (2, 16))
         for epsilon, ga_steps in [(0.0, 1), (1e-8, 1), (0.1, 1), (0.1, 2)]:
