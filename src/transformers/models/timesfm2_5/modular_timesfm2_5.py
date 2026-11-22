@@ -131,8 +131,8 @@ class TimesFm2_5OutputForPrediction(TimesFmOutputForPrediction):
     mean_predictions (`torch.Tensor` of shape `(batch_size, horizon_length)`):
         Deterministic forecasts after denormalization.
     full_predictions (`torch.Tensor` of shape `(batch_size, horizon_length, num_quantiles)`):
-        Quantile forecasts including the median after denormalization, plus a leading point-forecast
-        channel at index 0, so `num_quantiles = len(config.quantiles) + 1`.
+        Denormalized forecasts with an extra leading channel at index 0, followed by the quantile forecasts
+        in `config.quantiles` order. `num_quantiles = len(config.quantiles) + 1`.
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
         Training loss combining MSE and quantile losses when targets are supplied.
     """
