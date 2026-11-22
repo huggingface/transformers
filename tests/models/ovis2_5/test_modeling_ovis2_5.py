@@ -148,7 +148,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             inputs["input_ids"][inputs["input_ids"] == config.image_end_token_id] = config.video_end_token_id
 
         with torch.no_grad():
-            expected_hidden_state = model(**inputs).last_hidden_state
+            raw_outputs = model(**inputs)
             feature_keys = (
                 ("pixel_values", "image_grid_thw")
                 if modality == "image"
@@ -161,10 +161,14 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             inputs["inputs_embeds"] = model.get_input_embeddings()(inputs.pop("input_ids"))
             embedded_outputs = model(**inputs)
 
-        torch.testing.assert_close(outputs.last_hidden_state, expected_hidden_state, rtol=0, atol=0)
-        torch.testing.assert_close(embedded_outputs.last_hidden_state, expected_hidden_state, rtol=0, atol=0)
-        self.assertNotIn("image_pooler_output", outputs)
-        self.assertNotIn("video_pooler_output", outputs)
+        torch.testing.assert_close(outputs.last_hidden_state, raw_outputs.last_hidden_state, rtol=0, atol=0)
+        torch.testing.assert_close(embedded_outputs.last_hidden_state, raw_outputs.last_hidden_state, rtol=0, atol=0)
+        modality_key = f"{modality}_outputs"
+        torch.testing.assert_close(
+            getattr(raw_outputs, modality_key).pooler_output, features.pooler_output, rtol=0, atol=0
+        )
+        self.assertIs(getattr(outputs, modality_key), inputs["mm_encoder_outputs"][modality])
+        self.assertIs(getattr(embedded_outputs, modality_key), inputs["mm_encoder_outputs"][modality])
 
     def test_video_forward(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -188,6 +192,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 
         self.assertEqual(outputs.logits.shape[:2], inputs["input_ids"].shape)
         self.assertTrue(torch.isfinite(outputs.logits).all())
+        self.assertEqual(len(outputs.video_outputs.pooler_output), self.model_tester.batch_size)
 
 
 @slow
