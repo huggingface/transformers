@@ -601,8 +601,3 @@ class Mask4DTestHard(MemoryCleanupMixin, unittest.TestCase):
             ]
         ]
         self.assertEqual(decoded, decoded_1b)
-
-
-def test_dummy_failure_for_report_check():
-    # [Temporary] CI-only: checks that both new-failures JSON files get uploaded
-    assert 1 == 2
