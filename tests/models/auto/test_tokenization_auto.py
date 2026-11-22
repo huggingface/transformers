@@ -129,6 +129,13 @@ class AutoTokenizerTest(unittest.TestCase):
         backend_tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
         backend_tokenizer.decoder = decoders.ByteLevel()
 
+        # the three ways `AutoTokenizer` comes to load `TokenizersBackend` in place of the Hub class: a byte-level
+        # `tokenizer.json`, a checkpoint in `MODEL_IDS_TO_TOKENIZERS_BACKEND`, and a model type with another tokenizer
+        configs = {
+            "byte-level": AutoConfig.for_model("llama"),
+            "model id": AutoConfig.for_model("llama", name_or_path="deepseek-ai/deepseek-coder-1.3b-instruct"),
+            "model type": MistralConfig(),
+        }
         # the padding side set in `tokenizer_config.json` still comes first
         for padding_side, expected_input_ids in ((None, [[0, 1], [1, 2]]), ("right", [[1, 0], [1, 2]])):
             tokenizer_config = {"tokenizer_class": "LlamaTokenizerFast", "pad_token": "<pad>"}
@@ -138,12 +145,14 @@ class AutoTokenizerTest(unittest.TestCase):
                 backend_tokenizer.save(os.path.join(tmp_dir, "tokenizer.json"))
                 with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
                     json.dump(tokenizer_config, f)
-                with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
-                    json.dump({"model_type": "llama"}, f)
-                tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+                tokenizers = {
+                    name: AutoTokenizer.from_pretrained(tmp_dir, config=config) for name, config in configs.items()
+                }
 
-            self.assertIs(type(tokenizer), TokenizersBackend)
-            self.assertEqual(tokenizer(["a", "ab"], padding=True)["input_ids"], expected_input_ids)
+            for name, tokenizer in tokenizers.items():
+                with self.subTest(name, padding_side=padding_side):
+                    self.assertIs(type(tokenizer), TokenizersBackend)
+                    self.assertEqual(tokenizer(["a", "ab"], padding=True)["input_ids"], expected_input_ids)
 
     @slow
     def test_tokenizer_from_pretrained(self):
