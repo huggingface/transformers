@@ -729,6 +729,12 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_init()
 
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the attention's `cu_seqlens` and
+        `max_seqlen`."""
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        return {"cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
+
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring

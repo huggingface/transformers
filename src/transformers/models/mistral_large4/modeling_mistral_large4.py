@@ -987,6 +987,7 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel, MultimodalMixin):
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
                 return_dict=True,
+                **kwargs,
             )
 
         if mm_encoder_outputs.get("image") is not None:
