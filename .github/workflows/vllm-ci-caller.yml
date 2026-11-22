@@ -817,6 +817,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] verified separately; trial run of the next job only
     runs-on:
       group: aws-m8i-8xl-cache
     container:
