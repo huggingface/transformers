@@ -57,7 +57,6 @@ jobs:
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@test-kernels-ci-efs
     with:
       job: run_models_gpu
-      subdirs: "['models/llama', 'models/mistral3', 'models/gemma4', 'models/qwen2']"
       slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
