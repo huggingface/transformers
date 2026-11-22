@@ -80,7 +80,7 @@ jobs:
       - name: Get vLLM commit date
         id: vllm-commit-date
         run: |
-          VLLM_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -Cvllm log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC')
+          VLLM_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -C vllm log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC' || true)
           echo "vllm_commit_date=$VLLM_COMMIT_DATE" >> $GITHUB_OUTPUT
           echo "vLLM commit date: $VLLM_COMMIT_DATE"
 
@@ -745,7 +745,7 @@ jobs:
           VLLM_COMMIT_DATE: ${{ needs.vllm.outputs.vllm_commit_date }}
         run: |
           # The transformers checkout of this job is at the run's commit, the one shown in the report.
-          TRANSFORMERS_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -Ctransformers log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC')
+          TRANSFORMERS_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -C transformers log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC' || true)
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
