@@ -1154,13 +1154,13 @@ jobs:
           #   into contiguous memory before being passed to out_proj.
           #
           # TODO: open upstream vLLM issues / PRs for both bugs.
-          # Patches commented out — not needed for the small subset (no Mamba models).
-          # Re-enable if/when restoring the large subset run.
+          # Patches enabled here: the large subset includes the Mamba-based models (commented out in `vllm-test-init`,
+          # whose small subset has none).
           # -------------------------------------------------------------------------
-          # sed -i 's/self\.conv1d\.weight\.size(2)/-1/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
-          # grep "conv1d.weight" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
-          # sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous())/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
-          # grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
+          sed -i 's/self\.conv1d\.weight\.size(2)/-1/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
+          grep "conv1d.weight" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
+          sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous())/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
+          grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
 
       - name: Pip freeze
         run: pip freeze
