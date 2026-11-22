@@ -111,8 +111,6 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.quantizers.OnnxRuntimeDynamicConfig
 
-[[autodoc]] exporters.quantizers.OnnxRuntimeCalibrationTableConfig
-
 [[autodoc]] exporters.quantizers.NNCFOpenVINOQuantizer
 
 [[autodoc]] exporters.quantizers.NNCFOnnxQuantizer
@@ -122,10 +120,6 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 [[autodoc]] exporters.quantizers.NNCFQuantizationConfig
 
 [[autodoc]] exporters.quantizers.NNCFWeightCompressionConfig
-
-[[autodoc]] exporters.quantizers.ModelOptOnnxQuantizer
-
-[[autodoc]] exporters.quantizers.ModelOptOnnxConfig
 
 ## Utilities
 

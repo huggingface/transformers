@@ -15,8 +15,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
 import tempfile
 import weakref
@@ -41,71 +39,6 @@ if is_onnxscript_available():
 # Past this much weight a graph opens from a file rather than serialized: protobuf caps a model at 2GB (torch's own
 # threshold, leaving room for the graph itself).
 _SERIALIZED_WEIGHTS_LIMIT = int(1.5 * 2**30)
-
-
-def _with_calibration_table(program: onnx_ir.Model, providers: list) -> list:
-    """`providers`, a TensorRT one turning int8 on without a table of its own reading the graph's
-    (`OnnxRuntimeCalibrationTableConfig`): written into its engine cache directory, named by its content, as the
-    flatbuffer TensorRT reads (each tensor's largest absolute value). On a graph with neither a table nor Q/DQ nodes,
-    int8 is turned off."""
-    from ..quantizers.quantizer_onnxruntime import TENSORRT_CALIBRATION_TABLE
-
-    table = program.metadata_props.get(TENSORRT_CALIBRATION_TABLE)
-    quantized = any(node.op_type == "QuantizeLinear" for node in program.graph)
-    resolved = []
-    for provider in providers:
-        name, options = provider if isinstance(provider, tuple) else (provider, {})
-        int8 = str(options.get("trt_int8_enable", False)).lower() in ("1", "true")
-        if name != "TensorrtExecutionProvider" or not int8 or "trt_int8_calibration_table_name" in options:
-            resolved.append(provider)
-        elif table is not None:
-            cache = options.get("trt_engine_cache_path") or tempfile.mkdtemp()
-            os.makedirs(cache, exist_ok=True)
-            file = f"calibration-{hashlib.sha256(table.encode()).hexdigest()[:16]}.flatbuffers"
-            _write_tensorrt_table(json.loads(table), os.path.join(cache, file))
-            resolved.append(
-                (
-                    name,
-                    {
-                        **options,
-                        "trt_engine_cache_path": cache,
-                        "trt_int8_calibration_table_name": file,
-                        "trt_int8_use_native_calibration_table": False,
-                    },
-                )
-            )
-        elif quantized:
-            resolved.append(provider)
-        else:
-            # Nothing to take int8 scales from (an export's embedding graph, left out by its quantizer): TensorRT
-            # would refuse to build it
-            resolved.append((name, {**options, "trt_int8_enable": False}))
-    return resolved
-
-
-def _write_tensorrt_table(table: dict[str, float], path: str) -> None:
-    """ONNX Runtime's TensorRT calibration flatbuffer (`onnxruntime.quantization.write_calibration_table`'s, under a
-    name of our own): a key-value table of each tensor's range."""
-    import flatbuffers
-    from onnxruntime.quantization.CalTableFlatBuffers import KeyValue, TrtTable
-
-    builder = flatbuffers.Builder(1024)
-    entries = []
-    for key in sorted(table):
-        flat_key, flat_value = builder.CreateString(key), builder.CreateString(str(table[key]))
-        KeyValue.KeyValueStart(builder)
-        KeyValue.KeyValueAddKey(builder, flat_key)
-        KeyValue.KeyValueAddValue(builder, flat_value)
-        entries.append(KeyValue.KeyValueEnd(builder))
-    TrtTable.TrtTableStartDictVector(builder, len(entries))
-    for entry in entries:
-        builder.PrependUOffsetTRelative(entry)
-    entries_vector = builder.EndVector()
-    TrtTable.TrtTableStart(builder)
-    TrtTable.TrtTableAddDict(builder, entries_vector)
-    builder.Finish(TrtTable.TrtTableEnd(builder))
-    with open(path, "wb") as file:
-        file.write(builder.Output())
 
 
 def _execution_providers(device=None, cuda_graph: bool = False) -> list:
@@ -183,7 +116,6 @@ class OnnxModelRunner(ModelRunner):
             providers = _execution_providers(device, cuda_graph=static)
         elif not static:
             providers = _without_cuda_graph(providers)
-        providers = _with_calibration_table(program, providers)
         if "path" in program.meta:
             return cls(metadata, _open_session(program.meta["path"], session_options, providers))
 
