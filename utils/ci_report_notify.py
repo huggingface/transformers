@@ -8,7 +8,11 @@ Hub layout (like the daily CI's `hf-internal-testing/transformers_daily_ci`):
 File names are those of the reports without their date suffix (e.g. `failing_tests.json`).
 
 Usage:
-  python utils/ci_report_notify.py --reports-dir <DIR> --hub-repo <ORG/NAME> --slack-channel <#channel> [--dry-run]
+  python utils/ci_report_notify.py --reports-dir <DIR> --hub-repo <ORG/NAME> --slack-channel <#channel> \
+      [--commit <NAME>=<SHA> ...] [--dry-run]
+
+The Slack message shows the transformers commit of the run, followed by one line per --commit
+(e.g. `--commit vllm=<SHA>` for the vLLM commit that was tested).
 
 Environment:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN   Hub token with write access to --hub-repo
@@ -82,7 +86,8 @@ def _button(text, url):
     return {"type": "button", "text": {"type": "plain_text", "text": text}, "url": url}
 
 
-def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url):
+def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url, commits=()):
+    """`commits`: (name, sha) pairs shown after the transformers commit, e.g. [("vllm", "<SHA>")]."""
     run = job_results["run"]
     jobs = job_results["jobs"]
 
@@ -108,6 +113,11 @@ def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failur
             "text": {"type": "mrkdwn", "text": status},
             "accessory": _button("Check Action results", run["url"]),
         },
+        _section(
+            "\n".join(
+                f"{name} commit: {sha or '(unknown)'}" for name, sha in [("transformers", run["head_sha"]), *commits]
+            )
+        ),
     ]
 
     if no_summary:
@@ -167,8 +177,21 @@ def main():
         "--hub-repo", required=True, help="Hub dataset repo, e.g. hf-internal-testing/transformers_vllm_ci"
     )
     parser.add_argument("--slack-channel", required=True, help="Slack channel, e.g. #transformers-ci-vllm")
+    parser.add_argument(
+        "--commit",
+        action="append",
+        default=[],
+        metavar="NAME=SHA",
+        help="Commit of another tested project to show in the Slack message, e.g. vllm=<SHA>. Can be repeated.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Don't upload or post; print the Slack payload")
     args = parser.parse_args()
+    commits = []
+    for value in args.commit:
+        name, sep, sha = value.partition("=")
+        if not sep or not name:
+            parser.error(f"--commit must be NAME=SHA, got {value!r}")
+        commits.append((name, sha))
 
     job_results = _load(args.reports_dir, "job_results")
     if job_results is None:
@@ -189,7 +212,7 @@ def main():
         f"https://huggingface.co/datasets/{args.hub_repo}/blob/{revision}/{folder}/new_failing_tests_with_trace.json"
     )
 
-    title, blocks = build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url)
+    title, blocks = build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url, commits)
     if args.dry_run:
         print(
             json.dumps({"channel": args.slack_channel, "text": title, "blocks": blocks}, indent=2, ensure_ascii=False)
