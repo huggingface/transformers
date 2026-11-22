@@ -456,6 +456,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             kwargs.setdefault("max_length", _padding["length"])
             kwargs.setdefault("pad_to_multiple_of", _padding["pad_to_multiple_of"])
 
+        # `AutoTokenizer` passes the padding side of the Hub `tokenizer_class` when it loads this class in its place.
+        # It comes last, like the class default it stands for.
+        hub_class_padding_side = kwargs.pop("_hub_class_padding_side", self.padding_side)
+        if hub_class_padding_side != self.padding_side:
+            kwargs.setdefault("padding_side", hub_class_padding_side)
+
         # Set backend to "tokenizers" if not already set
         if "backend" not in kwargs:
             kwargs["backend"] = "tokenizers"
