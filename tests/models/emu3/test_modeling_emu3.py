@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from huggingface_hub import hf_hub_download
 
-from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available
+from transformers import BitsAndBytesConfig, Emu3Config, Emu3TextConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -31,14 +31,12 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
-if is_vision_available():
-    pass
 
 if is_torch_available():
     import torch
@@ -51,40 +49,29 @@ if is_torch_available():
     )
 
 
-class Emu3Text2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-    ):
+class Emu3Text2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": False,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "intermediate_size": 37,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -123,6 +110,8 @@ class Emu3Text2TextModelTester:
 
 @require_torch
 class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Emu3Text2TextModelTester
+
     all_model_classes = (Emu3ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -139,63 +128,45 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("Doesn't work, tensors are not almost same")  # TODO raushan fixme
-    def test_custom_4d_attention_mask(self):
-        pass
 
+class Emu3Vision2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": False,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "intermediate_size": 37,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "image_token_id": 3,
+        "image_size": 15,
+        "codebook_size": 20,
+        "temporal_downsample_factor": 1,
+        "vq_channel_multiplier": [1, 2, 1],
+        "vq_num_res_blocks": 2,
+        "vq_img_token_start_id": 3,
+        "base_channels": 32,
+        "image_seq_length": 12,
+    }
 
-class Emu3Vision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        image_token_id=3,
-        image_size=15,
-        codebook_size=20,
-        temporal_downsample_factor=1,
-        base_channels=32,
-        vq_channel_multiplier=[1, 2, 1],
-        vq_num_res_blocks=2,
-        image_seq_length=12,
-        vq_img_token_start_id=3,
-    ):
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.image_token_id = image_token_id
-        self.image_size = image_size
-        self.codebook_size = codebook_size
-        self.temporal_downsample_factor = temporal_downsample_factor
-        self.vq_channel_multiplier = vq_channel_multiplier
-        self.vq_num_res_blocks = vq_num_res_blocks
-        self.vq_img_token_start_id = vq_img_token_start_id
-        self.base_channels = base_channels
-        self.seq_length = seq_length + image_seq_length
-        self.image_seq_length = image_seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
@@ -279,6 +250,8 @@ class Emu3Vision2TextModelTester:
 
 @require_torch
 class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Emu3Vision2TextModelTester
+
     all_model_classes = (
         (
             Emu3Model,
@@ -408,6 +381,10 @@ class Emu3IntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     "USER: 64*64Describe what do you see here? ASSISTANT: The image features a close-up view of a black dog with a shiny black coat, lying on a wooden surface. The dog's eyes are open and it is looking directly at the camera, giving an",
                     "USER: 64*64What can you say about the image? ASSISTANT: The image shows a desert landscape with a large sand dune and some desert vegetation. The sand dune is prominent in the background, while the desert vegetation is more prominent in the foreground.",
+                ],
+                ("xpu", 5): [
+                    "USER: 64*64Describe what do you see here? ASSISTANT: The image features a close-up view of a black dog with a shiny black coat, lying on a wooden surface. The dog's eyes are open and it is looking directly at the camera, giving an",
+                    "USER: 64*64What can you say about the image? ASSISTANT: The image shows a desert landscape with a large sand dune and some bushes in the foreground. The sand dune is tall and has a smooth, curved shape. The sky is clear and blue,",
                 ],
             }
         )  # fmt: skip

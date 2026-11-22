@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 # Zamba
 
 
-[Zamba](https://huggingface.co/papers/2405.16712) ([blog post](https://www.zyphra.com/post/zamba)) is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
+[Zamba](https://huggingface.co/papers/2405.16712) ([blog post](https://www.zyphra.com/post/zamba)) is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/Zyphra) repository for model weights.
 
 This model was contributed by [pglo](https://huggingface.co/pglo).
 
@@ -71,6 +71,10 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))
 ```
+
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## Model card
 

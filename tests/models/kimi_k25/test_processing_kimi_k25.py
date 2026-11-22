@@ -59,11 +59,6 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
         return image_processor_class(**image_processor_kwargs)
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
-
     @property
     def video_sampling_expectations(self):
         return [
@@ -76,7 +71,7 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modalities="image")
         image_input = self.prepare_images_inputs()
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 56)

@@ -20,6 +20,7 @@ import pytest
 import torch
 from datasets import load_dataset
 
+from tests.model_tester_config import ModelTesterConfigMixin
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from transformers import BitsAndBytesConfig, is_torch_available
@@ -41,20 +42,18 @@ if is_torch_available():
     import torch
 
 
-class ColQwen2ForRetrievalModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        pad_token_id=2,
-        projector_hidden_act="gelu",
-        seq_length=11,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        projection_dim=32,
-        is_training=False,
-        use_cache=False,
-        vlm_config={
+class ColQwen2ForRetrievalModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "ignore_index": -100,
+        "projector_hidden_act": "gelu",
+        "seq_length": 11,
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "projection_dim": 32,
+        "is_training": False,
+        "use_cache": False,
+        "vlm_config": {
             "_name_or_path": "Qwen/Qwen2-VL-2B-Instruct",
             "bos_token_id": 0,
             "eos_token_id": 1,
@@ -88,45 +87,39 @@ class ColQwen2ForRetrievalModelTester:
             "vision_token_id": 151654,
             "vocab_size": 99,
         },
-        embedding_dim=32,
-        initializer_range=0.02,
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.pad_token_id = pad_token_id
-
+        "embedding_dim": 32,
+        "initializer_range": 0.02,
         # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.image_token_index = 0
+        "image_token_index": 0,
+        "image_size": 56,
+        "num_image_tokens": 4,
+        "batch_size": 3,
+    }
 
-        self.image_token_id = vlm_config["image_token_id"]
-        self.video_token_id = vlm_config["video_token_id"]
-        self.pad_token_id = vlm_config["eos_token_id"]
-        self.vision_start_token_id = vlm_config["vision_start_token_id"]
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        vlm_config = values["vlm_config"]
+        values["image_token_id"] = vlm_config["image_token_id"]
+        values["video_token_id"] = vlm_config["video_token_id"]
+        values["pad_token_id"] = vlm_config["eos_token_id"]
+        values["vision_start_token_id"] = vlm_config["vision_start_token_id"]
 
-        self.image_size = 56
-        self.num_image_tokens = 4
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
 
-        self.seq_length = seq_length + self.num_image_tokens
-        self.projection_dim = projection_dim
+        values["num_hidden_layers"] = vlm_config["num_hidden_layers"]
+        values["vocab_size"] = vlm_config["vocab_size"]
+        values["hidden_size"] = vlm_config["hidden_size"]
+        values["num_attention_heads"] = vlm_config["num_attention_heads"]
+        values["num_channels"] = vlm_config["vision_config"]["in_chans"]
 
-        self.num_hidden_layers = vlm_config["num_hidden_layers"]
-        self.vocab_size = vlm_config["vocab_size"]
-        self.hidden_size = vlm_config["hidden_size"]
-        self.num_attention_heads = vlm_config["num_attention_heads"]
-        self.is_training = is_training
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
 
-        self.batch_size = 3
-        self.num_channels = vlm_config["vision_config"]["in_chans"]
-
-        self.encoder_seq_length = self.seq_length
-        self.use_cache = use_cache
-
-        self.vlm_config = vlm_config
-        self.embedding_dim = embedding_dim
-        self.initializer_range = initializer_range
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return ColQwen2Config(
@@ -202,52 +195,11 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = True
     test_missing_keys = False
+    model_tester_class = ColQwen2ForRetrievalModelTester
 
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColQwen2Config, has_text_modality=False)
-
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @slow
     @require_vision

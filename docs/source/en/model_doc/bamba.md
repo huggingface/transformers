@@ -118,6 +118,8 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
   )
   ```
 
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## BambaConfig
 
 [[autodoc]] BambaConfig

@@ -167,6 +167,8 @@ def sonicmoe_experts_forward(
 ) -> torch.Tensor:
     if not self.has_gate:
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
+    if self.has_post_expert_norm:
+        raise ValueError("The `sonicmoe` experts implementation does not support experts with a post-expert norm.")
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -180,7 +182,7 @@ def sonicmoe_experts_forward(
     # EP sentinel handling: leave `expert_ids` unclamped — the kernel's metadata stage drops
     # `expert_ids >= num_experts` from the per-expert histogram and masks them out of the
     # scatter indices, so sentinels never enter the grouped GEMM. Their routing weights are
-    # already zero (RouterParallel masks them at dispatch), so the per-token reduction
+    # already zero (the EP implementation masks them at dispatch), so the per-token reduction
     # contributes nothing for sentinel slots.
 
     w1 = self.gate_up_proj

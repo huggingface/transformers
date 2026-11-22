@@ -377,7 +377,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """
         # Accepted input types for `raw_audio`: "np.ndarray | list[float] | list[np.ndarray] | list[list[float]]"
         sampling_rate = sampling_rate if sampling_rate else self.sampling_rate
-        if isinstance(audio_url_or_urls, list) and not isinstance(audio_url_or_urls[0], float):
+        if isinstance(audio_url_or_urls, (list, tuple)) and (
+            not audio_url_or_urls or not isinstance(audio_url_or_urls[0], float)
+        ):
             return [self.fetch_audio(x, sampling_rate=sampling_rate) for x in audio_url_or_urls]
         elif isinstance(audio_url_or_urls, str):
             return load_audio(audio_url_or_urls, sampling_rate=sampling_rate)

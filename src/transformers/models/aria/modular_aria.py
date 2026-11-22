@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -21,7 +22,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_transforms import divide_to_patches
@@ -33,8 +34,12 @@ from ...image_utils import (
 )
 from ...integrations import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
+)
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
     TensorType,
@@ -43,23 +48,23 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
+from ...utils.output_capturing import OutputRecorder
+from ..auto import AutoConfig, AutoTokenizer
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import (
-    LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
-    LlavaModelOutputWithPast,
 )
+from ..olmoe.modeling_olmoe import OlmoeModel
 
 
 logger = logging.get_logger(__name__)
@@ -84,9 +89,17 @@ class AriaTextConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_rowwise",
+        "layers.*.mlp.experts.down_proj": "colwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     intermediate_size: int = 4096
@@ -105,10 +118,11 @@ class AriaConfig(PreTrainedConfig):
     """
 
     model_type = "aria"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="idefics3_vision"),
+        "text_config": AriaTextConfig,
     }
-    sub_configs = {"text_config": AriaTextConfig, "vision_config": AutoConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | AriaTextConfig | None = None
@@ -128,18 +142,6 @@ class AriaConfig(PreTrainedConfig):
             }
         self.projector_patch_to_query_dict = {int(k): int(v) for k, v in self.projector_patch_to_query_dict.items()}
         self.max_value_projector_patch_to_query_dict = max(self.projector_patch_to_query_dict.values())
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config["model_type"] = "idefics3_vision"
-            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["idefics3_vision"]()
-
-        if isinstance(self.text_config, dict) and "model_type" in self.text_config:
-            self.text_config = AriaTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = AriaTextConfig()
-
         super().__post_init__(**kwargs)
 
 
@@ -499,7 +501,7 @@ class AriaImageProcessor(TorchvisionBackend):
         return num_patches
 
 
-class AriaImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedAriaImagesKwargs(ImagesKwargs, total=False):
     """
     split_image (`bool`, *optional*, defaults to `False`):
         Whether to split large images into multiple crops. When enabled, images exceeding the maximum size are
@@ -520,25 +522,16 @@ class AriaImagesKwargs(ImagesKwargs, total=False):
     min_image_size: int
 
 
-class AriaProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: AriaImagesKwargs
-
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "max_image_size": 980,
-            "split_image": False,
-        },
-        "return_tensors": TensorType.PYTORCH,
-    }
+class DeprecatedAriaProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DeprecatedAriaImagesKwargs
 
 
 @auto_docstring
 class AriaProcessor(ProcessorMixin):
-    valid_processor_kwargs = AriaProcessorKwargs
+    images_kwargs = {
+        "max_image_size": 980,
+        "split_image": False,
+    }
 
     def __init__(
         self,
@@ -580,8 +573,7 @@ class AriaProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = AriaProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             max_size = images_kwargs.get("max_image_size", None) or self.image_processor.max_image_size
             num_image_patches = [
@@ -618,7 +610,8 @@ class AriaTextTopKRouter(nn.Module):
     """Top-k router for the Aria MoE block.
 
     Experts are selected on the raw logits and the routing weights are the softmax over the selected
-    logits only, which is equivalent to renormalizing a softmax taken over every expert.
+    logits only, which is equivalent to renormalizing a softmax taken over every expert. Returns
+    `(router_logits, top_k_weights, top_k_index)`.
     """
 
     def __init__(self, config: AriaTextConfig):
@@ -631,7 +624,7 @@ class AriaTextTopKRouter(nn.Module):
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
         top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = nn.functional.softmax(top_k_logits, dim=-1)  # (num_tokens, top_k)
-        return top_k_index, top_k_weights, router_logits
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation(is_transposed=True)
@@ -691,7 +684,7 @@ class AriaTextMoELayer(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         original_shape = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        top_k_index, top_k_weights, _ = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
         shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
         return expert_output + shared_expert_output
@@ -723,10 +716,8 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
 class AriaTextPreTrainedModel(PreTrainedModel):
     config: AriaTextConfig
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
     _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -734,9 +725,9 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AriaTextDecoderLayer,
         "attentions": AriaTextAttention,
+        "router_logits": OutputRecorder(AriaTextTopKRouter, index=0),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaExperts):
@@ -749,17 +740,18 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
     base_model_prefix = "model"
+    _no_split_modules = ["AriaTextDecoderLayer"]
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
+    input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
             init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
-class AriaTextModel(LlamaModel):
+class AriaTextModel(OlmoeModel):
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
@@ -769,7 +761,7 @@ class AriaTextModel(LlamaModel):
         self.post_init()
 
 
-class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
+class AriaTextForCausalLM(AriaTextPreTrainedModel, DeepseekV2ForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: AriaTextConfig):
@@ -781,17 +773,29 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
-    def forward(self, **super_kwargs):
-        super().forward(self, **super_kwargs)
+
+@auto_docstring
+@dataclass
+class AriaCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
-class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    pass
-
-
-class AriaModelOutputWithPast(LlavaModelOutputWithPast):
-    pass
+@auto_docstring
+@dataclass
+class AriaModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class AriaModel(LlavaModel):
@@ -817,14 +821,12 @@ class AriaModel(LlavaModel):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        pixel_mask: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        pixel_mask: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] = -1,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,
@@ -841,15 +843,16 @@ class AriaModel(LlavaModel):
 
         return image_outputs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -868,6 +871,7 @@ class AriaModel(LlavaModel):
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
                 return_dict=True,
+                **kwargs,
             )
 
         if mm_encoder_outputs.get("image") is not None:
@@ -881,19 +885,13 @@ class AriaModel(LlavaModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
-        return AriaModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return AriaModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring(
@@ -910,8 +908,8 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
-        pixel_mask: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        pixel_mask: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] = -1,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -924,15 +922,16 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_mask: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -1006,7 +1005,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             pixel_mask=pixel_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -1014,9 +1013,8 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1027,11 +1025,21 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         return AriaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            router_logits=outputs.router_logits,
         )
 
+
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "AriaImagesKwargs": (DeprecatedAriaImagesKwargs, "5.29.0"),
+        "AriaProcessorKwargs": (DeprecatedAriaProcessorKwargs, "5.29.0"),
+    },
+)
 
 __all__ = [
     "AriaConfig",

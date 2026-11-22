@@ -27,6 +27,7 @@ from transformers import FuyuConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -43,64 +44,47 @@ if is_torch_available():
     from transformers import FuyuForCausalLM, FuyuModel
 
 
-class FuyuModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        num_image_tokens=2,
-        image_size=30,
-        patch_size=15,
-        num_channels=3,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=10,
-        image_token_id=1,
-        scope=None,
-    ):
+class FuyuModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "num_image_tokens": 2,
+        "image_size": 30,
+        "patch_size": 15,
+        "num_channels": 3,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 10,
+        "image_token_id": 1,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_image_tokens = num_image_tokens
-        self.seq_length = seq_length + num_image_tokens
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.image_token_id = image_token_id
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
@@ -157,6 +141,8 @@ class FuyuModelTester:
 
 @require_torch
 class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = FuyuModelTester
+
     all_model_classes = (
         (
             FuyuModel,
@@ -195,6 +181,23 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             image_patches = curr_input_dict["image_patches"]
             with self.assertRaises(ValueError):
                 _ = model(input_ids=input_ids, image_patches=image_patches)
+
+    def test_nonlegacy_input_name(self):
+        """
+        Tests that we support legacy `image_patches` and the recommended `pixel_values` as input.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        nonlegacy_input_dict = input_dict.copy()
+        nonlegacy_input_dict["pixel_values"] = nonlegacy_input_dict["image_patches"]
+        del nonlegacy_input_dict["image_patches"]
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                out1 = model(**input_dict)
+                out2 = model(**nonlegacy_input_dict)
+
+            torch.testing.assert_close(out1[0], out2[0])
 
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate

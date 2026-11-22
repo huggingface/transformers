@@ -14,16 +14,18 @@
 
 import unittest
 from queue import Empty
-from threading import Thread
+from threading import Event, Thread
 from unittest.mock import patch
 
 import pytest
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers
 
 from transformers import (
     AsyncTextIteratorStreamer,
     AutoTokenizer,
     TextIteratorStreamer,
     TextStreamer,
+    TokenizersBackend,
     is_torch_available,
 )
 from transformers.testing_utils import CaptureStdout, require_torch, torch_device
@@ -35,7 +37,17 @@ from ..test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM
+    from transformers import AutoModelForCausalLM, LogitsProcessor, LogitsProcessorList
+
+    class BlockingLogitsProcessor(LogitsProcessor):
+        """Holds generation on the first decoding step until `release` is set."""
+
+        def __init__(self, release):
+            self.release = release
+
+        def __call__(self, input_ids, scores):
+            self.release.wait()
+            return scores
 
 
 @require_torch
@@ -56,6 +68,25 @@ class StreamerTester(unittest.TestCase):
         streamer_text = cs.out[:-1]
 
         self.assertEqual(streamer_text, greedy_text)
+
+    def test_text_streamer_streams_text_without_spaces(self):
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = "Supercalifragilistic<br>expialidocious done"
+        token_ids = tokenizer(text, add_special_tokens=False).input_ids
+        streamer = TextIteratorStreamer(tokenizer)
+
+        printed = ""
+        for i, token_id in enumerate(token_ids):
+            streamer.put(torch.tensor([token_id]))
+            printed += streamer.text_queue.get_nowait()
+            decoded = tokenizer.decode(token_ids[: i + 1])
+            if "<" not in decoded:
+                self.assertEqual(printed, decoded)  # letters stream without waiting for a space
+            elif " " not in decoded:
+                self.assertNotIn("<", printed)  # symbols wait for the next space
+        streamer.end()
+        printed += streamer.text_queue.get_nowait()
+        self.assertEqual(printed, text)
 
     def test_iterator_streamer_matches_non_streaming(self):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -122,16 +153,45 @@ class StreamerTester(unittest.TestCase):
         model.config.eos_token_id = -1
 
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        streamer = TextIteratorStreamer(tokenizer, timeout=0.001)
-        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
+        # `skip_prompt` keeps the prompt out of the queue, and generation is held until the timeout has fired, so
+        # the queue is guaranteed to be empty: otherwise the test races generation against the timeout
+        streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, timeout=0.001)
+        release = Event()
+        generation_kwargs = {
+            "input_ids": input_ids,
+            "max_new_tokens": 10,
+            "do_sample": False,
+            "streamer": streamer,
+            "logits_processor": LogitsProcessorList([BlockingLogitsProcessor(release)]),
+        }
         thread = Thread(target=model.generate, kwargs=generation_kwargs)
         thread.start()
 
         # The streamer will timeout after 0.001 seconds, so an exception will be raised
-        with self.assertRaises(Empty):
-            streamer_text = ""
-            for new_text in streamer:
-                streamer_text += new_text
+        try:
+            with self.assertRaises(Empty):
+                for _ in streamer:
+                    pass
+        finally:
+            release.set()
+            thread.join()
+
+    def test_iterator_streamer_preserves_spaces_after_newline(self):
+        backend = Tokenizer(models.BPE(vocab={"[UNK]": 0, "▁": 1, "\n": 2, "a": 3, "b": 4}, merges=[]))
+        backend.pre_tokenizer = pre_tokenizers.Metaspace(prepend_scheme="always", split=False)
+        backend.decoder = decoders.Metaspace(prepend_scheme="always")
+        tokenizer = TokenizersBackend(tokenizer_object=backend, eos_token="[EOS]")
+        text = "a\n    b\n\n a\n"
+        input_ids = tokenizer.encode(text, add_special_tokens=False)
+        self.assertEqual(tokenizer.decode(input_ids), text)
+
+        for skip_special_tokens in (False, True):
+            streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=skip_special_tokens)
+            for token_id in input_ids:
+                streamer.put(torch.tensor([token_id]))
+            streamer.end()
+
+            self.assertEqual("".join(streamer), text)
 
 
 @require_torch
@@ -162,13 +222,24 @@ class AsyncStreamerTester(unittest.IsolatedAsyncioTestCase):
         model.config.eos_token_id = -1
 
         input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
-        streamer = AsyncTextIteratorStreamer(tokenizer, timeout=0.001)
-        generation_kwargs = {"input_ids": input_ids, "max_new_tokens": 10, "do_sample": False, "streamer": streamer}
+        # Same as the sync test: no prompt in the queue and generation held, so the timeout must fire
+        streamer = AsyncTextIteratorStreamer(tokenizer, skip_prompt=True, timeout=0.001)
+        release = Event()
+        generation_kwargs = {
+            "input_ids": input_ids,
+            "max_new_tokens": 10,
+            "do_sample": False,
+            "streamer": streamer,
+            "logits_processor": LogitsProcessorList([BlockingLogitsProcessor(release)]),
+        }
         thread = Thread(target=model.generate, kwargs=generation_kwargs)
         thread.start()
 
         # The streamer will timeout after 0.001 seconds, so TimeoutError will be raised
-        with self.assertRaises(TimeoutError):
-            streamer_text = ""
-            async for new_text in streamer:
-                streamer_text += new_text
+        try:
+            with self.assertRaises(TimeoutError):
+                async for _ in streamer:
+                    pass
+        finally:
+            release.set()
+            thread.join()

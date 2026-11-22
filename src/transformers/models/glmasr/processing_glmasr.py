@@ -26,6 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -36,27 +37,18 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class GlmAsrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "return_attention_mask": True,
-            "padding": "max_length",
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-            "padding_side": "left",
-        },
-    }
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class GlmAsrProcessor(ProcessorMixin):
-    valid_processor_kwargs = GlmAsrProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "return_attention_mask": True,
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -88,7 +80,7 @@ class GlmAsrProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[GlmAsrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -104,6 +96,12 @@ class GlmAsrProcessor(ProcessorMixin):
 
         if output_labels:
             kwargs["return_mm_token_type_ids"] = True
+
+        # For BC, was previously set in GlmAsrProcessorKwargs._defaults
+        text_kwargs = kwargs.get("text_kwargs", {})
+        if not any("padding_side" in group for group in (kwargs, text_kwargs, kwargs.get("common_kwargs", {}))):
+            kwargs["text_kwargs"] = text_kwargs | {"padding_side": "left"}
+
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
@@ -192,8 +190,9 @@ class GlmAsrProcessor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
-        **kwargs: Unpack[GlmAsrProcessorKwargs],
-    ) -> BatchFeature:
+        tokenize: bool = True,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
 
@@ -204,12 +203,18 @@ class GlmAsrProcessor(ProcessorMixin):
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
+            [`BatchFeature`] or `list[str]`: One prompt per audio when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
 
         """
 
@@ -255,7 +260,7 @@ class GlmAsrProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
@@ -302,5 +307,7 @@ class GlmAsrProcessor(ProcessorMixin):
 
         return stripped
 
+
+__getattr__ = deprecate_attr(__name__, rename={"GlmAsrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["GlmAsrProcessor"]

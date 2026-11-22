@@ -21,7 +21,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -51,7 +51,18 @@ class PPOCRV6SmallDetConfig(PreTrainedConfig):
     """
 
     model_type = "pp_ocrv6_small_det"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="pp_lcnet_v3",
+            init_kwargs={
+                "scale": 0.75,
+                "out_features": ["stage2", "stage3", "stage4", "stage5"],
+                "out_indices": [2, 3, 4, 5],
+                "divisor": 16,
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     reduction: int = 4

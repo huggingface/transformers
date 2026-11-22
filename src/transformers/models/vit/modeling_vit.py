@@ -320,7 +320,6 @@ class ViTPreTrainedModel(PreTrainedModel):
     }
     _input_embed_layer = "patch_embeddings"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -391,13 +390,6 @@ class ViTModel(ViTPreTrainedModel):
 @auto_docstring(
     custom_intro="""
     ViT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
     """
 )
 class ViTForMaskedImageModeling(ViTPreTrainedModel):

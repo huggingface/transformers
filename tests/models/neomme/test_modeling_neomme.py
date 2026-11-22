@@ -23,6 +23,7 @@ from transformers import NeoMMEConfig, is_torch_available
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.testing_utils import require_torch, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
@@ -98,61 +99,46 @@ def _per_layer_window_config(layer_types: list[str], alternate_sliding_window: i
     return per_layer_config
 
 
-class NeoMMEModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=13,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        embedding_rank=16,
-        hidden_size=32,
-        intermediate_size=48,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
+class NeoMMEModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 13,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "embedding_rank": 16,
+        "hidden_size": 32,
+        "intermediate_size": 48,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
         # 16 ensures the default 0.25 rotary factor yields four dimensions, enough for both M-RoPE axes.
-        head_dim=16,
-        layer_types=None,
-        sliding_window=3,
-        alternate_sliding_window=6,
-        patch_size=4,
-        embedding_dim=8,
-        max_position_embeddings=128,
-        initializer_range=0.02,
-        pad_token_id=0,
-        document_token_id=5,
-        image_token_id=6,
-        row_token_id=8,
-    ):
+        "head_dim": 16,
+        "layer_types": None,
+        "sliding_window": 3,
+        "alternate_sliding_window": 6,
+        "patch_size": 4,
+        "embedding_dim": 8,
+        "max_position_embeddings": 128,
+        "initializer_range": 0.02,
+        "pad_token_id": 0,
+        "document_token_id": 5,
+        "image_token_id": 6,
+        "row_token_id": 8,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["layer_types"] = values["layer_types"] or _layer_types(values["num_hidden_layers"], 2)
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.embedding_rank = embedding_rank
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.layer_types = layer_types or _layer_types(num_hidden_layers, 2)
-        self.sliding_window = sliding_window
-        self.alternate_sliding_window = alternate_sliding_window
-        self.patch_size = patch_size
-        self.embedding_dim = embedding_dim
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.pad_token_id = pad_token_id
-        self.document_token_id = document_token_id
-        self.image_token_id = image_token_id
-        self.row_token_id = row_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self, **kwargs):
         config_kwargs = {
@@ -226,6 +212,8 @@ class NeoMMEModelTester:
 
 @require_torch
 class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = NeoMMEModelTester
+
     all_model_classes = (NeoMMEModel, NeoMMEForMaskedLM) if is_torch_available() else ()
     # The common batch is text-only, so the vision stem legitimately receives no gradient. The dedicated
     # `test_patch_stem_gradients` covers it instead.
@@ -649,14 +637,23 @@ class NeoMMEModelTest(ModelTesterMixin, unittest.TestCase):
         torch.testing.assert_close(default, stacked)
 
 
+class NeoMMEForRetrievalModelTester(NeoMMEModelTester):
+    defaults = {**NeoMMEModelTester.defaults, **NeoMMEModelTester.small_config_overrides}
+    small_config_overrides = {
+        "is_training": False,
+    }
+
+
 @require_torch
 class NeoMMEForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     """`NeoMMEForRetrieval` produces embeddings rather than a loss, so it is tested on its own."""
 
+    model_tester_class = NeoMMEForRetrievalModelTester
+
     all_model_classes = (NeoMMEForRetrieval,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = NeoMMEModelTester(self, is_training=False)
+        self.model_tester = NeoMMEForRetrievalModelTester(self)
         _patch_residual_init(self)
 
     @unittest.skip(reason="NeoMME value embeddings require token IDs")
