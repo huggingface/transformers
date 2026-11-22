@@ -99,6 +99,15 @@ def main(path):
     from transformers import AutoModelForImageTextToText, AutoTokenizer, CompileConfig, MetalConfig
 
     inductor_mps_fixes.apply()
+    if os.environ.get("HC_KERNEL_REV"):  # pin another metal-moe-decode revision (A/B controls)
+        from transformers.integrations import hub_kernels
+
+        hub_kernels._METAL_KERNELS["metal-moe-decode"] = ("ArthurZ/metal-moe-decode", os.environ["HC_KERNEL_REV"])
+    if os.environ.get("HC_EXPERT_CASTS") == "1":  # E4 control: the int32 / float32 casts before the expert kernels
+        from transformers.integrations import metal_quantization
+
+        forward = metal_quantization.MetalFp4Experts.forward
+        metal_quantization.MetalFp4Experts.forward = lambda self, h, i, w: forward(self, h, i.int(), w.float())
     if os.environ.get("HC_NO_KV_GROUP") == "1":  # control for E3: only the query-side sibling group
         from transformers.integrations import metal_quantization
 

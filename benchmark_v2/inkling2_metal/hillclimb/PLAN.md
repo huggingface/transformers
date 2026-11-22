@@ -68,3 +68,27 @@ Next: E1 rerun on a stable machine (grouping is the lever for the latency-bound 
 
 ### E3 k/v sibling group (members with another input run their own rows)
 - q-group 57.57 | qkv-group 57.46 | q-group 57.53: REJECTED (inside noise). k/v group reverted; the own-rows slice for members called on another input is kept (correct, free).
+
+## STATUS (2026-11-22)
+| metric | PR #51050 baseline | now | ceiling | harness |
+|---|---:|---:|---:|---|
+| c1 decode, exact (bf16 dense, native fp4 experts) | ~15 (eager, 46 GiB) | 38.6 (opt-in grouping) / 38.1 | 52 | hc_bench, median of 6 x 128 tok, AC, cooled |
+| c1 decode, opt-in 4-bit dense | n/a | 57.5 | 95 | same |
+| memory | 46.2 GiB | 9.9 GiB | | |
+
+What limits further gains (ablation of the 17.74 ms 4-bit step): experts 9.46 ms (floor ~6.3), 4-bit dense matvecs ~6.8 ms
+(floor ~3.2; thin shapes are latency-bound at ~10 us per dispatch), message gate 1.46, attention 0.93, router 0.79,
+attention residual 0.67, short conv 0.32. Speculation (DSpark) loses on this target: acceptance 2.4 incl. bonus and an
+8-token verify reads the union of experts. 150 tok/s is above every ceiling of this checkpoint on this machine.
+
+Remaining levers, ranked (estimated gain / cost):
+1. experts per-evaluation fixed cost + decomposition (~1-3 ms / kernel work; agent running)
+2. o_proj + gate epilogue fused into one matvec; k/v projections fused with their conv tails (~0.5-1 ms / kernel work)
+3. message gate down-projection fused into the attention residual that produces its input (~0.4 ms / signature change)
+4. exact path: grouping productized (save-safe fusion) (+1.6% measured)
+Thermal: back-to-back runs throttle after ~2 runs; the harness voids runs whose samples decay >5% and the queue cools 180 s.
+
+### E4 cast-free expert kernels (int64 ids / bf16 weights read in-kernel)
+casts 57.92 → nocasts 58.25 → casts 58.43 tok/s (4-bit dense, 6 samples each, none void).
+Verdict: REJECTED: the candidate does not beat the second control. The ~0.3 ms/token the microbench predicted is inside run noise (~1%).
+Reverted to pin 8d84318 and restored the casts. Hub rev 51ab38ad stays published (unused).
