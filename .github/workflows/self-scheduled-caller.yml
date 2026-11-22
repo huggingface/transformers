@@ -57,7 +57,6 @@ jobs:
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@check_hf_cache_usage
     with:
       job: run_models_gpu
-      subdirs: "['models/bert', 'models/gpt2']"
       slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
@@ -67,6 +66,7 @@ jobs:
     secrets: inherit
 
   torch-pipeline:
+    if: false
     name: Torch pipeline CI
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@check_hf_cache_usage
     with:
@@ -93,6 +93,7 @@ jobs:
     secrets: inherit
 
   deepspeed-ci:
+    if: false
     name: DeepSpeed CI
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@check_hf_cache_usage
     with:
@@ -106,6 +107,7 @@ jobs:
     secrets: inherit
 
   quantization-ci:
+    if: false
     name: Quantization CI
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@check_hf_cache_usage
     with:
@@ -119,6 +121,7 @@ jobs:
     secrets: inherit
 
   kernels-ci:
+    if: false
     name: Kernels CI
     uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@check_hf_cache_usage
     with:
