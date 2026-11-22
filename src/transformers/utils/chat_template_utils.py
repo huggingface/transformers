@@ -686,6 +686,44 @@ def _alias_reasoning_fields(chat: ChatType) -> ChatType:
     return aliased_chat
 
 
+def _message_objects_to_dicts(value: Any) -> Any:
+    # Unlike `_plain_template_data`, this leaves media (images, arrays, tensors) untouched, because processors still
+    # need to load them from the content blocks after this runs.
+    if isinstance(value, Mapping):
+        return {key: _message_objects_to_dicts(item) for key, item in value.items()}
+    elif isinstance(value, list):
+        return [_message_objects_to_dicts(item) for item in value]
+    elif isinstance(value, tuple):
+        return tuple(_message_objects_to_dicts(item) for item in value)
+    elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+        # We don't use `dataclasses.asdict()` here because it deep-copies everything, including any media in the fields
+        return {
+            field.name: _message_objects_to_dicts(getattr(value, field.name)) for field in dataclasses.fields(value)
+        }
+    elif callable(getattr(value, "model_dump", None)):
+        # Pydantic models, like the messages returned by the OpenAI SDK
+        return _message_objects_to_dicts(value.model_dump())
+    else:
+        # Strings, numbers and media are returned as-is
+        return value
+
+
+def _normalize_chat_messages(conversation: Any) -> list[dict]:
+    # First, convert message objects (and any objects nested inside them, like tool calls or content blocks) to dicts.
+    # We do this before anything else touches the chat, because control token sanitization and media loading
+    # only know how to walk dicts and lists.
+    messages = _message_objects_to_dicts(getattr(conversation, "messages", conversation))
+    normalized_messages = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
+        # Next, drop the keys whose value is None. Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`,
+        # but many chat templates crash or produce wrong output (e.g. rendering literal "None") on them, while they
+        # handle a missing key.
+        normalized_messages.append({key: value for key, value in message.items() if value is not None})
+    return normalized_messages
+
+
 def _plain_template_data(value: Any) -> Any:
     # Chat templates come from the Hub, but callers often put rich objects in their inputs, like the decoded images,
     # arrays and tensors in multimodal content blocks. Those objects have methods that the sandbox doesn't know are

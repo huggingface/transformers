@@ -38,6 +38,7 @@ from transformers.testing_utils import (
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
@@ -72,24 +73,26 @@ class Gemma4UnifiedTextModelTester(CausalLMModelTester):
         base_model_class = Gemma4UnifiedTextModel
         causal_lm_class = Gemma4UnifiedForCausalLM
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.num_hidden_layers = 4  # override to correctly test sharing cache pattern
-        self.num_kv_shared_layers = 2  # important to override
-        self.layer_types = [
-            "sliding_attention",
-            "full_attention",
-            "sliding_attention",
-            "full_attention",
-        ]  # similarly we want to test sharing on both types
-        self.per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
-            if layer_type == "full_attention"
-        }  # gemma4 use a different head_dim for full and sliding layers
-
+    small_config_overrides = {
+        # override to correctly test sharing cache pattern
+        "num_hidden_layers": 4,
+        # important to override
+        "num_kv_shared_layers": 2,
+        # similarly we want to test sharing on both types
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
         # Test if bidirectional image mask path works
-        self.use_bidirectional_attention = "vision"
+        "use_bidirectional_attention": "vision",
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for (layer_idx, layer_type) in enumerate(values["layer_types"])
+            if layer_type == "full_attention"
+        }
+        return values
 
 
 @require_torch
@@ -136,48 +139,42 @@ class Gemma4UnifiedTextModelTest(CausalLMModelTest, unittest.TestCase):
             super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol, rtol)
 
 
-class Gemma4UnifiedAudio2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_id=4,
-        boi_token_id=5,
-        eoi_token_id=6,
-        audio_token_id=7,
-        boa_token_id=8,
-        eoa_token_index=9,
-        video_token_id=10,
-        seq_length=50,
-        audio_seq_length=50,
-        audio_num_channels=32,
-        is_training=True,
-        audio_config={"audio_embed_dim": 32},
-    ):
+class Gemma4UnifiedAudio2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "image_token_id": 4,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "audio_token_id": 7,
+        "boa_token_id": 8,
+        "eoa_token_index": 9,
+        "video_token_id": 10,
+        "seq_length": 50,
+        "audio_seq_length": 50,
+        "audio_num_channels": 32,
+        "is_training": True,
+        "audio_config": {"audio_embed_dim": 32},
+        "batch_size": 3,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.image_token_id = image_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.audio_token_id = audio_token_id
-        self.boa_token_id = boa_token_id
-        self.eoa_token_index = eoa_token_index
-        self.video_token_id = video_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         self.llm_tester = Gemma4UnifiedTextModelTester(self.parent)
         self.llm_tester.use_bidirectional_attention = None
         self.text_config = self.llm_tester.get_config()
-        self.audio_config = audio_config
-        self.seq_length = seq_length
-        self.audio_seq_length = audio_seq_length
-        self.audio_num_channels = audio_num_channels
-        self.pad_token_id = self.text_config.pad_token_id
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.encoder_seq_length = seq_length
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # mirror the text model tester's sizes
+        text_values = Gemma4UnifiedTextModelTester.get_small_config_defaults()
+        for key in ("pad_token_id", "num_hidden_layers", "vocab_size", "hidden_size", "num_attention_heads"):
+            values[key] = text_values[key]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
 
     def get_config(self):
         return Gemma4UnifiedConfig(
@@ -225,6 +222,8 @@ class Gemma4UnifiedAudio2TextModelTester:
 
 @require_torch
 class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = Gemma4UnifiedAudio2TextModelTester
+
     all_model_classes = (Gemma4UnifiedModel, Gemma4UnifiedForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma4UnifiedForConditionalGeneration,) if is_torch_available() else ()
     test_resize_embeddings = False
@@ -271,19 +270,20 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
         pass
 
 
-class Gemma4UnifiedVision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_id=4,
-        video_token_id=7,
-        audio_token_id=8,
-        boi_token_id=5,
-        eoi_token_id=6,
-        seq_length=25,
-        is_training=True,
-        vision_config={
+class Gemma4UnifiedVision2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "mm_tokens_per_image": 2,
+        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
+        "image_token_id": 4,
+        "video_token_id": 7,
+        "audio_token_id": 8,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "seq_length": 25,
+        "is_training": True,
+        "vision_config": {
             "use_labels": True,
             "mm_embed_dim": 64,
             "output_proj_dims": 64,
@@ -294,31 +294,27 @@ class Gemma4UnifiedVision2TextModelTester:
             "initializer_range": 0.02,
             "pooling_kernel_size": 2,
         },
-    ):
+        "batch_size": 3,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.audio_token_id = audio_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         self.llm_tester = Gemma4UnifiedTextModelTester(self.parent)
         self.text_config = self.llm_tester.get_config()
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # mirror the text model tester's sizes
+        text_values = Gemma4UnifiedTextModelTester.get_small_config_defaults()
+        for key in ("pad_token_id", "num_hidden_layers", "vocab_size", "hidden_size", "num_attention_heads"):
+            values[key] = text_values[key]
+        values["encoder_seq_length"] = values["seq_length"]
+        values["num_channels"] = values["vision_config"]["num_channels"]
+        values["image_size"] = values["vision_config"]["image_size"]
+        return values
 
     def get_config(self):
         return Gemma4UnifiedConfig(
@@ -381,6 +377,8 @@ class Gemma4UnifiedVision2TextModelTester:
 
 @require_torch
 class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = Gemma4UnifiedVision2TextModelTester
+
     all_model_classes = (Gemma4UnifiedModel, Gemma4UnifiedForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Gemma4UnifiedForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["mm_token_type_ids"]

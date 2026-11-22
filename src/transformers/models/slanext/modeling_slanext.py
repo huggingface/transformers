@@ -556,8 +556,8 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
 
         self.structure_attention_cell = SLANeXtAttentionGRUCell(
             config.post_conv_out_channels, config.hidden_size, config.out_channels
-        )
-        self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
+        ).to(dtype=torch.float32)
+        self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels).to(dtype=torch.float32)
 
         self.post_init()
 
