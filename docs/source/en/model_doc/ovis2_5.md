@@ -36,7 +36,8 @@ original repositories still use legacy processor metadata. Weight names are mapp
 ## Usage
 
 > [!WARNING]
-> Ovis2.5 accepts exactly one video per request and does not support mixing images and video in the same request.
+> If you pass `inputs_embeds` with visual inputs, also pass the `mm_token_type_ids` returned by the processor
+> when you set `return_mm_token_type_ids=True`.
 >
 > The two-stage `thinking_budget` behavior implemented by the original custom remote code is not part of the native
 > Transformers generation API.
@@ -91,6 +92,9 @@ they should appear in the prompt.
 
 The processor uniformly samples eight frames by default. Pass the video URL directly in the conversation and let the
 processor load and sample it using the preprocessing settings saved with the checkpoint.
+
+For batched generation, set `processor.tokenizer.padding_side = "left"` and pass a list of conversations to
+[`Ovis2_5Processor.apply_chat_template`] with `processor_kwargs={"padding": True}`.
 
 ```python
 messages = [

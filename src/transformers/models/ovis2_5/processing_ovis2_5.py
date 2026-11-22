@@ -13,10 +13,8 @@
 # limitations under the License.
 """Processor class for Ovis2.5."""
 
-from ...image_utils import make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessorMixin
 from ...utils import auto_docstring
-from ...video_utils import make_batched_videos
 
 
 @auto_docstring
@@ -44,19 +42,6 @@ class Ovis2_5Processor(ProcessorMixin):
         self.video_end_token_id = tokenizer.convert_tokens_to_ids(self.video_end_token)
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
-
-    def validate_inputs(self, images=None, text=None, videos=None, **kwargs):
-        super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
-
-        image_count = len(make_flat_list_of_images(images)) if images is not None else 0
-        video_count = len(make_batched_videos(videos)) if videos is not None else 0
-
-        if image_count and video_count:
-            raise ValueError(
-                "Ovis2.5 supports only one visual modality at a time; provide images or one video, not both."
-            )
-        if video_count > 1:
-            raise ValueError(f"Ovis2.5 supports exactly one video at a time, but received {video_count}.")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2

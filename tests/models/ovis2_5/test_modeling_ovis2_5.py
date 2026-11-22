@@ -147,28 +147,61 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
             inputs["input_ids"][inputs["input_ids"] == config.image_start_token_id] = config.video_start_token_id
             inputs["input_ids"][inputs["input_ids"] == config.image_end_token_id] = config.video_end_token_id
 
+        modality_key = f"{modality}_outputs"
         with torch.no_grad():
             raw_outputs = model(**inputs)
+            pooler_output = getattr(raw_outputs, modality_key).pooler_output
             feature_keys = (
                 ("pixel_values", "image_grid_thw")
                 if modality == "image"
                 else ("pixel_values_videos", "video_grid_thw")
             )
-            feature_inputs = {key: inputs.pop(key) for key in feature_keys}
-            features = getattr(model, f"get_{modality}_features")(**feature_inputs, return_dict=True)
-            inputs["mm_encoder_outputs"] = {modality: BaseModelOutputWithPooling(pooler_output=features.pooler_output)}
+            for key in feature_keys:
+                inputs.pop(key)
+            inputs["mm_encoder_outputs"] = {modality: BaseModelOutputWithPooling(pooler_output=pooler_output)}
             outputs = model(**inputs)
             inputs["inputs_embeds"] = model.get_input_embeddings()(inputs.pop("input_ids"))
             embedded_outputs = model(**inputs)
 
         torch.testing.assert_close(outputs.last_hidden_state, raw_outputs.last_hidden_state, rtol=0, atol=0)
         torch.testing.assert_close(embedded_outputs.last_hidden_state, raw_outputs.last_hidden_state, rtol=0, atol=0)
-        modality_key = f"{modality}_outputs"
-        torch.testing.assert_close(
-            getattr(raw_outputs, modality_key).pooler_output, features.pooler_output, rtol=0, atol=0
+        torch.testing.assert_close(getattr(outputs, modality_key).pooler_output, pooler_output, rtol=0, atol=0)
+
+    def test_mixed_visual_features_match_inputs_embeds(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Ovis2_5Model(config).to(torch_device).eval()
+        num_frames = 2
+        video_tokens = [config.video_token_id] * (num_frames * self.model_tester.num_image_tokens)
+        video_ids = torch.tensor(
+            [[config.video_start_token_id, *video_tokens, config.video_end_token_id]], device=torch_device
         )
-        self.assertIs(getattr(outputs, modality_key), inputs["mm_encoder_outputs"][modality])
-        self.assertIs(getattr(embedded_outputs, modality_key), inputs["mm_encoder_outputs"][modality])
+        input_ids = torch.cat((inputs["input_ids"][:1], video_ids), dim=-1)
+        image_grid = inputs["image_grid_thw"][:1]
+        video_grid = image_grid.clone()
+        video_grid[:, 0] = num_frames
+        raw_features = {
+            "pixel_values": inputs["pixel_values"][: self.model_tester.num_image_patches],
+            "image_grid_thw": image_grid,
+            "pixel_values_videos": self.model_tester.create_pixel_values(batch_size=num_frames),
+            "video_grid_thw": video_grid,
+        }
+
+        with torch.no_grad():
+            embeddings = model.get_input_embeddings()
+            # The published checkpoint shares an embedding for these four token IDs.
+            shared_ids = [config.video_token_id, config.image_start_token_id, config.image_end_token_id]
+            embeddings.weight[shared_ids] = embeddings.weight[config.image_token_id].clone()
+            mm_token_type_ids = (input_ids == config.image_token_id).long() + 2 * (
+                input_ids == config.video_token_id
+            ).long()
+            expected = model(input_ids=input_ids, **raw_features)
+            embed_kwargs = {"inputs_embeds": embeddings(input_ids), "mm_token_type_ids": mm_token_type_ids}
+            precomputed = {"image": expected.image_outputs, "video": expected.video_outputs}
+            from_embeds = model(**embed_kwargs, **raw_features)
+            from_cached_embeds = model(**embed_kwargs, mm_encoder_outputs=precomputed)
+
+        torch.testing.assert_close(from_embeds.last_hidden_state, expected.last_hidden_state, rtol=0, atol=0)
+        torch.testing.assert_close(from_cached_embeds.last_hidden_state, expected.last_hidden_state, rtol=0, atol=0)
 
     def test_video_forward(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

@@ -583,8 +583,27 @@ class Ovis2_5Model(PerceptionLMModel):
         visual_features: torch.Tensor,
         num_visual_inputs: int,
         is_video: bool,
+        mm_token_type_ids: torch.LongTensor | None,
     ) -> torch.Tensor:
         """Replace visual placeholders and start/end tokens with their visual embeddings."""
+        if is_video:
+            placeholder_id = self.config.video_token_id
+            boundary_token_ids = (self.config.video_start_token_id, self.config.video_end_token_id)
+            first_indicator_index = 2
+        else:
+            placeholder_id = self.config.image_token_id
+            boundary_token_ids = (self.config.image_start_token_id, self.config.image_end_token_id)
+            first_indicator_index = 0
+
+        if input_ids is None and mm_token_type_ids is not None:
+            # The processor places a boundary token immediately before and after each run of visual placeholders.
+            modality_mask = mm_token_type_ids.to(inputs_embeds.device) == (2 if is_video else 1)
+            input_ids = torch.where(modality_mask, placeholder_id, -1)
+            start_mask = ~modality_mask & nn.functional.pad(modality_mask[:, 1:], (0, 1), value=False)
+            end_mask = ~modality_mask & nn.functional.pad(modality_mask[:, :-1], (1, 0), value=False)
+            input_ids = input_ids.masked_fill(start_mask, boundary_token_ids[0])
+            input_ids = input_ids.masked_fill(end_mask, boundary_token_ids[1])
+
         image_mask, video_mask = self.get_placeholder_mask(
             input_ids,
             inputs_embeds=inputs_embeds,
@@ -599,14 +618,8 @@ class Ovis2_5Model(PerceptionLMModel):
 
         visual_indicator_features = self.multi_modal_projector.get_visual_indicator_features(visual_features.device)
         visual_indicator_features = visual_indicator_features.to(inputs_embeds.device, inputs_embeds.dtype)
-        boundaries = (
-            (self.config.image_start_token_id, False),
-            (self.config.image_end_token_id, False),
-            (self.config.video_start_token_id, True),
-            (self.config.video_end_token_id, True),
-        )
 
-        for indicator_index, (boundary_token_id, boundary_is_video) in enumerate(boundaries):
+        for indicator_index, boundary_token_id in enumerate(boundary_token_ids, start=first_indicator_index):
             if input_ids is None:
                 boundary_embedding = self.get_input_embeddings()(
                     torch.tensor(boundary_token_id, dtype=torch.long, device=inputs_embeds.device)
@@ -614,15 +627,14 @@ class Ovis2_5Model(PerceptionLMModel):
                 boundary_mask = (inputs_embeds == boundary_embedding).all(dim=-1)
             else:
                 boundary_mask = input_ids == boundary_token_id
-            if boundary_is_video == is_video:
-                num_boundary_tokens = boundary_mask.sum()
-                torch_compilable_check(
-                    num_boundary_tokens == num_visual_inputs,
-                    lambda: (
-                        f"Expected {num_visual_inputs} visual boundary tokens with id {boundary_token_id}, but found "
-                        f"{num_boundary_tokens}."
-                    ),
-                )
+            num_boundary_tokens = boundary_mask.sum()
+            torch_compilable_check(
+                num_boundary_tokens == num_visual_inputs,
+                lambda: (
+                    f"Expected {num_visual_inputs} visual boundary tokens with id {boundary_token_id}, but found "
+                    f"{num_boundary_tokens}."
+                ),
+            )
             merged_embeds = torch.where(
                 boundary_mask.unsqueeze(-1),
                 visual_indicator_features[indicator_index],
@@ -647,19 +659,27 @@ class Ovis2_5Model(PerceptionLMModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MultimodalBaseModelOutputWithPast:
+        r"""
+        mm_token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Modality labels returned by the processor with `return_mm_token_type_ids=True`. Pass them with
+            `inputs_embeds` to locate visual placeholders when token embeddings are shared.
+        """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
-        if pixel_values is not None and pixel_values_videos is not None:
-            raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
+        if (
+            inputs_embeds is not None
+            and mm_token_type_ids is not None
+            and mm_token_type_ids.shape != inputs_embeds.shape[:2]
+        ):
+            raise ValueError("mm_token_type_ids must match the batch and sequence dimensions of inputs_embeds.")
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
             )
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
-        if mm_encoder_outputs.get("image") is not None and mm_encoder_outputs.get("video") is not None:
-            raise ValueError("Ovis2.5 supports images or video in one request, but not both.")
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -687,6 +707,7 @@ class Ovis2_5Model(PerceptionLMModel):
                 image_features,
                 num_visual_inputs=len(image_outputs.pooler_output),
                 is_video=False,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
         if mm_encoder_outputs.get("video") is not None:
@@ -698,6 +719,7 @@ class Ovis2_5Model(PerceptionLMModel):
                 video_features,
                 num_visual_inputs=len(video_outputs.pooler_output),
                 is_video=True,
+                mm_token_type_ids=mm_token_type_ids,
             )
 
         outputs = self.language_model(
@@ -722,6 +744,11 @@ class Ovis2_5ForConditionalGeneration(Ovis2_5PreTrainedModel, Exaone4_5_ForCondi
         super().__init__(config)
         # Exaone uses an underscored model class, while Ovis exposes `Ovis2_5Model`.
         self.model = Ovis2_5Model(config)
+
+    def prepare_inputs_for_generation(self, input_ids, mm_token_type_ids=None, **kwargs):
+        if mm_token_type_ids is not None:
+            kwargs["mm_token_type_ids"] = mm_token_type_ids
+        return super().prepare_inputs_for_generation(input_ids, **kwargs)
 
 
 __all__ = [
