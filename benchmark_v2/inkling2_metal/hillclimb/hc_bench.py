@@ -99,6 +99,11 @@ def main(path):
     from transformers import AutoModelForImageTextToText, AutoTokenizer, CompileConfig, MetalConfig
 
     inductor_mps_fixes.apply()
+    if os.environ.get("HC_NO_KV_GROUP") == "1":  # control for E3: only the query-side sibling group
+        from transformers.integrations import metal_quantization
+
+        for key, value in metal_quantization.SIBLING_LINEARS.items():
+            metal_quantization.SIBLING_LINEARS[key] = value[:1]
     repo = "thinkingmachines/Inkling-2-Mini"
     kwargs = {"device_map": "mps", "dtype": torch.bfloat16}
     if cfg.get("dense", "4bit") == "4bit":

@@ -1,0 +1,1 @@
+{"name": "q-group", "dense": "4bit", "env": {"HC_NO_KV_GROUP": "1"}, "tokens": 128, "samples": 6}

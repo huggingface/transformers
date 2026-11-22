@@ -64,3 +64,7 @@ Next: E1 rerun on a stable machine (grouping is the lever for the latency-bound 
 - prod-4bit (fusion at load in the Metal quantizer): 57.50 (matches the accepted 57.49). Best = 57.5 tok/s.
 
 ### E2 HC_GROUP on the exact bf16 path (concatenated weights, one F.linear)
+- base-exact 37.93 | grp-exact 38.55 | base-exact 37.91: ACCEPTED (+1.6%, noise 0.4%). Exact path has no quantizer to fuse at load and fusing renames state_dict keys (saving): kept as an opt-in helper for now.
+
+### E3 k/v sibling group (members with another input run their own rows)
+- q-group 57.57 | qkv-group 57.46 | q-group 57.53: REJECTED (inside noise). k/v group reverted; the own-rows slice for members called on another input is kept (correct, free).

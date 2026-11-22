@@ -365,23 +365,34 @@ SIBLING_LINEARS = {
             "Inkling2LoopSlidingAttention",
             "Inkling2LoopFullAttention",
         ],
-        ["q_proj.linear", "o_proj.gate_proj", "relative_position_bias.linear", "sink_proj"],
+        [["q_proj.linear", "o_proj.gate_proj", "relative_position_bias.linear", "sink_proj"]],
     ),
 }
 
 
 class _SiblingSlice(nn.Module):
-    """One member of a fused group: the first member called on an input computes the whole group, the others slice."""
+    """
+    One member of a fused group: the first member called on an input computes the whole group and the others called
+    on the same input slice it. A member called on another input (e.g. keys and values projected from different
+    states) runs its own rows only, a view of the fused weights.
+    """
 
     def __init__(self, fused: MetalLinear, state: dict, start: int, end: int):
         super().__init__()
         self.fused, self.state, self.start, self.end = fused, state, start, end
         self.in_features, self.out_features = fused.in_features, end - start
+        own = MetalLinear(fused.in_features, end - start, bias=False, bits=fused.bits, group_size=fused.group_size)
+        for name in ("weight", "scales", "qbiases"):
+            setattr(own, name, nn.Parameter(getattr(fused, name)[start:end], requires_grad=False))
+        self.own = own
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.state.get("input") is not x:
+        if self.state.get("input") is x:
+            return self.state["output"][..., self.start : self.end]
+        if self.start == 0:  # the group's first member: compute every member's rows for this input
             self.state["input"], self.state["output"] = x, self.fused(x)
-        return self.state["output"][..., self.start : self.end]
+            return self.state["output"][..., self.start : self.end]
+        return self.own(x)
 
 
 def fuse_sibling_linears(model: nn.Module, plan: dict | None = None) -> int:
@@ -390,35 +401,37 @@ def fuse_sibling_linears(model: nn.Module, plan: dict | None = None) -> int:
     plan = SIBLING_LINEARS if plan is None else plan
     groups = 0
     for module in list(model.modules()):
-        paths = plan.get(type(module).__name__)
-        if not paths:
-            continue
-        members = []
-        for path in paths:
-            try:
-                members.append((path, module.get_submodule(path)))
-            except AttributeError:  # absent child (e.g. a mixer without `block_inject_weight`)
-                pass
-        linears = [m for _, m in members]
-        same = {(m.in_features, m.bits, m.group_size) for m in linears if isinstance(m, MetalLinear)}
-        if (
-            len(linears) < 2
-            or len(same) != 1
-            or any(type(m) is not MetalLinear or m.bias is not None for m in linears)
-        ):
-            continue
-        first = linears[0]
-        fused = MetalLinear(
-            first.in_features, sum(m.out_features for m in linears), bits=first.bits, group_size=first.group_size
-        )
-        for name in ("weight", "scales", "qbiases"):
-            tensor = torch.cat([getattr(m, name) for m in linears])
-            setattr(fused, name, nn.Parameter(tensor, requires_grad=False))
-        state, start = {}, 0
-        for path, linear in members:
-            parent, _, child = path.rpartition(".")
-            owner = module.get_submodule(parent) if parent else module
-            owner.register_module(child, _SiblingSlice(fused, state, start, start + linear.out_features))
-            start += linear.out_features
-        groups += 1
+        module_groups = plan.get(type(module).__name__) or []
+        if module_groups and isinstance(module_groups[0], str):  # a single group
+            module_groups = [module_groups]
+        for paths in module_groups:
+            groups += _fuse_group(module, paths)
     return groups
+
+
+def _fuse_group(module: nn.Module, paths: list[str]) -> int:
+    """Fuse the `MetalLinear`s at `paths` of `module` into one (see `fuse_sibling_linears`); 1 if fused, else 0."""
+    members = []
+    for path in paths:
+        try:
+            members.append((path, module.get_submodule(path)))
+        except AttributeError:  # absent child (e.g. a mixer without `block_inject_weight`)
+            pass
+    linears = [m for _, m in members]
+    same = {(m.in_features, m.bits, m.group_size) for m in linears if isinstance(m, MetalLinear)}
+    if len(linears) < 2 or len(same) != 1 or any(type(m) is not MetalLinear or m.bias is not None for m in linears):
+        return 0
+    first = linears[0]
+    fused = MetalLinear(
+        first.in_features, sum(m.out_features for m in linears), bits=first.bits, group_size=first.group_size
+    )
+    for name in ("weight", "scales", "qbiases"):
+        tensor = torch.cat([getattr(m, name) for m in linears])
+        setattr(fused, name, nn.Parameter(tensor, requires_grad=False))
+    state, start = {}, 0
+    for path, linear in members:
+        parent, _, child = path.rpartition(".")
+        owner = module.get_submodule(parent) if parent else module
+        owner.register_module(child, _SiblingSlice(fused, state, start, start + linear.out_features))
+        start += linear.out_features
+    return 1
