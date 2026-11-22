@@ -228,6 +228,11 @@ class PagedAttentionCache:
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
         self.use_varlen_block_table = self._infer_use_varlen_block_table()
+        # FA3 checks the new tokens of a whole step against the width of the block table, so it spans max_batch_tokens
+        if self.use_varlen_block_table:
+            min_blocks = max(ceil(self.max_batch_tokens / ca.tokens_per_page) for ca in self.cache_allocators.values())
+            self.max_blocks_per_request = max(self.max_blocks_per_request, min_blocks)
+            self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
         # Helper attribute for the input/output classes
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
 
