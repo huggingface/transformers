@@ -179,6 +179,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return {"dequantize": Fp8Dequantize}
 
+    def get_weight_conversions(self):
+        if not (self.pre_quantized and self.quantization_config.experts_only):
+            return super().get_weight_conversions()
+
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained_fp8 import Fp8Dequantize
+
+        # The linear layers outside the experts are plain `nn.Linear`: their weights are dequantized as they load
+        return [WeightConverter(names, param, [Fp8Dequantize(self)]) for param, names in self.serialized_names.items()]
+
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightRenaming
 

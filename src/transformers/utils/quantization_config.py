@@ -1699,6 +1699,10 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             `"ue8m0"` (1-byte `torch.float8_e8m0fnu`, V4-style).
         expert_dtype (`str`, *optional*, defaults to `"fp8"`):
             Format of the MoE experts' weights: `"fp8"`, or `"fp4"` for DeepSeek-V4's FP4-packed experts.
+        experts_only (`bool`, *optional*, defaults to `False`):
+            Whether to keep only the MoE experts in FP8. The other linear layers are dequantized to the model's dtype
+            when loading a pre-quantized checkpoint, or left unquantized otherwise. They are a small part of the
+            weights of a MoE model, and run faster in bf16 than in FP8 at generation batch sizes.
     """
 
     def __init__(
@@ -1710,6 +1714,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         modules_to_convert: list | None = None,
         scale_fmt: str = "float",
         expert_dtype: str = "fp8",
+        experts_only: bool = False,
         **kwargs,
     ):
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
@@ -1724,6 +1729,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.dequantize = dequantize
         self.scale_fmt = scale_fmt
         self.expert_dtype = expert_dtype
+        self.experts_only = experts_only
         self.post_init()
 
     def post_init(self):
@@ -1743,7 +1749,11 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError(f"expert_dtype must be 'fp8' or 'fp4'; got {self.expert_dtype!r}")
 
     def get_loading_attributes(self):
-        return {"dequantize": self.dequantize, "modules_to_not_convert": self.modules_to_not_convert}
+        return {
+            "dequantize": self.dequantize,
+            "modules_to_not_convert": self.modules_to_not_convert,
+            "experts_only": self.experts_only,
+        }
 
 
 class QuarkConfig(QuantizationConfigMixin):
