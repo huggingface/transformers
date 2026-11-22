@@ -1518,10 +1518,6 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, MultimodalMixin,
 
         self.post_init()
 
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`Glm4vMoeModel.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
-
     @auto_docstring
     @can_return_tuple
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
