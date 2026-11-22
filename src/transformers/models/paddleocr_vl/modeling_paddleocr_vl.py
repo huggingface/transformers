@@ -1362,10 +1362,6 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Multimodal
 
         self.post_init()
 
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`PaddleOCRVLModel.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
