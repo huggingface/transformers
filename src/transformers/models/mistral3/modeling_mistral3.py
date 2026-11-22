@@ -289,6 +289,7 @@ class Mistral3Model(Mistral3PreTrainedModel, MultimodalMixin):
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
                 return_dict=True,
+                **kwargs,
             )
 
         if mm_encoder_outputs.get("image") is not None:

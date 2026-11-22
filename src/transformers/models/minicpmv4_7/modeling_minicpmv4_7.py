@@ -743,7 +743,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel, MultimodalMixin):
             and self.config.image_token_id is not None
         ):
             mm_encoder_outputs["image"] = self.get_image_embeddings(
-                pixel_values[:1], target_sizes, downsample_mode=downsample_mode
+                pixel_values[:1], target_sizes, downsample_mode=downsample_mode, **kwargs
             )
 
         if (
