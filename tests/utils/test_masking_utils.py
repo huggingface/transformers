@@ -588,6 +588,19 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         # `None` (no padding) is deferred too.
         self.assertIsNone(create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, cache=None))
 
+    def test_create_masks_for_generate_hybrid_sliding_uses_the_window(self):
+        """`hybrid_sliding` layers (e.g. Inkling) get a sliding-window mask from `create_masks_for_generate`, sized like
+        their cache layer, not the full-attention one: a static cache longer than the window used to break them."""
+        config = LlamaConfig(num_hidden_layers=2, sliding_window=4, attn_implementation="eager")
+        config.layer_types = ["hybrid_sliding", "hybrid"]
+        cache = StaticCache(config=config, max_cache_len=10)
+        inputs_embeds = torch.zeros((1, 3, 8), device=torch_device)
+        attention_mask = torch.ones((1, 3), dtype=torch.long, device=torch_device)
+        position_ids = torch.arange(3, device=torch_device)[None]
+        masks = create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=position_ids)
+        self.assertEqual(masks["full_attention"].shape[-1], 10)
+        self.assertEqual(masks["sliding_attention"].shape[-1], 4)
+
     def test_causal_mask_default_layer_skips_linear_layers(self):
         """A linear layer is not sliding either, so the default must not pick it over the full-attention layer."""
         config = LlamaConfig(
