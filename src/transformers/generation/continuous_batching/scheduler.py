@@ -28,6 +28,11 @@ from .utils import logger
 # the waiting or prefilling requests. Unset: today's behaviour, where one waiting request turns the batch into a varlen
 # batch for every request in it.
 _PROTO_PREFILLS_APART = int(os.environ.get("CB_PROTO_PREFILLS_APART", "-1"))
+# [scratch, bench only] CB_PROTO_PREFIX_WAIT=1: a new request whose next uncached prompt page is being computed by a
+# forward in flight (a sibling of the same prompt admitted a step earlier, or in the same step) waits up to
+# CB_PROTO_PREFIX_WAIT_MAX scheduling rounds for that page to be registered, then shares it instead of recomputing it
+_PROTO_PREFIX_WAIT = os.environ.get("CB_PROTO_PREFIX_WAIT", "0") == "1"
+_PROTO_PREFIX_WAIT_MAX = int(os.environ.get("CB_PROTO_PREFIX_WAIT_MAX", "4"))
 # gap3-mtp prototype: with CB_MTP=spec and the block table decode path, a decoding request brings its last token and
 # its draft (2 query tokens) and still takes the decode fast path
 _MTP_BT_QUERY = 2 if os.environ.get("CB_MTP", "") == "spec" and _PROTO_MLA_BLOCK_TABLE else 1
@@ -277,6 +282,21 @@ class Scheduler(ABC):
             if not in_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
                 break
 
+            # [scratch, bench only] CB_PROTO_PREFIX_WAIT: wait for a sibling's prompt pages instead of recomputing them
+            if (
+                _PROTO_PREFIX_WAIT
+                and self.cache.use_prefix_sharing
+                and state.status == RequestStatus.PENDING
+                and not state.is_cpu_offloaded
+            ):
+                waits = self.__dict__.setdefault("_prefix_waits", {})
+                if waits.get(state.request_id, 0) < _PROTO_PREFIX_WAIT_MAX:
+                    key = self.cache.prefix_wait_key(state.remaining_prefill_tokens)
+                    if key is not None and self.cache.is_prefix_pending(key):
+                        waits[state.request_id] = waits.get(state.request_id, 0) + 1
+                        continue
+                waits.pop(state.request_id, None)
+
             # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
             # gap2-mtp prototype: a decoding request that carries a draft takes its two tokens together or waits
@@ -309,6 +329,7 @@ class Scheduler(ABC):
                 continue
 
             # If this point is reached, it means we can safely schedule the request
+            was_prefilling = state.status != RequestStatus.DECODING  # scheduling may switch it to DECODING
             self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)  # it may change after scheduling
 
@@ -322,6 +343,8 @@ class Scheduler(ABC):
 
             # If using prefix sharing, we make note of the blocks that will be completed by the forward pass
             complete_blocks = self.cache.count_new_complete_blocks(state, request_len)
+            if _PROTO_PREFIX_WAIT and complete_blocks and was_prefilling:
+                self.cache.note_pending_prefix(state, request_len)
 
             # Store the future request state
             has_new_token = not state.remaining_prefill_tokens
