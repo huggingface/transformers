@@ -478,6 +478,23 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         with torch.no_grad():
             torch.testing.assert_close(reloaded(input_ids).logits, logits, rtol=0, atol=0)
 
+    def test_experts_only_quantize_while_loading(self):
+        """
+        Checks that quantizing while loading with `experts_only=True` only quantizes the experts
+        """
+        from transformers.integrations.finegrained_fp8 import FP8Experts, FP8Linear
+
+        quantization_config = FineGrainedFP8Config(weight_block_size=(32, 32), experts_only=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen3MoeForCausalLM",
+            quantization_config=quantization_config,
+            device_map=self.device_map,
+        )
+        self.assertFalse(any(isinstance(module, FP8Linear) for module in model.modules()))
+        self.assertTrue(any(isinstance(module, FP8Experts) for module in model.modules()))
+        self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, torch.bfloat16)
+        model(input_ids=torch.arange(10, 20, device=self.device_map).unsqueeze(0))
+
     @parameterized.expand(["eager", "grouped_mm"])
     @with_grad
     def test_quantized_moe_backward(self, experts_implementation):
