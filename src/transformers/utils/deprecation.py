@@ -182,7 +182,7 @@ def deprecate_kwarg(
             deprecated = inspect.Parameter(old_name, inspect.Parameter.KEYWORD_ONLY, default=None)
             has_var_keyword = parameters and parameters[-1].kind is inspect.Parameter.VAR_KEYWORD
             parameters.insert(len(parameters) - has_var_keyword, deprecated)
-            wrapped_func.__signature__ = sig.replace(parameters=parameters)
+            wrapped_func.__signature__ = sig.replace(parameters=parameters)  # ty: ignore[unresolved-attribute]
 
         return wrapped_func
 
