@@ -1473,7 +1473,13 @@ class GenerationMixin(ContinuousMixin):
             mask = (model_kwargs or {}).get(
                 "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
             )
-            padding_lengths = (mask != 0).int().argmax(dim=1) if mask is not None else None
+            # The padding lengths assume that the prompt is in `input_ids`. When generating from `inputs_embeds`
+            # without `input_ids`, `input_ids` only contains the newly generated tokens, so ignoring its first
+            # positions would wrongly exclude those generated tokens from the penalty.
+            if mask is not None and input_ids_seq_length is not None and input_ids_seq_length > 0:
+                padding_lengths = (mask != 0).int().argmax(dim=1)
+            else:
+                padding_lengths = None
             processors.append(
                 RepetitionPenaltyLogitsProcessor(
                     generation_config.repetition_penalty, prompt_ignore_length=padding_lengths

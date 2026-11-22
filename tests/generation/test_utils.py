@@ -3538,6 +3538,46 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(out.shape, (1, 12))
         self.assertEqual(out[:, :8].tolist(), input_ids.tolist())
 
+    def test_generate_inputs_embeds_left_padding_repetition_penalty(self):
+        """Regression test for #51093: with `inputs_embeds` the prompt is not in `input_ids`, so left padding in the
+        batch must not cause the first generated tokens to be skipped by the repetition penalty."""
+        torch.manual_seed(14)
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            pad_token_id=0,
+            bos_token_id=None,
+            eos_token_id=None,
+        )
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        embeds = model.get_input_embeddings()
+        generation_kwargs = {
+            "max_new_tokens": 8,
+            "do_sample": False,
+            "repetition_penalty": 2.0,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
+
+        # The same prompt generated alone and left-padded in a batch must give the same tokens, with the penalty
+        # applied to every generated token (hence identical scores at every step)
+        alone = torch.tensor([[5, 6]], device=torch_device)
+        batch = torch.tensor([[0, 0, 0, 5, 6], [7, 8, 9, 10, 11]], device=torch_device)
+
+        out_alone = model.generate(
+            inputs_embeds=embeds(alone), attention_mask=torch.ones_like(alone), **generation_kwargs
+        )
+        out_batch = model.generate(
+            inputs_embeds=embeds(batch), attention_mask=(batch != 0).long(), **generation_kwargs
+        )
+        self.assertEqual(out_alone.sequences[0].tolist(), out_batch.sequences[0].tolist())
+        for alone_scores, batched_scores in zip(out_alone.scores, out_batch.scores):
+            self.assertTrue(torch.allclose(alone_scores[0], batched_scores[0], atol=1e-3))
+
     @require_torch_accelerator
     def test_generate_with_inputs_on_cpu(self):
         """
