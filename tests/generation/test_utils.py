@@ -5863,6 +5863,49 @@ class GenerationIntegrationTests(unittest.TestCase):
         output = tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertEqual(output, EXPECTED_TEXT)
 
+    @parameterized.expand([("beam", 3, False), ("sampling", 1, True)])
+    def test_precomputed_encoder_outputs_not_mutated(self, _, num_beams, do_sample):
+        """Reusing precomputed encoder features must not change their batch size. See #51086."""
+        torch.manual_seed(42)
+        config = AutoConfig.for_model(
+            "t5", vocab_size=64, d_model=32, d_kv=8, d_ff=64, num_layers=1,
+            num_decoder_layers=1, num_heads=4, pad_token_id=0, eos_token_id=1, decoder_start_token_id=0,
+        )
+        model = AutoModelForSeq2SeqLM.from_config(config).to(torch_device).eval()
+        inputs = torch.tensor([[3, 4, 5], [6, 7, 8]], device=torch_device)
+        mask = torch.ones_like(inputs)
+        with torch.no_grad():
+            outputs = model.get_encoder()(input_ids=inputs, attention_mask=mask, return_dict=True)
+            original = outputs.last_hidden_state
+            expected = model.generate(encoder_outputs=outputs, attention_mask=mask, max_new_tokens=3, use_cache=False)
+            expanded = model.generate(
+                encoder_outputs=outputs, attention_mask=mask, num_beams=num_beams, do_sample=do_sample,
+                num_return_sequences=3 if do_sample else 2, max_new_tokens=3, use_cache=False,
+            )
+            self.assertEqual(expanded.shape[0], inputs.shape[0] * (3 if do_sample else 2))
+            self.assertIs(outputs.last_hidden_state, original)
+            actual = model.generate(encoder_outputs=outputs, attention_mask=mask, max_new_tokens=3, use_cache=False)
+            torch.testing.assert_close(actual, expected)
+
+    @slow
+    def test_precomputed_encoder_outputs_not_mutated_flant5(self):
+        """Pretrained FLAN-T5 with a padded batch must preserve encoder-output reuse. See #51086."""
+        name = "google/flan-t5-small"
+        model = AutoModelForSeq2SeqLM.from_pretrained(name).to(torch_device).eval()
+        tokenizer = AutoTokenizer.from_pretrained(name)
+        batch = tokenizer(
+            ["Translate English to German: Hello world", "Summarize: A short example."],
+            padding=True, return_tensors="pt",
+        ).to(torch_device)
+        with torch.no_grad():
+            outputs = model.get_encoder()(**batch, return_dict=True)
+            original = outputs.last_hidden_state
+            expected = model.generate(encoder_outputs=outputs, attention_mask=batch.attention_mask, max_new_tokens=4)
+            model.generate(encoder_outputs=outputs, attention_mask=batch.attention_mask, num_beams=3, max_new_tokens=4)
+            self.assertIs(outputs.last_hidden_state, original)
+            actual = model.generate(encoder_outputs=outputs, attention_mask=batch.attention_mask, max_new_tokens=4)
+            torch.testing.assert_close(actual, expected)
+
     def test_encoder_outputs_without_input_ids_with_encoder_penalties(self):
         """
         Tests that when precomputed `encoder_outputs` are passed without `input_ids`,
