@@ -42,6 +42,7 @@ from transformers.testing_utils import (
     require_timm,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -73,6 +74,7 @@ if is_torch_available():
         Gemma3nModel,
         Gemma3nTextModel,
     )
+    from transformers.models.gemma3n.modeling_gemma3n import Gemma3nTextMLP
 
 
 class Gemma3nAudioModelTester(ModelTesterConfigMixin):
@@ -308,6 +310,46 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
     training_overfit_steps = 400
+
+    @require_torch_gpu
+    @parameterized.expand([("float32", torch.float32), ("float16", torch.float16), ("bfloat16", torch.bfloat16)])
+    def test_sparse_mlp_forward_without_cuda_sync(self, name, dtype):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.activation_sparsity_pattern = [0.95] * config.num_hidden_layers
+        mlp = Gemma3nTextMLP(config).to(device="cuda", dtype=dtype).eval()
+        hidden_states = floats_tensor((*inputs["input_ids"].shape, config.hidden_size)).to("cuda", dtype=dtype)
+        with torch.no_grad():
+            gate = mlp.gate_proj(hidden_states)
+            multiplier = (
+                torch.distributions.Normal(0, 1)
+                .icdf(torch.tensor(mlp.activation_sparsity, dtype=torch.float32, device="cuda"))
+                .to(dtype)
+            )
+            cutoff = gate.mean(dim=-1, keepdim=True) + gate.std(dim=-1, keepdim=True, unbiased=False) * multiplier
+            expected = mlp.down_proj(mlp.act_fn(torch.nn.functional.relu(gate - cutoff)) * mlp.up_proj(hidden_states))
+            previous_mode = torch.cuda.get_sync_debug_mode()
+            try:
+                torch.cuda.set_sync_debug_mode("error")
+                actual = mlp(hidden_states)
+            finally:
+                torch.cuda.set_sync_debug_mode(previous_mode)
+        if dtype == torch.float32:
+            torch.testing.assert_close(actual, expected, rtol=1e-6, atol=1e-7)
+        else:
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+    def test_sparse_mlp_save_load(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config.activation_sparsity_pattern = [0.95] * config.num_hidden_layers
+        model = Gemma3nForCausalLM(config).to(torch_device).eval()
+        input_ids = inputs["input_ids"].to(torch_device)
+        with torch.no_grad():
+            expected = model(input_ids).logits
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                reloaded = Gemma3nForCausalLM.from_pretrained(tmp_dir).to(torch_device).eval()
+                actual = reloaded(input_ids).logits
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
