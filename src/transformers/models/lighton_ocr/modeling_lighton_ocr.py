@@ -241,7 +241,7 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel, MultimodalMixin):
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_embeddings(
-                pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True
+                pixel_values=pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
