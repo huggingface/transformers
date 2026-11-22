@@ -119,6 +119,23 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
         # The official-key mapping targets the conditional model's `model.*` subtree.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
+    def test_load_original_visual_projection_into_base_model(self):
+        config = self.model_tester.get_config()
+        state_dict = Ovis2_5Model(config).state_dict()
+        key = "multi_modal_projector.visual_embeddings_table.weight"
+        weight = state_dict.pop(key)
+        original_weight = torch.arange(weight.numel(), dtype=weight.dtype).reshape(weight.shape[1], weight.shape[0])
+        state_dict["vte.weight"] = original_weight
+
+        model, loading_info = Ovis2_5Model.from_pretrained(
+            None, config=config, state_dict=state_dict, output_loading_info=True
+        )
+
+        self.assertFalse(loading_info["missing_keys"])
+        self.assertFalse(loading_info["unexpected_keys"])
+        self.assertFalse(loading_info["mismatched_keys"])
+        torch.testing.assert_close(model.state_dict()[key], original_weight.T, rtol=0, atol=0)
+
     @parameterized.expand([("image",), ("video",)])
     def test_precomputed_visual_features(self, modality):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

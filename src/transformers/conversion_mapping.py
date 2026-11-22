@@ -222,7 +222,13 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(r"^visual_tokenizer\.head\.0\.", "model.multi_modal_projector.visual_tokenizer.linear."),
             WeightRenaming(r"^visual_tokenizer\.head\.1\.", "model.multi_modal_projector.visual_tokenizer.norm."),
-            WeightRenaming(r"^vte\.", "model.multi_modal_projector.visual_embeddings_table."),
+            # Preserve the conditional wrapper prefix on reverse conversion while allowing the base model to load too.
+            WeightRenaming(r"^vte\.", "model.vte."),
+            WeightConverter(
+                source_patterns=r"vte\.weight",
+                target_patterns="multi_modal_projector.visual_embeddings_table.weight",
+                operations=[Transpose()],
+            ),
         ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
