@@ -19,7 +19,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 from torch import nn
@@ -383,10 +382,6 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, MultimodalMi
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
         )
-
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`LightOnOcrModel.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
 
 
 __all__ = ["LightOnOcrPreTrainedModel", "LightOnOcrForConditionalGeneration", "LightOnOcrModel"]

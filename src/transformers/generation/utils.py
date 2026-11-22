@@ -775,8 +775,9 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs[key] = value
 
         # 6. The forward's data-dependent inputs, computed with the prompt's; those already laid out are kept
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            data_dependent_inputs = self.get_data_dependent_inputs(**model_inputs)
+        get_data_dependent_inputs = getattr(self, "get_data_dependent_inputs", None)
+        if get_data_dependent_inputs is not None and (is_first_iteration or not kwargs.get("use_cache", True)):
+            data_dependent_inputs = get_data_dependent_inputs(**model_inputs)
             model_inputs.update(
                 {key: value for key, value in data_dependent_inputs.items() if key not in model_inputs}
             )
