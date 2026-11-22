@@ -119,6 +119,32 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertIs(type(tokenizer), TokenizersBackend)
         self.assertEqual(tokenizer.decode(tokenizer.encode(text, add_special_tokens=False)), text)
 
+    @require_tokenizers
+    def test_byte_level_llama_tokenizer_class_keeps_left_padding(self):
+        # `LlamaTokenizer` pads on the left, and so must the `TokenizersBackend` loaded in its place
+        from tokenizers import Tokenizer, decoders, pre_tokenizers
+        from tokenizers.models import BPE
+
+        backend_tokenizer = Tokenizer(BPE({"<pad>": 0, "a": 1, "b": 2}, []))
+        backend_tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+        backend_tokenizer.decoder = decoders.ByteLevel()
+
+        # the padding side set in `tokenizer_config.json` still comes first
+        for padding_side, expected_input_ids in ((None, [[0, 1], [1, 2]]), ("right", [[1, 0], [1, 2]])):
+            tokenizer_config = {"tokenizer_class": "LlamaTokenizerFast", "pad_token": "<pad>"}
+            if padding_side is not None:
+                tokenizer_config["padding_side"] = padding_side
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                backend_tokenizer.save(os.path.join(tmp_dir, "tokenizer.json"))
+                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
+                    json.dump(tokenizer_config, f)
+                with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
+                    json.dump({"model_type": "llama"}, f)
+                tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+
+            self.assertIs(type(tokenizer), TokenizersBackend)
+            self.assertEqual(tokenizer(["a", "ab"], padding=True)["input_ids"], expected_input_ids)
+
     @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):

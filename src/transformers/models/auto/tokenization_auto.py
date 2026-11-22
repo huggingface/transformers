@@ -505,6 +505,17 @@ def _use_mistral_format(
     return resolve_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **probe_kwargs)[0]
 
 
+def _tokenizers_backend_in_place_of_hub_class(
+    hub_class_name: str | None, pretrained_model_name_or_path: str | os.PathLike[str], *inputs, **kwargs
+):
+    """Load `TokenizersBackend` in place of the Hub `tokenizer_class`, keeping the side that class pads on by default
+    (left for `LlamaTokenizer`). `TokenizersBackend` pads on the right otherwise."""
+    hub_class = tokenizer_class_from_name(hub_class_name) if hub_class_name is not None else None
+    if isinstance(hub_class, type) and issubclass(hub_class, TokenizersBackend):
+        kwargs["_hub_class_padding_side"] = hub_class.padding_side
+    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+
 def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     # Bloom tokenizer classes were removed but should map to the fast backend for BC
     if class_name in {"BloomTokenizer", "BloomTokenizerFast"}:
@@ -833,17 +844,19 @@ class AutoTokenizer:
         _config_name_or_path = (
             name.lower() if isinstance((name := getattr(config, "_name_or_path", None)), str) else ""
         )
+        _hub_declared_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
         if (
             tokenizer_auto_map is None
             and TokenizersBackend is not None
             and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
         ):
-            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return _tokenizers_backend_in_place_of_hub_class(
+                _hub_declared_class, pretrained_model_name_or_path, *inputs, **kwargs
+            )
 
         # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend
         # because LlamaTokenizer hardcodes Metaspace. Skip Mistral checkpoints (also ByteLevel) so
         # they still go through the tekken-first MistralCommonBackend check below.
-        _hub_declared_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
         if (
             tokenizer_auto_map is None
             and TokenizersBackend is not None
@@ -859,7 +872,9 @@ class AutoTokenizer:
                 "loading `TokenizersBackend`. Set `tokenizer_class` to `TokenizersBackend` in "
                 "`tokenizer_config.json`."
             )
-            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            return _tokenizers_backend_in_place_of_hub_class(
+                _hub_declared_class, pretrained_model_name_or_path, *inputs, **kwargs
+            )
 
         # if there is a config, we can check that the tokenizer class != than model class.
         # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
@@ -908,7 +923,9 @@ class AutoTokenizer:
                     return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             if TokenizersBackend is not None:
-                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                return _tokenizers_backend_in_place_of_hub_class(
+                    _hub_class, pretrained_model_name_or_path, *inputs, **kwargs
+                )
 
             raise ValueError(
                 f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
