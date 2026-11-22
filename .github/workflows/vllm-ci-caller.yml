@@ -34,12 +34,13 @@ jobs:
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-    # The vLLM commit shown in the Slack report (`vllm-ci-report` job).
+    # The vLLM commit (and its date) shown in the Slack report (`vllm-ci-report` job).
     # TODO: each CPU test job finds the latest vLLM commit with a CPU wheel on its own, when it starts. If a new
     # nightly wheel is published during the run, jobs can test different vLLM commits, and the one reported (from
     # this job) is not the one of every job. Fix: find the commit once in a separate job used by all CPU jobs.
     outputs:
       vllm_commit: ${{ steps.find-vllm-commit.outputs.vllm_commit }}
+      vllm_commit_date: ${{ steps.vllm-commit-date.outputs.vllm_commit_date }}
 
     steps:
       - name: Checkout Transformers
@@ -75,6 +76,13 @@ jobs:
           ref: ${{ env.VLLM_COMMIT }}
           persist-credentials: false
           path: vllm
+
+      - name: Get vLLM commit date
+        id: vllm-commit-date
+        run: |
+          VLLM_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -Cvllm log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC')
+          echo "vllm_commit_date=$VLLM_COMMIT_DATE" >> $GITHUB_OUTPUT
+          echo "vLLM commit date: $VLLM_COMMIT_DATE"
 
       - name: Set up Python 3.12 environment
         run: |
@@ -734,9 +742,14 @@ jobs:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           # Found by the `vllm` job (see the TODO there).
           VLLM_COMMIT: ${{ needs.vllm.outputs.vllm_commit }}
+          VLLM_COMMIT_DATE: ${{ needs.vllm.outputs.vllm_commit_date }}
         run: |
+          # The transformers checkout of this job is at the run's commit, the one shown in the report.
+          TRANSFORMERS_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -Ctransformers log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC')
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
             --slack-channel "#transformers-ci-vllm" \
-            --commit "vllm=$VLLM_COMMIT"
+            --commit "vllm=$VLLM_COMMIT" \
+            --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
+            --commit-date "vllm=$VLLM_COMMIT_DATE"

@@ -9,10 +9,11 @@ File names are those of the reports without their date suffix (e.g. `failing_tes
 
 Usage:
   python utils/ci_report_notify.py --reports-dir <DIR> --hub-repo <ORG/NAME> --slack-channel <#channel> \
-      [--commit <NAME>=<SHA> ...] [--dry-run]
+      [--commit <NAME>=<SHA> ...] [--commit-date <NAME>=<DATE> ...] [--dry-run]
 
 Below its title, the Slack message shows the transformers commit of the run, followed by one line per
---commit (e.g. `--commit vllm=<SHA>` for the vLLM commit that was tested).
+--commit (e.g. `--commit vllm=<SHA>` for the vLLM commit that was tested). A commit's date, given with
+--commit-date (e.g. `--commit-date transformers=<DATE>`), is shown after it.
 
 Environment:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN   Hub token with write access to --hub-repo
@@ -86,8 +87,12 @@ def _button(text, url):
     return {"type": "button", "text": {"type": "plain_text", "text": text}, "url": url}
 
 
-def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url, commits=()):
-    """`commits`: (name, sha) pairs shown after the transformers commit, e.g. [("vllm", "<SHA>")]."""
+def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url, commits=(), commit_dates=None):
+    """
+    `commits`: (name, sha) pairs shown after the transformers commit, e.g. [("vllm", "<SHA>")].
+    `commit_dates`: name -> date shown after the commit of that name, e.g. {"transformers": "<DATE>"}.
+    """
+    commit_dates = commit_dates or {}
     run = job_results["run"]
     jobs = job_results["jobs"]
 
@@ -110,7 +115,8 @@ def build_slack_blocks(job_results, new_failing, categories, hub_url, new_failur
         {"type": "header", "text": {"type": "plain_text", "text": title[:150]}},
         _section(
             "\n".join(
-                f"{name} commit: {sha or '(unknown)'}" for name, sha in [("transformers", run["head_sha"]), *commits]
+                f"{name} commit: {sha or '(unknown)'}" + (f" ({commit_dates[name]})" if commit_dates.get(name) else "")
+                for name, sha in [("transformers", run["head_sha"]), *commits]
             )
         ),
         {
@@ -184,6 +190,13 @@ def main():
         metavar="NAME=SHA",
         help="Commit of another tested project to show in the Slack message, e.g. vllm=<SHA>. Can be repeated.",
     )
+    parser.add_argument(
+        "--commit-date",
+        action="append",
+        default=[],
+        metavar="NAME=DATE",
+        help="Date shown after the commit of NAME (`transformers` or a --commit NAME). Can be repeated.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Don't upload or post; print the Slack payload")
     args = parser.parse_args()
     commits = []
@@ -192,6 +205,12 @@ def main():
         if not sep or not name:
             parser.error(f"--commit must be NAME=SHA, got {value!r}")
         commits.append((name, sha))
+    commit_dates = {}
+    for value in args.commit_date:
+        name, sep, date = value.partition("=")
+        if not sep or not name:
+            parser.error(f"--commit-date must be NAME=DATE, got {value!r}")
+        commit_dates[name] = date
 
     job_results = _load(args.reports_dir, "job_results")
     if job_results is None:
@@ -212,7 +231,9 @@ def main():
         f"https://huggingface.co/datasets/{args.hub_repo}/blob/{revision}/{folder}/new_failing_tests_with_trace.json"
     )
 
-    title, blocks = build_slack_blocks(job_results, new_failing, categories, hub_url, new_failures_url, commits)
+    title, blocks = build_slack_blocks(
+        job_results, new_failing, categories, hub_url, new_failures_url, commits, commit_dates
+    )
     if args.dry_run:
         print(
             json.dumps({"channel": args.slack_channel, "text": title, "blocks": blocks}, indent=2, ensure_ascii=False)
