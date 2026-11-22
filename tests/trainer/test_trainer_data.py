@@ -316,27 +316,28 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
         config = Qwen3MoeModelTester(self, output_router_logits=True).get_config()
         model = Qwen3MoeForCausalLM(config)
         input_ids = torch.randint(0, config.vocab_size, (2, 16))
-        for epsilon, ga_steps in [(0.0, 1), (1e-8, 1), (0.1, 1), (0.1, 2)]:
-            with self.subTest(epsilon=epsilon, ga_steps=ga_steps), tempfile.TemporaryDirectory() as tmp_dir:
+        for eps, steps, training in [(0.0, 1, True), (1e-8, 1, True), (0.1, 1, True), (0.1, 2, True), (0.1, 2, False)]:
+            with self.subTest(eps=eps, steps=steps, training=training), tempfile.TemporaryDirectory() as tmp_dir:
+                model.train(training)
                 trainer = Trainer(
                     model=model,
                     args=TrainingArguments(
                         output_dir=tmp_dir,
                         use_cpu=True,
                         report_to="none",
-                        label_smoothing_factor=epsilon,
+                        label_smoothing_factor=eps,
                     ),
                 )
-                trainer.current_gradient_accumulation_steps = ga_steps
-                num_items = input_ids[:, 1:].numel() * ga_steps if ga_steps > 1 else None
+                trainer.current_gradient_accumulation_steps = steps
+                num_items = input_ids[:, 1:].numel() * (steps if training else 1) if steps > 1 else None
                 loss, outputs = trainer.compute_loss(
                     model,
                     {"input_ids": input_ids, "labels": input_ids},
                     return_outputs=True,
                     num_items_in_batch=num_items,
                 )
-                ce = LabelSmoother(epsilon)(outputs, input_ids, shift_labels=True, num_items_in_batch=num_items)
-                weight = model.router_aux_loss_coef / ga_steps
+                ce = LabelSmoother(eps)(outputs, input_ids, shift_labels=True, num_items_in_batch=num_items)
+                weight = model.router_aux_loss_coef / (steps if training else 1)
                 torch.testing.assert_close(loss, ce + weight * outputs.aux_loss)
                 aux_grad = torch.autograd.grad(loss, outputs.aux_loss)[0]
                 torch.testing.assert_close(aux_grad, torch.full_like(aux_grad, weight))
