@@ -185,12 +185,8 @@ def convert(checkpoint, flavour, config_path, output_dir, dtype="float32"):
     missing = sorted(k for k in expected - set(converted) if not re.search(r"blocks\.0\.att\.v[012]$", k))
     if missing or unexpected:
         raise RuntimeError(f"state dict mismatch: missing={missing}, unexpected={unexpected}")
-    # Shapes too, not just names. The skeleton is right here and its shapes are already
-    # read three lines below to fill the absent tensors, so comparing them costs
-    # nothing -- and without it a config that disagrees with the checkpoint converts
-    # with zero reported mismatches and produces a model that loads and generates
-    # noise. A hand-written `config.json` that gets one width wrong is the ordinary way
-    # to reach that, and the widths are exactly what a hand-written config gets wrong.
+    # Shapes too, not just names: a config that disagrees with the checkpoint (a hand-written `config.json` with one
+    # width wrong) would otherwise convert with no reported mismatch and give a model that loads and generates noise.
     wrong_shape = {
         key: (tuple(converted[key].shape), tuple(reference[key].shape))
         for key in sorted(set(converted) & expected)
