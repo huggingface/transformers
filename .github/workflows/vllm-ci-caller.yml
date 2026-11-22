@@ -672,6 +672,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM tokenizers, chat templates, configs and model imports"
+    if: false  # [Temporary] verified (run 45063409509); trial run of the next job only
     runs-on:
       group: aws-m8i-8xl-cache
     container:
