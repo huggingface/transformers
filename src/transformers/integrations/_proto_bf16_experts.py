@@ -23,7 +23,7 @@ import triton.language as tl
 from ._proto_fp8_experts import decode_route, decode_topk_sum
 
 
-MAX_ROWS_PER_EXPERT = float(os.environ.get("PROTO_DECODE_MAX_ROWS_PER_EXPERT", "32"))
+MAX_ROWS_PER_EXPERT = float(os.environ.get("PROTO_DECODE_MAX_ROWS_PER_EXPERT", "0"))
 
 
 @triton.jit
@@ -299,9 +299,21 @@ def _aligned_down_kernel(
     )
 
 
-def _aligned_config(num_slots: int, num_experts: int):
-    """`(gate_up config, down config)`, each (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages), by mean routed rows per
-    expert. Picked on one H100 at the Qwen3-30B-A3B shapes (`bigserve/cbopt/moe/sweep_down.py`)."""
+_ALIGNED_CFG = os.environ.get("PROTO_ALIGNED_CFG")  # "bm,bn,bk,warps,stages/bn,bk,warps,stages" to override
+
+
+def _aligned_config(num_tokens: int, num_slots: int, num_experts: int):
+    """`(gate_up config, down config)`, each (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages). By token count up to
+    512 (vLLM's bf16 defaults on Hopper), then by mean routed rows per expert (picked on one H100 at the Qwen3-30B-A3B
+    shapes, `bigserve/cbopt/moe/sweep_down.py`)."""
+    if _ALIGNED_CFG:
+        gate_up, down = _ALIGNED_CFG.split("/")
+        gate_up = tuple(int(c) for c in gate_up.split(","))
+        return gate_up, (gate_up[0], *(int(c) for c in down.split(",")))
+    if num_tokens <= 32:
+        return (16, 64, 128, 4, 4), (16, 64, 128, 4, 4)
+    if num_tokens <= 96:
+        return (32, 64, 128, 4, 3), (32, 64, 128, 4, 3)
     if num_slots / num_experts <= 96:
         return (64, 64, 64, 4, 3), (64, 128, 64, 4, 2)
     return (128, 128, 64, 8, 4), (128, 256, 64, 8, 4)
@@ -315,7 +327,7 @@ def proto_aligned_experts(hidden_states, top_k_index, top_k_weights, gate_up, do
     top_k_index = top_k_index.contiguous()
     top_k_weights = top_k_weights.contiguous()
     if config is None:
-        config, down_config = _aligned_config(num_slots, num_experts)
+        config, down_config = _aligned_config(hidden_states.shape[0], num_slots, num_experts)
     block_m, block_n, block_k, num_warps, num_stages = config
     _, down_n, down_k, down_warps, down_stages = down_config or config
     sorted_slots, block_expert, num_blocks = align_route(top_k_index, num_experts, block_m)
