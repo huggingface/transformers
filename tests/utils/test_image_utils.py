@@ -725,7 +725,8 @@ class LoadImageTester(unittest.TestCase):
 
     @is_flaky()
     def test_load_img_url_timeout(self):
-        with self.assertRaises(httpx.ConnectTimeout):
+        # The connection may complete within the timeout (e.g. through a local proxy), giving a `ReadTimeout`
+        with self.assertRaises(httpx.TimeoutException):
             load_image(INVOICE_URL, timeout=0.001)
 
     def test_load_img_local(self):
