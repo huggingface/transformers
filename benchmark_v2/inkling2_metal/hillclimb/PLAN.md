@@ -73,7 +73,7 @@ Next: E1 rerun on a stable machine (grouping is the lever for the latency-bound 
 | metric | PR #51050 baseline | now | ceiling | harness |
 |---|---:|---:|---:|---|
 | c1 decode, exact (bf16 dense, native fp4 experts) | ~15 (eager, 46 GiB) | 38.6 (opt-in grouping) / 38.1 | 52 | hc_bench, median of 6 x 128 tok, AC, cooled |
-| c1 decode, opt-in 4-bit dense | n/a | 57.5 | 95 | same |
+| c1 decode, opt-in 4-bit dense | n/a | 58.8 (E5) | 95 | same |
 | memory | 46.2 GiB | 9.9 GiB | | |
 
 What limits further gains (ablation of the 17.74 ms 4-bit step): experts 9.46 ms (floor ~6.3), 4-bit dense matvecs ~6.8 ms
@@ -92,3 +92,11 @@ Thermal: back-to-back runs throttle after ~2 runs; the harness voids runs whose 
 casts 57.92 → nocasts 58.25 → casts 58.43 tok/s (4-bit dense, 6 samples each, none void).
 Verdict: REJECTED: the candidate does not beat the second control. The ~0.3 ms/token the microbench predicted is inside run noise (~1%).
 Reverted to pin 8d84318 and restored the casts. Hub rev 51ab38ad stays published (unused).
+
+### E5 small-kernel bundle: cast-free experts + router v2 (split rows, register selection), hub rev a2400044
+Router microbench (GPU events, real shape, DRAM): 21.4 -> 16.0 us/call; expected ~0.55 ms/token with E4 (~3%).
+casts 57.96 → bundle 58.76 → casts 57.86 tok/s (6 samples each, none void; bundle min 58.52 > control max 58.29). Greedy text identical.
+Verdict: ACCEPTED (+1.4%). The pin is now a2400044 and the casts are dropped.
+Findings: a dispatch under compile costs ~1.1 us (400 chained kernels = 498 us), so the 1218 dispatches/token
+(761 custom + 457 inductor) are only ~1.4 ms. The rest of the non-expert gap is the fixed latency of small dependent kernels
+(router selection ~5 us after its last-threadgroup sync, message gate's two grid syncs ~15 us). Experts run at ~80% of 290 GB/s.

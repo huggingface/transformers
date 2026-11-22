@@ -221,7 +221,7 @@ class MetalFp4Experts(nn.Module):
     def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor):
         # every (token, route) pair is a gathered matvec straight from the banks: no dequantized copy, no host sync
         kernel = _decode_kernel()
-        ids, weights = top_k_index.int(), top_k_weights.float()
+        ids, weights = top_k_index, top_k_weights  # int64 / any float: read as they are in-kernel, no cast dispatches
         act = kernel.fp4_gate_up_act(
             hidden_states, *self._bank("gate_up_proj"), ids, weights, self.gate_cap, self.up_cap
         )
