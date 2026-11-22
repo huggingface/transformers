@@ -371,6 +371,14 @@ class PagedAttentionCache:
                 evicted_any = True
         return evicted_any
 
+    def reset_prefix_cache(self) -> None:
+        """Makes the keys and values computed so far unreachable to prefix matching, typically because the weights
+        changed. Blocks kept only for prefix sharing go back to the pool. Blocks of requests in flight stay with their
+        requests, but new requests never match them, since their hash chains start from a new root."""
+        self.evict_cached_blocks()
+        for allocator in self.cache_allocators.values():
+            allocator.ledger.epoch += 1
+
     def extend_read_and_write_indices(
         self,
         request_id: str,

@@ -2059,6 +2059,55 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         input_msg = "What is the Transformers library known for?"
         return self._test_block_sharing(model_id, {"full_attention"}, input_msg)
 
+    def test_reset_prefix_cache_after_weight_update(self) -> None:
+        """A prompt generated before a weight update reuses its cached blocks unless `reset_prefix_cache` is called in
+        the pause: after the reset it matches no prefix and generates what a fresh manager generates with the new
+        weights."""
+        tokenizer, model = get_tokenizer_and_model(
+            "Qwen/Qwen2.5-0.5B-Instruct", "sdpa", torch_device, dtype=torch.float32
+        )
+        model.generation_config.max_new_tokens = 8
+        model.generation_config.do_sample = False
+        model.generation_config.repetition_penalty = None
+        inputs = get_generation_inputs(
+            ["What is the Transformers library known for?"], tokenizer, for_continuous_batching=True
+        )[0]
+        self.assertGreaterEqual(len(inputs), 33, "the prompt must hold a complete block of 32 tokens")
+
+        # Spy on prefix matching to observe how many prompt tokens get matched
+        matched_tokens: list[int] = []
+        original_search = PagedAttentionCache.search_prefix_match
+
+        def spy_search(cache_self, request_id, prompt_ids):
+            matched = original_search(cache_self, request_id, prompt_ids)
+            matched_tokens.append(matched)
+            return matched
+
+        def generate(manager) -> list[int]:
+            request_id = manager.add_request(inputs, max_new_tokens=8)
+            return next(manager.request_id_iter(request_id)).generated_tokens
+
+        cb_config = ContinuousBatchingConfig(page_size=32)
+        with patch.object(PagedAttentionCache, "search_prefix_match", autospec=True, side_effect=spy_search):
+            with model.continuous_batching_context_manager(
+                generation_config=model.generation_config, continuous_batching_config=cb_config
+            ) as manager:
+                generate(manager)  # leaves the prompt's first block hashed
+                with self.assertRaises(RuntimeError):
+                    manager.reset_prefix_cache()  # outside the pause
+                with manager.pause():
+                    with torch.no_grad():
+                        model.model.layers[0].self_attn.k_proj.weight.mul_(2.0)
+                    manager.reset_prefix_cache()
+                tokens_after_update = generate(manager)
+            self.assertEqual(matched_tokens, [0, 0], "the prompt reused blocks computed before the weight update")
+
+            with model.continuous_batching_context_manager(
+                generation_config=model.generation_config, continuous_batching_config=cb_config
+            ) as manager:
+                expected_tokens = generate(manager)
+        self.assertEqual(tokens_after_update, expected_tokens)
+
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
         input_msg = "I am a software engineer looking to use open source software to build a new AI agent. What is the Transformers library known for?"
