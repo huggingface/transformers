@@ -915,7 +915,10 @@ jobs:
         if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
-          pytest -v -s tests/models/multimodal/pooling/test_clip.py tests/models/multimodal/pooling/test_siglip.py
+          # siglip2-giant-opt: vLLM's CPU attention kernel doesn't support its head_dim (72)
+          # ("Unsupported CPU attention configuration: head_dim=72").
+          pytest -v -s tests/models/multimodal/pooling/test_clip.py tests/models/multimodal/pooling/test_siglip.py \
+            --deselect 'tests/models/multimodal/pooling/test_siglip.py::test_models[float-google/siglip2-giant-opt-patch16-384]'
 
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
