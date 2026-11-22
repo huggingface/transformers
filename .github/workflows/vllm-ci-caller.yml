@@ -98,6 +98,17 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm open-clip-torch==2.32.0 albumentations==1.4.6
+          # vLLM caps transformers below the next minor release (e.g. `< 5.24.0`), which excludes our `X.0.dev0`
+          # checkout, so installing vLLM silently replaces it with the latest PyPI release. Reinstall the checkout
+          # without deps and fail if it is not the one imported, otherwise this CI tests the release, not `main`.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
 
       - name: Patch vLLM for CPU
         # Probably not needed on the larger aws-m8i-8xl-cache runner, but not verified yet. Keeping for now.
@@ -243,6 +254,17 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
+          # vLLM caps transformers below the next minor release (e.g. `< 5.24.0`), which excludes our `X.0.dev0`
+          # checkout, so installing vLLM silently replaces it with the latest PyPI release. Reinstall the checkout
+          # without deps and fail if it is not the one imported, otherwise this CI tests the release, not `main`.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
 
       - name: Patch vLLM for CPU
         run: |
@@ -378,6 +400,17 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard sentence-transformers open-clip-torch==2.32.0 albumentations==1.4.6
+          # vLLM caps transformers below the next minor release (e.g. `< 5.24.0`), which excludes our `X.0.dev0`
+          # checkout, so installing vLLM silently replaces it with the latest PyPI release. Reinstall the checkout
+          # without deps and fail if it is not the one imported, otherwise this CI tests the release, not `main`.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
 
       - name: Patch vLLM for CPU
         run: |
@@ -583,6 +616,17 @@ jobs:
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           # kaldi-native-fbank: required by the FireRedASR2 processor tests (listed in vLLM's requirements/test/cpu.txt)
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6 kaldi-native-fbank
+          # vLLM caps transformers below the next minor release (e.g. `< 5.24.0`), which excludes our `X.0.dev0`
+          # checkout, so installing vLLM silently replaces it with the latest PyPI release. Reinstall the checkout
+          # without deps and fail if it is not the one imported, otherwise this CI tests the release, not `main`.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
 
       - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
