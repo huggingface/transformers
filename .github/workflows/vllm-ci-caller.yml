@@ -808,6 +808,114 @@ jobs:
           pytest -v -s tests/test_config.py \
             -k "not (eplb or async_scheduling or all2all or vllm_config_defaults or ir_op_priority)"
 
+  # vLLM vs transformers outputs: these tests run the same model in transformers (`hf_runner`) and in vLLM and compare
+  # logprobs / embeddings / scores. Same selection as vLLM's own CPU CI (`.buildkite/hardware_tests/cpu.yaml`,
+  # "CPU-Language Generation and Pooling Model Tests": the `cpu_model` tests), plus the CLIP / SigLIP pooling tests.
+  vllm-test-hf-comparison:
+    permissions:
+      contents: read
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    name: "Test vLLM vs transformers outputs (shard ${{ matrix.shard }} / 4)"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      SHARD_ID: ${{ matrix.shard }}
+      # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
+      VLLM_CPU_CI_ENV: "1"
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          # Same as the other CPU jobs (see the comments in `vllm-multimodal-processing`).
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          # sentence-transformers: reference models of the pooling tests (tests/conftest.py)
+          uv pip install tblib pqdm pytest-shard sentence-transformers
+          # Reinstall the transformers checkout (see `vllm-multimodal-processing`) and check it's the one imported.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
+
+      - name: "Test: language models generation and pooling (shard ${{ matrix.shard }} / 4)"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # Not included from vLLM's CPU command: tests/v1/e2e/test_cpu_linear_attn_chunked_prefix.py (no transformers).
+          pytest -v -s tests/models/language/generation tests/models/language/pooling \
+            -m cpu_model --num-shards=4 --shard-id=$SHARD_ID
+
+      # Only ~5 tests: run them all in shard 0 (with `--num-shards`, a shard could get no test, and pytest fails then).
+      - name: "Test: CLIP / SigLIP pooling"
+        if: ${{ !cancelled() && matrix.shard == 0 }}
+        working-directory: vllm
+        run: |
+          pytest -v -s tests/models/multimodal/pooling/test_clip.py tests/models/multimodal/pooling/test_siglip.py
+
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
   # and a breakdown by error category. Reports are uploaded as an artifact.
@@ -819,7 +927,7 @@ jobs:
       image: huggingface/transformers-torch-light
     # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
     if: ${{ !cancelled() }}
-    needs: [vllm, vllm-test-init, vllm-test-transformers, vllm-multimodal-processing, vllm-test-tokenizers-configs]
+    needs: [vllm, vllm-test-init, vllm-test-transformers, vllm-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
       actions: read
