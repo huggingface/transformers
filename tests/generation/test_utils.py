@@ -5868,8 +5868,17 @@ class GenerationIntegrationTests(unittest.TestCase):
         """Reusing precomputed encoder features must not change their batch size. See #51086."""
         torch.manual_seed(42)
         config = AutoConfig.for_model(
-            "t5", vocab_size=64, d_model=32, d_kv=8, d_ff=64, num_layers=1,
-            num_decoder_layers=1, num_heads=4, pad_token_id=0, eos_token_id=1, decoder_start_token_id=0,
+            "t5",
+            vocab_size=64,
+            d_model=32,
+            d_kv=8,
+            d_ff=64,
+            num_layers=1,
+            num_decoder_layers=1,
+            num_heads=4,
+            pad_token_id=0,
+            eos_token_id=1,
+            decoder_start_token_id=0,
         )
         model = AutoModelForSeq2SeqLM.from_config(config).to(torch_device).eval()
         inputs = torch.tensor([[3, 4, 5], [6, 7, 8]], device=torch_device)
@@ -5879,8 +5888,13 @@ class GenerationIntegrationTests(unittest.TestCase):
             original = outputs.last_hidden_state
             expected = model.generate(encoder_outputs=outputs, attention_mask=mask, max_new_tokens=3, use_cache=False)
             expanded = model.generate(
-                encoder_outputs=outputs, attention_mask=mask, num_beams=num_beams, do_sample=do_sample,
-                num_return_sequences=3 if do_sample else 2, max_new_tokens=3, use_cache=False,
+                encoder_outputs=outputs,
+                attention_mask=mask,
+                num_beams=num_beams,
+                do_sample=do_sample,
+                num_return_sequences=3 if do_sample else 2,
+                max_new_tokens=3,
+                use_cache=False,
             )
             self.assertEqual(expanded.shape[0], inputs.shape[0] * (3 if do_sample else 2))
             self.assertIs(outputs.last_hidden_state, original)
@@ -5895,7 +5909,8 @@ class GenerationIntegrationTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(name)
         batch = tokenizer(
             ["Translate English to German: Hello world", "Summarize: A short example."],
-            padding=True, return_tensors="pt",
+            padding=True,
+            return_tensors="pt",
         ).to(torch_device)
         with torch.no_grad():
             outputs = model.get_encoder()(**batch, return_dict=True)
