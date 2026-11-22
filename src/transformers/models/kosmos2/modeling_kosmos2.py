@@ -27,7 +27,6 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -1327,7 +1326,7 @@ class Kosmos2ImageToTextProjection(nn.Module):
     KOSMOS-2 Model for generating text and image features. The model consists of a vision encoder and a language model.
     """
 )
-class Kosmos2Model(Kosmos2PreTrainedModel, MultimodalMixin):
+class Kosmos2Model(Kosmos2PreTrainedModel):
     config: Kosmos2Config
     main_input_name = "pixel_values"
 
@@ -1349,7 +1348,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel, MultimodalMixin):
 
     @can_return_tuple
     @auto_docstring
-    def get_image_embeddings(
+    def get_image_features(
         self,
         pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool | None = False,
@@ -1377,7 +1376,6 @@ class Kosmos2Model(Kosmos2PreTrainedModel, MultimodalMixin):
         vision_output.pooler_output = image_embeds
         vision_output.projection_attentions = projection_attentions
 
-        vision_output.pooler_output, vision_output.split_sizes = flatten_items(vision_output.pooler_output)
         return vision_output
 
     @can_return_tuple
@@ -1443,10 +1441,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel, MultimodalMixin):
         if image_embeds is None:
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
-            image_outputs = self.get_image_embeddings(
+            image_outputs = self.get_image_features(
                 pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True, **kwargs
             )
-            image_embeds = image_outputs.pooler_output.unflatten(0, (pixel_values.shape[0], -1))
+            image_embeds = image_outputs.pooler_output
 
         outputs = self.text_model(
             input_ids=input_ids,
