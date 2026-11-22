@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -468,15 +470,25 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         input_ids = torch.arange(10, 20, device=self.device_map).unsqueeze(0)
         with torch.no_grad():
             logits = model(input_ids).logits
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            reloaded = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
-        reloaded_state_dict = reloaded.state_dict()
-        self.assertEqual(reloaded_state_dict.keys(), model.state_dict().keys())
-        for name, param in model.state_dict().items():
-            torch.testing.assert_close(reloaded_state_dict[name], param, rtol=0, atol=0)
-        with torch.no_grad():
-            torch.testing.assert_close(reloaded(input_ids).logits, logits, rtol=0, atol=0)
+        # Reloads as saved, then as a loader that doesn't read `experts_only` would: the saved list of the layers left
+        # out of FP8 is enough
+        for drop_experts_only in [False, True]:
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                if drop_experts_only:
+                    config_path = os.path.join(tmpdirname, "config.json")
+                    with open(config_path) as f:
+                        config = json.load(f)
+                    del config["quantization_config"]["experts_only"]
+                    with open(config_path, "w") as f:
+                        json.dump(config, f)
+                reloaded = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            reloaded_state_dict = reloaded.state_dict()
+            self.assertEqual(reloaded_state_dict.keys(), model.state_dict().keys())
+            for name, param in model.state_dict().items():
+                torch.testing.assert_close(reloaded_state_dict[name], param, rtol=0, atol=0)
+            with torch.no_grad():
+                torch.testing.assert_close(reloaded(input_ids).logits, logits, rtol=0, atol=0)
 
     def test_experts_only_quantize_while_loading(self):
         """
