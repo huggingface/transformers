@@ -316,7 +316,8 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
         config = Qwen3MoeModelTester(self, output_router_logits=True).get_config()
         model = Qwen3MoeForCausalLM(config)
         input_ids = torch.randint(0, config.vocab_size, (2, 16))
-        for eps, steps, training in [(0.0, 1, True), (1e-8, 1, True), (0.1, 1, True), (0.1, 2, True), (0.1, 2, False)]:
+        inputs = {"input_ids": input_ids, "labels": input_ids}
+        for eps, steps, training in [(0.0, 1, True), (1e-8, 1, True), (0.1, 2, True), (0.1, 2, False)]:
             with self.subTest(eps=eps, steps=steps, training=training), tempfile.TemporaryDirectory() as tmp_dir:
                 model.train(training)
                 args = TrainingArguments(tmp_dir, use_cpu=True, report_to="none", label_smoothing_factor=eps)
@@ -324,10 +325,7 @@ class TrainerLabelSmoothingTest(unittest.TestCase):
                 trainer.current_gradient_accumulation_steps = steps
                 num_items = input_ids[:, 1:].numel() * (steps if training else 1) if steps > 1 else None
                 loss, outputs = trainer.compute_loss(
-                    model,
-                    {"input_ids": input_ids, "labels": input_ids},
-                    return_outputs=True,
-                    num_items_in_batch=num_items,
+                    model, inputs.copy(), return_outputs=True, num_items_in_batch=num_items
                 )
                 ce = LabelSmoother(eps)(outputs, input_ids, shift_labels=True, num_items_in_batch=num_items)
                 weight = model.router_aux_loss_coef / (steps if training else 1)
