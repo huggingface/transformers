@@ -20,7 +20,6 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
-from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
@@ -251,12 +250,9 @@ class PagedAttentionCache:
         return int(acc)
 
     def _infer_use_varlen_block_table(self) -> bool:
-        """Every step (prefill, mixed, decode) goes through the block table when the paged kernel takes varlen queries,
-        i.e. FA3's `flash_attn_with_kvcache` with `cu_seqlens_q`. FA2 only takes one query token per sequence."""
-        if self.max_decode_fast_path_length == 0:
-            return False
-        flash_attn_with_kvcache = lazy_import_flash_attention(self.config._attn_implementation)[0][2]
-        return "cu_seqlens_q" in inspect.signature(flash_attn_with_kvcache).parameters
+        """Every step (prefill, mixed, decode) goes through the block table when the paged kernel takes varlen queries:
+        FA3's `flash_attn_with_kvcache` does (`cu_seqlens_q`), FA2's only takes one query token per sequence."""
+        return self.max_decode_fast_path_length > 0 and is_flash_attention_requested(self.config, version=3)
 
     def can_store_request_tokens(self, state: RequestState, request_len: int, dry_run: bool = False) -> bool:
         """Checks if the new tokens for a request can be stored in the cache. If they can, actual cache allocation is
