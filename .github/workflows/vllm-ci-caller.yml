@@ -25,6 +25,7 @@ jobs:
     permissions:
       contents: read
     name: Test vLLM integration
+    if: false  # [Temporary] trial run of vllm-test-tokenizers-configs only
     # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
     # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
     runs-on:
@@ -197,6 +198,7 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run of vllm-test-tokenizers-configs only
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -346,6 +348,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run of vllm-test-tokenizers-configs only
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -561,6 +564,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run of vllm-test-tokenizers-configs only
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -882,7 +886,7 @@ jobs:
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
-            --slack-channel "#transformers-ci-vllm" \
+            --slack-channel "#transformers-ci-dummy" \
             --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
             --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
             --commit-date "vllm=$VLLM_COMMIT_DATE"
