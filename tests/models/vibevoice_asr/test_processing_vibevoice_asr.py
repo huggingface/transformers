@@ -21,7 +21,7 @@ import torch
 
 from transformers import (
     AutoTokenizer,
-    VibeVoiceAcousticTokenizerFeatureExtractor,
+    VibevoiceAcousticTokenizerAudioProcessor,
     VibeVoiceAsrProcessor,
 )
 from transformers.testing_utils import require_torch
@@ -49,17 +49,17 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_save_load_pretrained_default(self):
         tokenizer = AutoTokenizer.from_pretrained(self.tiny_model_id)
         processor = VibeVoiceAsrProcessor.from_pretrained(self.tiny_model_id)
-        feature_extractor = processor.feature_extractor
+        audio_processor = processor.audio_processor
 
-        processor = VibeVoiceAsrProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = VibeVoiceAsrProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             processor.save_pretrained(tmpdir)
             reloaded = VibeVoiceAsrProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(reloaded.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(reloaded.feature_extractor, VibeVoiceAcousticTokenizerFeatureExtractor)
+        self.assertEqual(reloaded.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(reloaded.audio_processor, VibevoiceAcousticTokenizerAudioProcessor)
 
     @require_torch
     def test_apply_transcription_request_single(self):

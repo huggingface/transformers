@@ -89,7 +89,7 @@ class VoxtralRealtimeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     def _dummy_audio(self, processor, seed: int = 0, duration_s: float = 1.0):
-        sampling_rate = processor.feature_extractor.sampling_rate
+        sampling_rate = processor.audio_processor.sampling_rate
         rng = np.random.default_rng(seed)
         num_samples = int(duration_s * sampling_rate)
         return (rng.standard_normal(num_samples) * 0.1).clip(-1.0, 1.0).astype(np.float32)
@@ -172,7 +172,7 @@ class VoxtralRealtimeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_online_streaming_matches_low_level_audio_encoder(self):
         # Online streaming builds the prefill from the audio encoder primitives; check it matches.
         processor = self.get_processor()
-        sampling_rate = processor.feature_extractor.sampling_rate
+        sampling_rate = processor.audio_processor.sampling_rate
         audio = self._dummy_audio(processor, seed=42)
 
         encoding = processor(audio, is_streaming=True, is_first_audio_chunk=True, return_tensors="pt")
@@ -183,7 +183,7 @@ class VoxtralRealtimeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(encoding["input_ids"].tolist(), [expected_tokens])
 
         left_pad, _ = audio_encoder.get_padding_audio()
-        expected_features = processor.feature_extractor(
+        expected_features = processor.audio_processor(
             np.concatenate((left_pad.audio_array, audio)),
             center=True,
             sampling_rate=sampling_rate,

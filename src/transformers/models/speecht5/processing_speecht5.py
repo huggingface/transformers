@@ -19,8 +19,8 @@ from ...utils import auto_docstring
 
 @auto_docstring
 class SpeechT5Processor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
     @auto_docstring
     def __call__(self, *args, **kwargs):
@@ -44,14 +44,14 @@ class SpeechT5Processor(ProcessorMixin):
             )
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            inputs = self.audio_processor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         elif text is not None:
             inputs = self.tokenizer(text, **kwargs)
         else:
             inputs = None
 
         if audio_target is not None:
-            targets = self.feature_extractor(audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs)
+            targets = self.audio_processor(audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs)
             labels = targets["input_values"]
         elif text_target is not None:
             targets = self.tokenizer(text_target, **kwargs)
@@ -100,7 +100,7 @@ class SpeechT5Processor(ProcessorMixin):
             )
 
         if input_values is not None:
-            inputs = self.feature_extractor.pad(input_values, *args, **kwargs)
+            inputs = self.audio_processor.pad(input_values, *args, **kwargs)
         elif input_ids is not None:
             inputs = self.tokenizer.pad(input_ids, **kwargs)
         else:
@@ -111,10 +111,10 @@ class SpeechT5Processor(ProcessorMixin):
                 targets = self.tokenizer.pad(labels, **kwargs)
                 labels = targets["input_ids"]
             else:
-                feature_size_hack = self.feature_extractor.feature_size
-                self.feature_extractor.feature_size = self.feature_extractor.num_mel_bins
-                targets = self.feature_extractor.pad(labels, *args, **kwargs)
-                self.feature_extractor.feature_size = feature_size_hack
+                feature_size_hack = self.audio_processor.feature_size
+                self.audio_processor.feature_size = self.audio_processor.num_mel_bins
+                targets = self.audio_processor.pad(labels, *args, **kwargs)
+                self.audio_processor.feature_size = feature_size_hack
                 labels = targets["input_values"]
         else:
             targets = None

@@ -39,15 +39,15 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class MossTranscribeDiarizeProcessor(ProcessorMixin):
     r"""
-    Constructs a MOSS-Transcribe-Diarize processor which wraps [`MossTranscribeDiarizeFeatureExtractor`] and
+    Constructs a MOSS-Transcribe-Diarize processor which wraps [`MossTranscribeDiarizeAudioProcessor`] and
     [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities.
 
     See the [`~MossTranscribeDiarizeProcessor.__call__`] for more information.
 
     Args:
-        feature_extractor (`MossTranscribeDiarizeFeatureExtractor`):
-            The feature extractor for audio processing.
+        audio_processor (`MossTranscribeDiarizeAudioProcessor`):
+            The audio processor for audio processing.
         tokenizer (`Qwen2TokenizerFast`):
             The tokenizer for text processing.
         chat_template (`str`, *optional*):
@@ -56,7 +56,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
     def __init__(
         self,
-        feature_extractor=None,
+        audio_processor=None,
         tokenizer=None,
         chat_template: str | None = None,
         audio_token: str = "<|audio_pad|>",
@@ -87,7 +87,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token = audio_eos_token
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
-        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, tokenizer, chat_template=chat_template)
         self.audio_tokens_per_second = audio_tokens_per_second
         self.audio_merge_size = audio_merge_size
         self.time_marker_every_seconds = time_marker_every_seconds
@@ -110,7 +110,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
-            audio features (`input_values`, `padding_mask`).
+            audio features (`input_features`, `input_features_mask`, `padding_mask`).
         """
         output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
@@ -156,11 +156,16 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                     raise ValueError(f"Audio should be mono, got shape: {example.shape}")
 
     def _process_audio(self, audio: AudioInput, **kwargs) -> tuple[dict[str, torch.Tensor], list[str]]:
-        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        # The audio processor's keys are renamed to the ones the model's `forward` takes.
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
+        audio_inputs["input_features_mask"] = audio_inputs.pop("audio_features_mask")
 
         # Derive how many Whisper-window chunks each sample was split into from its raw length in
         # `padding_mask`, the same way the model derives `audio_chunk_mapping` via `config.audio_chunk_size`.
-        window_size = self.feature_extractor.n_samples
+        window_size = (
+            kwargs.get("chunk_length", self.audio_processor.chunk_length) * self.audio_processor.sampling_rate
+        )
         per_sample_lengths = audio_inputs["padding_mask"].sum(-1)
         per_sample_windows = ((per_sample_lengths + window_size - 1) // window_size).clamp(min=1).to(torch.long)
         audio_chunk_mapping = torch.repeat_interleave(torch.arange(len(audio), dtype=torch.long), per_sample_windows)
@@ -377,7 +382,8 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self) -> list[str]:
-        return super().model_input_names + ["input_features_mask", "padding_mask"]
+        input_names = self.tokenizer.model_input_names + ["input_features", "input_features_mask", "padding_mask"]
+        return [name for name in input_names if name not in self.unused_input_names]
 
     @staticmethod
     def parse_timestamp(value: str) -> float:

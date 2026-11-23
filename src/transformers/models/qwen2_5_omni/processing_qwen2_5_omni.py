@@ -132,15 +132,16 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
     }
     audio_kwargs = {
         "sampling_rate": 16000,
-        "return_attention_mask": True,
+        "padding": "max_length",
+        "return_padding_mask": True,
     }
     seconds_per_chunk = 2.0
     position_id_per_seconds = 25
 
     def __init__(
-        self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
+        self, image_processor=None, video_processor=None, audio_processor=None, tokenizer=None, chat_template=None
     ):
-        super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, video_processor, audio_processor, tokenizer, chat_template=chat_template)
         self.image_token = self.tokenizer.image_token
         self.audio_token = self.tokenizer.audio_token
         self.video_token = self.tokenizer.video_token
@@ -194,10 +195,10 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         kwargs["padding"] = "max_length"  # Support "max_length" padding only here
-        audio_inputs = self.feature_extractor(audio, **kwargs)
-        audio_inputs["feature_attention_mask"] = audio_inputs.pop(
-            "attention_mask"
-        )  # rename feature_attention_mask to prevent conflicts later on
+        audio_inputs = self.audio_processor(audio, **kwargs)
+        # Rename to the model's input names; `feature_attention_mask` also avoids clashing with the text mask
+        audio_inputs["feature_attention_mask"] = audio_inputs.pop("audio_features_mask")
+        audio_inputs["input_features"] = audio_inputs.pop("audio_features")
         audio_inputs["num_audio_tokens"] = _get_feat_extract_output_lengths(
             audio_inputs["feature_attention_mask"].sum(-1)
         )
@@ -444,9 +445,8 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
         """
         Computes the output length of the convolutional layers and the output length of the audio encoder
         """
-        input_lengths = min(
-            math.ceil(audio_length / self.feature_extractor.hop_length), self.feature_extractor.nb_max_frames
-        )
+        hop_length = self.audio_processor.spectrogram_config["stft_config"]["hop_length"]
+        input_lengths = min(math.ceil(audio_length / hop_length), self.audio_processor.max_length // hop_length)
         return _get_feat_extract_output_lengths(input_lengths)
 
     @property
@@ -457,16 +457,15 @@ class Qwen2_5OmniProcessor(OmniModalProcessorMixin):
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         video_processor_input_names = self.video_processor.model_input_names
+        # The audio processor's outputs are renamed in `__call__`
         return list(
             dict.fromkeys(
                 tokenizer_input_names
-                + feature_extractor_input_names
                 + image_processor_input_names
                 + video_processor_input_names
-                + ["feature_attention_mask"]
+                + ["input_features", "feature_attention_mask"]
                 + ["video_second_per_grid"]
             )
         )

@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_fun_asr_nano import *
     from .configuration_fun_asr_nano import *
     from .feature_extraction_fun_asr_nano import *
     from .modeling_fun_asr_nano import *

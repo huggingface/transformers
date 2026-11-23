@@ -22,11 +22,11 @@ import pytest
 from transformers import WhisperTokenizer, WhisperTokenizerFast, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
-from .test_feature_extraction_whisper import floats_list
+from ...test_processing_common import floats_list
 
 
 if is_speech_available():
-    from transformers import WhisperFeatureExtractor, WhisperProcessor
+    from transformers import WhisperAudioProcessor, WhisperProcessor
 
 
 TRANSCRIBE = 50358
@@ -44,17 +44,17 @@ class WhisperProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         return WhisperTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return WhisperFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+    def get_audio_processor(self, **kwargs):
+        return WhisperAudioProcessor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         processor.save_pretrained(self.tmpdirname)
         processor = WhisperProcessor.from_pretrained(self.tmpdirname)
@@ -62,15 +62,15 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, WhisperTokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(processor.audio_processor, WhisperAudioProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), audio_processor=self.get_audio_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+        audio_processor_add_kwargs = self.get_audio_processor(do_normalize=False, padding_value=1.0)
 
         processor = WhisperProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
@@ -79,28 +79,28 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, WhisperTokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, WhisperFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.audio_processor, WhisperAudioProcessor)
 
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
+    def test_audio_processor(self):
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         raw_speech = floats_list((3, 1000))
 
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         input_str = "This is a test string"
 
@@ -112,10 +112,10 @@ class WhisperProcessorTest(unittest.TestCase):
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_tokenizer_decode(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -125,10 +125,10 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_get_decoder_prompt_ids(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = WhisperProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
         forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", no_timestamps=True)
 
         self.assertIsInstance(forced_decoder_ids, list)
@@ -139,7 +139,7 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertListEqual([ids[-1] for ids in forced_decoder_ids], expected_ids)
 
     def test_get_prompt_ids(self):
-        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), audio_processor=self.get_audio_processor())
         prompt_ids = processor.get_prompt_ids("Mr. Quilter")
         decoded_prompt = processor.tokenizer.decode(prompt_ids)
 
@@ -147,7 +147,7 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertEqual(decoded_prompt, "<|startofprev|> Mr. Quilter")
 
     def test_empty_get_prompt_ids(self):
-        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), audio_processor=self.get_audio_processor())
         prompt_ids = processor.get_prompt_ids("")
         decoded_prompt = processor.tokenizer.decode(prompt_ids)
 
@@ -155,7 +155,7 @@ class WhisperProcessorTest(unittest.TestCase):
         self.assertEqual(decoded_prompt, "<|startofprev|> ")
 
     def test_get_prompt_ids_with_special_tokens(self):
-        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), audio_processor=self.get_audio_processor())
 
         def _test_prompt_error_raised_helper(prompt, special_token):
             with pytest.raises(ValueError) as excinfo:
@@ -206,7 +206,7 @@ class WhisperProcessorTest(unittest.TestCase):
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_1, (480_000, 120_000, 0)]],
             processor.tokenizer,
-            processor.feature_extractor,
+            processor.audio_processor,
             max_source_positions,
         )
 
@@ -243,7 +243,7 @@ class WhisperProcessorTest(unittest.TestCase):
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_2, (480_000, 120_000, 0)]],
             processor.tokenizer,
-            processor.feature_extractor,
+            processor.audio_processor,
             max_source_positions,
         )
         # fmt: off
@@ -277,7 +277,7 @@ class WhisperProcessorTest(unittest.TestCase):
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 120_000, 0)]],
             processor.tokenizer,
-            processor.feature_extractor,
+            processor.audio_processor,
             max_source_positions,
         )
         self.assertEqual(
@@ -307,7 +307,7 @@ class WhisperProcessorTest(unittest.TestCase):
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 167_000, 0)]],
             processor.tokenizer,
-            processor.feature_extractor,
+            processor.audio_processor,
             max_source_positions,
         )
         self.assertEqual(
@@ -353,7 +353,7 @@ def _fast_find_longest_common_sequence(sequence_left, sequence_right):
     return index_left, index_right, longest
 
 
-def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source_positions):
+def _find_timestamp_sequence(sequences, tokenizer, audio_processor, max_source_positions):
     """
     Old processing function used in the ASR pipeline.
 
@@ -367,7 +367,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
     items = []
     # approximation of the token to time ratio : ~0.2seconds
-    time_precision = feature_extractor.chunk_length / max_source_positions
+    time_precision = audio_processor.chunk_length / max_source_positions
     time = 0
     for seq_idx, item in enumerate(sequences):
         sequence, stride = item
@@ -385,8 +385,8 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
             last_timestamp = np.where(timestamp_tokens)[0][-1]
             consecutive = np.append(consecutive, last_timestamp) if last_timestamp not in consecutive else consecutive
             time -= stride_left + stride_right
-            offset = int((time / feature_extractor.sampling_rate) / time_precision)
-            overlap_time = int((stride_left / feature_extractor.sampling_rate) / time_precision)
+            offset = int((time / audio_processor.sampling_rate) / time_precision)
+            overlap_time = int((stride_left / audio_processor.sampling_rate) / time_precision)
             # relevant timestamps are in the overlapping part
             relevant_timestamp = np.where(sequence[consecutive] >= timestamp_begin + overlap_time)[0]
             if relevant_timestamp.shape[0] > 0:

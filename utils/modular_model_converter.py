@@ -572,6 +572,7 @@ ALL_FILE_TYPES = (
     "processing",
     "image_processing_pil",
     "image_processing",
+    "audio_processing",
     "video_processing",
     "feature_extraction",
 )
@@ -1210,6 +1211,8 @@ TYPE_TO_FILE_TYPE = {
     "Config": "configuration",
     "Tokenizer": "tokenization",
     "Processor": "processing",
+    "AudioProcessor": "audio_processing",
+    "AudioProcessorKwargs": "audio_processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorPil": "image_processing_pil",
     "VideoProcessor": "video_processing",
@@ -1222,6 +1225,7 @@ TYPE_TO_FILE_TYPE = {
     "VideosKwargs": "processing",
     "ImagesKwargs": "processing",
     "TextKwargs": "processing",
+    "AudioKwargs": "processing",
 }
 
 

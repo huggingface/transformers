@@ -1,0 +1,58 @@
+# Copyright 2026 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from ...audio_processing_utils import BaseAudioProcessor
+from ...processing_utils import AudioKwargs
+
+
+class VibevoiceAcousticTokenizerAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    target_dB_FS (`int`, *optional*, defaults to -25):
+        Loudness, in dBFS, the waveform is normalized to.
+    eps (`float`, *optional*, defaults to 1e-06):
+        Small constant guarding the loudness-normalization division.
+    normalize_audio (`bool`, *optional*, defaults to `True`):
+        Whether to loudness-normalize the waveform at all. The legacy extractor gates the whole
+        normalization on this; without it a checkpoint that disables it was normalized anyway.
+    """
+
+    target_dB_FS: int
+    eps: float
+    normalize_audio: bool
+
+
+class VibevoiceAcousticTokenizerAudioProcessor(BaseAudioProcessor):
+    sampling_rate = 24000
+
+    target_dB_FS = -25
+    eps = 1e-6
+    normalize_audio = True
+    pad_to_multiple_of = 3200
+    # Not in the legacy extractor's signature (feature_size, sampling_rate, padding_value,
+    # normalize_audio, target_dB_FS, eps, pad_to_multiple_of): `db_normalize` is superseded by
+    # `normalize_audio`, and `speech_tok_compress_ratio` is a modeling ratio, not a feature one.
+    legacy_field_mapping = {"db_normalize": None, "speech_tok_compress_ratio": None}
+    valid_kwargs = VibevoiceAcousticTokenizerAudioProcessorKwargs
+
+    def _prepare_waveform(self, audio_el, *, normalize_audio, target_dB_FS, eps, **kwargs):
+        if not normalize_audio:
+            return audio_el
+        rms = self.ops.pow(self.ops.mean(self.ops.pow(audio_el, 2), -1, keepdims=True), 0.5)
+        audio_el = audio_el * (10 ** (target_dB_FS / 20) / (rms + eps))
+        max_val = self.ops.amax(self.ops.abs(audio_el), -1, keepdims=True)
+        # `where` evaluates both branches: no host sync on the peak
+        return self.ops.where(max_val > 1.0, audio_el / (max_val + eps), audio_el)
+
+
+__all__ = ["VibevoiceAcousticTokenizerAudioProcessor"]

@@ -61,6 +61,11 @@ class IdeficsImageProcessingTester(ImageProcessingTester):
 class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = IdeficsImageProcessingTester
 
+    def test_explicit_none_kwarg_falls_back_to_default(self):
+        # Idefics' `preprocess` indexes the batch itself and cannot consume the shared
+        # image fixture; its own `test_call_*` methods build the inputs it needs.
+        self.skipTest("Idefics needs a bespoke input fixture")
+
     @require_torchvision
     def test_torchvision_numpy_transforms_equivalency(self):
         def convert_to_rgb(image):

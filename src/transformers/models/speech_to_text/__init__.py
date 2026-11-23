@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_speech_to_text import *
     from .configuration_speech_to_text import *
     from .feature_extraction_speech_to_text import *
     from .modeling_speech_to_text import *

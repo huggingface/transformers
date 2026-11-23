@@ -1,0 +1,72 @@
+# Copyright 2026 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from ...audio_processing_utils import BaseAudioProcessor
+from ..gemma3n.audio_processing_gemma3n import LEGACY_GEMMA_AUDIO_FIELDS
+
+
+class Gemma4AudioProcessor(BaseAudioProcessor):
+    legacy_field_mapping = {
+        **LEGACY_GEMMA_AUDIO_FIELDS,
+        "mel_floor": "spectrogram_config.pre_log_offset",
+    }
+    max_length = 480_000
+    pad_to_multiple_of = 128
+    padding = "longest"
+    sampling_rate = 16000
+    spectrogram_config = {
+        "stft_config": {
+            "n_fft": 512,
+            "win_length": 320,
+            "hop_length": 160,
+            # Gemma4's legacy extractor uses `window_function(...).astype(np.float32)` -- float64
+            # cosine, stored as float32. Gemma3n instead builds the window inline from a float32
+            # arange, which is what `hann_window_f32` reproduces; the two differ by 2.4e-07.
+            "window_fn": "hann_window_f64_as_f32",
+            "power": 1.0,
+            "center": "left",
+            "extra_samples_per_frame": 1,
+            # the legacy `np.fft.rfft` promoted its float32 frames to complex128, so the legacy
+            # magnitudes are float64; without this the FFT would stay in the frames' float32
+            "fft_dtype": "float64",
+        },
+        "mel_scale_config": {
+            "n_mels": 128,
+            "f_min": 0.0,
+            "f_max": 8000.0,
+            "mel_scale": "htk",
+            "matmul_order": "features_first",
+            # the legacy extractor built its bank with `mel_filter_bank` (librosa's rounding, linspace bins)
+            "bank_rounding": "librosa",
+            "frequency_bin_mode": "linspace",
+        },
+        "preemphasis": 0.0,
+        "preemphasis_mode": "htk_per_frame",
+        "mel_floor": 0.0,
+        "pre_log_offset": 1e-3,
+        "log_mode": "log",
+        "computation_dtype": "float64",
+    }
+    truncation = True
+
+    def _finalize_output(self, output, audio_ranges=None, **kwargs):
+        # Zero the padded frames, as the legacy extractor does.
+        mask = output.get("audio_features_mask")
+        if mask is not None and "audio_features" in output:
+            features = output["audio_features"]
+            output["audio_features"] = features * self.ops.astype(mask, self.ops.dtype_name(features))[..., None]
+        return output
+
+
+__all__ = ["Gemma4AudioProcessor"]

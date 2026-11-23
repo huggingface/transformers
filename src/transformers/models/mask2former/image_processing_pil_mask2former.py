@@ -72,9 +72,9 @@ class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     ignore_index: int | None
-    do_reduce_labels: bool
+    do_reduce_labels: bool | None
     num_labels: int | None
-    size_divisor: int
+    size_divisor: int | None
     pad_size: SizeDict | None
 
 

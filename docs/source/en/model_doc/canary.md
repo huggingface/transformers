@@ -52,7 +52,7 @@ processor = AutoProcessor.from_pretrained("nvidia/canary-1b-v2")
 model = AutoModelForSpeechSeq2Seq.from_pretrained("nvidia/canary-1b-v2", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
 inputs = processor.apply_transcription_request(audio=ds[0]["audio"]["array"], source_language="en").to(model.device)
 generated_ids = model.generate(**inputs, max_new_tokens=128)

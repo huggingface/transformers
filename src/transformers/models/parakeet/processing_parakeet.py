@@ -16,17 +16,32 @@
 from tokenizers.decoders import DecodeStream
 
 from ...audio_utils import AudioInput, make_list_of_audio
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
-from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
+class ParakeetAudioKwargs(AudioKwargs, total=False):
+    """
+    subsampling_factor (`int`, *optional*, defaults to 8):
+        Ratio between audio feature frames and encoder output frames. Used by the processor to convert
+        encoder frame indices to timestamps; it does not change the audio features.
+    """
+
+    subsampling_factor: int | None
+
+
+class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: ParakeetAudioKwargs
+
+
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
+    valid_processor_kwargs = ParakeetProcessorKwargs
+
     text_kwargs = {
         "padding": True,
         "padding_side": "right",
@@ -35,12 +50,13 @@ class ParakeetProcessor(ProcessorMixin):
     }
     audio_kwargs = {
         "sampling_rate": 16000,
-        "return_attention_mask": True,
+        "padding": "longest",
+        "return_padding_mask": True,
         "subsampling_factor": 8,
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor, tokenizer, blank_token="<blank>", decoder_type=None):
+    def __init__(self, audio_processor, tokenizer, blank_token="<blank>", decoder_type=None):
         r"""
         blank_token (`str`, *optional*, defaults to `"<blank>"`):
             Blank token for transducer decoding.
@@ -56,7 +72,7 @@ class ParakeetProcessor(ProcessorMixin):
         self.blank_token = blank_token
         self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
         self.decoder_type = decoder_type
-        super().__init__(feature_extractor, tokenizer)
+        super().__init__(audio_processor, tokenizer)
 
     @property
     def _decoder_type(self):
@@ -73,7 +89,7 @@ class ParakeetProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[ParakeetProcessorKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -93,13 +109,14 @@ class ParakeetProcessor(ProcessorMixin):
             logger.warning_once(
                 f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
             )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-            )
+        else:
+            # Forward the caller's assertion; the audio processor resamples if it differs from its own rate.
+            output_kwargs["audio_kwargs"]["sampling_rate"] = sampling_rate
 
+        # A processor-level option: it converts encoder frames to timestamps, not audio to features.
+        output_kwargs["audio_kwargs"].pop("subsampling_factor", None)
         if audio is not None:
-            inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
+            inputs = self.audio_processor(audio, **output_kwargs["audio_kwargs"])
         if text is not None:
             encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
@@ -118,8 +135,8 @@ class ParakeetProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels", "decoder_input_ids"]
+        audio_processor_input_names = self.audio_processor.model_input_names
+        return audio_processor_input_names + ["labels", "decoder_input_ids"]
 
     def batch_decode(self, *args, **kwargs):
         kwargs.setdefault("group_tokens", self._decoder_type == "ctc")
@@ -142,8 +159,8 @@ class ParakeetProcessor(ProcessorMixin):
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             )
             frame_rate = (
-                self.feature_extractor.hop_length
-                / self.feature_extractor.sampling_rate
+                self.audio_processor.spectrogram_config.stft_config.hop_length
+                / self.audio_processor.sampling_rate
                 * output_kwargs["audio_kwargs"]["subsampling_factor"]
             )
             # Filter padding/blank tokens and decode per sequence to keep track of token-level timestamps
@@ -192,7 +209,5 @@ class ParakeetProcessor(ProcessorMixin):
 
         return char_offsets
 
-
-__getattr__ = deprecate_attr(__name__, rename={"ParakeetProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["ParakeetProcessor"]

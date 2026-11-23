@@ -28,8 +28,8 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
 
 __getattr__ = deprecate_attr(__name__, rename={"KyutaiSpeechToTextProcessorKwargs": (ProcessingKwargs, "5.29.0")})

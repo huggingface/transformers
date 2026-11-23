@@ -358,6 +358,11 @@ print(transcription)
 [[autodoc]] MossTranscribeDiarizeAudioModel
     - forward
 
+## MossTranscribeDiarizeAudioProcessor
+
+[[autodoc]] MossTranscribeDiarizeAudioProcessor
+    - __call__
+
 ## MossTranscribeDiarizeFeatureExtractor
 
 [[autodoc]] MossTranscribeDiarizeFeatureExtractor

@@ -54,10 +54,10 @@ processor = AutoProcessor.from_pretrained("google/medasr")
 model = AutoModelForCTC.from_pretrained("google/medasr", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el['array'] for el in ds["audio"][:5]]
 
-inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(speech_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
 outputs = model.generate(**inputs)
 print(processor.batch_decode(outputs))
@@ -82,12 +82,12 @@ model = AutoModelForCTC.from_pretrained("google/medasr", device_map="auto")
 
 # Load a small example dataset and prepare batch
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 speech_samples = [el["array"] for el in ds["audio"][:5]]
 text_samples = [el for el in ds["text"][:5]]
 
 # Passing `text` to the processor will prepare the `labels`
-inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
+inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.audio_processor.sampling_rate)
 inputs.to(device, dtype=model.dtype)
 
 outputs = model(**inputs)

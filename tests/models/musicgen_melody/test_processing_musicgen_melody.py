@@ -27,7 +27,7 @@ from ...test_processing_common import floats_list
 
 
 if is_torchaudio_available():
-    from transformers import MusicgenMelodyFeatureExtractor, MusicgenMelodyProcessor
+    from transformers import MusicgenMelodyAudioProcessor, MusicgenMelodyProcessor
 
 
 @require_torch
@@ -43,17 +43,17 @@ class MusicgenMelodyProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         return T5Tokenizer.from_pretrained(self.checkpoint, **kwargs)
 
-    def get_feature_extractor(self, **kwargs):
-        return MusicgenMelodyFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+    def get_audio_processor(self, **kwargs):
+        return MusicgenMelodyAudioProcessor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
 
-        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         processor.save_pretrained(self.tmpdirname)
         processor = MusicgenMelodyProcessor.from_pretrained(self.tmpdirname)
@@ -61,17 +61,15 @@ class MusicgenMelodyProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, T5TokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, MusicgenMelodyFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(processor.audio_processor, MusicgenMelodyAudioProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = MusicgenMelodyProcessor(
-            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
-        )
+        processor = MusicgenMelodyProcessor(tokenizer=self.get_tokenizer(), audio_processor=self.get_audio_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+        audio_processor_add_kwargs = self.get_audio_processor(do_normalize=False, padding_value=1.0)
 
         processor = MusicgenMelodyProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
@@ -80,28 +78,28 @@ class MusicgenMelodyProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, T5TokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, MusicgenMelodyFeatureExtractor)
+        self.assertEqual(processor.audio_processor.to_json_string(), audio_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.audio_processor, MusicgenMelodyAudioProcessor)
 
-    def test_feature_extractor(self):
-        feature_extractor = self.get_feature_extractor()
+    def test_audio_processor(self):
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         raw_speech = floats_list((3, 1000))
 
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_feat_extract = audio_processor(raw_speech, return_tensors="np")
         input_processor = processor(raw_speech, return_tensors="np")
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         input_str = "This is a test string"
 
@@ -113,10 +111,10 @@ class MusicgenMelodyProcessorTest(unittest.TestCase):
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_tokenizer_decode(self):
-        feature_extractor = self.get_feature_extractor()
+        audio_processor = self.get_audio_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -127,10 +125,10 @@ class MusicgenMelodyProcessorTest(unittest.TestCase):
 
     # Ignore copy
     def test_decode_audio(self):
-        feature_extractor = self.get_feature_extractor(padding_side="left")
+        audio_processor = self.get_audio_processor(padding_side="left")
         tokenizer = self.get_tokenizer()
 
-        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MusicgenMelodyProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         attention_mask = np.zeros((3, 20))
         attention_mask[0, -5:] = 1

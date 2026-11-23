@@ -31,7 +31,7 @@ from ...utils import TensorType, auto_docstring
 
 # Adapted from transformers.models.bridgetower.image_processing_bridgetower.BridgeTowerImageProcessorKwargs
 class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
-    size_divisor: int
+    size_divisor: int | None
 
 
 # adapted from transformers.models.bridgetower.image_processing_bridgetower.get_resize_output_image_size

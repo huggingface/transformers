@@ -15,9 +15,8 @@ from ...processing_utils import ProcessorMixin
 
 
 class PeAudioProcessor(ProcessorMixin):
-    attributes = ["feature_extractor", "tokenizer"]
-    feature_extractor_class = "PeAudioFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
+    def __init__(self, audio_processor, tokenizer):
+        super().__init__(audio_processor, tokenizer)
 
 
 __all__ = ["PeAudioProcessor"]

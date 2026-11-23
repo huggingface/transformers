@@ -14,21 +14,21 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Literal
 
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...audio_processing_utils import BaseAudioProcessor
 from ...cache_utils import Cache, DynamicCache
-from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...processing_utils import AudioKwargs, Unpack
 from ...utils import (
-    TensorType,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
@@ -40,8 +40,8 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
+from ..parakeet.audio_processing_parakeet import ParakeetAudioProcessor
 from ..parakeet.configuration_parakeet import ParakeetEncoderConfig, ParakeetRNNTConfig
-from ..parakeet.feature_extraction_parakeet import ParakeetFeatureExtractor
 from ..parakeet.modeling_parakeet import (
     ParakeetEncoder,
     ParakeetEncoderAttention,
@@ -62,8 +62,6 @@ from .generation_nemotron_asr_streaming import (
     NemotronAsrStreamingRNNTDecoderCache,
 )
 
-
-LOG_ZERO_GUARD_VALUE = 2**-24
 
 logger = logging.get_logger(__name__)
 
@@ -166,241 +164,6 @@ class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
     vocab_size: int = 1025
     pad_token_id: int = 0
     blank_token_id: int = 1024
-
-
-class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
-    r"""
-    Constructs a NemotronAsrStreaming feature extractor.
-
-    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
-    most of the main methods. Users should refer to this superclass for more information regarding those methods.
-
-    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
-    Fourier Transform` which should match pytorch's `torch.stft` equivalent.
-
-    Args:
-        feature_size (`int`, *optional*, defaults to 80):
-            The feature dimension of the extracted features.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        hop_length (`int`, *optional*, defaults to 160):
-            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
-        n_fft (`int`, *optional*, defaults to 512):
-            Size of the Fourier transform.
-        win_length (`int`, *optional*, defaults to 400):
-            The window length for the STFT computation.
-        preemphasis (`float`, *optional*, defaults to 0.97):
-            A preemphasis filter coefficient. 0.0 means no preemphasis filter.
-        padding_value (`float`, *optional*, defaults to 0.0):
-            Padding value used to pad the audio. Should correspond to silences.
-        mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
-            Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
-            precision (`"bfloat16"` for Nemotron 3.5 Transcribe): the filter bank and the window are then rounded to
-            that dtype when the features are computed, so the log-mel features match the original front-end; the
-            spectrogram itself is always computed in float32.
-    """
-
-    def __init__(
-        self,
-        feature_size=80,
-        sampling_rate=16000,
-        hop_length=160,
-        n_fft=512,
-        win_length=400,
-        preemphasis=0.97,
-        padding_value=0.0,
-        mel_filters_dtype="float32",
-        **kwargs,
-    ):
-        super().__init__(
-            feature_size=feature_size,
-            sampling_rate=sampling_rate,
-            hop_length=hop_length,
-            n_fft=n_fft,
-            win_length=win_length,
-            preemphasis=preemphasis,
-            padding_value=padding_value,
-            **kwargs,
-        )
-        self.mel_filters_dtype = mel_filters_dtype
-
-    def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        dtype = getattr(torch, self.mel_filters_dtype)
-        window = torch.hann_window(self.win_length, periodic=False, device=device).to(dtype).float()
-        stft = torch.stft(
-            waveform,
-            self.n_fft,
-            hop_length=self.hop_length,
-            win_length=self.win_length,
-            window=window,
-            return_complex=True,
-            pad_mode="constant",
-            center=center,
-        )
-        magnitudes = torch.view_as_real(stft)
-        magnitudes = torch.sqrt(magnitudes.pow(2).sum(-1))
-        magnitudes = magnitudes.pow(2)
-
-        # log mel spectrogram
-        mel_filters = self.mel_filters.to(device).to(dtype).float()
-        mel_spec = mel_filters @ magnitudes
-        mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
-
-        # (batch_size, num_mel_filters, num_frames) -> (batch_size, num_frames, num_mel_filters)
-        mel_spec = mel_spec.permute(0, 2, 1)
-
-        return mel_spec
-
-    def __call__(
-        self,
-        raw_speech: "np.ndarray | list[float] | list[np.ndarray] | list[list[float]]",
-        truncation: bool = False,
-        pad_to_multiple_of: int | None = None,
-        return_tensors: "str | TensorType | None" = None,
-        return_attention_mask: bool | None = None,
-        padding: str | None = "longest",
-        max_length: int | None = None,
-        sampling_rate: int | None = None,
-        device: str | None = "cpu",
-        return_token_timestamps: bool | None = None,
-        center: bool = True,
-        is_last_audio_chunk: bool = False,
-        **kwargs,
-    ) -> BatchFeature:
-        """
-        Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch for
-        the STFT computation if available, otherwise a slower NumPy based one.
-
-        Args:
-            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
-                stereo, i.e. single float per timestep.
-            truncation (`bool`, *optional*, default to `True`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*, defaults to None):
-                If set will pad the sequence to a multiple of the provided value.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
-            sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
-                pipeline.
-            device (`str`, *optional*, defaults to `'cpu'`):
-                Specifies the device for computation of the log-mel spectrogram of audio signals in the
-                `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
-            return_token_timestamps (`bool`, *optional*, defaults to `None`):
-                Deprecated. Use `return_attention_mask` instead from which the number of frames can be inferred.
-            center (`bool`, *optional*, defaults to `True`):
-                Whether to pad the audio on both sides so STFT frames are centered (`torch.stft(center=True)`). Use
-                `True` for offline extraction and for the first chunk of a streaming session. Use `False` for
-                subsequent streaming chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
-                reproduces, frame-for-frame, the features that a single `center=True` pass over the whole utterance
-                would have produced for those frames.
-            is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
-                Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio
-                is then zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the
-                whole utterance reaches past the audio at most, so that this frame is kept rather than dropped.
-        """
-        if sampling_rate is not None:
-            if sampling_rate != self.sampling_rate:
-                raise ValueError(
-                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
-                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `raw_speech` input"
-                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
-                )
-        else:
-            logger.warning(
-                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
-                "Failing to do so can result in silent errors that might be hard to debug."
-            )
-
-        # Convert to torch tensor
-        if isinstance(raw_speech, np.ndarray):
-            raw_speech = torch.tensor(raw_speech)
-        elif isinstance(raw_speech, (list, tuple)) and isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [torch.tensor(speech) for speech in raw_speech]
-
-        is_batched_torch = isinstance(raw_speech, torch.Tensor) and len(raw_speech.shape) > 1
-        if is_batched_torch and len(raw_speech.shape) > 2:
-            logger.warning(
-                f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
-                "We will take the mean of the channels to convert to mono."
-            )
-            raw_speech = raw_speech.mean(-1)
-
-        is_batched_sequence = isinstance(raw_speech, (list, tuple))
-        if is_batched_sequence:
-            for speech in raw_speech:
-                if len(speech.shape) > 1:
-                    logger.warning(
-                        f"Only mono-channel audio is supported for input to {self.__class__.__name__}. "
-                        "We will take the mean of the channels to convert to mono."
-                    )
-                    speech = speech.mean(-1)
-
-        if is_batched_torch or is_batched_sequence:
-            raw_speech = [speech[:, None].to(torch.float32) for speech in raw_speech]
-        else:
-            raw_speech = [raw_speech[:, None].to(torch.float32)]
-
-        audio_lengths = [len(speech) for speech in raw_speech]
-        batched_speech = BatchFeature({"input_features": raw_speech, "audio_lengths": audio_lengths})
-
-        padded_inputs = self.pad(
-            batched_speech,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_tensors="pt",
-        )
-        input_features = padded_inputs.input_features.squeeze(-1)
-
-        # preemphasis
-        if self.preemphasis is not None:
-            timemask = torch.arange(input_features.shape[1], device=input_features.device).unsqueeze(
-                0
-            ) < padded_inputs.audio_lengths.unsqueeze(1)
-            input_features = torch.cat(
-                [input_features[:, :1], input_features[:, 1:] - self.preemphasis * input_features[:, :-1]], dim=1
-            )
-            input_features = input_features.masked_fill(~timemask, 0.0)
-
-        audio_lengths = padded_inputs.audio_lengths
-        if is_last_audio_chunk and not center:
-            # the last frame a `center=True` pass counts reaches up to `n_fft // 2 - hop` past the audio; padded
-            # after the preemphasis, which would otherwise turn the first zero into `-preemphasis * audio[-1]`
-            num_padding = self.n_fft // 2 - self.hop_length
-            input_features = torch.nn.functional.pad(input_features, (0, num_padding))
-            audio_lengths = audio_lengths + num_padding
-
-        input_features = self._torch_extract_fbank_features(input_features, device, center=center)
-        if center:
-            # `center=True` pads `n_fft // 2` on each side, so the number of valid frames is `floor(L / hop)`.
-            features_lengths = torch.floor_divide(audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length)
-        else:
-            # `center=False` does no padding: `floor((L - n_fft) / hop) + 1` frames.
-            features_lengths = torch.floor_divide(audio_lengths - self.n_fft, self.hop_length) + 1
-        attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
-
-        # NemotronAsrStreaming never normalizes the mel features
-        input_features *= attention_mask.unsqueeze(-1)
-
-        return BatchFeature(
-            data={
-                "input_features": input_features,
-                "attention_mask": attention_mask,
-            },
-            tensor_type=return_tensors,
-        )
 
 
 class NemotronAsrStreamingEncoderCausalConv1dCacheLayer(VoxtralRealtimeConv1dCacheLayer): ...
@@ -909,7 +672,7 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
         >>> encoder = NemotronAsrStreamingEncoder.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> encoder_outputs = encoder(**inputs)
@@ -1080,7 +843,7 @@ class NemotronAsrStreamingForRNNT(
         >>> model = NemotronAsrStreamingForRNNT.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 
         >>> inputs = processor(ds[0]["audio"]["array"])
         >>> outputs = model(**inputs)
@@ -1120,10 +883,118 @@ class NemotronAsrStreamingForRNNT(
         )
 
 
+def _round_to_dtype(array, dtype: str):
+    """`array` rounded to `dtype` (round to nearest even) and back to float32, on the host. numpy has no
+    bfloat16, so its rounding is done on the float32 bits; the result matches `torch.Tensor.to(dtype).float()`.
+    Elementwise ops keep the memory layout, which the mel matmul's accumulation order depends on."""
+    array = np.asarray(array, dtype=np.float32)
+    if dtype == "float32":
+        return array
+    if dtype == "float16":
+        return array.astype(np.float16).astype(np.float32)
+    bits = array.view(np.uint32)
+    rounded = (bits + np.uint32(0x7FFF) + ((bits >> np.uint32(16)) & np.uint32(1))) & np.uint32(0xFFFF0000)
+    return rounded.astype(np.uint32).view(np.float32)
+
+
+class NemotronAsrStreamingAudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    center (`bool`, *optional*):
+        Per-call override of `spectrogram_config.stft_config.center`. Streaming centers the first chunk (and offline
+        audio), and not the later chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
+        reproduces, frame for frame, the features a single `center=True` pass over the whole utterance yields.
+    is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
+        Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio is then
+        zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the whole
+        utterance reaches past the audio at most, so that this frame is kept rather than dropped.
+    mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
+        Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
+        precision (`"bfloat16"` for Nemotron 3.5 Transcribe): both are then rounded to that dtype once, so the log-mel
+        features match the original front end; the spectrogram itself is always computed in float32.
+    """
+
+    center: bool | None
+    is_last_audio_chunk: bool | None
+    mel_filters_dtype: Literal["float32", "bfloat16", "float16"]
+
+
+class NemotronAsrStreamingAudioProcessor(ParakeetAudioProcessor):
+    # Unlike Parakeet, Nemotron consumes log-mel features without per-feature
+    # standardization. Override the inherited recipe explicitly.
+    feature_normalization = None
+    # The streaming encoder consumes log-mel frames; extraction is not optional. The mel bank is rounded at
+    # construction, so its precision is a property of the checkpoint, not of a call.
+    frozen_options = ("do_extract_spectrogram", "mel_filters_dtype")
+
+    # Call-only streaming options: `None` leaves `spectrogram_config` as configured and keeps them out of `to_dict`.
+    center = None
+    is_last_audio_chunk = None
+    mel_filters_dtype = "float32"
+    valid_kwargs = NemotronAsrStreamingAudioProcessorKwargs
+
+    def _set_attributes(self, **kwargs):
+        BaseAudioProcessor._set_attributes(self, **kwargs)
+        if self.mel_filters_dtype != "float32" and getattr(self, "mel_filters", None) is not None:
+            self.mel_filters = _round_to_dtype(self.mel_filters, self.mel_filters_dtype)
+
+    def _standardize_kwargs(self, center: bool | None = None, **kwargs):
+        kwargs = BaseAudioProcessor._standardize_kwargs(self, center=center, **kwargs)
+        spectrogram_config = kwargs.get("spectrogram_config")
+        if center is not None and spectrogram_config is not None and spectrogram_config.stft_config.center != center:
+            stft_config = replace(spectrogram_config.stft_config, center=center)
+            kwargs["spectrogram_config"] = replace(spectrogram_config, stft_config=stft_config)
+        return kwargs
+
+    def _device_window(self, audio, stft_cfg):
+        window = BaseAudioProcessor._device_window(self, audio, stft_cfg)
+        if self.mel_filters_dtype == "float32":
+            return window
+        return self.ops.asarray(_round_to_dtype(self.ops.to_numpy(window), self.mel_filters_dtype), like=audio)
+
+    def _frame_count(self, lengths, stft_cfg):
+        if not stft_cfg.center:
+            # uncentered frames are `n_fft` samples long (the window sits centred in the FFT buffer)
+            return (lengths + 2 * stft_cfg.pad - stft_cfg.n_fft) // stft_cfg.hop_length + 1
+        return BaseAudioProcessor._frame_count(self, lengths, stft_cfg)
+
+    @staticmethod
+    def _last_chunk_padding(stft_cfg, is_last_audio_chunk) -> int:
+        """Zeros appended to the last uncentered chunk: the last frame a `center=True` pass counts reaches up to
+        `n_fft // 2 - hop_length` past the audio."""
+        if is_last_audio_chunk and not stft_cfg.center:
+            return stft_cfg.n_fft // 2 - stft_cfg.hop_length
+        return 0
+
+    def _compute_batched_features(
+        self, audio, *, audio_ranges, spectrogram_config, is_last_audio_chunk=None, **kwargs
+    ):
+        num_padding = self._last_chunk_padding(spectrogram_config.stft_config, is_last_audio_chunk)
+        if num_padding:
+            # Appended before the spectrogram, but the waveform preemphasis zeroes every sample past
+            # `audio_ranges`: the padding stays zero, as when padded after the preemphasis.
+            audio = self.ops.pad(audio, 0, num_padding)
+        features = self.spectrogram(audio, spectrogram_config=spectrogram_config, audio_ranges=audio_ranges, **kwargs)
+        audio_lengths = self._lengths_from_ranges(audio_ranges) + num_padding
+        return features, self._valid_frame_counts(audio_lengths, spectrogram_config)
+
+    def _padded_frame_count(self, padded_length, spectrogram_config, is_last_audio_chunk=None, **kwargs) -> int:
+        padded_length += self._last_chunk_padding(spectrogram_config.stft_config, is_last_audio_chunk)
+        return BaseAudioProcessor._padded_frame_count(self, padded_length, spectrogram_config, **kwargs)
+
+    def _finalize_output(self, output, audio_ranges=None, feature_ranges=None, **kwargs):
+        features = output.pop("audio_features")
+        mask = output.pop("audio_features_mask", None)
+        if mask is not None:
+            features = features * self.ops.astype(mask[..., None], self.ops.dtype_name(features))
+            output["audio_features_mask"] = mask
+        output["audio_features"] = features
+        return output
+
+
 __all__ = [
+    "NemotronAsrStreamingAudioProcessor",
     "NemotronAsrStreamingConfig",
     "NemotronAsrStreamingEncoderConfig",
-    "NemotronAsrStreamingFeatureExtractor",
     "NemotronAsrStreamingEncoderModelOutput",
     "NemotronAsrStreamingRNNTOutput",
     "NemotronAsrStreamingForRNNT",

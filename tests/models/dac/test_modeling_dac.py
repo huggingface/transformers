@@ -72,9 +72,9 @@ class DacModelTester(ModelTesterConfigMixin):
             setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        audio_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
         config = self.get_config()
-        inputs_dict = {"input_values": input_values}
+        inputs_dict = {"audio_values": audio_values}
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -82,9 +82,9 @@ class DacModelTester(ModelTesterConfigMixin):
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        audio_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
         config = self.get_config()
-        inputs_dict = {"input_values": input_values}
+        inputs_dict = {"audio_values": audio_values}
 
         return config, inputs_dict
 
@@ -106,8 +106,8 @@ class DacModelTester(ModelTesterConfigMixin):
     def create_and_check_model_forward(self, config, inputs_dict):
         model = DacModel(config=config).to(torch_device).eval()
 
-        input_values = inputs_dict["input_values"]
-        result = model(input_values)
+        audio_values = inputs_dict["audio_values"]
+        result = model(audio_values)
         self.parent.assertEqual(result.audio_values.shape, (self.batch_size, self.intermediate_size))
 
 
@@ -159,7 +159,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             # Ignore copy
-            expected_arg_names = ["input_values", "n_quantizers", "return_dict"]
+            expected_arg_names = ["audio_values", "n_quantizers", "return_dict"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @unittest.skip("The DacModel is not transformers based, thus it does not have `inputs_embeds` logics")
@@ -268,7 +268,7 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             msg="All quantizers should have the attribute codebook_dim",
         )
         with torch.no_grad():
-            encoder_outputs = model.encode(inputs_dict["input_values"])
+            encoder_outputs = model.encode(inputs_dict["audio_values"])
             latents = encoder_outputs.projected_latents
             quantizer_representation, quantized_latents = model.quantizer.from_latents(latents=latents)
 
@@ -328,11 +328,11 @@ class DacIntegrationTest(unittest.TestCase):
             sampling_rate=processor.sampling_rate,
             return_tensors="pt",
         ).to(torch_device)
-        torch.equal(torch.tensor(inputs["input_values"].shape), torch.tensor(expected["preproc_shape"]))
+        torch.equal(torch.tensor(inputs["audio_values"].shape), torch.tensor(expected["preproc_shape"]))
 
         with torch.no_grad():
             # compare encoder loss
-            encoder_outputs = model.encode(inputs["input_values"])
+            encoder_outputs = model.encode(inputs["audio_values"])
             torch.testing.assert_close(encoder_outputs[0].squeeze().item(), expected["enc_loss"], rtol=1e-3, atol=1e-3)
 
             # compare quantizer outputs
@@ -362,11 +362,11 @@ class DacIntegrationTest(unittest.TestCase):
             )
 
             # compare codec error / lossiness
-            codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["input_values"])
+            codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["audio_values"])
             torch.testing.assert_close(codec_err, expected["codec_error"], rtol=1e-5, atol=1e-5)
 
             # make sure forward and decode gives same result
-            enc_dec = model(inputs["input_values"])[1]
+            enc_dec = model(inputs["audio_values"])[1]
             torch.testing.assert_close(decoded_outputs["audio_values"], enc_dec, rtol=1e-6, atol=1e-6)
 
     @parameterized.expand([(model_name,) for model_name in EXPECTED_INTEGRATION_BATCH.keys()])
@@ -390,11 +390,11 @@ class DacIntegrationTest(unittest.TestCase):
             truncation=False,
             return_tensors="pt",
         ).to(torch_device)
-        torch.equal(torch.tensor(inputs["input_values"].shape), torch.tensor(expected["preproc_shape"]))
+        torch.equal(torch.tensor(inputs["audio_values"].shape), torch.tensor(expected["preproc_shape"]))
 
         with torch.no_grad():
             # compare encoder loss
-            encoder_outputs = model.encode(inputs["input_values"])
+            encoder_outputs = model.encode(inputs["audio_values"])
             torch.testing.assert_close(encoder_outputs[0].mean().item(), expected["enc_loss"], rtol=1e-3, atol=1e-3)
 
             # compare quantizer outputs
@@ -424,11 +424,11 @@ class DacIntegrationTest(unittest.TestCase):
             )
 
             # compare codec error / lossiness
-            codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["input_values"])
+            codec_err = compute_rmse(decoded_outputs["audio_values"], inputs["audio_values"])
             torch.testing.assert_close(codec_err, expected["codec_error"], rtol=1e-6, atol=1e-6)
 
             # make sure forward and decode gives same result
-            enc_dec = model(inputs["input_values"])[1]
+            enc_dec = model(inputs["audio_values"])[1]
             torch.testing.assert_close(decoded_outputs["audio_values"], enc_dec, rtol=1e-6, atol=1e-6)
 
     @parameterized.expand([(model_name,) for model_name in EXPECTED_INTEGRATION_BATCH.keys()])
@@ -449,9 +449,9 @@ class DacIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         ).to(torch_device)
 
-        input_values = inputs["input_values"]
+        audio_values = inputs["audio_values"]
         with torch.no_grad():
-            encoder_outputs = model.encode(input_values)
+            encoder_outputs = model.encode(audio_values)
             latents = encoder_outputs.projected_latents
             original_quantizer_representation = encoder_outputs.quantized_representation
 
@@ -460,7 +460,7 @@ class DacIntegrationTest(unittest.TestCase):
             reconstructed = model.decode(quantized_representation=quantizer_representation).audio_values
 
             # forward pass
-            original_reconstructed = model(input_values).audio_values
+            original_reconstructed = model(audio_values).audio_values
 
         # ensure quantizer representations match
         self.assertTrue(

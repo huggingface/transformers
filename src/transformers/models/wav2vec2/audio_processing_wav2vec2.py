@@ -1,0 +1,42 @@
+# Copyright 2026 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from ...audio_processing_utils import BaseAudioProcessor
+from ...processing_utils import AudioKwargs
+
+
+class Wav2Vec2AudioProcessorKwargs(AudioKwargs, total=False):
+    r"""
+    do_normalize (`bool`, *optional*, defaults to `True`):
+        Whether to zero-mean unit-variance normalize the raw waveform.
+    """
+
+    do_normalize: bool | None
+
+
+class Wav2Vec2AudioProcessor(BaseAudioProcessor):
+    sampling_rate = 16000
+
+    do_normalize = True
+    valid_kwargs = Wav2Vec2AudioProcessorKwargs
+
+    def _prepare_waveform(self, audio_el, *, do_normalize, **kwargs):
+        if do_normalize:
+            # numpy's population variance: the mean of the squared deviations from the mean
+            centered = audio_el - self.ops.mean(audio_el, -1, keepdims=True)
+            audio_el = centered / self.ops.sqrt(self.ops.mean(centered * centered, -1, keepdims=True) + 1e-7)
+        return audio_el
+
+
+__all__ = ["Wav2Vec2AudioProcessor"]

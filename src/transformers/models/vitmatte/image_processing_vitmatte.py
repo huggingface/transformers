@@ -38,7 +38,7 @@ class VitMatteImageProcessorKwargs(ImagesKwargs, total=False):
         The width and height of the image will be padded to be divisible by this number.
     """
 
-    size_divisor: int
+    size_divisor: int | None
 
 
 @auto_docstring

@@ -52,7 +52,7 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     """
 
     min_size: int
-    high_res_size: dict
+    high_res_size: dict | SizeDict
     high_res_resample: Union["PILImageResampling", int]
     high_res_image_mean: float | list[float] | tuple[float, ...]
     high_res_image_std: float | list[float] | tuple[float, ...]

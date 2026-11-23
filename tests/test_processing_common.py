@@ -381,7 +381,10 @@ class ProcessorTesterMixin:
             else:
                 component_class = component_class[0] if component_class[0] is not None else component_class[1]
         elif isinstance(component_class, dict):
-            if not use_fast:
+            if mapping_name in {"audio_processor", "feature_extractor"}:
+                backend = "torch" if use_fast else "numpy"
+                component_class = component_class.get(backend) or next(iter(component_class.values()))
+            elif not use_fast:
                 component_class = component_class["pil"]
             else:
                 component_class = (
@@ -1189,6 +1192,23 @@ class ProcessorTesterMixin:
                 self.assertNotIsInstance(v, torch.Tensor, msg=f"{k} should not be a torch.Tensor")
             else:
                 self.assertIsInstance(v, torch.Tensor, msg=f"{k} should be a torch.Tensor")
+
+    def test_tokenizer_init_kwargs_only_seed_text_kwargs(self):
+        # The tokenizer's init kwargs are text defaults. Seeding them into the other modalities let a
+        # left-padding tokenizer override the audio processor's own `padding_side`.
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+        components = self.prepare_components()
+        components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
+        processor = self.processor_class(**components, **self.prepare_processor_dict())
+
+        merged = processor._merge_kwargs(
+            processor.valid_processor_kwargs, tokenizer_init_kwargs=processor.tokenizer.init_kwargs
+        )
+        defaults = processor.valid_processor_kwargs._defaults
+        for modality in ("images_kwargs", "videos_kwargs", "audio_kwargs"):
+            expected = {**defaults.get(modality, {}), **defaults.get("common_kwargs", {})}
+            self.assertEqual(merged[modality], expected, msg=f"{modality} picked up tokenizer init kwargs")
 
     def test_args_overlap_kwargs(self):
         if "image_processor" not in self.processor_class.get_attributes():

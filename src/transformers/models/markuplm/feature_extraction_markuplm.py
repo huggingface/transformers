@@ -17,8 +17,9 @@ Feature extractor class for MarkupLM.
 
 import html
 
-from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...utils import is_bs4_available, logging, requires_backends
+from ...feature_extraction_utils import BatchFeature
+from ...preprocessing_base import PreprocessingMixin
+from ...utils import FEATURE_EXTRACTOR_NAME, is_bs4_available, logging, requires_backends
 
 
 if is_bs4_available():
@@ -29,15 +30,24 @@ if is_bs4_available():
 logger = logging.get_logger(__name__)
 
 
-class MarkupLMFeatureExtractor(FeatureExtractionMixin):
+class MarkupLMFeatureExtractor(PreprocessingMixin):
     r"""
     Constructs a MarkupLM feature extractor. This can be used to get a list of nodes and corresponding xpaths from HTML
     strings.
 
-    This feature extractor inherits from [`~feature_extraction_utils.PreTrainedFeatureExtractor`] which contains most
-    of the main methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`~preprocessing_base.PreprocessingMixin`] which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     """
+
+    # MarkupLM extracts nodes/xpaths from HTML rather than audio or images, so it builds directly on
+    # `PreprocessingMixin` and carries the feature-extractor identity itself (config filename, config
+    # type key and auto class are unchanged, so existing checkpoints keep loading).
+    _config_name = FEATURE_EXTRACTOR_NAME
+    _type_key = "feature_extractor_type"
+    _nested_config_keys = ["feature_extractor"]
+    _auto_class_default = "AutoFeatureExtractor"
+    _file_type_label = "feature extractor"
 
     def __init__(self, **kwargs):
         requires_backends(self, ["bs4"])

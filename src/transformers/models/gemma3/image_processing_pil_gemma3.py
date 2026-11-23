@@ -48,10 +48,10 @@ class Gemma3ImageProcessorKwargs(ImagesKwargs, total=False):
         Minimum aspect ratio to activate pan and scan.
     """
 
-    do_pan_and_scan: bool
-    pan_and_scan_min_crop_size: int
-    pan_and_scan_max_num_crops: int
-    pan_and_scan_min_ratio_to_activate: float
+    do_pan_and_scan: bool | None
+    pan_and_scan_min_crop_size: int | None
+    pan_and_scan_max_num_crops: int | None
+    pan_and_scan_min_ratio_to_activate: float | None
 
 
 @auto_docstring

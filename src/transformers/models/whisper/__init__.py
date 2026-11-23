@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_whisper import *
     from .configuration_whisper import *
     from .feature_extraction_whisper import *
     from .modeling_whisper import *

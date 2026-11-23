@@ -21,7 +21,7 @@ from parameterized import parameterized
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
-    MossTranscribeDiarizeFeatureExtractor,
+    MossTranscribeDiarizeAudioProcessor,
     MossTranscribeDiarizeProcessor,
 )
 from transformers.testing_utils import require_librosa, require_torch
@@ -63,17 +63,17 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
     def test_save_load_pretrained_default(self):
         tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
         processor = MossTranscribeDiarizeProcessor.from_pretrained(self.tmpdirname)
-        feature_extractor = processor.feature_extractor
+        audio_processor = processor.audio_processor
 
-        processor = MossTranscribeDiarizeProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = MossTranscribeDiarizeProcessor(tokenizer=tokenizer, audio_processor=audio_processor)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             processor.save_pretrained(tmpdir)
             reloaded = MossTranscribeDiarizeProcessor.from_pretrained(tmpdir)
 
         self.assertEqual(reloaded.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(reloaded.feature_extractor, MossTranscribeDiarizeFeatureExtractor)
+        self.assertEqual(reloaded.audio_processor.to_json_string(), audio_processor.to_json_string())
+        self.assertIsInstance(reloaded.audio_processor, MossTranscribeDiarizeAudioProcessor)
         self.assertEqual(reloaded.time_marker_every_seconds, processor.time_marker_every_seconds)
 
     @require_torch
@@ -252,7 +252,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         if return_tensors == "np":
             self.skipTest("MossTranscribeDiarizeProcessor only supports PyTorch tensors")
         self._test_apply_chat_template(
-            "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
+            "audio", batch_size, return_tensors, "audio_input_name", "audio_processor", MODALITY_INPUT_DATA["audio"]
         )
 
     @unittest.skip(

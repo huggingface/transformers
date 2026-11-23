@@ -126,7 +126,7 @@ model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-251
 
 # loading audio directly from dataset
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.audio_processor.sampling_rate))
 audio_array = ds[0]["audio"]["array"]
 
 inputs = processor.apply_transcription_request(audio_array)

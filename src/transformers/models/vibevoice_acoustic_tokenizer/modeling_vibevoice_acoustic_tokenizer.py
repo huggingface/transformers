@@ -29,6 +29,7 @@ from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils.deprecation import deprecate_kwarg
 from ..auto.modeling_auto import AutoModel
 from .configuration_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerConfig,
@@ -360,7 +361,7 @@ class VibeVoiceAcousticTokenizerEncoderLayer(nn.Module):
 class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
     config: VibeVoiceAcousticTokenizerConfig
     base_model_prefix = "vibevoice_acoustic_tokenizer"
-    main_input_name = "input_values"
+    main_input_name = "audio_values"
     _no_split_modules = ["VibeVoiceAcousticTokenizerEncoderModel", "VibeVoiceAcousticTokenizerDecoderModel"]
 
     def _init_weights(self, module):
@@ -509,9 +510,10 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def encode(self, input_values, padding_cache=None, use_cache=None, sample=True):
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
+    def encode(self, audio_values, padding_cache=None, use_cache=None, sample=True):
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
         padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers.
@@ -521,7 +523,10 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
             Whether to add Gaussian noise to the latents (σ-VAE: the noise scale is drawn per batch item from
             N(0, `config.vae_std`)). If False, the encoder output is returned as is.
         """
-        encoder_output = self.encoder(input_values, padding_cache=padding_cache, use_cache=use_cache)
+        if audio_values.ndim == 2:
+            audio_values = audio_values.unsqueeze(1)
+
+        encoder_output = self.encoder(audio_values, padding_cache=padding_cache, use_cache=use_cache)
 
         if sample:
             noise_std = self.config.vae_std * torch.randn(
@@ -550,9 +555,10 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, input_values, padding_cache=None, use_cache=False, sample=True, **kwargs):
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
+    def forward(self, audio_values, padding_cache=None, use_cache=False, sample=True, **kwargs):
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
         padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers. Note only used by decoder.
@@ -562,7 +568,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
             Whether to add Gaussian noise to the latents (σ-VAE: the noise scale is drawn per batch item from
             N(0, `config.vae_std`)). If False, the encoder output is returned as is.
         """
-        encoder_output = self.encode(input_values, use_cache=use_cache, sample=sample)
+        encoder_output = self.encode(audio_values, use_cache=use_cache, sample=sample)
         decoder_output = self.decode(encoder_output.latents, padding_cache=padding_cache, use_cache=use_cache)
         return VibeVoiceAcousticTokenizerOutput(
             audio=decoder_output.audio,

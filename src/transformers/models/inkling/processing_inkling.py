@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 class InklingProcessor(ProcessorMixin):
     def __init__(
         self,
-        feature_extractor=None,
+        audio_processor=None,
         image_processor=None,
         tokenizer=None,
         chat_template=None,
@@ -78,7 +78,7 @@ class InklingProcessor(ProcessorMixin):
             torch.float32
         )
 
-        super().__init__(feature_extractor, image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(audio_processor, image_processor, tokenizer, chat_template=chat_template)
 
     def _extract_dmel_bins(self, input_features: "torch.Tensor") -> "torch.Tensor":
         bin_centers = self.bin_centers.to(input_features.device)
@@ -86,7 +86,7 @@ class InklingProcessor(ProcessorMixin):
         return (mel.unsqueeze(-1) - bin_centers).abs().argmin(dim=-1).to(torch.int32)
 
     def _process_audio(self, audio, **kwargs):
-        audio_inputs = self.feature_extractor(audio, **kwargs)
+        audio_inputs = self.audio_processor(audio, **kwargs)
 
         processed_audio = {
             "audio_input_ids": self._extract_dmel_bins(audio_inputs["input_features"]),

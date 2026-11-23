@@ -83,26 +83,26 @@ class DiaProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
+    def __init__(self, audio_processor, tokenizer, audio_tokenizer):
         r"""
         audio_tokenizer (`DacModel`):
             An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is a required input.
         """
-        super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
+        super().__init__(audio_processor, tokenizer, audio_tokenizer=audio_tokenizer)
 
     def _process_audio(self, audio, **kwargs):
         """Full audio processing: feature extraction → DAC codebook encoding → delay pattern."""
-        # Pop unused kwargs by feature_extractor
+        # Pop unused kwargs by audio_processor
         delay_pattern = kwargs.pop("delay_pattern")
         bos_token_id = kwargs.pop("bos_token_id")
         eos_token_id = kwargs.pop("eos_token_id")
         generation = kwargs.pop("generation")
         kwargs.pop("pad_token_id")
 
-        input_audios = self.feature_extractor(audio, **kwargs)
+        input_audios = self.audio_processor(audio, **kwargs)
 
         compression_rate = math.prod(self.audio_tokenizer.config.downsampling_ratios)
-        max_encoded_sequence_len = input_audios["padding_mask"][0].shape[-1] // compression_rate
+        max_encoded_sequence_len = input_audios["audio_values_mask"][0].shape[-1] // compression_rate
         max_delay = max(delay_pattern)
 
         decoder_input_ids_list = []
@@ -110,8 +110,8 @@ class DiaProcessor(ProcessorMixin):
 
         # TODO: dac with batching is currently broken, but non-batch is working
         # refer to https://gist.github.com/vasqu/643a45b680cf39fd7467271ee2eb6f80 for a validation script
-        for padding_mask, audio_sample in zip(input_audios["padding_mask"], input_audios["input_values"]):
-            base_pad_len = self.feature_extractor.hop_length
+        for padding_mask, audio_sample in zip(input_audios["audio_values_mask"], input_audios["audio_values"]):
+            base_pad_len = self.audio_processor.pad_to_multiple_of
             current_audio_len = math.ceil(padding_mask.sum(dim=-1) / base_pad_len) * base_pad_len
             encoded_sequence_len = current_audio_len // compression_rate
             padding_len = max_encoded_sequence_len - encoded_sequence_len

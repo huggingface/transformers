@@ -21,7 +21,6 @@ from typing import Any
 
 import numpy as np
 from huggingface_hub import is_offline_mode
-from huggingface_hub.dataclasses import validate_typed_dict
 
 from .dynamic_module_utils import custom_object_save
 from .image_processing_backends import TorchvisionBackend
@@ -44,6 +43,7 @@ from .utils import (
 )
 from .utils.hub import cached_file, hf_api, resolve_revision
 from .utils.import_utils import requires
+from .utils.type_validators import validate_present_kwargs
 from .video_utils import (
     TORCHVISION_VIDEO_DECODING_ERROR,
     VideoInput,
@@ -103,7 +103,7 @@ class VideoProcessorMixin(BaseImageProcessor):
         )
 
         # Perform type validation on received kwargs
-        validate_typed_dict(self.valid_kwargs, kwargs)
+        validate_present_kwargs(self.valid_kwargs, kwargs)
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.

@@ -123,7 +123,7 @@ class MuseGlimmerImageProcessorKwargs(Glm4vImageProcessorKwargs):
         The maximum number of merged image tokens produced for one image.
     """
 
-    max_image_tokens: int
+    max_image_tokens: int | None
 
 
 class MuseGlimmerImageProcessor(Glm4vImageProcessor):

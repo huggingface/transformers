@@ -52,7 +52,7 @@ class Sapiens2ImageProcessorKwargs(ImagesKwargs, total=False):
         The standard deviation (sigma) for the 2D Gaussian distributions used to generate the heatmaps.
     """
 
-    do_reduce_labels: bool
+    do_reduce_labels: bool | None
 
     keypoint_heatmap_downscale_factor: int
     keypoint_heatmap_sigma: float

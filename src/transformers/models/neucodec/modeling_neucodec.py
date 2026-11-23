@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import Parameter
 
 from ... import initialization as init
@@ -44,7 +45,6 @@ from .configuration_neucodec import NeuCodecConfig
 
 if is_torch_available():
     import torch
-    import torch.nn.functional as F
 
 
 @auto_docstring
@@ -617,7 +617,7 @@ class NeuCodecPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_attention_backend = True
     _can_compile_fullgraph = True
-    main_input_name = "input_values"
+    main_input_name = "audio_values"
     _can_record_outputs = {
         "hidden_states": NeuCodecDecoderLayer,
         "attentions": NeuCodecDecoderLayer,
@@ -948,7 +948,7 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
     def __init__(self, config: NeuCodecConfig):
         super().__init__(config)
         # `Xcodec2Model.hop_length` mirrors `config.hop_length`, which for NeuCodec is expressed in the decoder's
-        # (24kHz) domain. The mask arithmetic in `encode()` operates on `input_values` in the encoder's (16kHz)
+        # (24kHz) domain. The mask arithmetic in `encode()` operates on `audio_values` in the encoder's (16kHz)
         # domain, so it must use the un-rescaled hop length instead.
         self.hop_length = config.encoder_hop_length
         self.semantic_encoder = AutoModel.from_config(config.semantic_model_config)
@@ -966,9 +966,10 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
     def encode(
         self,
-        input_values: torch.Tensor,
+        audio_values: torch.Tensor,
         input_features: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
@@ -976,12 +977,12 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | NeuCodecEncoderOutput:
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`):
             Input audio waveform.
         input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Padding mask used to pad `input_values`.
+            Padding mask used to pad `audio_values`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
             Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
         output_latents (`bool`, *optional*, defaults to `False`):
@@ -995,7 +996,10 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
         # Acoustic embedding
-        acoustic_hidden_states = self.acoustic_encoder(input_values)
+        if audio_values.ndim == 2:
+            audio_values = audio_values.unsqueeze(1)
+
+        acoustic_hidden_states = self.acoustic_encoder(audio_values)
 
         # The two branches downsample independently and can differ by a frame; trim to the shorter one, matching
         # the reference: https://github.com/neuphonic/neucodec/blob/ed3e6cd1bdc374ce14a21355e5eee66a777149ce/neucodec/model.py#L173
@@ -1064,9 +1068,10 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("input_values", new_name="audio_values", version="5.5", warn_if_greater_or_equal_version=True)
     def forward(
         self,
-        input_values: torch.Tensor,
+        audio_values: torch.Tensor,
         input_features: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
@@ -1074,12 +1079,12 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | NeuCodecOutput:
         r"""
-        input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
+        audio_values (`torch.Tensor` of shape `(batch_size, sequence_length)` or `(batch_size, 1, sequence_length)`):
             Input audio waveform, sampled at `config.input_sampling_rate`.
         input_features (`torch.Tensor` of shape `(batch_size, mel_bins, time_steps)`):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
-            Padding mask used to pad `input_values`.
+            Padding mask used to pad `audio_values`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
             Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
         output_latents (`bool`, *optional*, defaults to `False`):
@@ -1105,18 +1110,18 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         >>> audio_values = outputs.audio_values  # sampled at 24kHz
         ```"""
         # NeuCodec's decoder outputs audio at `output_sampling_rate`, which differs from the `input_sampling_rate` of
-        input_length = input_values.shape[-1]
+        input_length = audio_values.shape[-1]
         output_length = int(input_length * self.sample_rate_conversion_factor)
 
         encoder_outputs = self.encode(
-            input_values,
+            audio_values,
             input_features=input_features,
             padding_mask=padding_mask,
             input_features_mask=input_features_mask,
             output_latents=True,
             return_dict=True,
         )
-        audio_values = self.decode(
+        reconstructed_audio_values = self.decode(
             latents=encoder_outputs.latents,
             audio_codes_mask=encoder_outputs.audio_codes_mask,
             return_dict=True,
@@ -1124,7 +1129,7 @@ class NeuCodecModel(NeuCodecPreTrainedModel):
         )[0][..., :output_length]
 
         return NeuCodecOutput(
-            audio_values=audio_values,
+            audio_values=reconstructed_audio_values,
             audio_codes=encoder_outputs.audio_codes,
             latents=encoder_outputs.latents if output_latents else None,
             audio_codes_mask=encoder_outputs.audio_codes_mask,

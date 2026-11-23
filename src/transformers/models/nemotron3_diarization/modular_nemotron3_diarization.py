@@ -721,7 +721,7 @@ class Nemotron3DiarizationForAudioFrameClassification(Nemotron3DiarizationPreTra
         >>> processor = AutoProcessor.from_pretrained(model_id)
         >>> model = AutoModelForAudioFrameClassification.from_pretrained(model_id, device_map="auto")
 
-        >>> sampling_rate = processor.feature_extractor.sampling_rate
+        >>> sampling_rate = processor.audio_processor.sampling_rate
         >>> audio = load_audio(
         ...     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Alice_woman.wav",
         ...     sampling_rate=sampling_rate,

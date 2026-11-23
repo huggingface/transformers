@@ -31,13 +31,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    logging,
-    torch_compilable_check,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -304,7 +298,7 @@ class MossTranscribeDiarizeAudioModel(MossTranscribeDiarizePreTrainedModel):
         r"""
         input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
             Log-mel features extracted from the raw speech waveform, one row per 30s Whisper window. See
-            [`~MossTranscribeDiarizeFeatureExtractor.__call__`].
+            [`~MossTranscribeDiarizeAudioProcessor.__call__`].
         attention_mask (`torch.Tensor`, *optional*):
             MossTranscribeDiarize does not support masking of the `input_features`, this argument is preserved for
             compatibility, but it is not used.

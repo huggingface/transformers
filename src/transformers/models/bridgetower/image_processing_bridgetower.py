@@ -69,7 +69,7 @@ def get_resize_output_image_size(
 
 
 class BridgeTowerImageProcessorKwargs(ImagesKwargs, total=False):
-    size_divisor: int
+    size_divisor: int | None
 
 
 @auto_docstring

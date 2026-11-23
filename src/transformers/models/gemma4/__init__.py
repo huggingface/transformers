@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_gemma4 import *
     from .configuration_gemma4 import *
     from .feature_extraction_gemma4 import *
     from .image_processing_gemma4 import *

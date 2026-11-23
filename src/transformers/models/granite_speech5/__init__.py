@@ -24,6 +24,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .audio_processing_granite_speech5 import *
     from .configuration_granite_speech5 import *
     from .feature_extraction_granite_speech5 import *
     from .modeling_granite_speech5 import *
