@@ -53,7 +53,7 @@ import numpy as np
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
-from .configs import ORT_FUSION_EPS, ExportFormat, OnnxConfig
+from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .metadata import ExportMetadata, record_output_structure
 from .utils import (
@@ -143,16 +143,13 @@ class OnnxExporter(DynamoExporter):
     ) -> tuple[onnx_ir.Model, ExportMetadata]:
         # A model quantized before export has no ops the fusions match.
         quantizer = config.quantizer
-        quantized_before_export = quantizer is not None and quantizer.quantizes_fx_graph
-        ort_fusions = config.ort_ep if config.ort_ep in ORT_FUSION_EPS and not quantized_before_export else None
+        ort_fusions = config.ort_ep if quantizer is None or not quantizer.quantizes_fx_graph else None
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
         experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
-        # ONNX Runtime's TensorRT execution provider takes patches of its own, every other export the default ones
-        execution_patches = "onnx.tensorrt" if config.ort_ep == "tensorrt" else "onnx.default"
 
         with (
             patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
-            apply_patches("onnx", execution_patches),
+            apply_patches("onnx"),
             use_experts_implementation(model, experts_implementation),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
@@ -298,7 +295,8 @@ def _patch_sdpa(original):
     relative-position bias masks that way), returns `NaN` — which a later BatchNorm then spreads over
     the whole batch. Rows like these are routine: any padded frame under a padding mask has one.
 
-    Unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
+    A boolean mask goes in as an additive one (torchlib's boolean softmax adds a redundant `IsNaN`/`Where`), and
+    unattended rows are counted with a sum (a bool `ReduceMax` runs on the CPU in ONNX Runtime's CUDA provider,
     microsoft/onnxruntime#33876). The key, value and mask lengths are checked equal, so a dynamic export gives them
     one symbol, which onnxscript's attention fusion needs.
     """
@@ -313,31 +311,13 @@ def _patch_sdpa(original):
         # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
         if attn_mask.dtype == torch.bool:
             attended = attn_mask.to(query.dtype)
+            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
         else:
             attended = (attn_mask > torch.finfo(attn_mask.dtype).min).to(query.dtype)
         unattended = attended.sum(dim=-1, keepdim=True) < 1
         attn_output = original(query, key, value, attn_mask, *args, **kwargs)
         zero = torch.zeros((), dtype=attn_output.dtype, device=attn_output.device)
         return torch.where(unattended, zero, attn_output)
-
-    return patch
-
-
-@register_patch("onnx.default", "torch.nn.functional.scaled_dot_product_attention")
-def _additive_sdpa_mask(original):
-    """A boolean attention mask as an additive one, for every export but TensorRT's.
-
-    torchlib's boolean softmax guards every attention with an `IsNaN`/`Where` over the scores, which `_patch_sdpa`
-    makes redundant and which ONNX Runtime pays for (2x on a 2520-patch vision attention on its CPU provider).
-    TensorRT builds a faster engine from the boolean form (2.53 ms against 3.00 ms on EmbeddingGemma2 in bf16 on a
-    B200).
-    """
-
-    def patch(query, key, value, attn_mask=None, *args, **kwargs):
-        if attn_mask is not None and attn_mask.dtype == torch.bool:
-            # Built from scalars only, so every layer's copy of this, reading the same mask, is one after CSE.
-            attn_mask = (~attn_mask).to(query.dtype) * torch.finfo(query.dtype).min
-        return original(query, key, value, attn_mask, *args, **kwargs)
 
     return patch
 

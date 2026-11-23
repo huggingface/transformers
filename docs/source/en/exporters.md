@@ -904,9 +904,6 @@ The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or 
 is `ort_ep=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for
 each.
 
-`ort_ep="tensorrt"` targets ONNX Runtime's TensorRT execution provider. It fuses nothing, since TensorRT fuses the graph
-itself, and keeps the attention masks boolean, which TensorRT builds a faster engine from.
-
 The fusions run before [`~exporters.OnnxRuntimeQuantizer`] quantizes the graph, as ONNX Runtime recommends. They're
 skipped when the model is quantized before export, and they require `optimize=True` (the default). The `"cuda"` fusions
 need onnxruntime 1.28 or later.

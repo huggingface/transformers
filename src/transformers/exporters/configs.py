@@ -29,9 +29,6 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
-# The ONNX Runtime execution providers `OnnxConfig(ort_ep=...)` fuses the graph for
-ORT_FUSION_EPS = ("cpu", "cuda", "webgpu", "dml")
-
 
 class ExportFormat(StrEnum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
@@ -150,10 +147,9 @@ class OnnxConfig(DynamoConfig):
             elimination, …) on the exported graph. Disable for models that
             hit upstream `onnxscript` optimiser bugs.
         ort_ep (`str`, *optional*):
-            The ONNX Runtime execution provider the graph will run on. `"cpu"`, `"cuda"`, `"webgpu"` and `"dml"` fuse
-            it into that provider's ops: the fused graph only runs on ONNX Runtime, and requires `optimize=True`.
-            `"tensorrt"` keeps the attention masks boolean, which TensorRT builds a faster engine from, and fuses
-            nothing, as TensorRT fuses the graph itself. `None` keeps the graph standard.
+            The ONNX Runtime execution provider the graph will run on: `"cpu"`, `"cuda"`, `"webgpu"` or `"dml"` fuse it
+            into that provider's ops. The fused graph only runs on ONNX Runtime, and requires `optimize=True`. `None`
+            keeps the graph standard.
         ort_fusions (`str`, *optional*):
             Deprecated, use `ort_ep`.
     """
@@ -162,7 +158,7 @@ class OnnxConfig(DynamoConfig):
 
     opset_version: int | None = None
     optimize: bool = True
-    ort_ep: Literal["cpu", "cuda", "webgpu", "dml", "tensorrt"] | None = None
+    ort_ep: Literal["cpu", "cuda", "webgpu", "dml"] | None = None
     ort_fusions: Literal["cpu", "cuda", "webgpu", "dml"] | None = None
 
     def __post_init__(self):
@@ -171,11 +167,9 @@ class OnnxConfig(DynamoConfig):
             if self.ort_ep is not None:
                 raise ValueError("Pass `ort_ep` only: `ort_fusions` is its deprecated name.")
             self.ort_ep, self.ort_fusions = self.ort_fusions, None
-        if self.ort_ep not in (None, *ORT_FUSION_EPS, "tensorrt"):
-            raise ValueError(
-                f"`ort_ep` must be None, 'cpu', 'cuda', 'webgpu', 'dml' or 'tensorrt', got {self.ort_ep!r}"
-            )
-        if self.ort_ep in ORT_FUSION_EPS and not self.optimize:
+        if self.ort_ep not in (None, "cpu", "cuda", "webgpu", "dml"):
+            raise ValueError(f"`ort_ep` must be None, 'cpu', 'cuda', 'webgpu' or 'dml', got {self.ort_ep!r}")
+        if self.ort_ep is not None and not self.optimize:
             raise ValueError(f"Fusing the graph for `ort_ep={self.ort_ep!r}` requires `optimize=True`.")
 
 

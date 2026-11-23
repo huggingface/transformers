@@ -121,11 +121,10 @@ def patch_attributes(patches: list[tuple[Any, str, callable]]):
 
 
 @contextlib.contextmanager
-def apply_patches(*backends: str):
-    """Install `_PATCHES[backend]` of each of `backends`, in order, for the duration of the block."""
+def apply_patches(backend: str):
+    """Install `_PATCHES[backend]` for the duration of the block."""
     resolved = [
         (obj, attribute, fn)
-        for backend in backends
         for obj_path, attribute, fn in _PATCHES.get(backend, [])
         if (obj := import_dotted_path(obj_path, missing_ok=True)) is not None
     ]
