@@ -333,6 +333,7 @@ def test_broken_torchaudio_does_not_break_import():
             raise AssertionError("rnnt_loss must raise ImportError when torchaudio is unavailable")
 
 
+@require_torch
 @run_test_using_subprocess
 def test_broken_torchaudio_does_not_break_model_import():
     """

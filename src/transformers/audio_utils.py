@@ -289,7 +289,8 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
 
     if resolved_backend == "torchaudio":
         requires_backends(load_audio, ["torchaudio"])
-        # Import torchaudio lazily rather than at module scope, see https://github.com/huggingface/transformers/pull/47422
+        # torchaudio can be installed but fail to load (e.g. built for another torch/CUDA version); importing it at
+        # module scope would break importing every model, since all of them import this module.
         import torchaudio
 
         waveform, src_sampling_rate = torchaudio.load(BytesIO(source) if isinstance(source, bytes) else source)
