@@ -723,9 +723,9 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         num_groups = kv_length // ratio
         if num_groups == 0:
             return visible.unsqueeze(1)
-        # Each query pools the tokens it sees, in order, into groups of `compress_ratio`. A query sees an ordered prefix
-        # of what its row sees at all (causal + padding), so the groups are the same for every query of a row: pool
-        # them once. ponytail: masks where queries see non-nested sets (packed documents) need the per-query groups
+        # Each query sees an ordered prefix of what its row sees at all (causal + padding), so the groups of
+        # `compress_ratio` pooled keys are the same for every query of a row: pool them once. ponytail: masks where
+        # queries see non-nested sets (packed documents) change which tokens a group pools, not just its membership
         seen = visible.any(dim=1)
         rank = seen.cumsum(-1) - 1
         positions = torch.arange(kv_length, device=visible.device)
@@ -743,8 +743,9 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
 
         scores = torch.einsum("bshd,bgd->bsgh", q.float(), block_key_states.float())
         scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
-        # Only a query's complete groups compete; its incomplete tail is always kept
-        complete_tokens = visible.sum(dim=-1, keepdim=True) // ratio * ratio
+        # Only a query's complete groups compete; its incomplete tail is always kept. Completion is per query:
+        # an early query's tail sits in a group that is complete for the row, but it must survive like a tail
+        complete_tokens = visible.sum(dim=-1, keepdim=True) // ratio * ratio  # [batch, queries, 1]
         complete = torch.arange(num_groups, device=visible.device) * ratio < complete_tokens
         scores = scores.masked_fill(~complete, float("-inf"))
         top = scores.topk(min(self.block_topk, num_groups), dim=-1).indices
