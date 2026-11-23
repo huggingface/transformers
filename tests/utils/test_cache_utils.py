@@ -98,6 +98,7 @@ if is_torch_available():
     from transformers.integrations.heterogeneity.configuration_utils import (
         AmbiguousGlobalPerLayerAttributeError,
     )
+    from transformers.modeling_flash_attention_utils import _lazy_define_process_function
 
 
 # FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
@@ -312,6 +313,60 @@ class CacheTest(unittest.TestCase):
         quantized_keys, scale = layer._quantized_keys
         self.assertTrue(torch.equal(scale, calibrated_scale))
         self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
+
+    def test_fp8_quantized_layer_fp8_attention(self):
+        """
+        Tests that, with `fp8_attention`, `Fp8QuantizedLayer` returns its FP8 states and routes their scales to the
+        attention kwargs, and that it still dequantizes them when there are no kwargs to route the scales to.
+        """
+        layer = Fp8QuantizedLayer(fp8_attention=True)
+        keys, values = torch.randn(1, 2, 5, 8), torch.randn(1, 2, 5, 8)
+        attention_kwargs = {}
+        cached_keys, cached_values = layer.update(keys, values, kwargs=attention_kwargs)
+        self.assertEqual(cached_keys.dtype, torch.float8_e4m3fn)
+        self.assertEqual(cached_values.dtype, torch.float8_e4m3fn)
+        self.assertIs(attention_kwargs["k_descale"], layer._quantized_keys[1])
+        self.assertIs(attention_kwargs["v_descale"], layer._quantized_values[1])
+        torch.testing.assert_close(
+            cached_keys.float() * attention_kwargs["k_descale"], keys, atol=keys.abs().max() / 8, rtol=0
+        )
+
+        attention_kwargs = {}
+        cached_keys, _ = layer.update(torch.randn(1, 2, 1, 8), torch.randn(1, 2, 1, 8), kwargs=attention_kwargs)
+        self.assertEqual(cached_keys.dtype, torch.float8_e4m3fn)
+        self.assertEqual(cached_keys.shape, (1, 2, 6, 8))
+        self.assertIn("k_descale", attention_kwargs)
+
+        cached_keys, _ = layer.update(torch.randn(1, 2, 1, 8), torch.randn(1, 2, 1, 8))
+        self.assertEqual(cached_keys.dtype, keys.dtype)
+        self.assertEqual(cached_keys.shape, (1, 2, 7, 8))
+
+        # The attention implementation decides whether the layers return FP8 states
+        config = LlamaConfig(num_hidden_layers=1)
+        config._attn_implementation = "sdpa"
+        self.assertFalse(QuantizedCache(backend="fp8", config=config).layers[0].fp8_attention)
+
+    def test_flash_attention_kwargs_descales(self):
+        """Tests that the FP8 descales are expanded to `(num_sequences, num_kv_heads)`, and only for kernels taking them."""
+
+        def flash_varlen_fn(q, k, v, cu_seqlens_q, cu_seqlens_k, q_descale=None, k_descale=None, v_descale=None):
+            pass
+
+        def flash_varlen_fn_no_fp8(q, k, v, cu_seqlens_q, cu_seqlens_k):
+            pass
+
+        descale = torch.tensor(0.5)
+        flash_kwargs = _lazy_define_process_function(flash_varlen_fn)(
+            query_length=1, key_length=4, is_causal=True, k_descale=descale, v_descale=descale, descale_shape=(3, 2)
+        )
+        self.assertEqual(flash_kwargs["k_descale"].shape, (3, 2))
+        self.assertEqual(flash_kwargs["k_descale"].untyped_storage().nbytes(), descale.element_size())
+        self.assertNotIn("q_descale", flash_kwargs)
+
+        with self.assertRaisesRegex(ValueError, "does not support FP8"):
+            _lazy_define_process_function(flash_varlen_fn_no_fp8)(
+                query_length=1, key_length=4, is_causal=True, k_descale=descale, descale_shape=(3, 2)
+            )
 
     def test_fp8_quantized_cache_rejects_group_wise_options(self):
         """Tests that the `fp8` backend, which quantizes per-tensor, does not silently drop the group-wise options."""

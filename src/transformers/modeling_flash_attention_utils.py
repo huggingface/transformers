@@ -34,6 +34,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils.generic import is_flash_attention_requested
 from .utils.import_utils import _package_distribution_mapping, is_tracing
 
 
@@ -310,6 +311,26 @@ def lazy_import_flash_attention(
         (_flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn),
         (_process_flash_kwargs_fn, _process_with_kvcache_kwargs_fn),
     )
+
+
+def flash_attn_supports_fp8(implementation: str | None) -> bool:
+    """
+    Whether the flash attention `implementation` consumes FP8 query, key and value states, i.e. whether it takes the
+    per-tensor `q_descale`, `k_descale` and `v_descale` of the FA3 API.
+    """
+    if not is_flash_attention_requested(requested_attention_implementation=implementation):
+        return False
+    _, (process_flash_kwargs_fn, _) = lazy_import_flash_attention(implementation)
+    supports_mapping = getattr(process_flash_kwargs_fn, "keywords", {}).get("supports_mapping", {})
+    return all(supports_mapping.get(name, False) for name in ("q_descale", "k_descale", "v_descale"))
+
+
+def _quantize_fp8_per_tensor(tensor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Quantizes `tensor` to FP8 with a single scale calibrated on its amplitude, returned as a 0-dim float32 tensor."""
+    fp8_dtype = torch.float8_e4m3fn
+    # `clamp` guards against an all-zeros tensor, which would give a null scale
+    scale = (tensor.abs().amax().float() / torch.finfo(fp8_dtype).max).clamp(min=torch.finfo(torch.float32).tiny)
+    return (tensor.float() / scale).to(fp8_dtype), scale
 
 
 def _index_first_axis(tensor, indices):
@@ -594,7 +615,9 @@ def fa_peft_integration_check(
     """
     if target_dtype and q.dtype == torch.float32:
         logger.warning_once(f"Casting fp32 inputs back to {target_dtype} for flash-attn compatibility.")
-        q, k, v = q.to(target_dtype), k.to(target_dtype), v.to(target_dtype)
+        # FP8 key/value states are left as-is, they only make sense with their scales
+        q = q.to(target_dtype)
+        k, v = (x if x.dtype == torch.float8_e4m3fn else x.to(target_dtype) for x in (k, v))
     return q, k, v
 
 
@@ -635,6 +658,10 @@ def _process_flash_attention_kwargs(
     supports_mapping: dict[str, bool] | None = None,
     block_table: torch.Tensor | None = None,
     cache_seqlens: torch.Tensor | None = None,
+    q_descale: torch.Tensor | None = None,
+    k_descale: torch.Tensor | None = None,
+    v_descale: torch.Tensor | None = None,
+    descale_shape: tuple[int, int] | None = None,
     **kwargs,
 ):
     """
@@ -672,6 +699,14 @@ def _process_flash_attention_kwargs(
             The block table used by paged flash attention to know where to read and write the KV cache.
         cache_seqlens (`torch.Tensor`, *optional*):
             The number of cache tokens per sequence. Used by paged flash to know how much KV cache to read and write.
+        q_descale (`torch.Tensor`, *optional*):
+            The 0-dim per-tensor scale of an FP8 query, which is dequantized as `q.float() * q_descale`.
+        k_descale (`torch.Tensor`, *optional*):
+            The 0-dim per-tensor scale of FP8 keys.
+        v_descale (`torch.Tensor`, *optional*):
+            The 0-dim per-tensor scale of FP8 values.
+        descale_shape (`tuple[int, int]`, *optional*):
+            The `(num_sequences, num_kv_heads)` shape the descales are expanded to, as in the FA3 API.
     Return:
         flash_kwargs (`dict`):
             A dict of kwargs that are requested and supported.
@@ -718,6 +753,12 @@ def _process_flash_attention_kwargs(
 
     if supports_mapping["cache_seqlens"] and cache_seqlens is not None:
         flash_kwargs["cache_seqlens"] = cache_seqlens
+
+    for name, descale in (("q_descale", q_descale), ("k_descale", k_descale), ("v_descale", v_descale)):
+        if descale is not None:
+            if not supports_mapping[name]:
+                raise ValueError(f"This flash attention implementation does not support FP8 inputs (`{name}`).")
+            flash_kwargs[name] = descale.expand(descale_shape)
 
     # There is a limitation of the flash attention API, as the function `flash_attn_varlen_func`
     # may require `max_length_q`, `max_length_k` to be passed as `int` and not `torch.Tensor`.
@@ -797,6 +838,13 @@ def _flash_attention_forward(
         query_states, key_states, value_states, target_dtype
     )
 
+    # FP8 key/value states (see `QuantizedCache(backend="fp8")`) come with their `k_descale` / `v_descale` in the
+    # kwargs. The kernels consuming them follow the FA3 API: the query is quantized to FP8 as well, and the output is
+    # in bfloat16, so it is cast back to the dtype of the query
+    output_dtype = query_states.dtype
+    if key_states.dtype == torch.float8_e4m3fn and query_states.dtype != torch.float8_e4m3fn:
+        query_states, kwargs["q_descale"] = _quantize_fp8_per_tensor(query_states)
+
     # We will use `flash_varlen_fn` to prevent cross-example attention and also allow padding free approach under two cases:
     # Case 1. If position ids is provided and the position ids indicate packed sequences, see `_is_packed_sequence`.
     # Case 2. Some models pass directly pre-computed `cu_seqlens` so we don't need to infer it from position ids. It is
@@ -817,6 +865,7 @@ def _flash_attention_forward(
         use_top_left_mask=use_top_left_mask,
         softcap=softcap,
         deterministic=deterministic,
+        descale_shape=(batch_size, key_states.size(2)),
         **kwargs,
     )
 
@@ -827,11 +876,15 @@ def _flash_attention_forward(
         # NOTE: here k.size(0) is the number of sequences because this is decode only (for now)
         cache_seqlens = cu_seq_lens_k[1 : k.size(0) + 1] - cu_seq_lens_k[: k.size(0)] - 1
         flash_kwargs = flash_kwargs_fn(
-            max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, cache_seqlens=cache_seqlens
+            max_seqlen_q=max_length_q,
+            max_seqlen_k=max_length_k,
+            block_table=block_table,
+            cache_seqlens=cache_seqlens,
+            descale_shape=(k.size(0), k.size(2)),
         )
         out = flash_kvcache_fn(q, k_cache, v_cache, k, v, **flash_kwargs)
         out = out[0] if isinstance(out, tuple) else out
-        return out.view(batch_size, -1, *out.shape[-2:])
+        return out.view(batch_size, -1, *out.shape[-2:]).to(output_dtype)
 
     # Contains at least one padding token in the sequence: unpad compute cu_seqlen and max_length from attention mask
     if attention_mask is not None:
@@ -841,15 +894,19 @@ def _flash_attention_forward(
         flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
         out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
         out = out[0] if isinstance(out, tuple) else out
-        return pad_fn(out, indices_q, batch_size, query_length)
+        return pad_fn(out, indices_q, batch_size, query_length).to(output_dtype)
 
     # Padding free (i.e. sequences flattened into one total sequence) and cu_seqlen and max_length are provided
     if is_fa_with_varlen_kwargs:
         q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
-        flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+        flash_kwargs = flash_kwargs_fn(
+            max_seqlen_q=max_length_q,
+            max_seqlen_k=max_length_k,
+            descale_shape=(cu_seq_lens_q.size(0) - 1, k.size(1)),
+        )
         out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
         out = out[0] if isinstance(out, tuple) else out
-        return out.view(batch_size, -1, *out.shape[-2:])
+        return out.view(batch_size, -1, *out.shape[-2:]).to(output_dtype)
 
     # Padding free, but cu_seqlens or max_seqlen are not provided: infer them from position_ids if sequence lengths vary
     if _is_packed_sequence(position_ids, batch_size):  # this check is expensive so not precomputed
@@ -857,11 +914,16 @@ def _flash_attention_forward(
         q, k, v, (cu_seq_lens_q, cu_seq_lens_k), (max_length_q, max_length_k) = _prepare_from_posids(
             query_states, key_states, value_states, position_ids
         )
-        flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+        flash_kwargs = flash_kwargs_fn(
+            max_seqlen_q=max_length_q,
+            max_seqlen_k=max_length_k,
+            descale_shape=(cu_seq_lens_q.size(0) - 1, k.size(1)),
+        )
         out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
         out = out[0] if isinstance(out, tuple) else out
-        return out.view(batch_size, -1, *out.shape[-2:])
+        return out.view(batch_size, -1, *out.shape[-2:]).to(output_dtype)
 
     # Padding free and same sequence lengths: we can run flash (no varlen)
     out = flash_fn(query_states, key_states, value_states, **flash_kwargs_fn())
-    return out[0] if isinstance(out, tuple) else out
+    out = out[0] if isinstance(out, tuple) else out
+    return out.to(output_dtype)

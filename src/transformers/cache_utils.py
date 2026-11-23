@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import UserDict
 from collections.abc import Iterable
+from typing import Any
 
 import torch
 
@@ -970,10 +971,20 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
 
     A finer-grained variant belongs here rather than under `QuantizedLayer`, as grouping along the head
     dimension keeps states appendable and only turns the stored scale into a tensor.
+
+    Args:
+        fp8_attention (`bool`, *optional*, defaults to `False`):
+            Whether the attention implementation consumes FP8 states (see `flash_attn_supports_fp8`). If so, the
+            FP8 states are returned as-is, and their scales are routed to the attention through its kwargs, as
+            `k_descale` and `v_descale`. Otherwise, the states are dequantized.
     """
 
     fp8_dtype = torch.float8_e4m3fn
     fp8_max = torch.finfo(fp8_dtype).max
+
+    def __init__(self, fp8_attention: bool = False):
+        super().__init__()
+        self.fp8_attention = fp8_attention
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         super().lazy_initialization(key_states, value_states)
@@ -992,7 +1003,12 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
         return (quant_tensor.float() * scale).to(self.dtype)
 
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        *args,
+        kwargs: dict[str, Any] | None = None,
+        **other_kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -1000,22 +1016,32 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
         Args:
             key_states (`torch.Tensor`): The new key states to cache.
             value_states (`torch.Tensor`): The new value states to cache.
+            kwargs (`dict[str, Any]`, *optional*):
+                The kwargs of the attention call. With `fp8_attention`, the scales are added to them in-place.
 
         Returns:
             tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
         """
         self.cumulative_length += key_states.shape[-2]
+        # The FP8 states can only be returned if their scales can be routed to the attention, through its kwargs
+        return_fp8 = self.fp8_attention and kwargs is not None
 
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
-            return key_states, value_states
+            if not return_fp8:
+                return key_states, value_states
+        else:
+            quantized_keys, key_scale = self._quantized_keys
+            quantized_values, value_scale = self._quantized_values
+            new_keys, _ = self._quantize(key_states, scale=key_scale)
+            new_values, _ = self._quantize(value_states, scale=value_scale)
+            self._quantized_keys = (torch.cat([quantized_keys, new_keys], dim=-2), key_scale)
+            self._quantized_values = (torch.cat([quantized_values, new_values], dim=-2), value_scale)
 
-        quantized_keys, key_scale = self._quantized_keys
-        quantized_values, value_scale = self._quantized_values
-        new_keys, _ = self._quantize(key_states, scale=key_scale)
-        new_values, _ = self._quantize(value_states, scale=value_scale)
-        self._quantized_keys = (torch.cat([quantized_keys, new_keys], dim=-2), key_scale)
-        self._quantized_values = (torch.cat([quantized_values, new_values], dim=-2), value_scale)
+        if return_fp8:
+            keys_to_return, kwargs["k_descale"] = self._quantized_keys
+            values_to_return, kwargs["v_descale"] = self._quantized_values
+            return keys_to_return, values_to_return
 
         keys_to_return = self._dequantize(self._quantized_keys)
         values_to_return = self._dequantize(self._quantized_values)
@@ -2179,7 +2205,9 @@ class QuantizedCache(Cache):
                     f"The `fp8` backend quantizes per-tensor and does not support {unsupported}. Use the `quanto` or "
                     "`hqq` backend to quantize group-wise."
                 )
-            layer_kwargs = {}
+            from .modeling_flash_attention_utils import flash_attn_supports_fp8
+
+            layer_kwargs = {"fp8_attention": flash_attn_supports_fp8(config._attn_implementation)}
         else:
             # The unset ones are left out, so that the layer's own defaults apply
             layer_kwargs = {name: value for name, value in group_wise_kwargs.items() if value is not None}
