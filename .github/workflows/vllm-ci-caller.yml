@@ -937,6 +937,23 @@ jobs:
             tests/samplers/test_beam_search.py::test_beam_search_single_input \
             tests/samplers/test_beam_search.py::test_beam_search_with_concurrency_limit
 
+      # More pooling models / features vs transformers (`hf_runner`): token classification, multi-label classification,
+      # hidden states extraction, prefix caching, pooler config defaults (models up to ~1.8B). In one shard.
+      - name: "Test: more language pooling models"
+        if: ${{ !cancelled() && matrix.shard == 0 }}
+        working-directory: vllm
+        run: |
+          # Not included: test_last_pool_score_chunked_prefill_matches_unchunked (vLLM vs vLLM, no transformers reference).
+          pytest -v -s \
+            tests/models/language/pooling/test_token_classification.py \
+            tests/models/language/pooling/test_multilabel_classification_support.py \
+            tests/models/language/pooling/test_head_dtype.py \
+            tests/models/language/pooling/test_extract_hidden_states.py \
+            tests/models/language/pooling/test_all_pooling_plus_chunked_prefill.py \
+            tests/models/language/pooling/test_auto_prefix_cache_support.py \
+            tests/models/language/pooling/test_pooler_config_init_behaviour.py \
+            --deselect tests/models/language/pooling/test_all_pooling_plus_chunked_prefill.py::test_last_pool_score_chunked_prefill_matches_unchunked
+
   # Multimodal generation with vLLM's Transformers modeling backend, compared with transformers (`hf_runner`): the
   # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
   # file (only ~12 tests in total, so `--num-shards` could leave a shard without tests).
@@ -1301,6 +1318,34 @@ jobs:
         run: |
           # Not included: test_whisper.py (its only `cpu_model` test skips itself on CPU: it uses enforce_eager=False).
           pytest -v -s tests/models/multimodal/generation/test_common.py -m cpu_model --num-shards=4 --shard-id=$SHARD_ID
+
+      # Multimodal pooling models vs transformers (`hf_runner`), beyond CLIP / SigLIP (run in `vllm-test-hf-comparison`).
+      # Only ~13 tests: one group of test files per shard (with `--num-shards`, a shard could get no test).
+      # Not included: InternViT-6B (too large for CPU), the tests of test_llama_nemotron_vl.py / test_radio.py without a
+      # transformers reference, test_prithvi_mae.py (skips itself: needs terratorch), test_llava_next.py (CUDA only) and
+      # test_phi3v.py (4B model).
+      - name: "Test: multimodal pooling models (shard ${{ matrix.shard }} / 4)"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          case "$SHARD_ID" in
+            0)
+              pytest -v -s \
+                tests/models/multimodal/pooling/test_intern_vit.py \
+                tests/models/multimodal/pooling/test_llama_nemotron_vl.py::test_models \
+                tests/models/multimodal/pooling/test_llama_nemotron_vl.py::test_reranker \
+                -k "not InternViT-6B"
+              ;;
+            1)
+              pytest -v -s tests/models/multimodal/pooling/test_dse_qwen2_vl.py
+              ;;
+            2)
+              pytest -v -s tests/models/multimodal/pooling/test_jinavl_reranker.py
+              ;;
+            3)
+              pytest -v -s tests/models/multimodal/pooling/test_radio.py::test_radio
+              ;;
+          esac
 
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
