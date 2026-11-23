@@ -419,6 +419,282 @@ class MaskFormerDetrMHAttentionMap(nn.Module):
         return attn_weights
 
 
+# refactored from original implementation
+def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
+    r"""
+    Compute the DICE loss, similar to generalized IOU for masks as follows:
+
+    $$ \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}} $$
+
+    In practice, since `labels` is a binary mask, (only 0s and 1s), dice can be computed as follow
+
+    $$ \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x * y }{x + y + 1}} $$
+
+    Args:
+        inputs (`torch.Tensor`):
+            A tensor representing a mask.
+        labels (`torch.Tensor`):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
+        num_masks (`int`):
+            The number of masks present in the current batch, used for normalization.
+
+    Returns:
+        `torch.Tensor`: The computed loss.
+    """
+    probs = inputs.sigmoid().flatten(1)
+    numerator = 2 * (probs * labels).sum(-1)
+    denominator = probs.sum(-1) + labels.sum(-1)
+    loss = 1 - (numerator + 1) / (denominator + 1)
+    loss = loss.sum() / num_masks
+    return loss
+
+
+# refactored from original implementation
+def sigmoid_focal_loss(
+    inputs: Tensor, labels: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
+) -> Tensor:
+    r"""
+    Focal loss proposed in [Focal Loss for Dense Object Detection](https://huggingface.co/papers/1708.02002) originally used in
+    RetinaNet. The loss is computed as follows:
+
+    $$ \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)} $$
+
+    where \\(CE(p_t) = -\log{(p_t)}}\\), CE is the standard Cross Entropy Loss
+
+    Please refer to equation (1,2,3) of the paper for a better understanding.
+
+    Args:
+        inputs (`torch.Tensor`):
+            A float tensor of arbitrary shape.
+        labels (`torch.Tensor`):
+            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
+            (0 for the negative class and 1 for the positive class).
+        num_masks (`int`):
+            The number of masks present in the current batch, used for normalization.
+        alpha (float, *optional*, defaults to 0.25):
+            Weighting factor in range (0,1) to balance positive vs negative examples.
+        gamma (float, *optional*, defaults to 2.0):
+            Exponent of the modulating factor \\(1 - p_t\\) to balance easy vs hard examples.
+
+    Returns:
+        `torch.Tensor`: The computed loss.
+    """
+    criterion = nn.BCEWithLogitsLoss(reduction="none")
+    probs = inputs.sigmoid()
+    cross_entropy_loss = criterion(inputs, labels)
+    p_t = probs * labels + (1 - probs) * (1 - labels)
+    loss = cross_entropy_loss * ((1 - p_t) ** gamma)
+
+    if alpha >= 0:
+        alpha_t = alpha * labels + (1 - alpha) * (1 - labels)
+        loss = alpha_t * loss
+
+    loss = loss.mean(1).sum() / num_masks
+    return loss
+
+
+# taken from https://github.com/facebookresearch/mask_former_detr/blob/master/models/mask_former_detr.py
+class MaskFormerDetrLoss(nn.Module):
+    """
+    This class computes the losses for MaskFormerDetrForObjectDetection/MaskFormerDetrForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
+
+    A note on the `num_classes` argument (copied from original repo in mask_former_detr.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
+    https://github.com/facebookresearch/mask_former_detr/issues/108#issuecomment-650269223"
+
+
+    Args:
+        matcher (`MaskFormerDetrHungarianMatcher`):
+            Module able to compute a matching between targets and proposals.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
+        eos_coef (`float`):
+            Relative classification weight applied to the no-object category.
+        losses (`list[str]`):
+            List of all the losses to be applied. See `get_loss` for a list of all available losses.
+    """
+
+    def __init__(self, config, losses, matcher):
+        super().__init__()
+        requires_backends(self, ["scipy"])
+        self.matcher = matcher
+        self.eos_coef = config.eos_coefficient
+        self.num_classes = config.num_labels
+        self.losses = losses
+        empty_weight = torch.ones(self.num_classes + 1)
+        empty_weight[-1] = self.eos_coef
+        self.empty_weight = nn.Buffer(empty_weight)
+
+    # removed logging parameter, which was part of the original implementation
+    def loss_labels(self, outputs, targets, indices, num_boxes):
+        """
+        Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
+        [nb_target_boxes]
+        """
+        if "logits" not in outputs:
+            raise KeyError("No logits were found in the outputs")
+        source_logits = outputs["logits"]
+
+        idx = self._get_source_permutation_idx(indices)
+        target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
+        target_classes = torch.full(
+            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
+        )
+        target_classes[idx] = target_classes_o
+
+        loss_ce = nn.functional.cross_entropy(source_logits.transpose(1, 2), target_classes, self.empty_weight)
+        losses = {"loss_ce": loss_ce}
+
+        return losses
+
+    @torch.no_grad()
+    def loss_cardinality(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
+
+        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
+        """
+        logits = outputs["logits"]
+        device = logits.device
+        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
+        # Count the number of predictions that are NOT "no-object" (which is the last class)
+        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
+        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
+        losses = {"cardinality_error": card_err}
+        return losses
+
+    def loss_boxes(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
+
+        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
+        are expected in format (center_x, center_y, w, h), normalized by the image size.
+        """
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
+        idx = self._get_source_permutation_idx(indices)
+        source_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+
+        loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
+
+        losses = {}
+        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
+
+        loss_giou = 1 - torch.diag(
+            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
+        )
+        losses["loss_giou"] = loss_giou.sum() / num_boxes
+        return losses
+
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the masks: the focal loss and the dice loss.
+
+        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
+        """
+        if "pred_masks" not in outputs:
+            raise KeyError("No predicted masks found in outputs")
+
+        source_idx = self._get_source_permutation_idx(indices)
+        target_idx = self._get_target_permutation_idx(indices)
+        source_masks = outputs["pred_masks"]
+        source_masks = source_masks[source_idx]
+        masks = [t["masks"] for t in targets]
+        # TODO use valid to mask invalid areas due to padding in loss
+        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
+        target_masks = target_masks.to(source_masks)
+        target_masks = target_masks[target_idx]
+
+        # upsample predictions to the target size
+        source_masks = nn.functional.interpolate(
+            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
+        )
+        source_masks = source_masks[:, 0].flatten(1)
+
+        target_masks = target_masks.flatten(1)
+        target_masks = target_masks.view(source_masks.shape)
+        losses = {
+            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
+            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
+        }
+        return losses
+
+    def _get_source_permutation_idx(self, indices):
+        # permute predictions following indices
+        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
+        source_idx = torch.cat([source for (source, _) in indices])
+        return batch_idx, source_idx
+
+    def _get_target_permutation_idx(self, indices):
+        # permute targets following indices
+        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
+        target_idx = torch.cat([target for (_, target) in indices])
+        return batch_idx, target_idx
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "labels": self.loss_labels,
+            "cardinality": self.loss_cardinality,
+            "boxes": self.loss_boxes,
+            "masks": self.loss_masks,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
+    def forward(self, outputs, targets):
+        """
+        This performs the loss computation.
+
+        Args:
+             outputs (`dict`, *optional*):
+                Dictionary of tensors, see the output specification of the model for the format.
+             targets (`list[dict]`, *optional*):
+                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
+                losses applied, see each loss' doc.
+        """
+        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs"}
+
+        # Retrieve the matching between the outputs of the last layer and the targets
+        indices = self.matcher(outputs_without_aux, targets)
+
+        # Compute the average number of target boxes across all nodes, for normalization purposes
+        num_boxes = sum(len(t["class_labels"]) for t in targets)
+        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
+        world_size = 1
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+                world_size = PartialState().num_processes
+        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
+
+        # Compute all the requested losses
+        losses = {}
+        for loss in self.losses:
+            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+
+        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
+        if "auxiliary_outputs" in outputs:
+            for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
+                indices = self.matcher(auxiliary_outputs, targets)
+                for loss in self.losses:
+                    if loss == "masks":
+                        # Intermediate masks losses are too costly to compute, we ignore them.
+                        continue
+                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
+                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
+                    losses.update(l_dict)
+
+        return losses
+
+
 @auto_docstring
 class MaskFormerDetrPreTrainedModel(PreTrainedModel):
     config: MaskFormerDetrConfig
@@ -455,6 +731,10 @@ class MaskFormerDetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, MaskFormerDetrLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
+        elif isinstance(module, MaskFormerDetrLoss):
+            empty_weight = torch.ones(module.num_classes + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
 
 
 @auto_docstring(
@@ -756,478 +1036,6 @@ class MaskFormerDetrDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.final_layer_norm(hidden_states)
 
         return hidden_states
-
-
-class MaskFormerDetrConvBlock(nn.Module):
-    """Basic conv block: Conv3x3 -> GroupNorm -> Activation."""
-
-    def __init__(self, in_channels: int, out_channels: int, activation: str = "relu"):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.norm = nn.GroupNorm(min(8, out_channels), out_channels)
-        self.activation = ACT2FN[activation]
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.activation(self.norm(self.conv(x)))
-
-
-class MaskFormerDetrFPNFusionStage(nn.Module):
-    """Single FPN fusion stage combining low-resolution features with high-resolution FPN features."""
-
-    def __init__(self, fpn_channels: int, current_channels: int, output_channels: int, activation: str = "relu"):
-        super().__init__()
-        self.fpn_adapter = nn.Conv2d(fpn_channels, current_channels, kernel_size=1)
-        self.refine = MaskFormerDetrConvBlock(current_channels, output_channels, activation)
-
-    def forward(self, features: torch.Tensor, fpn_features: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            features: Current features to upsample, shape (B*Q, current_channels, H_in, W_in)
-            fpn_features: FPN features at target resolution, shape (B*Q, fpn_channels, H_out, W_out)
-
-        Returns:
-            Fused and refined features, shape (B*Q, output_channels, H_out, W_out)
-        """
-        fpn_features = self.fpn_adapter(fpn_features)
-        features = nn.functional.interpolate(features, size=fpn_features.shape[-2:], mode="nearest")
-        return self.refine(fpn_features + features)
-
-
-class MaskFormerDetrMaskHeadSmallConv(nn.Module):
-    """
-    Segmentation mask head that generates per-query masks using FPN-based progressive upsampling.
-
-    Combines attention maps (spatial localization) with encoder features (semantics) and progressively
-    upsamples through multiple scales, fusing with FPN features for high-resolution detail.
-    """
-
-    def __init__(
-        self,
-        input_channels: int,
-        fpn_channels: list[int],
-        hidden_size: int,
-        activation_function: str = "relu",
-    ):
-        super().__init__()
-        if input_channels % 8 != 0:
-            raise ValueError(f"input_channels must be divisible by 8, got {input_channels}")
-
-        self.conv1 = MaskFormerDetrConvBlock(input_channels, input_channels, activation_function)
-        self.conv2 = MaskFormerDetrConvBlock(input_channels, hidden_size // 2, activation_function)
-
-        # Progressive channel reduction: /2 -> /4 -> /8 -> /16
-        self.fpn_stages = nn.ModuleList(
-            [
-                MaskFormerDetrFPNFusionStage(fpn_channels[0], hidden_size // 2, hidden_size // 4, activation_function),
-                MaskFormerDetrFPNFusionStage(fpn_channels[1], hidden_size // 4, hidden_size // 8, activation_function),
-                MaskFormerDetrFPNFusionStage(
-                    fpn_channels[2], hidden_size // 8, hidden_size // 16, activation_function
-                ),
-            ]
-        )
-
-        self.output_conv = nn.Conv2d(hidden_size // 16, 1, kernel_size=3, padding=1)
-
-    def forward(
-        self,
-        features: torch.Tensor,
-        attention_masks: torch.Tensor,
-        fpn_features: list[torch.Tensor],
-    ) -> torch.Tensor:
-        """
-        Args:
-            features: Encoder output features, shape (batch_size, hidden_size, H, W)
-            attention_masks: Cross-attention maps from decoder, shape (batch_size, num_queries, num_heads, H, W)
-            fpn_features: List of 3 FPN features from low to high resolution, each (batch_size, C, H, W)
-
-        Returns:
-            Predicted masks, shape (batch_size * num_queries, 1, output_H, output_W)
-        """
-        num_queries = attention_masks.shape[1]
-
-        # Expand to (batch_size * num_queries) dimension
-        features = features.unsqueeze(1).expand(-1, num_queries, -1, -1, -1).flatten(0, 1)
-        attention_masks = attention_masks.flatten(0, 1)
-        fpn_features = [
-            fpn_feat.unsqueeze(1).expand(-1, num_queries, -1, -1, -1).flatten(0, 1) for fpn_feat in fpn_features
-        ]
-
-        hidden_states = torch.cat([features, attention_masks], dim=1)
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.conv2(hidden_states)
-
-        for fpn_stage, fpn_feat in zip(self.fpn_stages, fpn_features):
-            hidden_states = fpn_stage(hidden_states, fpn_feat)
-
-        return self.output_conv(hidden_states)
-
-
-class MaskFormerDetrMHAttentionMap(nn.Module):
-    """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
-
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ):
-        super().__init__()
-        self.head_dim = hidden_size // num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = dropout
-
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-
-    def forward(
-        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: torch.Tensor | None = None
-    ):
-        query_hidden_shape = (*query_states.shape[:-1], -1, self.head_dim)
-        key_hidden_shape = (key_states.shape[0], -1, self.head_dim, *key_states.shape[-2:])
-
-        query_states = self.q_proj(query_states).view(query_hidden_shape)
-        key_states = nn.functional.conv2d(
-            key_states, self.k_proj.weight.unsqueeze(-1).unsqueeze(-1), self.k_proj.bias
-        ).view(key_hidden_shape)
-
-        batch_size, num_queries, num_heads, head_dim = query_states.shape
-        _, _, _, height, width = key_states.shape
-        query_shape = (batch_size * num_heads, num_queries, head_dim)
-        key_shape = (batch_size * num_heads, height * width, head_dim)
-        attn_weights_shape = (batch_size, num_heads, num_queries, height, width)
-
-        query = query_states.transpose(1, 2).contiguous().view(query_shape)
-        key = key_states.permute(0, 1, 3, 4, 2).contiguous().view(key_shape)
-
-        attn_weights = (
-            (torch.matmul(query * self.scaling, key.transpose(1, 2))).view(attn_weights_shape).transpose(1, 2)
-        )
-
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-
-        return attn_weights
-
-
-# taken from https://github.com/facebookresearch/mask_former_detr/blob/master/models/mask_former_detr.py
-class MaskFormerDetrLoss(nn.Module):
-    """
-    This class computes the losses for MaskFormerDetrForObjectDetection/MaskFormerDetrForSegmentation. The process happens in two steps: 1)
-    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
-    of matched ground-truth / prediction (supervise class and box).
-
-    A note on the `num_classes` argument (copied from original repo in mask_former_detr.py): "the naming of the `num_classes`
-    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
-    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
-    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
-    (`max_obj_id` + 1). For more details on this, check the following discussion
-    https://github.com/facebookresearch/mask_former_detr/issues/108#issuecomment-650269223"
-
-
-    Args:
-        matcher (`MaskFormerDetrHungarianMatcher`):
-            Module able to compute a matching between targets and proposals.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
-        losses (`list[str]`):
-            List of all the losses to be applied. See `get_loss` for a list of all available losses.
-    """
-
-    def __init__(self, config, losses, matcher):
-        super().__init__()
-        requires_backends(self, ["scipy"])
-        self.matcher = matcher
-        self.eos_coef = config.eos_coefficient
-        self.num_classes = config.num_labels
-        self.losses = losses
-        empty_weight = torch.ones(self.num_classes + 1)
-        empty_weight[-1] = self.eos_coef
-        self.empty_weight = nn.Buffer(empty_weight)
-
-    # removed logging parameter, which was part of the original implementation
-    def loss_labels(self, outputs, targets, indices, num_boxes):
-        """
-        Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
-        [nb_target_boxes]
-        """
-        if "logits" not in outputs:
-            raise KeyError("No logits were found in the outputs")
-        source_logits = outputs["logits"]
-
-        idx = self._get_source_permutation_idx(indices)
-        target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(
-            source_logits.shape[:2], self.num_classes, dtype=torch.int64, device=source_logits.device
-        )
-        target_classes[idx] = target_classes_o
-
-        loss_ce = nn.functional.cross_entropy(source_logits.transpose(1, 2), target_classes, self.empty_weight)
-        losses = {"loss_ce": loss_ce}
-
-        return losses
-
-    @torch.no_grad()
-    def loss_cardinality(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
-
-        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
-        """
-        logits = outputs["logits"]
-        device = logits.device
-        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
-        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
-        losses = {"cardinality_error": card_err}
-        return losses
-
-    def loss_boxes(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
-
-        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes
-        are expected in format (center_x, center_y, w, h), normalized by the image size.
-        """
-        if "pred_boxes" not in outputs:
-            raise KeyError("No predicted boxes found in outputs")
-        idx = self._get_source_permutation_idx(indices)
-        source_boxes = outputs["pred_boxes"][idx]
-        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
-
-        loss_bbox = nn.functional.l1_loss(source_boxes, target_boxes, reduction="none")
-
-        losses = {}
-        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
-
-        loss_giou = 1 - torch.diag(
-            generalized_box_iou(center_to_corners_format(source_boxes), center_to_corners_format(target_boxes))
-        )
-        losses["loss_giou"] = loss_giou.sum() / num_boxes
-        return losses
-
-    def loss_masks(self, outputs, targets, indices, num_boxes):
-        """
-        Compute the losses related to the masks: the focal loss and the dice loss.
-
-        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
-        """
-        if "pred_masks" not in outputs:
-            raise KeyError("No predicted masks found in outputs")
-
-        source_idx = self._get_source_permutation_idx(indices)
-        target_idx = self._get_target_permutation_idx(indices)
-        source_masks = outputs["pred_masks"]
-        source_masks = source_masks[source_idx]
-        masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
-        target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
-        target_masks = target_masks.to(source_masks)
-        target_masks = target_masks[target_idx]
-
-        # upsample predictions to the target size
-        source_masks = nn.functional.interpolate(
-            source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
-        )
-        source_masks = source_masks[:, 0].flatten(1)
-
-        target_masks = target_masks.flatten(1)
-        target_masks = target_masks.view(source_masks.shape)
-        losses = {
-            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
-        }
-        return losses
-
-    def _get_source_permutation_idx(self, indices):
-        # permute predictions following indices
-        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
-        source_idx = torch.cat([source for (source, _) in indices])
-        return batch_idx, source_idx
-
-    def _get_target_permutation_idx(self, indices):
-        # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
-        target_idx = torch.cat([target for (_, target) in indices])
-        return batch_idx, target_idx
-
-    def get_loss(self, loss, outputs, targets, indices, num_boxes):
-        loss_map = {
-            "labels": self.loss_labels,
-            "cardinality": self.loss_cardinality,
-            "boxes": self.loss_boxes,
-            "masks": self.loss_masks,
-        }
-        if loss not in loss_map:
-            raise ValueError(f"Loss {loss} not supported")
-        return loss_map[loss](outputs, targets, indices, num_boxes)
-
-    def forward(self, outputs, targets):
-        """
-        This performs the loss computation.
-
-        Args:
-             outputs (`dict`, *optional*):
-                Dictionary of tensors, see the output specification of the model for the format.
-             targets (`list[dict]`, *optional*):
-                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
-                losses applied, see each loss' doc.
-        """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs"}
-
-        # Retrieve the matching between the outputs of the last layer and the targets
-        indices = self.matcher(outputs_without_aux, targets)
-
-        # Compute the average number of target boxes across all nodes, for normalization purposes
-        num_boxes = sum(len(t["class_labels"]) for t in targets)
-        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        world_size = 1
-        if is_accelerate_available():
-            if PartialState._shared_state != {}:
-                num_boxes = reduce(num_boxes)
-                world_size = PartialState().num_processes
-        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
-
-        # Compute all the requested losses
-        losses = {}
-        for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
-
-        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if "auxiliary_outputs" in outputs:
-            for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
-                indices = self.matcher(auxiliary_outputs, targets)
-                for loss in self.losses:
-                    if loss == "masks":
-                        # Intermediate masks losses are too costly to compute, we ignore them.
-                        continue
-                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
-                    l_dict = {k + f"_{i}": v for k, v in l_dict.items()}
-                    losses.update(l_dict)
-
-        return losses
-
-
-@auto_docstring
-class MaskFormerDetrPreTrainedModel(PreTrainedModel):
-    config: MaskFormerDetrConfig
-    base_model_prefix = "model"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = [r"MaskFormerDetrConvEncoder", r"MaskFormerDetrEncoderLayer", r"MaskFormerDetrDecoderLayer"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_attention_backend = True
-    _supports_flex_attn = True  # Uses create_bidirectional_masks for attention masking
-    _keys_to_ignore_on_load_unexpected = [
-        r"mask_former_detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
-    ]
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        xavier_std = self.config.init_xavier_std
-
-        if isinstance(module, MaskFormerDetrMaskHeadSmallConv):
-            # MaskFormerDetrMaskHeadSmallConv uses kaiming initialization for all its Conv2d layers
-            for m in module.modules():
-                if isinstance(m, nn.Conv2d):
-                    init.kaiming_uniform_(m.weight, a=1)
-                    if m.bias is not None:
-                        init.constant_(m.bias, 0)
-        elif isinstance(module, MaskFormerDetrMHAttentionMap):
-            init.zeros_(module.k_proj.bias)
-            init.zeros_(module.q_proj.bias)
-            init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
-            init.xavier_uniform_(module.q_proj.weight, gain=xavier_std)
-        elif isinstance(module, MaskFormerDetrLearnedPositionEmbedding):
-            init.uniform_(module.row_embeddings.weight)
-            init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, MaskFormerDetrLoss):
-            empty_weight = torch.ones(module.num_classes + 1)
-            empty_weight[-1] = module.eos_coef
-            init.copy_(module.empty_weight, empty_weight)
-
-
-# refactored from original implementation
-def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
-    r"""
-    Compute the DICE loss, similar to generalized IOU for masks as follows:
-
-    $$ \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x \cap y }{x \cup y + 1}} $$
-
-    In practice, since `labels` is a binary mask, (only 0s and 1s), dice can be computed as follow
-
-    $$ \mathcal{L}_{\text{dice}(x, y) = 1 - \frac{2 * x * y }{x + y + 1}} $$
-
-    Args:
-        inputs (`torch.Tensor`):
-            A tensor representing a mask.
-        labels (`torch.Tensor`):
-            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
-            (0 for the negative class and 1 for the positive class).
-        num_masks (`int`):
-            The number of masks present in the current batch, used for normalization.
-
-    Returns:
-        `torch.Tensor`: The computed loss.
-    """
-    probs = inputs.sigmoid().flatten(1)
-    numerator = 2 * (probs * labels).sum(-1)
-    denominator = probs.sum(-1) + labels.sum(-1)
-    loss = 1 - (numerator + 1) / (denominator + 1)
-    loss = loss.sum() / num_masks
-    return loss
-
-
-# refactored from original implementation
-def sigmoid_focal_loss(
-    inputs: Tensor, labels: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
-) -> Tensor:
-    r"""
-    Focal loss proposed in [Focal Loss for Dense Object Detection](https://huggingface.co/papers/1708.02002) originally used in
-    RetinaNet. The loss is computed as follows:
-
-    $$ \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)} $$
-
-    where \\(CE(p_t) = -\log{(p_t)}}\\), CE is the standard Cross Entropy Loss
-
-    Please refer to equation (1,2,3) of the paper for a better understanding.
-
-    Args:
-        inputs (`torch.Tensor`):
-            A float tensor of arbitrary shape.
-        labels (`torch.Tensor`):
-            A tensor with the same shape as inputs. Stores the binary classification labels for each element in inputs
-            (0 for the negative class and 1 for the positive class).
-        num_masks (`int`):
-            The number of masks present in the current batch, used for normalization.
-        alpha (float, *optional*, defaults to 0.25):
-            Weighting factor in range (0,1) to balance positive vs negative examples.
-        gamma (float, *optional*, defaults to 2.0):
-            Exponent of the modulating factor \\(1 - p_t\\) to balance easy vs hard examples.
-
-    Returns:
-        `torch.Tensor`: The computed loss.
-    """
-    criterion = nn.BCEWithLogitsLoss(reduction="none")
-    probs = inputs.sigmoid()
-    cross_entropy_loss = criterion(inputs, labels)
-    p_t = probs * labels + (1 - probs) * (1 - labels)
-    loss = cross_entropy_loss * ((1 - p_t) ** gamma)
-
-    if alpha >= 0:
-        alpha_t = alpha * labels + (1 - alpha) * (1 - labels)
-        loss = alpha_t * loss
-
-    loss = loss.mean(1).sum() / num_masks
-    return loss
 
 
 class MaskFormerDetrDecoder(MaskFormerDetrPreTrainedModel):

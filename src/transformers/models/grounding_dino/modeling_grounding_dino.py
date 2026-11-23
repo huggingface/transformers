@@ -1051,7 +1051,6 @@ class GroundingDinoEncoderLayer(nn.Module):
     ) -> Tensor:
         if text_position_embedding is not None:
             return text_position_embedding
-
         if text_position_ids is None:
             batch_size, seq_length, _ = text_features.shape
             text_position_ids = torch.arange(seq_length, device=text_features.device)
@@ -1318,6 +1317,10 @@ class GroundingDinoContrastiveEmbedding(nn.Module):
         new_output[..., : output.shape[-1]] = output
 
         return new_output
+
+
+# these correspond to [CLS], [SEP], . and ?
+SPECIAL_TOKENS = [101, 102, 1012, 1029]
 
 
 @auto_docstring
@@ -1813,10 +1816,6 @@ def build_position_encoding(config):
     return position_embedding
 
 
-# these correspond to [CLS], [SEP], . and ?
-SPECIAL_TOKENS = [101, 102, 1012, 1029]
-
-
 def generate_masks_with_special_tokens_and_transfer_map(
     input_ids: torch.LongTensor, special_tokens: torch.LongTensor
 ) -> tuple[Tensor, Tensor]:
@@ -1946,10 +1945,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         else:
             self.reference_points = nn.Embedding(config.num_queries, 4)
 
-        self.special_tokens = nn.Buffer(
-            torch.tensor(SPECIAL_TOKENS, dtype=torch.long),
-            persistent=False,
-        )
+        self.special_tokens = nn.Buffer(torch.tensor(SPECIAL_TOKENS, dtype=torch.long), persistent=False)
         self.post_init()
 
     def freeze_backbone(self):

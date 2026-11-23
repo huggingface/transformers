@@ -1015,7 +1015,6 @@ class MMGroundingDinoEncoderLayer(nn.Module):
     ) -> Tensor:
         if text_position_embedding is not None:
             return text_position_embedding
-
         if text_position_ids is None:
             batch_size, seq_length, _ = text_features.shape
             text_position_ids = torch.arange(seq_length, device=text_features.device)
