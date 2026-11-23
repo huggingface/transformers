@@ -298,7 +298,6 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -425,7 +424,6 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Gemma3MultiModalProjector):
@@ -660,6 +658,8 @@ class Gemma3Model(PaliGemmaModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
 
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         del self.text_config_dtype
@@ -750,16 +750,12 @@ class Gemma3Model(PaliGemmaModel):
             **kwargs,
         )
 
-        return Gemma3ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Gemma3ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
+
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -854,7 +850,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
     def _update_model_kwargs_for_generation(self, **super_kwargs):

@@ -180,7 +180,6 @@ class JanusPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["JanusVisionEncoderLayer"]
-    _skip_keys_device_placement = ["cache", "causal_mask"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -810,13 +809,7 @@ class JanusModel(JanusPreTrainedModel):
             **kwargs,
         )
 
-        return JanusBaseModelOutputWithPast(
-            last_hidden_state=lm_output.last_hidden_state,
-            cache=lm_output.cache,
-            hidden_states=lm_output.hidden_states,
-            attentions=lm_output.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return JanusBaseModelOutputWithPast(**lm_output, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
@@ -883,7 +876,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
     def decode_image_tokens(self, image_tokens: torch.Tensor):

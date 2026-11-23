@@ -45,16 +45,21 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
-    ModelOutput,
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     is_accelerate_available,
+    logging,
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -68,94 +73,80 @@ if is_accelerate_available():
     from accelerate.hooks import add_hook_to_module
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4 outputs, with hidden states and attentions.
-    """
-)
-@dataclass
-class Gemma4ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+logger = logging.get_logger(__name__)
 
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`KVSharingDict`, *optional*):
-        A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
+
+@auto_docstring
+@dataclass
+class Gemma4ModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    r"""
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
         Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
-
     shared_kv_states: KVSharingDict | None = None
     router_logits: tuple[torch.Tensor] | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Gemma4 causal language model (or autoregressive) outputs.
-    """
-)
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
+
+
+@auto_docstring
 @dataclass
-class Gemma4CausalLMOutputWithPast(ModelOutput):
+class Gemma4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`KVSharingDict`, *optional*):
-        A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
         Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
-
     shared_kv_states: KVSharingDict | None = None
     router_logits: tuple[torch.Tensor] | None = None
 
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
+
+
+@auto_docstring
 @dataclass
 class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
-    """
-    BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
-
-    Args:
-        shared_kv_states (`KVSharingDict`, *optional*):
-            A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
-            Used to pass shared KV states between layers during KV sharing.
-        router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-            Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
+    r"""
+    shared_kv_states (`KVSharingDict`, *optional*):
+        A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
+        Used to pass shared KV states between layers during KV sharing.
+    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
     shared_kv_states: KVSharingDict | None = None
@@ -245,7 +236,6 @@ class Gemma4AudioRelPositionalEncoding(nn.Module):
         inv_timescales = min_timescale * torch.exp(torch.arange(num_timescales) * -log_timescale_increment)
         self.inv_timescales = nn.Buffer(inv_timescales.unsqueeze(0).unsqueeze(0), persistent=False)
 
-    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         position_ids = torch.arange(self.context_size // 2, -1, -1, device=hidden_states.device)
         position_ids = position_ids[..., None]
@@ -749,7 +739,6 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
@@ -1136,7 +1125,6 @@ class Gemma4TextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -1455,7 +1443,6 @@ class Gemma4PreTrainedModel(PreTrainedModel):
         "Gemma4VisionPatchEmbedder",
         "Gemma4AudioLayer",
     ]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1465,7 +1452,6 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     _can_record_outputs = None  # override
     input_modalities = ("image", "text", "video", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Gemma4VisionPatchEmbedder):
@@ -2238,6 +2224,7 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
 class Gemma4Model(Gemma4PreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
@@ -2447,6 +2434,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             )
 
         # Merge text and audio
+        audio_outputs = None
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
             audio_features = audio_output.pooler_output
@@ -2510,14 +2498,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
         )
 
         return Gemma4ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
-            shared_kv_states=outputs.shared_kv_states,
-            router_logits=outputs.router_logits,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
         )
 
     def get_per_layer_input_embeddings(self):
@@ -2606,6 +2587,8 @@ class Gemma4Model(Gemma4PreTrainedModel):
 class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     accepts_loss_kwargs = False
     base_model_prefix = "model"
 
@@ -2716,8 +2699,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            audio_hidden_states=outputs.audio_hidden_states,
+            image_outputs=outputs.image_outputs,
             shared_kv_states=outputs.shared_kv_states,
             router_logits=outputs.router_logits,
         )

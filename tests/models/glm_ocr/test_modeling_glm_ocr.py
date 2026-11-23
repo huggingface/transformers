@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -48,23 +49,23 @@ if is_torch_available():
     import torch
 
 
-class GlmOcrVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=112,
-        video_start_token_id=3,
-        video_end_token_id=4,
-        image_start_token_id=5,
-        image_end_token_id=6,
-        image_token_id=7,
-        video_token_id=8,
-        is_training=True,
-        text_config={
+class GlmOcrVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_channels": 3,
+        "ignore_index": -100,
+        "image_size": 112,
+        "video_start_token_id": 3,
+        "video_end_token_id": 4,
+        "image_start_token_id": 5,
+        "image_end_token_id": 6,
+        "image_token_id": 7,
+        "video_token_id": 8,
+        "is_training": True,
+        "text_config": {
             "vocab_size": 99,
             "hidden_size": 16,
             "intermediate_size": 22,
@@ -81,7 +82,7 @@ class GlmOcrVisionText2TextModelTester:
             "eos_token_id": 0,
             "pad_token_id": 0,
         },
-        vision_config={
+        "vision_config": {
             "depth": 2,
             "hidden_act": "silu",
             "hidden_size": 48,
@@ -92,30 +93,26 @@ class GlmOcrVisionText2TextModelTester:
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
         },
-    ):
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["bos_token_id"] = values["text_config"]["bos_token_id"]
+        values["eos_token_id"] = values["text_config"]["eos_token_id"]
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["num_image_tokens"] = 64
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.hidden_size = text_config["hidden_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.vocab_size = text_config["vocab_size"]
-        self.num_image_tokens = 64
-        self.seq_length = seq_length + self.num_image_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return GlmOcrConfig(
@@ -179,6 +176,8 @@ class GlmOcrVisionText2TextModelTester:
 
 @require_torch
 class GlmOcrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = GlmOcrVisionText2TextModelTester
+
     all_model_classes = (GlmOcrModel, GlmOcrForConditionalGeneration) if is_torch_available() else ()
 
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5

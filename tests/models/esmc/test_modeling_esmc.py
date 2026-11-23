@@ -18,6 +18,7 @@ import unittest
 from transformers import AutoTokenizer, EsmcConfig, is_torch_available
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -34,38 +35,29 @@ if is_torch_available():
     )
 
 
-class EsmcModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=33,
-        hidden_size=32,
-        intermediate_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        initializer_range=0.02,
-        num_labels=3,
-        scope=None,
-    ):
+class EsmcModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": False,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 33,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -136,6 +128,8 @@ class EsmcModelTester:
 
 @require_torch
 class EsmcModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = EsmcModelTester
+
     test_mismatched_shapes = False
     test_resize_embeddings = False  # ESMC's lm_head decoder is untied (tie_word_embeddings=False)
 

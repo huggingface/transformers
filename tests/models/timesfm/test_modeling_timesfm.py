@@ -22,6 +22,7 @@ from parameterized import parameterized
 from transformers import TimesFmConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin
 
@@ -32,50 +33,39 @@ if is_torch_available():
 TOLERANCE = 1e-4
 
 
-class TimesFmModelTester:
-    def __init__(
-        self,
-        parent,
-        patch_length: int = 32,
-        context_length: int = 512,
-        horizon_length: int = 128,
-        freq_size: int = 3,
-        num_hidden_layers: int = 1,
-        hidden_size: int = 16,
-        intermediate_size: int = 32,
-        head_dim: int = 8,
-        num_heads: int = 2,
-        tolerance: float = 1e-6,
-        rms_norm_eps: float = 1e-6,
-        quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        pad_val: float = 1123581321.0,
-        use_positional_embedding: bool = True,
-        initializer_factor: float = 0.0,
-        is_training: bool = False,
-        batch_size: int = 3,
-    ):
-        self.parent = parent
-        self.patch_length = patch_length
-        self.context_length = context_length
-        self.horizon_length = horizon_length
-        self.quantiles = quantiles
-        self.pad_val = pad_val
-        self.freq_size = freq_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.head_dim = head_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_heads
-        self.tolerance = tolerance
-        self.rms_norm_eps = rms_norm_eps
-        self.use_positional_embedding = use_positional_embedding
-        self.initializer_factor = initializer_factor
-        self.is_training = is_training
-        self.batch_size = batch_size
+class TimesFmModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "patch_length": 32,
+        "context_length": 512,
+        "horizon_length": 128,
+        "freq_size": 3,
+        "num_hidden_layers": 1,
+        "hidden_size": 16,
+        "intermediate_size": 32,
+        "head_dim": 8,
+        "num_attention_heads": 2,
+        "tolerance": 1e-6,
+        "rms_norm_eps": 1e-6,
+        "quantiles": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        "pad_val": 1123581321.0,
+        "use_positional_embedding": True,
+        "initializer_factor": 0.0,
+        "is_training": False,
+        "batch_size": 3,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # The size of test input
-        self.seq_length = context_length // patch_length
-        self.hidden_size = hidden_size
+        values["seq_length"] = values["context_length"] // values["patch_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return TimesFmConfig(
@@ -121,6 +111,8 @@ class TimesFmModelTester:
 
 @require_torch
 class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = TimesFmModelTester
+
     all_model_classes = (TimesFmModelForPrediction,) if is_torch_available() else ()
     all_generative_model_classes = ()
 

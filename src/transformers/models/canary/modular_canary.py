@@ -102,7 +102,6 @@ class CanaryConfig(PreTrainedConfig):
     """
 
     model_type = "canary"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "encoder_config": SubConfigSpec(
             config_class=AutoConfig,
@@ -168,7 +167,6 @@ class CanaryPreTrainedModel(CohereAsrPreTrainedModel):
     def _get_feat_extract_output_lengths(self):
         raise AttributeError("Not needed for Canary")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, CanaryPositionalEmbedding):

@@ -41,6 +41,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -111,7 +113,6 @@ class Qwen3_5VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -172,7 +173,6 @@ class Qwen3_5TextRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update
     def forward(self, x, position_ids):
         # In contrast to other models, Qwen3_5Text has different position ids for the grids
@@ -858,7 +858,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
         self.block_type = config.layer_types[layer_idx]
         if self.block_type == "linear_attention":
             self.linear_attn = Qwen3_5GatedDeltaNet(config, layer_idx)
-        elif self.block_type == "full_attention":
+        else:
             self.self_attn = Qwen3_5Attention(config, layer_idx)
         self.mlp = Qwen3_5MLP(config, config.intermediate_size)
         self.input_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -886,7 +886,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 **kwargs,
             )
-        elif self.block_type == "full_attention":
+        else:
             # Self Attention
             hidden_states, _ = self.self_attn(
                 hidden_states=hidden_states,
@@ -913,7 +913,6 @@ class Qwen3_5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
@@ -924,7 +923,6 @@ class Qwen3_5PreTrainedModel(PreTrainedModel):
     _is_stateful = True
     _can_compile_fullgraph = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Qwen3_5GatedDeltaNet):
@@ -1443,7 +1441,9 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return outputs
+        return MultimodalBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring
@@ -1586,7 +1586,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1651,12 +1651,14 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

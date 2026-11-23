@@ -541,7 +541,6 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
         "cross_attentions": OutputRecorder(Pop2PianoLayerCrossAttention, index=-1),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

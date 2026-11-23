@@ -87,7 +87,6 @@ class PI0PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "state"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -103,6 +102,8 @@ class PI0PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class PI0Model(PI0PreTrainedModel):
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over the action tokens
+
     def __init__(self, config: PI0Config):
         super().__init__(config)
         self.dit = AutoModel.from_config(config.dit_config)
@@ -220,6 +221,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
     _tp_plan = {"action_out_proj": "colwise_gather_output"}
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over the action tokens
 
     def __init__(self, config: PI0Config):
         super().__init__(config)

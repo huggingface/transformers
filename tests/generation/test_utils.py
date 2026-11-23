@@ -792,6 +792,13 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             for output in (output_greedy, output_assisted):
                 self._check_generate_outputs(output, model.config, use_cache=True)
 
+            # The same must hold with a static cache. Models that cannot use a static cache at all are skipped, see `test_generate_with_static_cache`
+            if model_class._can_compile_fullgraph and not config.is_encoder_decoder:
+                output_static = model.generate(
+                    **generation_kwargs, **inputs_dict, **logits_processor_kwargs, cache_implementation="static"
+                )
+                assert_similar_generate_outputs(output_assisted, output_static, atol=atol, rtol=rtol)
+
     @pytest.mark.generate
     @is_flaky
     def test_prompt_lookup_decoding_matches_greedy_search(self):
@@ -1400,7 +1407,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             for key in inputs:
                 if (
                     "pixel" in key
-                    or key in ["image_patches", "input_feature", "input_features", "feature_attention_mask"]
+                    or key
+                    in ["image_patches", "input_feature", "input_features", "feature_attention_mask", "input_values"]
                 ) and key != model.main_input_name:
                     keys_to_pop.append(key)
             for key in keys_to_pop:
@@ -3459,6 +3467,30 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
 @pytest.mark.generate
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase):
+    def test_prefix_constraints_with_multiple_sampled_returns(self):
+        config = AutoConfig.for_model(
+            "gpt2",
+            vocab_size=32,
+            n_positions=32,
+            n_embd=32,
+            n_layer=1,
+            n_head=2,
+            bos_token_id=1,
+            eos_token_id=2,
+            pad_token_id=0,
+        )
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+        inputs = torch.tensor([[10, 11], [20, 21]], device=torch_device)
+        allowed = [[5], [7]]
+        output = model.generate(
+            inputs,
+            do_sample=True,
+            num_return_sequences=3,
+            max_new_tokens=1,
+            prefix_allowed_tokens_fn=lambda batch_id, _: allowed[batch_id],
+        )
+        self.assertEqual(output[:, -1].tolist(), [5, 5, 5, 7, 7, 7])
+
     def test_generation_config_defaults(self):
         "Tests that we can set config value to a global default. See https://github.com/huggingface/transformers/issues/42762"
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
@@ -3491,6 +3523,25 @@ class GenerationIntegrationTests(unittest.TestCase):
             model.generation_config.cache_implementation = "dynamic"
             model.generation_config.use_cache = None
             model.save_pretrained(tmpdirname)
+
+    def test_generate_flex_attention_with_static_cache(self):
+        """A compileable cache makes `prepare_inputs_for_generation` build the mask ahead of the forward: with flex
+        attention it is a `BlockMask`, which has no `.contiguous()`"""
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        torch.manual_seed(0)
+        # head_dim 16: the smallest flex attention supports on GPU
+        config = LlamaConfig(
+            vocab_size=128, hidden_size=64, intermediate_size=128, num_hidden_layers=2, num_attention_heads=4
+        )
+        config._attn_implementation = "flex_attention"
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.randint(0, 128, (1, 8), device=torch_device)
+        generation_config = GenerationConfig(do_sample=False, max_new_tokens=4, eos_token_id=-1)
+
+        out = model.generate(input_ids, generation_config=generation_config, cache_implementation="static")
+        self.assertEqual(out.shape, (1, 12))
+        self.assertEqual(out[:, :8].tolist(), input_ids.tolist())
 
     @require_torch_accelerator
     def test_generate_with_inputs_on_cpu(self):

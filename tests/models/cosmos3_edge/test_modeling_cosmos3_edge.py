@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 from transformers.video_utils import load_video
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -45,21 +46,28 @@ if is_torch_available():
     from transformers import Cosmos3EdgeTextModel
 
 
-class Cosmos3EdgeTextModelTester:
+class Cosmos3EdgeTextModelTester(ModelTesterConfigMixin):
     """Tiny text-only inputs for the common model-test suite."""
 
-    def __init__(self, parent):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "vocab_size": 97,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "is_training": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = 3
-        self.seq_length = 7
-        self.vocab_size = 97
-        self.hidden_size = 32
-        self.intermediate_size = 64
-        self.num_hidden_layers = 2
-        self.num_attention_heads = 4
-        self.num_key_value_heads = 2
-        self.head_dim = 8
-        self.is_training = True
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Cosmos3EdgeTextConfig(
@@ -95,6 +103,8 @@ class Cosmos3EdgeTextModelTester:
 
 @require_torch
 class Cosmos3EdgeTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Cosmos3EdgeTextModelTester
+
     all_model_classes = (Cosmos3EdgeTextModel,) if is_torch_available() else ()
 
     def setUp(self):
@@ -114,33 +124,35 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = Cosmos3EdgeForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("vocab_size", 97)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("max_position_embeddings", 128)
-        kwargs.setdefault("hidden_act", "relu2")
-        kwargs.setdefault("rms_norm_eps", 1e-5)
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("vision_start_token_id", 5)
-        kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault(
-            "rope_parameters",
-            {"rope_type": "default", "rope_theta": 100_000_000, "mrope_section": [2, 1, 1]},
-        )
-        super().__init__(parent, **kwargs)
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.projector_hidden_size = self.intermediate_size
+    small_config_overrides = {
+        "vocab_size": 97,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "max_position_embeddings": 128,
+        "hidden_act": "relu2",
+        "rms_norm_eps": 1e-5,
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
+        "image_size": 8,
+        "patch_size": 2,
+        "num_image_tokens": 4,
+        "num_channels": 3,
+        "spatial_merge_size": 2,
+        "rope_parameters": {"rope_type": "default", "rope_theta": 100_000_000, "mrope_section": [2, 1, 1]},
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_patches"] = (values["image_size"] // values["patch_size"]) ** 2
+        values["projector_hidden_size"] = values["intermediate_size"]
+        return values
 
     @property
     def _special_token_ids(self):

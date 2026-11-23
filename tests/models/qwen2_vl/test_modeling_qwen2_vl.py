@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -58,16 +59,15 @@ if is_vision_available():
     from PIL import Image
 
 
-class Qwen2VLVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=14,
-        text_config={
+class Qwen2VLVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_channels": 3,
+        "ignore_index": -100,
+        "image_size": 14,
+        "text_config": {
             "bos_token_id": 0,
             "eos_token_id": 1,
             "pad_token_id": 2,
@@ -84,11 +84,11 @@ class Qwen2VLVisionText2TextModelTester:
             "tie_word_embeddings": True,
             "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
         },
-        vision_start_token_id=3,
-        image_token_id=4,
-        video_token_id=5,
-        is_training=True,
-        vision_config={
+        "vision_start_token_id": 3,
+        "image_token_id": 4,
+        "video_token_id": 5,
+        "is_training": True,
+        "vision_config": {
             "depth": 2,
             "embed_dim": 32,
             "hidden_act": "quick_gelu",
@@ -99,27 +99,27 @@ class Qwen2VLVisionText2TextModelTester:
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
         },
-    ):
+        "num_image_tokens": 32,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["bos_token_id"] = text_config["bos_token_id"]
+        values["eos_token_id"] = text_config["eos_token_id"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
-        self.vision_start_token_id = vision_start_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.vocab_size = text_config["vocab_size"]
-        self.num_image_tokens = 32
-        self.seq_length = seq_length + self.num_image_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Qwen2VLConfig(
@@ -176,6 +176,8 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     """
     Model tester for `Qwen2VLForConditionalGeneration`.
     """
+
+    model_tester_class = Qwen2VLVisionText2TextModelTester
 
     all_model_classes = (
         (

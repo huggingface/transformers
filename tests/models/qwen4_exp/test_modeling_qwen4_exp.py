@@ -54,34 +54,34 @@ class Qwen4ExpTextModelTester(CausalLMModelTester):
         base_model_class = Qwen4ExpTextModel
         causal_lm_class = Qwen4ExpForCausalLM
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.hidden_act = "silu"
-        self.rope_parameters = {"rope_type": "default", "partial_rotary_factor": 0.25, "mrope_section": [1, 1, 1]}
-        self.layer_types = ["linear_attention", "indexed_attention"]
-        self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_value_head_dim = 16
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 8
-        self.hc_count = 2
-        self.hc_lowrank = 8
-        self.ple_layer_ids = [1]
-        self.ple_embed_dim = 16
-        self.ple_conv_kernel_size = 2
-        self.ngram_size = 3
-        self.heads_per_ngram = 2
-        self.ngram_vocab_size_base = 31
-        self.make_ngram_vocab_size_divisible_by = 8
-        self.split_ngram_parts = 4
-        self.indexer_n_heads = 2
-        self.indexer_kv_heads = 1
-        self.indexer_head_dim = 8
-        self.indexer_budget = 4
-        self.indexer_compress_ratio = 2
-        self.moe_intermediate_size = 8
-        self.shared_expert_intermediate_size = 8
-        self.num_experts = 4
+    small_config_overrides = {
+        "hidden_act": "silu",
+        "rope_parameters": {"rope_type": "default", "partial_rotary_factor": 0.25, "mrope_section": [1, 1, 1]},
+        "layer_types": ["linear_attention", "indexed_attention"],
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
+        "hc_count": 2,
+        "hc_lowrank": 8,
+        "ple_layer_ids": [1],
+        "ple_embed_dim": 16,
+        "ple_conv_kernel_size": 2,
+        "ngram_size": 3,
+        "heads_per_ngram": 2,
+        "ngram_vocab_size_base": 31,
+        "make_ngram_vocab_size_divisible_by": 8,
+        "split_ngram_parts": 4,
+        "indexer_n_heads": 2,
+        "indexer_kv_heads": 1,
+        "indexer_head_dim": 8,
+        "indexer_budget": 4,
+        "indexer_compress_ratio": 2,
+        "moe_intermediate_size": 8,
+        "shared_expert_intermediate_size": 8,
+        "num_experts": 4,
+    }
 
 
 @require_torch
@@ -349,60 +349,68 @@ class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = Qwen4ExpForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.num_key_value_heads = 1
-        self.head_dim = 24
-        self.hidden_act = "silu"
-        self.layer_types = ["linear_attention", "indexed_attention"]
-        self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_value_head_dim = 16
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 8
-        self.hc_count = 2
-        self.hc_lowrank = 8
-        self.ple_layer_ids = [1]
-        self.ple_embed_dim = 16
-        self.ple_conv_kernel_size = 2
-        self.ngram_size = 3
-        self.heads_per_ngram = 2
-        self.ngram_vocab_size_base = 31
-        self.make_ngram_vocab_size_divisible_by = 8
-        self.split_ngram_parts = 4
-        self.indexer_n_heads = 2
-        self.indexer_kv_heads = 1
-        self.indexer_head_dim = 8
-        self.indexer_budget = 4
-        self.indexer_compress_ratio = 2
-        self.moe_intermediate_size = 8
-        self.shared_expert_intermediate_size = 8
-        self.num_experts = 4
-        self.bos_token_id = 0
-        self.eos_token_id = 1
-        self.pad_token_id = 2
-        self.video_token_id = 4
-        self.vision_start_token_id = 5
-        self.vision_end_token_id = 6
-        self.image_size = 16
-        self.patch_size = 16
-        self.depth = 1
-        self.vision_hidden_act = "gelu_pytorch_tanh"
-        self.num_heads = 4
-        self.spatial_merge_size = 1
-        self.temporal_patch_size = 2
-        self.num_position_embeddings = 16
-        self.rope_parameters = {
+    small_config_overrides = {
+        "num_key_value_heads": 1,
+        "head_dim": 24,
+        "hidden_act": "silu",
+        "layer_types": ["linear_attention", "indexed_attention"],
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
+        "hc_count": 2,
+        "hc_lowrank": 8,
+        "ple_layer_ids": [1],
+        "ple_embed_dim": 16,
+        "ple_conv_kernel_size": 2,
+        "ngram_size": 3,
+        "heads_per_ngram": 2,
+        "ngram_vocab_size_base": 31,
+        "make_ngram_vocab_size_divisible_by": 8,
+        "split_ngram_parts": 4,
+        "indexer_n_heads": 2,
+        "indexer_kv_heads": 1,
+        "indexer_head_dim": 8,
+        "indexer_budget": 4,
+        "indexer_compress_ratio": 2,
+        "moe_intermediate_size": 8,
+        "shared_expert_intermediate_size": 8,
+        "num_experts": 4,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
+        "image_size": 16,
+        "patch_size": 16,
+        "depth": 1,
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "num_heads": 4,
+        "spatial_merge_size": 1,
+        "temporal_patch_size": 2,
+        "num_position_embeddings": 16,
+        "rope_parameters": {
             "rope_type": "default",
             "partial_rotary_factor": 0.25,
             "mrope_section": [1, 1, 1],
             "mrope_interleaved": True,
-        }
-        self.in_channels = self.num_channels
-        self.out_hidden_size = self.hidden_size
-        self.vision_hidden_size = self.hidden_size
-        self.vision_intermediate_size = self.hidden_size
-        self.expected_num_hidden_layers = self.depth + 1
+        },
+        # Preserve the sequence dimensions previously derived before overriding image_size and patch_size.
+        "num_image_tokens": 4,
+        "seq_length": 11,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["in_channels"] = values["num_channels"]
+        values["out_hidden_size"] = values["hidden_size"]
+        values["vision_hidden_size"] = values["hidden_size"]
+        values["vision_intermediate_size"] = values["hidden_size"]
+        values["expected_num_hidden_layers"] = values["depth"] + 1
+        return values
 
     @property
     def _special_token_ids(self):

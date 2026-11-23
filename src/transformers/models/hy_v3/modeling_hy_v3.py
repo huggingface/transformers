@@ -99,7 +99,6 @@ class HYV3RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -275,7 +274,7 @@ class HYV3TopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.router_scaling_factor = config.router_scaling_factor
 
     def forward(
@@ -344,7 +343,7 @@ class HYV3MoE(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.gate = HYV3TopKRouter(config)
         self.experts = HYV3Experts(config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts, dtype=torch.float32))
         self.enable_moe_fp32_combine = config.enable_moe_fp32_combine
         shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
         self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)
@@ -415,7 +414,6 @@ class HYV3PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["HYV3DecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -429,9 +427,8 @@ class HYV3PreTrainedModel(PreTrainedModel):
     }
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.80.*"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range

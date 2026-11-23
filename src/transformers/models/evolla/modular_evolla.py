@@ -164,7 +164,6 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
         ],
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, EvollaSaProtRotaryEmbedding):
@@ -701,7 +700,6 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
         "EvollaSequenceAlignerCrossAttention",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.initializer_range
         PreTrainedModel._init_weights(self, module)

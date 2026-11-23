@@ -661,7 +661,6 @@ class Data2VecVisionPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
