@@ -2486,53 +2486,73 @@ class PreTrainedModel(
             return expanded_tied_weights
 
         tied_mapping = self._tied_weights_keys
-        # If the config does not specify any tying, return empty dict
-        # NOTE: not all modules have `tie_word_embeddings` attr, for example vision-only
-        # modules do not have any word embeddings!
-        tie_word_embeddings = getattr(self.config, "tie_word_embeddings", False)
-        if not tie_word_embeddings:
-            return {}
         # If None, return empty dict
-        elif tied_mapping is None:
+        if tied_mapping is None:
             return {}
+
         # Short-cut for the most common cases: if the tied weights mapping only contains already expanded params,
         # return it directly (the regex matches names containing only letters, numbers, dots, and underscores to make
         # sure it does not contain a regex pattern, and finishing by "bias" or "weight" to make sure it's not a module)
         common_case_regex = re.compile(r"^[A-Za-z0-9_\.]+(weight)|(bias)$")
         if all(common_case_regex.match(k) for k in tied_mapping.keys() | tied_mapping.values()):
-            return tied_mapping.copy()
+            expanded_tied_weights = tied_mapping.copy()
+        else:
+            # We need to expand the regex patterns or the modules into proper parameters
+            expanded_tied_weights = {}
+            all_param_names = {k for k, _ in self.named_parameters(remove_duplicate=False)} | {
+                k for k, _ in self.named_buffers(remove_duplicate=False)
+            }
+            for target_name, source_name in tied_mapping.items():
+                target_name = "^" + target_name
+                source_name = "^" + source_name
 
-        # We need to expand the regex patterns or the modules into proper parameters
-        expanded_tied_weights = {}
-        all_param_names = {k for k, _ in self.named_parameters(remove_duplicate=False)} | {
-            k for k, _ in self.named_buffers(remove_duplicate=False)
-        }
-        for target_name, source_name in tied_mapping.items():
-            target_name = "^" + target_name
-            source_name = "^" + source_name
+                source_params = sorted(filter(lambda x: re.search(source_name, x), all_param_names))
+                target_params = sorted(filter(lambda x: re.search(target_name, x), all_param_names))
+                if (
+                    not len(source_params) > 0
+                    or not len(target_params) > 0
+                    or len(target_params) % len(source_params) != 0
+                ):
+                    raise ValueError(
+                        f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. "
+                        f"We found {source_params} to tie into {target_params}"
+                    )
+                # we cycle source as it should be dispatch in many target if regex
+                for target_n, source_n in zip(target_params, cycle(source_params)):
+                    # If the source is already registered as a target, use the original corresponding source. This should never
+                    # happen in general, but some models such as `d_fine` have complicated regex patterns, so it end up being
+                    # the case for simplicity of the regexes. Fix it silently here
+                    if source_n in expanded_tied_weights.keys():
+                        # Use original source instead of having keys both as source and targets
+                        expanded_tied_weights[target_n] = expanded_tied_weights[source_n]
+                    # Usual case, everything is already correct
+                    else:
+                        expanded_tied_weights[target_n] = source_n
 
-            source_params = sorted(filter(lambda x: re.search(source_name, x), all_param_names))
-            target_params = sorted(filter(lambda x: re.search(target_name, x), all_param_names))
-            if (
-                not len(source_params) > 0
-                or not len(target_params) > 0
-                or len(target_params) % len(source_params) != 0
-            ):
-                raise ValueError(
-                    f"There is an issue with your definition of `tie_weights_keys` for {source_name}:{target_name}. "
-                    f"We found {source_params} to tie into {target_params}"
-                )
-            # we cycle source as it should be dispatch in many target if regex
-            for target_n, source_n in zip(target_params, cycle(source_params)):
-                # If the source is already registered as a target, use the original corresponding source. This should never
-                # happen in general, but some models such as `d_fine` have complicated regex patterns, so it end up being
-                # the case for simplicity of the regexes. Fix it silently here
-                if source_n in expanded_tied_weights.keys():
-                    # Use original source instead of having keys both as source and targets
-                    expanded_tied_weights[target_n] = expanded_tied_weights[source_n]
-                # Usual case, everything is already correct
-                else:
-                    expanded_tied_weights[target_n] = source_n
+        # If tie_word_embeddings is explicitly False on config, only untie the model's output embeddings parameter
+        # (e.g. lm_head.weight), preserving structural parameter sharing across encoder/decoder,
+        # layers, or biases.
+        if getattr(self.config, "tie_word_embeddings", None) is False:
+            out_emb = None
+            try:
+                out_emb = self.get_output_embeddings()
+            except (NotImplementedError, AttributeError):
+                out_emb = None
+
+            if isinstance(out_emb, nn.Module):
+                out_mod_names = [name for name, mod in self.named_modules(remove_duplicate=False) if mod is out_emb]
+                out_param_names = {
+                    f"{mod_name}.{p_name}" if mod_name else p_name
+                    for mod_name in out_mod_names
+                    for p_name, _ in out_emb.named_parameters(recurse=False, remove_duplicate=False)
+                    if p_name == "weight"
+                }
+                if out_param_names:
+                    expanded_tied_weights = {
+                        k: v
+                        for k, v in expanded_tied_weights.items()
+                        if k not in out_param_names and v not in out_param_names
+                    }
 
         return expanded_tied_weights
 

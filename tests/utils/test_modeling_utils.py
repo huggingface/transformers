@@ -36,6 +36,8 @@ from parameterized import parameterized
 from pytest import mark
 
 from transformers import (
+    AlbertConfig,
+    AlbertForMaskedLM,
     AutoConfig,
     AutoModel,
     AutoModelForImageClassification,
@@ -1833,6 +1835,181 @@ class ModelUtilsTest(TestCasePlus):
         with init.no_tie_weights():
             model = LlamaForCausalLM._from_config(copy.deepcopy(config))
             self.assertTrue(model.lm_head.weight is not model.model.embed_tokens.weight)
+
+    def test_structural_tied_weights_preserved_when_tie_word_embeddings_false(self):
+        """Test that structural weight tying (e.g. encoder.embed_tokens <-> decoder.embed_tokens <-> shared)
+        is preserved even when tie_word_embeddings is False, while output head tying is untied."""
+        # 1. BartModel has no output head; its internal embedding sharing must remain tied
+        config = BartConfig(
+            vocab_size=100,
+            d_model=32,
+            encoder_layers=1,
+            decoder_layers=1,
+            encoder_attention_heads=4,
+            decoder_attention_heads=4,
+            encoder_ffn_dim=64,
+            decoder_ffn_dim=64,
+            tie_word_embeddings=False,
+        )
+        bart_model = BartModel(config)
+        self.assertIn("decoder.embed_tokens.weight", bart_model.all_tied_weights_keys)
+        self.assertIn("encoder.embed_tokens.weight", bart_model.all_tied_weights_keys)
+        self.assertIs(bart_model.encoder.embed_tokens.weight, bart_model.shared.weight)
+        self.assertIs(bart_model.decoder.embed_tokens.weight, bart_model.shared.weight)
+
+        # 2. BartForConditionalGeneration: lm_head is untied, but internal embeddings remain tied
+        bart_gen = BartForConditionalGeneration(config)
+        self.assertNotIn("lm_head.weight", bart_gen.all_tied_weights_keys)
+        self.assertIn("model.decoder.embed_tokens.weight", bart_gen.all_tied_weights_keys)
+        self.assertIn("model.encoder.embed_tokens.weight", bart_gen.all_tied_weights_keys)
+        self.assertIs(bart_gen.model.encoder.embed_tokens.weight, bart_gen.model.shared.weight)
+        self.assertIs(bart_gen.model.decoder.embed_tokens.weight, bart_gen.model.shared.weight)
+        self.assertIsNot(bart_gen.lm_head.weight, bart_gen.model.shared.weight)
+
+    def test_checkpoint_roundtrip_structural_tying_with_untied_lm_head(self):
+        """Test that loading a checkpoint when tie_word_embeddings=False correctly restores
+        structural embeddings without marking them as missing or randomizing them."""
+        config_tied = BartConfig(
+            vocab_size=100,
+            d_model=32,
+            encoder_layers=1,
+            decoder_layers=1,
+            encoder_attention_heads=4,
+            decoder_attention_heads=4,
+            encoder_ffn_dim=64,
+            decoder_ffn_dim=64,
+            tie_word_embeddings=True,
+        )
+        model = BartForConditionalGeneration(config_tied)
+        with torch.no_grad():
+            model.model.shared.weight.fill_(42.0)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+
+            # Reload with tie_word_embeddings=False
+            config_untied = BartConfig.from_pretrained(tmp_dir)
+            config_untied.tie_word_embeddings = False
+            loaded_model = BartForConditionalGeneration.from_pretrained(tmp_dir, config=config_untied)
+
+            # Structural embeddings must be loaded from checkpoint (fill_(42.0)), not randomized
+            self.assertTrue(torch.all(loaded_model.model.shared.weight == 42.0))
+            self.assertTrue(torch.all(loaded_model.model.encoder.embed_tokens.weight == 42.0))
+            self.assertTrue(torch.all(loaded_model.model.decoder.embed_tokens.weight == 42.0))
+
+            # Storage must be shared
+            self.assertIs(loaded_model.model.encoder.embed_tokens.weight, loaded_model.model.shared.weight)
+            self.assertIs(loaded_model.model.decoder.embed_tokens.weight, loaded_model.model.shared.weight)
+
+            # lm_head is untied
+            self.assertIsNot(loaded_model.lm_head.weight, loaded_model.model.shared.weight)
+
+    def test_models_without_tie_word_embeddings_preserve_tied_weights(self):
+        """Test that models/configs that do not define tie_word_embeddings preserve their structural tied weights."""
+
+        class CustomConfig(PreTrainedConfig):
+            model_type = "custom_test"
+
+        class CustomModelWithTiedWeights(PreTrainedModel):
+            config_class = CustomConfig
+            _tied_weights_keys = {"linear_2.weight": "linear_1.weight"}
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.linear_1 = torch.nn.Linear(8, 8, bias=False)
+                self.linear_2 = torch.nn.Linear(8, 8, bias=False)
+                self.post_init()
+
+        cfg = CustomConfig()
+        self.assertFalse(hasattr(cfg, "tie_word_embeddings"))
+        custom_model = CustomModelWithTiedWeights(cfg)
+        self.assertEqual(custom_model.all_tied_weights_keys, {"linear_2.weight": "linear_1.weight"})
+
+    def test_albert_prediction_bias_preserved_when_output_weight_untied(self):
+        """Test that ALBERT preserves prediction decoder bias tying when tie_word_embeddings=False."""
+        config = AlbertConfig(
+            vocab_size=100,
+            embedding_size=32,
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=64,
+            tie_word_embeddings=False,
+        )
+        model = AlbertForMaskedLM(config)
+        self.assertNotIn("predictions.decoder.weight", model.all_tied_weights_keys)
+        self.assertIn("predictions.decoder.bias", model.all_tied_weights_keys)
+        self.assertEqual(model.all_tied_weights_keys["predictions.decoder.bias"], "predictions.bias")
+
+    def test_reverse_direction_tied_weights_with_structural_ties(self):
+        """Test that reverse-direction mappings where output embeddings is the source (e.g. BLT)
+        are untied when tie_word_embeddings=False while auxiliary structural ties are preserved."""
+
+        class CustomReverseConfig(PreTrainedConfig):
+            model_type = "custom_reverse_test"
+            tie_word_embeddings = False
+
+        class CustomReverseModel(PreTrainedModel):
+            config_class = CustomReverseConfig
+            _tied_weights_keys = {
+                "embed_tokens.weight": "lm_head.weight",
+                "aux_2.weight": "aux_1.weight",
+            }
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.embed_tokens = torch.nn.Embedding(10, 8)
+                self.lm_head = torch.nn.Linear(8, 10, bias=False)
+                self.aux_1 = torch.nn.Linear(8, 8, bias=False)
+                self.aux_2 = torch.nn.Linear(8, 8, bias=False)
+                self.post_init()
+
+            def get_output_embeddings(self):
+                return self.lm_head
+
+        model = CustomReverseModel(CustomReverseConfig())
+        self.assertNotIn("embed_tokens.weight", model.all_tied_weights_keys)
+        self.assertIn("aux_2.weight", model.all_tied_weights_keys)
+        self.assertEqual(model.all_tied_weights_keys["aux_2.weight"], "aux_1.weight")
+
+    def test_compound_output_module_filter_precision(self):
+        """Test that compound output modules untie only the direct output weight matrix,
+        leaving nested submodule tied weights (e.g. norm.weight) preserved."""
+
+        class CustomCompoundConfig(PreTrainedConfig):
+            model_type = "custom_compound_test"
+            tie_word_embeddings = False
+
+        class CompoundHead(torch.nn.Module):
+            def __init__(self, hidden_size, vocab_size):
+                super().__init__()
+                self.weight = torch.nn.Parameter(torch.randn(vocab_size, hidden_size))
+                self.norm = torch.nn.LayerNorm(hidden_size)
+
+        class CustomCompoundModel(PreTrainedModel):
+            config_class = CustomCompoundConfig
+            _tied_weights_keys = {
+                "compound_head.weight": "embed_tokens.weight",
+                "compound_head.norm.weight": "encoder_norm.weight",
+            }
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.embed_tokens = torch.nn.Embedding(10, 8)
+                self.encoder_norm = torch.nn.LayerNorm(8)
+                self.compound_head = CompoundHead(8, 10)
+                self.post_init()
+
+            def get_output_embeddings(self):
+                return self.compound_head
+
+        model = CustomCompoundModel(CustomCompoundConfig())
+        # Word embedding output weight must be untied
+        self.assertNotIn("compound_head.weight", model.all_tied_weights_keys)
+        # Nested layer norm weight must remain structurally tied
+        self.assertIn("compound_head.norm.weight", model.all_tied_weights_keys)
+        self.assertEqual(model.all_tied_weights_keys["compound_head.norm.weight"], "encoder_norm.weight")
+        self.assertIs(model.compound_head.norm.weight, model.encoder_norm.weight)
 
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PreTrainedConfig(tie_word_embeddings=True))
