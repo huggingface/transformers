@@ -393,7 +393,6 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     @require_tokenizers
     def test_sentencepiece_error_kept_when_tiktoken_fallback_fails(self):
-        # A missing protobuf used to surface as "`tiktoken` is required" from the TikToken fallback
         with tempfile.TemporaryDirectory() as tmp_dir:
             vocab_file = os.path.join(tmp_dir, "sentencepiece.bpe.model")
             with open(vocab_file, "wb") as f:
