@@ -115,6 +115,7 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "input_ids",
                 "attention_mask",
                 "mm_token_type_ids",
+                "position_ids",
                 "pixel_values",
                 "image_grid_thw",
                 "moe_mm_token_type_ids",

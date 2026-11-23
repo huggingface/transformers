@@ -297,7 +297,8 @@ def read_marks(inputs: dict[str, Any], sentinel_ids: list[int]) -> tuple[dict[st
     keep = (input_ids != mark) & (input_ids != split)
     marks = keep.cumsum(0)[input_ids == mark]
     inputs = {
-        key: value[:, keep] if getattr(value, "shape", ())[-1:] == input_ids.shape else value
+        # `...` so that 3D `position_ids` (axes, batch, sequence) are sliced on the sequence axis too
+        key: value[..., keep] if getattr(value, "shape", ())[-1:] == input_ids.shape else value
         for key, value in inputs.items()
         if key != "attention_mask"
     }

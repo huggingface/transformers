@@ -1615,7 +1615,7 @@ class ModelTesterMixin(ExportTesterMixin):
             batch_size = self.model_tester.batch_size
             single_row_input = {}
             for key, value in batched_input_prepared.items():
-                if key == "position_ids" and value.ndim == 3:  # 3D RoPE positions are (axes, batch, seq)
+                if key == "position_ids" and getattr(value, "ndim", 0) == 3:  # 3D RoPE positions are (axes, batch, seq)
                     single_row_input[key] = value[:, :1]
                 elif isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
                     # e.g. musicgen has inputs of size (bs*codebooks). in most cases value.shape[0] == batch_size
