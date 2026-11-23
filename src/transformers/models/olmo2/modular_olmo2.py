@@ -88,9 +88,8 @@ class Olmo2Config(OlmoConfig):
 
 
 # OLMo2 RMS norm is identical to Llama RMS norm except:
-# - Weight and hidden states are multiplied before converting back to the input dtype, rather than after.
-# - Not decorated with Llama's `RMSNorm` hub kernel: that kernel casts back to the input dtype before the weight
-#   multiply (Llama's order), so it would change the numerics of this norm and of every norm built on it.
+# - Weight and hidden states are multiplied before converting back to the input dtype, rather than after
+#   (same goes for the kernel then: Llama's `RMSNorm` hub kernel uses Llama's order, so it is not inherited).
 @no_inherit_decorator
 class Olmo2RMSNorm(LlamaRMSNorm):
     def forward(self, hidden_states):
@@ -98,7 +97,7 @@ class Olmo2RMSNorm(LlamaRMSNorm):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
 
 class Olmo2RotaryEmbedding(OlmoRotaryEmbedding):
