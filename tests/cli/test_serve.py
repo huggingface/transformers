@@ -1099,14 +1099,17 @@ class TestChatCompletion(ServeIntegrationTestCase):
                 model=self.MODEL,
                 messages=[{"role": "user", "content": "Say hello"}],
                 stream=True,
+                stream_options={"include_usage": True},
             )
         )
-        # Last chunk should have usage
+        # The usage comes last, in a chunk of its own without choices, and only there
         last = chunks[-1]
+        self.assertEqual(last.choices, [])
         self.assertIsNotNone(last.usage)
         self.assertGreater(last.usage.prompt_tokens, 0)
         self.assertGreater(last.usage.completion_tokens, 0)
         self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
+        self.assertTrue(all(chunk.usage is None for chunk in chunks[:-1]))
 
     def test_concurrent_non_streaming(self):
         """Two concurrent non-streaming requests should both complete without interference."""
@@ -1281,9 +1284,13 @@ class TestCompletion(ServeIntegrationTestCase):
                 prompt="The capital of France is",
                 max_tokens=5,
                 stream=True,
+                stream_options={"include_usage": True},
             )
         )
+        # The usage comes last, in a chunk of its own without choices, and only there
         last = chunks[-1]
+        self.assertEqual(last.choices, [])
+        self.assertTrue(all(chunk.usage is None for chunk in chunks[:-1]))
         self.assertIsNotNone(last.usage)
         self.assertGreater(last.usage.prompt_tokens, 0)
         self.assertGreater(last.usage.completion_tokens, 0)

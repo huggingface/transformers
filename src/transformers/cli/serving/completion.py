@@ -58,7 +58,6 @@ UNUSED_LEGACY_COMPLETION_FIELDS = {
     "logprobs",
     "n",
     "presence_penalty",
-    "stream_options",
     "user",
 }
 
@@ -103,7 +102,7 @@ class CompletionHandler(BaseHandler):
         self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
 
         if streaming:
-            return self._streaming(request_id, engine, inputs, generation_kwargs, suffix)
+            return self._streaming(request_id, engine, inputs, generation_kwargs, suffix, body.get("stream_options"))
         else:
             return await self._non_streaming(request_id, engine, inputs, generation_kwargs, suffix)
 
@@ -116,8 +115,10 @@ class CompletionHandler(BaseHandler):
         inputs: dict,
         generation_kwargs: dict,
         suffix: str | None = None,
+        stream_options: dict | None = None,
     ) -> "StreamingResponse":
-        """Stream tokens as SSE."""
+        """Stream tokens as SSE. With ``stream_options={"include_usage": True}``, a last chunk has the usage."""
+        include_usage = bool(stream_options and stream_options.get("include_usage"))
         model_id = engine.model_id
         queue, streamer = engine.generate_streaming(inputs, generation_kwargs)
         input_ids = inputs["input_ids"]
@@ -150,12 +151,14 @@ class CompletionHandler(BaseHandler):
 
                 if suffix is not None:
                     yield self._build_chunk_sse(request_id, model_id, text=suffix)
-                usage = CompletionUsage(
-                    prompt_tokens=input_len,
-                    completion_tokens=streamer.total_tokens,
-                    total_tokens=input_len + streamer.total_tokens,
-                )
-                yield self._build_chunk_sse(request_id, model_id, finish_reason=finish_reason, usage=usage)
+                yield self._build_chunk_sse(request_id, model_id, finish_reason=finish_reason)
+                if include_usage:
+                    usage = CompletionUsage(
+                        prompt_tokens=input_len,
+                        completion_tokens=streamer.total_tokens,
+                        total_tokens=input_len + streamer.total_tokens,
+                    )
+                    yield self._build_chunk_sse(request_id, model_id, usage=usage)
             except (GeneratorExit, asyncio.CancelledError):
                 streamer.cancel()
                 raise
@@ -222,21 +225,16 @@ class CompletionHandler(BaseHandler):
 
         Uses ``model_construct`` to bypass pydantic validation so that ``finish_reason``
         can be ``None`` for mid-stream chunks (the OpenAI SDK's ``CompletionChoice`` only
-        accepts literal values).
+        accepts literal values). With `usage`, it's the usage chunk, the last one, with no choices
+        (``stream_options.include_usage``).
         """
+        choice = CompletionChoice.model_construct(text=text, index=0, logprobs=None, finish_reason=finish_reason)
         chunk = Completion.model_construct(
             id=request_id,
             object="text_completion",
             created=int(time.time()),
             model=model_id,
-            choices=[
-                CompletionChoice.model_construct(
-                    text=text,
-                    index=0,
-                    logprobs=None,
-                    finish_reason=finish_reason,
-                )
-            ],
+            choices=[] if usage is not None else [choice],
             usage=usage,
         )
         return self.chunk_to_sse(chunk)

@@ -86,7 +86,6 @@ UNUSED_CHAT_COMPLETION_FIELDS = {
     "response_format",
     "service_tier",
     "store",
-    "stream_options",
     "tool_choice",
     "top_logprobs",
     "user",
@@ -125,16 +124,25 @@ class ChatCompletionHandler(BaseHandler):
         streaming = body.get("stream")
         self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
         if streaming:
-            return self._streaming(request_id, engine, inputs, generation_kwargs, tools=body.get("tools"))
+            tools, stream_options = body.get("tools"), body.get("stream_options")
+            return self._streaming(request_id, engine, inputs, generation_kwargs, tools, stream_options)
         else:
             return await self._non_streaming(request_id, engine, inputs, generation_kwargs, tools=body.get("tools"))
 
     # ----- streaming -----
 
     def _streaming(
-        self, request_id: str, engine: "EngineClient", inputs: dict, generation_kwargs: dict, tools=None
+        self,
+        request_id: str,
+        engine: "EngineClient",
+        inputs: dict,
+        generation_kwargs: dict,
+        tools=None,
+        stream_options: dict | None = None,
     ) -> StreamingResponse:
-        """Stream tokens as SSE, decoded by a `Detokenizer`."""
+        """Stream tokens as SSE, decoded by a `Detokenizer`. With ``stream_options={"include_usage": True}``, a last
+        chunk has the usage."""
+        include_usage = bool(stream_options and stream_options.get("include_usage"))
         processor, model_id = engine.processor, engine.model_id
         response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
         queue, streamer = engine.generate_streaming(inputs, generation_kwargs, response_parser=response_parser)
@@ -204,18 +212,14 @@ class ChatCompletionHandler(BaseHandler):
                     finish_reason = "length"
                 else:
                     finish_reason = "stop"
-                usage = CompletionUsage(
-                    prompt_tokens=input_len,
-                    completion_tokens=streamer.total_tokens,
-                    total_tokens=input_len + streamer.total_tokens,
-                )
-                yield self._build_chunk_sse(
-                    request_id,
-                    finish_reason=finish_reason,
-                    model=model_id,
-                    usage=usage,
-                    created=created,
-                )
+                yield self._build_chunk_sse(request_id, finish_reason=finish_reason, model=model_id, created=created)
+                if include_usage:
+                    usage = CompletionUsage(
+                        prompt_tokens=input_len,
+                        completion_tokens=streamer.total_tokens,
+                        total_tokens=input_len + streamer.total_tokens,
+                    )
+                    yield self._build_chunk_sse(request_id, model=model_id, usage=usage, created=created)
             except (GeneratorExit, asyncio.CancelledError):
                 # Client disconnected — abort generation to free GPU.
                 # Re-raise is mandatory: Python raises RuntimeError if GeneratorExit is swallowed.
@@ -368,7 +372,8 @@ class ChatCompletionHandler(BaseHandler):
             role (`str`, *optional*): Role (only sent in the first chunk).
             finish_reason (`str`, *optional*): Set on the final chunk.
             tool_calls (`list`, *optional*): Tool call deltas.
-            usage (`CompletionUsage`, *optional*): Token usage (sent with the final chunk).
+            usage (`CompletionUsage`, *optional*): Token usage: the chunk is then the usage chunk, the last one, with no
+                choices (``stream_options.include_usage``).
             reasoning_content (`str`, *optional*): Reasoning/thinking delta (OpenAI-compatible extension).
 
         Returns:
@@ -383,7 +388,7 @@ class ChatCompletionHandler(BaseHandler):
             id=request_id,
             created=int(time.time()) if created is None else created,
             model=model,
-            choices=[ChoiceChunk(delta=delta, index=0, finish_reason=finish_reason)],
+            choices=[] if usage is not None else [ChoiceChunk(delta=delta, index=0, finish_reason=finish_reason)],
             usage=usage,
             system_fingerprint="",
             object="chat.completion.chunk",
