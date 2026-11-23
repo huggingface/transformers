@@ -36,7 +36,6 @@ from transformers.integrations.hub_kernels import (
     is_kernel,
     lazy_load_kernel,
     load_and_register_attn_kernel,
-    use_kernel_forward_from_hub,
     use_kernel_func_from_hub_with_fallback,
 )
 from transformers.masking_utils import ALL_MASK_ATTENTION_FUNCTIONS
@@ -500,26 +499,29 @@ class TestKernelUtilities(TestCasePlus):
     def test_kernelize_keeps_accelerate_hooks(self):
         from accelerate.hooks import ModelHook, add_hook_to_module
 
-        @use_kernel_forward_from_hub("Norm")
-        class Norm(torch.nn.Module):
-            def forward(self, x):
-                return x
-
         class Model(torch.nn.Module):
             kernel_config = None
             device = torch.device("cpu")
 
             def __init__(self):
                 super().__init__()
-                self.norm = Norm()
+                self.norm = torch.nn.Identity()
+
+        def kernel_forward(x):
+            return x
+
+        def fake_kernelize(model, **kwargs):
+            model.norm.forward = kernel_forward
 
         model = Model()
         add_hook_to_module(model.norm, ModelHook())
         hooked_forward = model.norm.forward
 
-        hub_kernels_pkg.kernelize(model)
+        with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=fake_kernelize):
+            hub_kernels_pkg.kernelize(model)
 
         self.assertIs(model.norm.forward, hooked_forward)
+        self.assertIs(model.norm._old_forward, kernel_forward)
 
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.ModuleType("sentinel_kernel_module")
