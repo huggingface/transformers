@@ -577,17 +577,6 @@ class MoeExpertsParallel(TensorParallelLayer):
         return _AllReduceForward.apply(output, process_group)
 
 
-class MoeIdentityParallel(TensorParallelLayer):
-    """
-    Used in longcat_flash zero_experts (nn.Identity) which return the same value on every GPU, but the
-    moe_tp_experts will sums across GPUs. Therefore we pre-divide the identity input by tp_size to cancel the extra scaling.
-    """
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        input_tensor = args[0]
-        return (input_tensor / mesh.size(), *args[1:]), kwargs
-
-
 class LocalParamsParallel(TensorParallelLayer):
     """Runs the module's forward with its own sharded parameters as local tensors. For a bare `nn.Parameter` such as
     attention sinks, which has no forward to hook: its own plan entry shards it, and this style goes on its owner."""
