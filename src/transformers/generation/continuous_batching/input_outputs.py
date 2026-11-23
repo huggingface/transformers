@@ -950,6 +950,10 @@ class ContinuousBatchingIOs:
                 if _PROTO_VARLEN_BUCKETS_IO:  # gap4 zsbench prototype: powers of 2, see CB_PROTO_VARLEN_BUCKETS
                     return pad_to_pow2(self.num_request_in_batch, self.max_requests_per_batch, 64)
                 return pad_to_interval(self.num_request_in_batch, 64, self.max_requests_per_batch)
+            # With varlen block tables, the logits rows (and the sequences FA sees) follow the requests, padded to a
+            # power of 2, so a step that prefills a long prompt does not run the LM head on every query token
+            if self.use_block_table and self.cache.use_varlen_block_table:
+                return min(self.num_q_tokens, pad_to_pow2(self.num_request_in_batch, self.max_requests_per_batch))
             return min(self.num_q_tokens, self.max_requests_per_batch)
         return self.num_request_in_batch
 
@@ -1054,7 +1058,7 @@ class ContinuousBatchingIOs:
             return (self.num_q_tokens, self._proto_len_k_bucket)
         # Keys for the block table path: with varlen block tables, decode-only steps (max_length_q = 1) get their own
         if self.use_block_table:
-            return (self.num_q_tokens, self.max_length_q)
+            return (self.num_q_tokens, self.max_length_q, self._get_num_sequences(use_padding=True))
         # Keys for varlen path
         if self.mtp_mode:
             return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values(), self._get_num_sequences(True))

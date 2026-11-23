@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from collections.abc import Callable
 
 import torch
@@ -29,6 +30,10 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
+
+# [scratch] fused router (PROTO_ROUTER=1) and fused q/k/v input (PROTO_QKV=1)
+from ...integrations._proto_router import PROTO_ROUTER as _PROTO_ROUTER  # noqa: E402
+from ...integrations._proto_router import router_topk as _proto_router_topk  # noqa: E402
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -46,6 +51,11 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_qwen3_moe import Qwen3MoeConfig
+
+
+_PROTO_QKV = os.environ.get("PROTO_QKV", "1") == "1"
+if _PROTO_QKV:
+    from ...integrations._proto_qk_norm_rope import qk_norm_rope_ as _proto_qk_norm_rope_
 
 
 def rotate_half(x):
@@ -147,6 +157,8 @@ class Qwen3MoeAttention(nn.Module):
         self.q_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = getattr(config, "sliding_window", None)
+        if _PROTO_QKV:  # [scratch] set by fuse_qkv_weights: one GEMM for q/k/v, one kernel for the norms and rotary
+            self._proto_qkv_weight = None
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -160,12 +172,26 @@ class Qwen3MoeAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        qkv_weight = self.__dict__.get("_proto_qkv_weight")
+        if qkv_weight is not None:
+            num_heads, num_kv_heads = self.config.num_attention_heads, self.config.num_key_value_heads
+            qkv = F.linear(hidden_states, qkv_weight)
+            cos, sin = position_embeddings
+            _proto_qk_norm_rope_(
+                qkv, cos, sin, self.q_norm.weight, self.k_norm.weight, self.q_norm.variance_epsilon, num_heads,
+                num_kv_heads, self.head_dim,
+            )  # fmt: skip
+            q, k, v = qkv.split([num_heads * self.head_dim, num_kv_heads * self.head_dim, num_kv_heads * self.head_dim], -1)
+            query_states = q.view(hidden_shape).transpose(1, 2)
+            key_states = k.view(hidden_shape).transpose(1, 2)
+            value_states = v.view(hidden_shape).transpose(1, 2)
+        else:
+            query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+            key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
@@ -247,6 +273,8 @@ class Qwen3MoeExperts(nn.Module):
         return final_hidden_states
 
 
+
+
 class Qwen3MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -259,6 +287,10 @@ class Qwen3MoeTopKRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        # [scratch] one kernel for softmax + top-k + renormalization (no backward)
+        if _PROTO_ROUTER and router_logits.is_cuda and not torch.is_grad_enabled():
+            router_scores, router_indices = _proto_router_topk(router_logits, self.top_k, self.norm_topk_prob)
+            return router_logits, router_scores, router_indices
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
         router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:

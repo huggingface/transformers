@@ -24,6 +24,9 @@ from ._proto_fp8_experts import decode_route, decode_topk_sum
 
 
 MAX_ROWS_PER_EXPERT = float(os.environ.get("PROTO_DECODE_MAX_ROWS_PER_EXPERT", "0"))
+# [scratch] number of real tokens of the step ([1] int32 on device), set by continuous batching when it pads the step:
+# the slots of padding tokens go to no expert
+VALID_TOKENS: torch.Tensor | None = None
 
 
 @triton.jit
@@ -169,10 +172,14 @@ def proto_decode_experts_forward(self, hidden_states, top_k_index, top_k_weights
 
 
 @triton.jit
-def _align_count_kernel(ExpertIds, Count, S, NUM_EXPERTS: tl.constexpr, BLOCK: tl.constexpr):
+def _align_count_kernel(
+    ExpertIds, Count, S, ValidTokens, NUM_EXPERTS: tl.constexpr, TOP_K: tl.constexpr, HAS_VALID: tl.constexpr,
+    BLOCK: tl.constexpr,
+):  # fmt: skip
     slots = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-    expert = tl.load(ExpertIds + slots, mask=slots < S, other=NUM_EXPERTS).to(tl.int32)
-    tl.atomic_add(Count + expert, 1, mask=(slots < S) & (expert < NUM_EXPERTS))
+    num_slots = tl.minimum(S, tl.load(ValidTokens) * TOP_K) if HAS_VALID else S
+    expert = tl.load(ExpertIds + slots, mask=slots < num_slots, other=NUM_EXPERTS).to(tl.int32)
+    tl.atomic_add(Count + expert, 1, mask=(slots < num_slots) & (expert < NUM_EXPERTS))
 
 
 @triton.jit
@@ -202,12 +209,16 @@ def _align_block_expert_kernel(
 
 
 @triton.jit
-def _align_scatter_kernel(ExpertIds, SortedSlots, Cursor, S, NUM_EXPERTS: tl.constexpr, BLOCK: tl.constexpr):
+def _align_scatter_kernel(
+    ExpertIds, SortedSlots, Cursor, S, ValidTokens, NUM_EXPERTS: tl.constexpr, TOP_K: tl.constexpr,
+    HAS_VALID: tl.constexpr, BLOCK: tl.constexpr,
+):  # fmt: skip
     # each slot claims the next position of its expert; the order inside an expert is that of the race (rows are
     # computed independently, so no output depends on it)
     slots = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-    expert = tl.load(ExpertIds + slots, mask=slots < S, other=NUM_EXPERTS).to(tl.int32)
-    valid = (slots < S) & (expert < NUM_EXPERTS)
+    num_slots = tl.minimum(S, tl.load(ValidTokens) * TOP_K) if HAS_VALID else S
+    expert = tl.load(ExpertIds + slots, mask=slots < num_slots, other=NUM_EXPERTS).to(tl.int32)
+    valid = (slots < num_slots) & (expert < NUM_EXPERTS)
     position = tl.atomic_add(Cursor + expert, 1, mask=valid)
     tl.store(SortedSlots + position, slots, mask=valid)
 
@@ -224,7 +235,14 @@ def align_route(top_k_index, num_experts, block_m):
     num_blocks = torch.empty(1, dtype=torch.int32, device=device)
     sorted_slots = torch.full((max_blocks * block_m,), num_slots, dtype=torch.int32, device=device)
     grid = (triton.cdiv(num_slots, 256),)
-    _align_count_kernel[grid](top_k_index, count, num_slots, NUM_EXPERTS=num_experts, BLOCK=256, num_warps=4)
+    valid = VALID_TOKENS
+    has_valid = valid is not None
+    valid = valid if has_valid else count  # unused pointer
+    top_k = top_k_index.shape[-1]
+    _align_count_kernel[grid](
+        top_k_index, count, num_slots, valid, NUM_EXPERTS=num_experts, TOP_K=top_k, HAS_VALID=has_valid, BLOCK=256,
+        num_warps=4,
+    )
     padded_e = triton.next_power_of_2(num_experts)
     block_end = torch.empty(num_experts, dtype=torch.int32, device=device)
     _align_offsets_kernel[(1,)](
@@ -233,7 +251,10 @@ def align_route(top_k_index, num_experts, block_m):
     _align_block_expert_kernel[(triton.cdiv(max_blocks, 32),)](
         block_end, block_expert, max_blocks, NUM_EXPERTS=num_experts, PADDED_E=padded_e, BLOCK=32, num_warps=4
     )
-    _align_scatter_kernel[grid](top_k_index, sorted_slots, cursor, num_slots, NUM_EXPERTS=num_experts, BLOCK=256, num_warps=4)
+    _align_scatter_kernel[grid](
+        top_k_index, sorted_slots, cursor, num_slots, valid, NUM_EXPERTS=num_experts, TOP_K=top_k,
+        HAS_VALID=has_valid, BLOCK=256, num_warps=4,
+    )
     return sorted_slots, block_expert, num_blocks
 
 

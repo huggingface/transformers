@@ -61,6 +61,7 @@ _PROTO_CAPTURE_THEN_REPLAY = os.environ.get("CB_PROTO_CAPTURE_THEN_REPLAY", "0")
 # cache tokens read to the whole cache (one bucket), max_length_k to a power of 2 (at least 1024) and, in MTP mode, the
 # number of sequences to a power of 2 (at least 64). A varlen batch whose key was not captured at warm-up (a longer
 # max_length_k than CB_PROTO_VARLEN_MLK_MAX, more sequences than the warm-up's) runs eager, and is logged
+_PROTO_MOE_SKIP_PADDING = os.environ.get("PROTO_MOE_SKIP_PADDING", "1") == "1"
 _PROTO_VARLEN_BUCKETS = os.environ.get("CB_PROTO_VARLEN_BUCKETS", "0") == "1"
 _PROTO_VARLEN_Q_MIN = int(os.environ.get("CB_PROTO_VARLEN_Q_MIN", "256"))
 _PROTO_VARLEN_MLK_MAX = int(os.environ.get("CB_PROTO_VARLEN_MLK_MAX", "2048"))
@@ -228,6 +229,14 @@ class ModelRunner:
         # If supported, the model slices hidden states at logits_indices before lm_head, instead of us slicing logits
         if self.supports_logits_to_keep(model) and not _CB_MTP:
             batch_data["logits_to_keep"] = batch_data["logits_indices"]
+
+        # [scratch] the proto_decode experts route the slots of padding tokens nowhere: they read the number of real
+        # tokens of the step from the end of cu_seq_lens_q (a fixed address per graph key)
+        if _PROTO_MOE_SKIP_PADDING:
+            from ...integrations import _proto_bf16_experts
+
+            cu_seq_lens_q = batch_data["cu_seq_lens_q"]
+            _proto_bf16_experts.VALID_TOKENS = cu_seq_lens_q[-1:] if self.pad_inputs else None
 
         # Get the appropriate forward function (compiled or not, based on current path)
         forward_fn, use_cuda_graph = self._get_forward_fn(use_block_table=self.inputs_and_outputs.use_block_table)

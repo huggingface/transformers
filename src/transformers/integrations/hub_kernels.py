@@ -726,6 +726,9 @@ if is_kernels_available():
                 },
             },
         }
+        # [scratch] PROTO_NO_HUB=rotary_pos_emb,...: leave these to the eager/compiled code
+        for name in filter(None, os.environ.get("PROTO_NO_HUB", "").split(",")):
+            _KERNEL_MAPPING.pop(name, None)
 
         return _KERNEL_MAPPING
 

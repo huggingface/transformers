@@ -926,6 +926,11 @@ class ContinuousBatchingManager:
             continuous_batching_config: Configuration for continuous batching parameters
             workload_hints: Workload hints for the continuous batching initialization (optional)
         """
+        # [scratch] PROTO_QKV=1: one [q; k; v] weight per attention layer that supports it
+        if os.environ.get("PROTO_QKV", "1") == "1":
+            from ...integrations._proto_qk_norm_rope import fuse_qkv_weights
+
+            logger.warning(f"PROTO_QKV: fused the q/k/v weights of {fuse_qkv_weights(model)} layers")
         # Accumulators for request handling
         self.input_queue: queue.Queue[RequestState] = queue.Queue(maxsize=continuous_batching_config.max_queue_size)
         self.cancel_queue: queue.Queue[str] = queue.Queue()
