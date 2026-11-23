@@ -401,17 +401,13 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_batching_independence(self):
         config = self.model_tester.get_config()
-        model = EfficientLoFTRForKeypointMatching(config=config)
-        model.to(torch_device)
-        model.eval()
+        config.fine_matching_regress_temperature = 0.01
+        torch.manual_seed(0)
+        model = EfficientLoFTRForKeypointMatching(config=config).to(torch_device, torch.float64).eval()
 
-        torch.manual_seed(42)
-        pair_a = floats_tensor([1, 2, 3, self.model_tester.image_height, self.model_tester.image_width]).to(
-            torch_device
-        )
-        pair_b = floats_tensor([1, 2, 3, self.model_tester.image_height, self.model_tester.image_width]).to(
-            torch_device
-        )
+        input_shape = (1, 2, 3, self.model_tester.image_height, self.model_tester.image_width)
+        pair_a = torch.rand(input_shape, dtype=torch.float64).to(torch_device)
+        pair_b = torch.rand(input_shape, dtype=torch.float64).to(torch_device)
 
         with torch.no_grad():
             out_a = model(pixel_values=pair_a)
