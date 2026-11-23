@@ -16,7 +16,7 @@ limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-11-19.*
+*This model was contributed to Hugging Face Transformers on 2026-11-23.*
 
 # GS1
 
