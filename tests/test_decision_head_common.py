@@ -63,7 +63,7 @@ class DecisionHeadTesterMixin:
     `backbone_class` model.
     """
 
-    is_training = False
+    model_tester = None
     backbone_class = Qwen2ForCausalLM if is_torch_available() else None
 
     @classmethod
@@ -111,7 +111,7 @@ class DecisionHeadTesterMixin:
                 self.assertEqual([len(s) for s in scores], [len(question.options) for question in prompt.questions])
 
     def test_loss_backward(self):
-        if not self.is_training:
+        if self.model_tester is None or not self.model_tester.is_training:
             self.skipTest("This decision head has no training test.")
 
         inputs = self.model_tester.prepare_training_inputs(self.prompts[0])
@@ -120,6 +120,7 @@ class DecisionHeadTesterMixin:
                 model = model_class(self.config).train()
                 output = model(**inputs)
 
+                self.assertEqual(output.loss.ndim, 0)
                 self.assertTrue(torch.isfinite(output.loss))
                 output.loss.backward()
                 grad = model.get_input_embeddings().weight.grad

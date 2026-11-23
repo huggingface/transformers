@@ -92,12 +92,16 @@ from transformers.decision import Question
 
 model.train()
 inputs, questions = config.prepare_inputs(request, tokenizer)[0]
-inputs = {name: tensor.to(model.device) for name, tensor in inputs.items()}
-counts = torch.tensor([[len(q.options) for q in questions]], device=model.device)
-types = torch.tensor([[Question.questions_types.index(q.type) for q in questions]], device=model.device)
+counts = torch.tensor([[len(q.options) for q in questions]])
+types = torch.tensor([[Question.questions_types.index(q.type) for q in questions]])
 
-inputs["marks"] = inputs["marks"][None]
-outputs = model(**inputs, num_options=counts, question_type_ids=types, labels=torch.zeros_like(counts))
+inputs.update(
+    marks=inputs["marks"][None],
+    num_options=counts,
+    question_type_ids=types,
+    labels=torch.zeros_like(counts),
+)
+outputs = model(**{name: tensor.to(model.device) for name, tensor in inputs.items()})
 outputs.loss.backward()
 ```
 
