@@ -128,16 +128,9 @@ class CompletionHandler(BaseHandler):
             try:
                 done = False
                 while not done:
-                    text = await queue.get()
-                    batch = [text]
-                    try:
-                        while True:
-                            batch.append(queue.get_nowait())
-                    except asyncio.QueueEmpty:
-                        pass
-
+                    new_outputs = await self.get_new_outputs(queue)
                     sse_parts: list[str] = []
-                    for text in batch:
+                    for text in new_outputs:
                         if text is None:
                             done = True
                             break

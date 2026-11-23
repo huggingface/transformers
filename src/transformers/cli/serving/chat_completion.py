@@ -158,16 +158,9 @@ class ChatCompletionHandler(BaseHandler):
                 has_tool_calls = False
                 done = False
                 while not done:
-                    item = await queue.get()
-                    batch = [item]
-                    try:
-                        while True:
-                            batch.append(queue.get_nowait())
-                    except asyncio.QueueEmpty:
-                        pass
-
+                    new_outputs = await self.get_new_outputs(queue)
                     sse_parts: list[str] = []
-                    for item in batch:
+                    for item in new_outputs:
                         if item is None:
                             done = True
                             break

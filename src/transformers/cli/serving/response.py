@@ -537,15 +537,9 @@ class ResponseHandler(BaseHandler):
                 tool_call_index = 0
                 done = False
                 while not done:
-                    batch = [await queue.get()]
-                    try:
-                        while True:
-                            batch.append(queue.get_nowait())
-                    except asyncio.QueueEmpty:
-                        pass
-
+                    new_outputs = await self.get_new_outputs(queue)
                     parts: list[str] = []
-                    for item in batch:
+                    for item in new_outputs:
                         if item is None:
                             done = True
                             break

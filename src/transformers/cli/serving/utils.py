@@ -19,6 +19,7 @@ import asyncio
 import copy
 import enum
 import gc
+import itertools
 import json
 import multiprocessing
 import os
@@ -1213,6 +1214,22 @@ class BaseHandler:
                 raise ValueError(f"Expected {field} once in the event {sse!r}")
             template = template.replace(field, f"{json.dumps(name)}:{{{name}}}")
         return template
+
+    @staticmethod
+    async def get_new_outputs(queue: asyncio.Queue) -> list:
+        """A stream's new outputs (see `Detokenizer`): waits for the next one, and takes all those already in `queue`
+        behind it. Consecutive texts of the same kind (answer or reasoning) are joined: a stream that fell behind
+        sends them as one event."""
+        items = [await queue.get()]
+        while not queue.empty():
+            items.append(queue.get_nowait())
+        merged = []
+        for kind, group in itertools.groupby(items, key=type):  # the items in a row of the same type
+            if kind in (str, ReasoningText):
+                merged.append(kind("".join(group)))
+            else:  # tool calls, the end of the stream (`None`), an error
+                merged.extend(group)
+        return merged
 
     def _get_engine(self, body: dict) -> "EngineClient":
         """The request's model's engine (see `ModelManager.get_engine`). Sets the body's model to the one served."""
