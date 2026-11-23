@@ -38,6 +38,7 @@ from ..utils.import_utils import (
     is_torchdynamo_exporting,
     resolve_internal_import,
 )
+from .accelerate import keep_accelerate_hooks
 from .flash_attention import flash_attention_forward
 
 
@@ -502,12 +503,13 @@ def kernelize(
         model._kernels_device = next(iter(set(device_map.values()) - {"cpu", "disk"}), "cpu")
     used_device = get_device_type(getattr(model, "_kernels_device", None) or model.device)
 
-    if used_kernel_config is not None:
-        inherit_mapping = not used_kernel_config.use_local_kernel and used_kernel_config.inherit_mapping
-        with use_kernel_mapping(used_kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+    with keep_accelerate_hooks(model):
+        if used_kernel_config is not None:
+            inherit_mapping = not used_kernel_config.use_local_kernel and used_kernel_config.inherit_mapping
+            with use_kernel_mapping(used_kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+                _kernels_kernelize(model, device=used_device, mode=used_mode, use_fallback=KernelizeFallback.ALL)
+        else:
             _kernels_kernelize(model, device=used_device, mode=used_mode, use_fallback=KernelizeFallback.ALL)
-    else:
-        _kernels_kernelize(model, device=used_device, mode=used_mode, use_fallback=KernelizeFallback.ALL)
 
     model._use_kernels = True
 
