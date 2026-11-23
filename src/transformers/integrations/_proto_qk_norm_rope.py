@@ -32,8 +32,10 @@ def _qk_norm_rope_kernel(
         x1 = tl.load(base + half[None, :]).to(tl.float32)
         x2 = tl.load(base + HEAD_DIM // 2 + half[None, :]).to(tl.float32)
         rstd = tl.rsqrt((tl.sum(x1 * x1, 1) + tl.sum(x2 * x2, 1)) / HEAD_DIM + eps)
-        y1 = x1 * rstd[:, None] * w1[None, :]
-        y2 = x2 * rstd[:, None] * w2[None, :]
+        # rounded like the eager path: the normalized input in the input dtype, times the weight in the input dtype
+        dtype = QKV.dtype.element_ty
+        y1 = ((x1 * rstd[:, None]).to(dtype).to(tl.float32) * w1[None, :]).to(dtype).to(tl.float32)
+        y2 = ((x2 * rstd[:, None]).to(dtype).to(tl.float32) * w2[None, :]).to(dtype).to(tl.float32)
         tl.store(base + half[None, :], (y1 * cos1[None, :] - y2 * sin1[None, :]).to(QKV.dtype.element_ty))
         tl.store(
             base + HEAD_DIM // 2 + half[None, :], (y2 * cos2[None, :] + y1 * sin2[None, :]).to(QKV.dtype.element_ty)
@@ -60,16 +62,22 @@ def qk_norm_rope_(qkv, cos, sin, q_weight, k_weight, eps, num_q_heads, num_k_hea
 
 
 def fuse_qkv_weights(model: torch.nn.Module) -> int:
-    """Makes the q/k/v projection weights of the attention layers that support it views of one [q; k; v] weight, so
-    their projections can run as one GEMM. Returns the number of layers fused."""
+    """Makes the q/k/v projection weights of the attention layers that support it (and the gate/up weights of the MLPs
+    that support it) views of one concatenated weight, so each runs as one GEMM. Returns the number of modules fused."""
     fused = 0
     for module in model.modules():
-        if "_proto_qkv_weight" not in module.__dict__:
+        if "_proto_qkv_weight" in module.__dict__:
+            projections, attribute = (module.q_proj, module.k_proj, module.v_proj), "_proto_qkv_weight"
+        elif "_proto_gate_up_weight" in module.__dict__:
+            projections, attribute = (module.gate_proj, module.up_proj), "_proto_gate_up_weight"
+        else:
             continue
-        q, k, v = module.q_proj.weight, module.k_proj.weight, module.v_proj.weight
-        weight = torch.cat([q, k, v]).detach()
-        nq, nk = q.shape[0], k.shape[0]
-        q.data, k.data, v.data = weight[:nq], weight[nq : nq + nk], weight[nq + nk :]
-        module._proto_qkv_weight = weight
+        weight = torch.cat([p.weight for p in projections]).detach()
+        offset = 0
+        for p in projections:
+            rows = p.weight.shape[0]
+            p.weight.data = weight[offset : offset + rows]
+            offset += rows
+        setattr(module, attribute, weight)
         fused += 1
     return fused

@@ -18,9 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from collections.abc import Callable
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
@@ -44,6 +46,12 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_qwen3 import Qwen3Config
+
+
+# [scratch] fused q/k/v input and gate/up projection (PROTO_QKV=1)
+_PROTO_QKV = os.environ.get("PROTO_QKV", "1") == "1"
+if _PROTO_QKV:
+    from ...integrations._proto_qk_norm_rope import qk_norm_rope_ as _proto_qk_norm_rope_
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -77,8 +85,14 @@ class Qwen3MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
+        if _PROTO_QKV:  # [scratch] set by fuse_qkv_weights: one GEMM for gate/up
+            self._proto_gate_up_weight = None
 
     def forward(self, x):
+        gate_up_weight = self.__dict__.get("_proto_gate_up_weight")
+        if gate_up_weight is not None and self.config.hidden_act == "silu":
+            gate, up = F.linear(x, gate_up_weight).chunk(2, dim=-1)
+            return self.down_proj(F.silu(gate) * up)
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -229,6 +243,8 @@ class Qwen3Attention(nn.Module):
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        if _PROTO_QKV:  # [scratch] set by fuse_qkv_weights: one GEMM for q/k/v, one kernel for the norms and rotary
+            self._proto_qkv_weight = None
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -242,12 +258,26 @@ class Qwen3Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        qkv_weight = self.__dict__.get("_proto_qkv_weight")
+        if qkv_weight is not None:
+            num_heads, num_kv_heads = self.config.num_attention_heads, self.config.num_key_value_heads
+            qkv = F.linear(hidden_states, qkv_weight)
+            cos, sin = position_embeddings
+            _proto_qk_norm_rope_(
+                qkv, cos, sin, self.q_norm.weight, self.k_norm.weight, self.q_norm.variance_epsilon, num_heads,
+                num_kv_heads, self.head_dim,
+            )  # fmt: skip
+            q, k, v = qkv.split([num_heads * self.head_dim, num_kv_heads * self.head_dim, num_kv_heads * self.head_dim], -1)
+            query_states = q.view(hidden_shape).transpose(1, 2)
+            key_states = k.view(hidden_shape).transpose(1, 2)
+            value_states = v.view(hidden_shape).transpose(1, 2)
+        else:
+            query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+            key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            cos, sin = position_embeddings
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
