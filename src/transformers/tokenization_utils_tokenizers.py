@@ -460,12 +460,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if "backend" not in kwargs:
             kwargs["backend"] = "tokenizers"
 
-        explicit_bos_eos_flags = {flag for flag in ("add_bos_token", "add_eos_token") if flag in kwargs}
-        self._add_bos_token = kwargs.get("add_bos_token", False)
-        self._add_eos_token = kwargs.get("add_eos_token", False)
+        explicit_bos_eos_in_kwargs = "add_bos_token" in kwargs or "add_eos_token" in kwargs
         if post_processor := kwargs.pop("post_processor", None):  # most reliable way to get the post-processor
             self._tokenizer.post_processor = post_processor
-        self._should_update_post_processor = bool(explicit_bos_eos_flags) or self._tokenizer.post_processor is None
+        # Flags that aren't passed default to what the loaded post-processor already does,
+        tokens = (self._tokenizer.post_processor and self._tokenizer.encode("a").tokens) or [None]
+        self._add_bos_token = kwargs.get("add_bos_token", tokens[0] == str(kwargs.get("bos_token")))
+        self._add_eos_token = kwargs.get("add_eos_token", tokens[-1] == str(kwargs.get("eos_token")))
+        self._should_update_post_processor = explicit_bos_eos_in_kwargs or self._tokenizer.post_processor is None
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
@@ -528,9 +530,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 **kwargs,
             )
 
-        # A flag that was not passed explicitly mirrors what the loaded post-processor already does, so that
-        # setting the other flag (or passing it to `from_pretrained`) doesn't silently drop the existing bos/eos.
-        self._infer_bos_eos_from_post_processor(skip=explicit_bos_eos_flags)
         self._should_update_post_processor = (
             self._should_update_post_processor or self._tokenizer.post_processor is None
         )
@@ -635,30 +634,6 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             push_to_hub=push_to_hub,
             **kwargs,
         )
-
-    def _infer_bos_eos_from_post_processor(self, skip=()):
-        """
-        Sets `add_bos_token` / `add_eos_token` from the `TemplateProcessing` post-processor of the backend tokenizer
-        (also when wrapped in a `Sequence`), without rebuilding it. Flags listed in `skip` are left untouched.
-        """
-        post_processor = self._tokenizer.post_processor
-        if post_processor is None:
-            return
-        state = json.loads(post_processor.__getstate__())
-        if state.get("type") == "Sequence":
-            templates = [p for p in state.get("processors", []) if p.get("type") == "TemplateProcessing"]
-            state = templates[0] if len(templates) == 1 else {}
-        if state.get("type") != "TemplateProcessing" or not state.get("single"):
-            return
-        single = state["single"]
-
-        def special_token(piece):
-            return piece["SpecialToken"]["id"] if "SpecialToken" in piece else None
-
-        if "add_bos_token" not in skip and self.bos_token is not None:
-            object.__setattr__(self, "_add_bos_token", special_token(single[0]) == str(self.bos_token))
-        if "add_eos_token" not in skip and self.eos_token is not None:
-            object.__setattr__(self, "_add_eos_token", special_token(single[-1]) == str(self.eos_token))
 
     def update_post_processor(self):
         """
