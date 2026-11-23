@@ -1,0 +1,24 @@
+name: record-mic close
+
+# When a PR closes, the expected values record-mic re-recorded for it (if any) go live with its
+# code (merged) or are dropped (closed). Runs no PR code: it only edits the MIC fleet on the Hub.
+
+on:
+  pull_request_target:
+    types:
+      - closed
+
+permissions:
+  contents: read
+
+jobs:
+  close:
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: huggingface/transformers-ci/.github/workflows/pr-ci_record_mic_close.yml@main
+    with:
+      pr: ${{ github.event.pull_request.number }}
+      merged: ${{ github.event.pull_request.merged }}
+    secrets:
+      mic_write_token: ${{ secrets.MIC_RECORD_WRITE_TOKEN }}

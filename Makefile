@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test run-mic codex claude clean-ai
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test run-mic record-mic codex claude clean-ai
 
 
 # Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
@@ -75,6 +75,15 @@ run-mic: export FLEET := $(FLEET)
 run-mic: export JOBS := $(JOBS)
 run-mic:
 	@python utils/checkers.py mic
+
+# Re-record MIC expected values on this PR's code, in the cloud, for this PR only (MODEL="gptj codegen",
+# PR=<number>, default: the PR of the current branch). Needs write access; same as commenting
+# `record-mic: <models>` on the PR. The values are posted on the PR and go live when it merges.
+record-mic:
+	@test -n "$(MODEL)" || { echo 'usage: make record-mic MODEL="<model> ..." [PR=<number>]'; exit 1; }
+	@pr="$(PR)"; test -n "$$pr" || pr=$$(gh pr view --repo huggingface/transformers --json number --jq .number) || exit 1; \
+	gh workflow run record-mic.yml --repo huggingface/transformers -f pr="$$pr" -f models="$(MODEL)" && \
+	echo "record-mic requested for #$$pr ($(MODEL)); the result is posted on the PR"
 
 codex:
 	mkdir -p .agents
