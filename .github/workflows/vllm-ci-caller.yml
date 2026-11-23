@@ -817,7 +817,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -826,7 +825,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [1, 3]  # [Temporary] trial run
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
@@ -904,7 +903,7 @@ jobs:
         run: pip freeze
 
       - name: "Test: language models generation and pooling (shard ${{ matrix.shard }} / 4)"
-        if: ${{ !cancelled() }}
+        if: false  # [Temporary] trial run
         working-directory: vllm
         run: |
           # Not included from vLLM's CPU command: tests/v1/e2e/test_cpu_linear_attn_chunked_prefix.py (no transformers),
@@ -916,7 +915,7 @@ jobs:
 
       # Only ~5 tests: run them all in shard 0 (with `--num-shards`, a shard could get no test, and pytest fails then).
       - name: "Test: CLIP / SigLIP pooling"
-        if: ${{ !cancelled() && matrix.shard == 0 }}
+        if: false  # [Temporary] trial run
         working-directory: vllm
         run: |
           # siglip2-giant-opt: vLLM's CPU attention kernel doesn't support its head_dim (72)
@@ -1060,6 +1059,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM structured output, detokenizer, parsers and video processing"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1139,7 +1139,7 @@ jobs:
 
       # One pytest run per area, so that a collection error in one area doesn't stop the others.
       - name: "Test: structured output"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
           # The grammar backends (xgrammar, guidance) built from real HF tokenizers. Not included: the tests/v1/structured_output
@@ -1153,7 +1153,7 @@ jobs:
             tests/v1/structured_output/test_structured_output_manager.py
 
       - name: "Test: detokenizer"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
           # Incremental detokenization vs the HF tokenizers' decode. Not included: the tests/detokenizer files about vLLM's
@@ -1161,7 +1161,7 @@ jobs:
           pytest -v -s tests/detokenizer/test_decode_stream_seed.py tests/detokenizer/test_min_tokens.py
 
       - name: "Test: video processing"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
           # vLLM's video frame sampling vs the HF video processors (AutoVideoProcessor). The rest of tests/multimodal is vLLM's
@@ -1169,7 +1169,7 @@ jobs:
           pytest -v -s tests/multimodal/test_video.py
 
       - name: "Test: reasoning and tool parsers"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
           # Only the parser tests that load the model's tokenizer (special tokens); the others parse text with vLLM's logic.
