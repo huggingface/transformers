@@ -823,6 +823,92 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     slot_to_token[idx] = past_length + offset
             past_length += query_length
 
+    def test_fp8_kv_cache_update(self) -> None:
+        """Tests the FP8 paged cache: it takes half the memory of a 16-bit one, calibrates its scales on the first
+        batch, returns dequantized states to attention implementations without FP8 support, and FP8 states with their
+        descales to those with it, for both the index and block table updates."""
+        config = AutoConfig.for_model(
+            "llama", hidden_size=32, num_attention_heads=4, num_key_value_heads=2, num_hidden_layers=2, vocab_size=8
+        )
+        config._attn_implementation = "sdpa"
+        helper = DistributedHelper(device_mesh=None, cpu_group_timeout=300, tp_plan={})
+
+        def make_cache(kv_cache_dtype) -> PagedAttentionCache:
+            cb_config = ContinuousBatchingConfig(
+                page_size=8, num_blocks=4, max_batch_tokens=8, max_memory_percent=0.5, kv_cache_dtype=kv_cache_dtype
+            )
+            return PagedAttentionCache(config, cb_config, "cpu", helper, dtype=torch.bfloat16)
+
+        cache = make_cache("fp8")
+        self.assertEqual(2 * cache.bytes_per_sector, make_cache(None).bytes_per_sector)
+        self.assertFalse(cache.fp8_attention)
+
+        def update(past_length: int, query_length: int, fp8_attention: bool = False, block_table=None):
+            cache.fp8_attention = fp8_attention
+            read_index, write_index = [[]], [[]]
+            cache.extend_read_and_write_indices("req", past_length, query_length, read_index, write_index)
+            if past_length == 0:  # a batch with no cache read
+                read_index = [[]]
+            kwargs = {
+                "cu_seq_lens_k": {"full_attention": torch.tensor([0, past_length + query_length])},
+                "max_length_k": {"full_attention": past_length + query_length},
+                "read_index": [torch.tensor(read_index[0], dtype=torch.long)],
+                "write_index": [torch.tensor(write_index[0], dtype=torch.long)],
+            }
+            if block_table is not None:
+                kwargs["block_table"] = block_table
+            keys, values = torch.randn(2, 1, 2, query_length, 8).clamp(-3, 3).to(torch.bfloat16)
+            if past_length == 0:  # so that later states are within the calibrated range
+                keys[0, 0, 0, 0], values[0, 0, 0, 0] = 4.0, 4.0
+            return keys, values, *cache.update(keys, values, 0, kwargs), kwargs
+
+        state = RequestState(request_id="req", initial_tokens=[0] * 5)
+        self.assertTrue(cache.can_store_request_tokens(state, 6))
+        k_scale, v_scale = cache.kv_scales[0]
+
+        # Prefill: the scales are calibrated, and the new states are returned as they are
+        keys, values, out_keys, out_values, kwargs = update(past_length=0, query_length=5)
+        self.assertIs(out_keys, keys)
+        self.assertIs(out_values, values)
+        self.assertNotIn("k_descale", kwargs)
+        torch.testing.assert_close(k_scale, keys.abs().amax().float() / 448)
+        torch.testing.assert_close(v_scale, values.abs().amax().float() / 448)
+
+        # Decode, without FP8 support: the whole cache is dequantized
+        calibrated_k_scale = k_scale.clone()
+        new_keys, _, out_keys, out_values, kwargs = update(past_length=5, query_length=1)
+        self.assertEqual(out_keys.dtype, torch.bfloat16)
+        self.assertEqual(out_keys.shape, (1, 2, 6, 8))
+        # FP8 rounding errors are within 2^-4 of the value, i.e. within 448 / 16 scales
+        atol = 32 * k_scale.item()
+        torch.testing.assert_close(out_keys, torch.cat([keys, new_keys], dim=2), atol=atol, rtol=0)
+        self.assertNotIn("k_descale", kwargs)
+        self.assertTrue(torch.equal(k_scale, calibrated_k_scale))  # the scales are only calibrated once
+
+        # With FP8 support, the FP8 states are returned along with their descales
+        _, _, out_keys, out_values, kwargs = update(past_length=5, query_length=1, fp8_attention=True)
+        self.assertEqual(out_keys.dtype, torch.float8_e4m3fn)
+        self.assertEqual(out_values.dtype, torch.float8_e4m3fn)
+        self.assertIs(kwargs["k_descale"], k_scale)
+        self.assertIs(kwargs["v_descale"], v_scale)
+
+        # The block table update returns the quantized new states, for the kernel to append them to the FP8 cache
+        new_keys, _, out_keys, _, kwargs = update(
+            past_length=5, query_length=1, fp8_attention=True, block_table=torch.zeros(1, 1, 2, dtype=torch.int32)
+        )
+        self.assertEqual(kwargs["k_cache"].dtype, torch.float8_e4m3fn)
+        self.assertEqual(out_keys.dtype, torch.float8_e4m3fn)
+        torch.testing.assert_close(out_keys.to(torch.bfloat16) * k_scale, new_keys, atol=atol, rtol=0)
+        self.assertIs(kwargs["k_descale"], k_scale)
+
+        # A reset (e.g. after the warmup) clears the scales so that they are calibrated again
+        cache.reset()
+        self.assertEqual(k_scale.item(), 0.0)
+        self.assertEqual(cache._calibrated_layers, set())
+
+        with self.assertRaisesRegex(ValueError, "kv_cache_dtype"):
+            make_cache(torch.float16)
+
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
         environment by mocking all accelerator availability checks to return False"""

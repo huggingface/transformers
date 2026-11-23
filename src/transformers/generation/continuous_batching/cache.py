@@ -20,6 +20,7 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig
+from ...modeling_flash_attention_utils import flash_attn_supports_fp8
 from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
@@ -132,7 +133,8 @@ class PagedAttentionCache:
             continuous_batching_config: Continuous batching configuration containing cache parameters
             device: Device for the cache tensors
             distributed_helper: TP-aware helper. Used to dispatch attention heads and ensure coherent cache size
-            dtype: Data type of the activation and the cache (for now, these are the same)
+            dtype: Data type of the activation, and of the cache unless `continuous_batching_config.kv_cache_dtype`
+                is set
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
         """
@@ -140,6 +142,14 @@ class PagedAttentionCache:
         self.dtype = dtype
         self.device = device
         self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0  # if not resolved, off
+
+        # The KV cache can be stored in FP8, with per-tensor scales for the keys and the values of each layer
+        kv_cache_dtype = continuous_batching_config.kv_cache_dtype or dtype
+        if kv_cache_dtype not in (dtype, torch.float8_e4m3fn):
+            raise ValueError(f"kv_cache_dtype must be the model dtype or torch.float8_e4m3fn, got {kv_cache_dtype}.")
+        self.fp8_kv_cache = kv_cache_dtype == torch.float8_e4m3fn
+        # Index ops like `index_copy_` are not implemented for FP8, so an FP8 cache is stored and indexed as raw bytes
+        storage_dtype = torch.uint8 if self.fp8_kv_cache else kv_cache_dtype
 
         # If the KV heads are TP'ed, each KV head is dispatched to a different GPU, so the effective number of KV heads
         # per GPU is simply divided by the TP size. We need to solve this before we can construct the cache allocators.
@@ -156,7 +166,7 @@ class PagedAttentionCache:
         ca_kwargs = {
             "num_key_value_heads": num_key_value_heads,
             "config": config,
-            "cache_dtype": self.dtype,
+            "cache_dtype": storage_dtype,
             "page_size": continuous_batching_config.page_size,
             "allow_block_sharing": continuous_batching_config.allow_block_sharing,
         }
@@ -179,7 +189,7 @@ class PagedAttentionCache:
         # Bytes of one cache block (page_size tokens of KV for every layer of the model), used to convert the num_blocks
         # config attribute to and from bytes
         bytes_per_block = config.num_hidden_layers * FullAttentionCacheAllocator.get_bytes_per_page(
-            num_key_value_heads, find_head_dim(config), self.dtype, continuous_batching_config.page_size
+            num_key_value_heads, find_head_dim(config), storage_dtype, continuous_batching_config.page_size
         )
 
         max_batch_tokens, num_sectors = PagedAttentionMemoryHandler(
@@ -226,6 +236,17 @@ class PagedAttentionCache:
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
         # Helper attribute for the input/output classes
         self.max_tokens_read = max(ca.tokens_per_page * ca.num_blocks for ca in self.cache_allocators.values())
+
+        if self.fp8_kv_cache:
+            # Whether the attention consumes the FP8 states, otherwise they are dequantized when read from the cache
+            self.fp8_attention = flash_attn_supports_fp8(config._attn_implementation)
+            # The 0-dim scales of the keys and values of each layer, each with its own storage as kernels may expect.
+            # They are calibrated on the first batch (see `_quantize_kv`), a null scale meaning "not calibrated"
+            self.kv_scales = {
+                layer_idx: tuple(torch.zeros((), dtype=torch.float32, device=self.device) for _ in range(2))
+                for layer_idx in self.layer_to_allocator
+            }
+            self._calibrated_layers = set()
 
     def _infer_read_cache_limit(self) -> int | None:
         """The maximum number of tokens that can be read from the cache for a single request."""
@@ -389,6 +410,23 @@ class PagedAttentionCache:
             for allocator, read_indices in zip(self.cache_allocators.values(), read_index):
                 read_indices.extend(allocator.get_read_indices(request_id, past_length, query_length))
 
+    def _quantize_kv(
+        self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Quantizes the new KV states to FP8 with the scales of the layer, which are calibrated on the amplitude of
+        the first states they see. Later states are clamped to the FP8 range."""
+        fp8_dtype = torch.float8_e4m3fn
+        fp8_max = torch.finfo(fp8_dtype).max
+        quantized = []
+        for states, scale in zip((key_states, value_states), self.kv_scales[layer_idx]):
+            # The calibration only overwrites null scales, so that it is a no-op when replayed in a captured graph
+            if layer_idx not in self._calibrated_layers:
+                new_scale = (states.abs().amax().float() / fp8_max).clamp(min=torch.finfo(torch.float32).tiny)
+                scale.copy_(torch.where(scale > 0, scale, new_scale))
+            quantized.append((states / scale).clamp(-fp8_max, fp8_max).to(fp8_dtype))
+        self._calibrated_layers.add(layer_idx)
+        return quantized[0], quantized[1]
+
     @torch.compiler.disable  # does not play well with the views of the cache tensor
     def update(
         self,
@@ -400,6 +438,10 @@ class PagedAttentionCache:
         """Updates the cache or the kwargs before entering the flash attention wrapper. The kwargs are updated in place.
         For an index-based update, the keys and values are actually updated to seqlen "seqlen_q + past_length". For a
         block table update, the KV states are untouched but the kwargs are filled with what is needed to call flash.
+
+        With an FP8 cache, the new KV states are quantized before being written. If the attention consumes FP8 states,
+        those are returned and their scales are added to the kwargs as `k_descale` and `v_descale`. Otherwise, they are
+        dequantized. A batch with no cache read gets its unquantized KV states back.
         """
         allocator = self.layer_to_allocator[layer_idx]
 
@@ -407,11 +449,19 @@ class PagedAttentionCache:
         kwargs["cu_seq_lens_k"] = kwargs["cu_seq_lens_k"][allocator.layer_type].to(torch.int32)
         kwargs["max_length_k"] = kwargs["max_length_k"][allocator.layer_type]
 
+        if self.fp8_kv_cache:
+            fp8_states = self._quantize_kv(key_states, value_states, layer_idx)
+            k_scale, v_scale = self.kv_scales[layer_idx]
+
         # Block table "update": no real update, just prepare the kwargs for the flash call, which will update the cache
         block_table = kwargs.get("block_table")
         if block_table is not None:
             k_cache, v_cache = allocator.get_cache_for_block_table(layer_idx)
             kwargs["block_table"] = block_table[allocator.index]
+            if self.fp8_kv_cache:  # the decode fast path is only enabled with FP8 if the kernel takes the descales
+                k_cache, v_cache = k_cache.view(torch.float8_e4m3fn), v_cache.view(torch.float8_e4m3fn)
+                key_states, value_states = fp8_states
+                kwargs["k_descale"], kwargs["v_descale"] = k_scale, v_scale
             kwargs["k_cache"] = k_cache
             kwargs["v_cache"] = v_cache
 
@@ -419,18 +469,35 @@ class PagedAttentionCache:
         else:
             read_index = kwargs["read_index"][allocator.index]
             write_index = kwargs["write_index"][allocator.index]
+            new_states = (key_states, value_states)
+            if self.fp8_kv_cache:
+                new_states = tuple(x.view(torch.uint8) for x in fp8_states)
             # Allocator update is done with the KV cache shape: [seqlen_q, num_kv_heads, head_dim]. We also return the
             # KV states in the same shape they were passed. It will help when we unify with regular Cache.
-            key_states, value_states = (x.squeeze(0).transpose(0, 1) for x in (key_states, value_states))
-            key_states, value_states = allocator.update(key_states, value_states, layer_idx, read_index, write_index)
-            key_states, value_states = (x.transpose(0, 1).unsqueeze(0) for x in (key_states, value_states))
+            new_states = (x.squeeze(0).transpose(0, 1) for x in new_states)
+            new_states = allocator.update(*new_states, layer_idx, read_index, write_index)
+            # With no cache read, the KV states are the new ones, which are returned unquantized if FP8 is used
+            if not self.fp8_kv_cache or read_index.numel() > 0:
+                key_states, value_states = (x.transpose(0, 1).unsqueeze(0) for x in new_states)
+                if self.fp8_kv_cache:
+                    key_states, value_states = (x.view(torch.float8_e4m3fn) for x in (key_states, value_states))
+                    if self.fp8_attention:
+                        kwargs["k_descale"], kwargs["v_descale"] = k_scale, v_scale
+                    else:
+                        key_states = key_states.to(self.dtype) * k_scale
+                        value_states = value_states.to(self.dtype) * v_scale
 
         return key_states, value_states
 
     def reset(self) -> None:
-        """Frees the cache of all requests and returns all sectors to the global pool."""
+        """Frees the cache of all requests and returns all sectors to the global pool. The scales of an FP8 cache are
+        reset as well, so that they are calibrated again, e.g. on the first real batch after the warmup."""
         self.free_all_requests(clear_ledgers=True)
         self.pool.reset()
+        if self.fp8_kv_cache:
+            for scale in (scale for scales in self.kv_scales.values() for scale in scales):
+                scale.zero_()
+            self._calibrated_layers.clear()
 
     def prepare_fork_request(
         self, src_state: RequestState, dst_req_ids: list[str], copy_src_and_dst: dict[str, tuple[list[int], list[int]]]

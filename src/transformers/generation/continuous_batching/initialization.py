@@ -22,7 +22,7 @@ import torch
 
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import CompileConfig, ContinuousBatchingConfig
-from ...modeling_flash_attention_utils import lazy_import_flash_attention
+from ...modeling_flash_attention_utils import flash_attn_supports_fp8, lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
@@ -157,6 +157,17 @@ def ensure_decode_fast_path_is_available(
                     logger.warning(
                         f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
                         f"because `flash_attn_with_kvcache` is not available for {config._attn_implementation = }."
+                    )
+                cb_config.max_blocks_per_request = 0
+            # An FP8 cache needs a kernel taking its scales, as the kernel reads (and appends to) the cache
+            elif cb_config.kv_cache_dtype == torch.float8_e4m3fn and not flash_attn_supports_fp8(
+                config._attn_implementation, with_kvcache=True
+            ):
+                if user_requested:
+                    logger.warning(
+                        f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
+                        f"because `flash_attn_with_kvcache` does not take FP8 descales for "
+                        f"{config._attn_implementation = }, which an FP8 KV cache needs."
                     )
                 cb_config.max_blocks_per_request = 0
         # Specific warning for unsupported attention implementation/device combinations

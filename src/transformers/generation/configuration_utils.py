@@ -1707,6 +1707,11 @@ class ContinuousBatchingConfig:
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
+        kv_cache_dtype (`torch.dtype` or `str`, *optional*):
+            Data type of the KV cache. Defaults to the dtype of the model. Can be set to `torch.float8_e4m3fn` (or
+            `"fp8"`) to halve the cache footprint: each layer then quantizes its keys and values with per-tensor scales,
+            calibrated on the first batch. Flash attention kernels taking `k_descale` / `v_descale` consume the FP8
+            states directly, other attention implementations get them dequantized.
         use_async_batching (`bool`, *optional*):
             Whether to enable async double-buffering, which removes CPU overhead from the continuous batching
             loop at the cost of doubled VRAM usage. Auto-detected when `None`.
@@ -1793,6 +1798,9 @@ class ContinuousBatchingConfig:
     # short prompts, but long generation lengths, you might want to disable block sharing.
     allow_block_sharing: bool = True
 
+    # The dtype of the KV cache. If None, the dtype of the model is used. Can be set to torch.float8_e4m3fn (or "fp8")
+    kv_cache_dtype: Union["torch.dtype", str, None] = None
+
     # Enables asynchronous batching. This removes the CPU overhead from the continuous batching loop, at the cost of
     # doubling the VRAM usage. If None, will be automatically detected.
     use_async_batching: bool | None = None
@@ -1874,6 +1882,11 @@ class ContinuousBatchingConfig:
             self.varlen_compile_config = CompileConfig(**self.varlen_compile_config)
         if isinstance(self.decode_compile_config, dict):
             self.decode_compile_config = CompileConfig(**self.decode_compile_config)
+        if isinstance(self.kv_cache_dtype, str):
+            import torch
+
+            name = "float8_e4m3fn" if self.kv_cache_dtype == "fp8" else self.kv_cache_dtype
+            self.kv_cache_dtype = getattr(torch, name)
 
         # Only turn off graph mixing support if TP is on
         graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT", "1") == "1"
