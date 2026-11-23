@@ -76,10 +76,17 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         Minimum division value during routing normalization.
     mlp_layer_types (`list`, *optional*):
         MLP (Moe vs Dense) pattern for each layer.
+    num_mtp_layers (`int`, *optional*):
+        Number of multi-token prediction (MTP) layers stored after the base model in the checkpoint. The released
+        Ernie 4.5 VL checkpoints have none.
     """
 
     model_type = "ernie4_5_vl_moe_text"
-    attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
+    attribute_map = {
+        "num_experts": "moe_num_experts",
+        "num_experts_per_tok": "moe_k",
+        "num_mtp_layers": "num_nextn_predict_layers",
+    }
     default_theta = 500000.0
 
     base_model_tp_plan = {
@@ -138,6 +145,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     moe_norm_min: float | None = 1e-12
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001
+    num_mtp_layers: int | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section"}
 
@@ -151,6 +159,14 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
             self.moe_intermediate_size = [1536, 512]
 
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        super().validate_architecture()
+        if self.num_mtp_layers is not None and self.num_mtp_layers > 1:
+            raise ValueError(
+                f"Ernie 4.5 MoE supports a single MTP layer, but got num_mtp_layers={self.num_mtp_layers}."
+            )
 
 
 @auto_docstring(checkpoint="baidu/ERNIE-4.5-VL-28B-A3B-PT")

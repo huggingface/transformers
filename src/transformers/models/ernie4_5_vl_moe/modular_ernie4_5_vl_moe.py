@@ -118,6 +118,9 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         Minimum division value during routing normalization.
     mlp_layer_types (`list`, *optional*):
         MLP (Moe vs Dense) pattern for each layer.
+    num_mtp_layers (`int`, *optional*):
+        Number of multi-token prediction (MTP) layers stored after the base model in the checkpoint. The released
+        Ernie 4.5 VL checkpoints have none.
     """
 
     model_type = "ernie4_5_vl_moe_text"
