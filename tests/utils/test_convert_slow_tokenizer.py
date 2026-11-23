@@ -4,7 +4,9 @@ import unittest
 import warnings
 from dataclasses import dataclass
 
-from transformers import AlbertTokenizer, AutoTokenizer, TokenizersBackend
+from huggingface_hub import hf_hub_download
+
+from transformers import AutoTokenizer, TokenizersBackend
 from transformers.convert_slow_tokenizer import SentencePieceExtractor, SpmConverter
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
 from transformers.utils import is_sentencepiece_available
@@ -136,23 +138,16 @@ class SentencePieceModelConversionTest(unittest.TestCase):
                     self.assertEqual(tokenizer.decode(ids), sp.decode(ids), text)
 
     def test_unigram_user_defined_pieces_keep_dummy_prefix(self):
-        # Like ALBERT's spiece.model: a Unigram model with user-defined punctuation, loaded without a tokenizer.json.
-        # The pieces must not become added tokens, which would give the text after them its own dummy prefix.
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            spm.SentencePieceTrainer.train(
-                sentence_iterator=iter(self.corpus),
-                model_prefix=f"{tmp_dir}/spiece",
-                model_type="unigram",
-                vocab_size=60,
-                normalization_rule_name="identity",
-                control_symbols=["[CLS]", "[SEP]"],
-                user_defined_symbols=["(", ")", "-"],
-                minloglevel=2,
-            )
-            sp = spm.SentencePieceProcessor(model_file=f"{tmp_dir}/spiece.model")
-            tokenizer = AlbertTokenizer.from_pretrained(tmp_dir, do_lower_case=False, keep_accents=True)
-            for text in ["state-of-the-art", "def f(x): return (x)"]:
-                self.assertEqual(tokenizer.encode(text, add_special_tokens=False), sp.encode(text), text)
+        # These ALBERT and XLNet fine-tunes ship only a Unigram `spiece.model`, with punctuation as user-defined pieces,
+        # and no tokenizer.json. The pieces must not become added tokens, which would give the text after them its own
+        # dummy prefix.
+        for repo in ["tals/albert-xlarge-vitaminc-mnli", "ynie/xlnet-large-cased-snli_mnli_fever_anli_R1_R2_R3-nli"]:
+            with self.subTest(repo=repo):
+                tokenizer = AutoTokenizer.from_pretrained(repo)
+                sp = spm.SentencePieceProcessor(model_file=hf_hub_download(repo, "spiece.model"))
+                # lower case, as ALBERT lowercases its input
+                for text in ["a state-of-the-art model (albert)", "def f(x): return (x)"]:
+                    self.assertEqual(tokenizer.encode(text, add_special_tokens=False), sp.encode(text), text)
 
     def test_user_defined_whitespace_pieces_marked_unnormalized(self):
         # Like Gemma: no dummy prefix, whitespace-only user-defined pieces that the config lists as `normalized=False`.
