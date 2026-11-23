@@ -46,7 +46,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     """
 
     model_type = "mimo_v2_flash"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

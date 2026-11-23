@@ -78,6 +78,10 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "HunYuanVLForConditionalGeneration": (
             "Dynamically pools image embeddings based on THW and has packed attention."
         ),
+        "HYV4VLModel": ("Dynamically pools image embeddings based on THW and has packed attention."),
+        "HYV4VLForConditionalGeneration": (
+            "Dynamically pools image embeddings based on THW and has packed attention."
+        ),
         "VideoMAEForPreTraining": (
             "Computes loss even when `return_loss=False`, hitting a data-dependent guard in "
             "`mse_loss`. TODO: skip loss when labels aren't provided."
@@ -140,7 +144,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
             "cross-attention mask doesn't flow through the generate decomposition correctly."
         ),
         "VoxtralRealtimeForConditionalGeneration": (
-            "Exported prefill drops `past_key_values.*.{keys,values,_sliding_window_tensor}` "
+            "Exported prefill drops `cache.*.{keys,values,_sliding_window_tensor}` "
             "tensors that eager returns. Plain forward exports work. "
             "TODO: align generate-decomposition path with the realtime KV-cache shape."
         ),
@@ -474,6 +478,14 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "BigBirdForTokenClassification": "Same `timeout` failure as `BigBirdModel`.",
         "MaskFormerModel": "Shifted-window (Swin) backbone exceeds the 1000s test timeout under dynamic shapes.",
         "MaskFormerForInstanceSegmentation": "Same `timeout` as `MaskFormerModel`.",
+        "SwinModel": "Shifted-window attention exceeds the 1000s test timeout under dynamic shapes.",
+        "SwinBackbone": "Same `timeout` as `SwinModel`.",
+        "SwinForImageClassification": "Same `timeout` as `SwinModel`.",
+        "SwinForMaskedImageModeling": "Same `timeout` as `SwinModel`.",
+        "Swinv2Model": "Same `timeout` as `SwinModel`.",
+        "Swinv2Backbone": "Same `timeout` as `SwinModel`.",
+        "Swinv2ForImageClassification": "Same `timeout` as `SwinModel`.",
+        "Swinv2ForMaskedImageModeling": "Same `timeout` as `SwinModel`.",
         "Mask2FormerModel": "Deformable-attention pixel decoder exceeds the 1000s test timeout under dynamic shapes.",
         "Mask2FormerForUniversalSegmentation": "Same `timeout` as `Mask2FormerModel`.",
         "GroundingDinoModel": "Deformable-attention encoder exceeds the 1000s test timeout under dynamic shapes.",
@@ -1184,7 +1196,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 check_device = True
-                cache = inputs.get("past_key_values")
+                cache = inputs.get("cache")
                 # Some models may share some layers of the cache, in which case those layers are not initialized, but they still
                 # get a `cumulative_length` tensor initialized on cpu, which is never moved to the correct device as the layer is not used
                 if (

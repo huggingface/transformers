@@ -138,8 +138,8 @@ visualizer("LLMs generate text through a process known as")
    )
    input_text = "LLMs generate text through a process known as"
    input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
-   past_key_values = DynamicCache(config=model.config)
-   outputs = model.generate(**input_ids, max_new_tokens=50, past_key_values=past_key_values)
+   cache = DynamicCache(config=model.config)
+   outputs = model.generate(**input_ids, max_new_tokens=50, cache=cache)
    print(tokenizer.decode(outputs[0], skip_special_tokens=True))
    ```
 

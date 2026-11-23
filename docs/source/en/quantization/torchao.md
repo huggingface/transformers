@@ -20,10 +20,10 @@ See the table below for additional torchao features.
 | Feature | Description |
 |--------|-------------|
 | **Quantization Aware Training (QAT)** | Train quantized models with minimal accuracy loss (see [QAT README](https://github.com/pytorch/ao/blob/main/torchao/quantization/qat/README.md)) |
-| **Float8 Training** | High-throughput training with float8 formats (see [torchtitan](https://github.com/pytorch/torchtitan/blob/main/docs/float8.md) and [Accelerate](https://huggingface.co/docs/accelerate/usage_guides/low_precision_training#configuring-torchao) docs) |
+| **Float8 Training** | High-throughput training with float8 formats (see [torchtitan](https://github.com/pytorch/torchtitan/blob/main/torchtitan/quantization/README.md) and [Accelerate](https://huggingface.co/docs/accelerate/usage_guides/low_precision_training#configuring-torchao) docs) |
 | **Sparsity Support** | Semi-structured (2:4) sparsity for faster inference (see [Accelerating Neural Network Training with Semi-Structured (2:4) Sparsity](https://pytorch.org/blog/accelerating-neural-network-training/) blog post) |
 | **Optimizer Quantization** | Reduce optimizer state memory with 4 and 8-bit variants of Adam |
-| **KV Cache Quantization** | Enables long context inference with lower memory (see [KV Cache Quantization](https://github.com/pytorch/ao/blob/main/torchao/_models/llama/README.md)) |
+| **KV Cache Quantization** | Enables long context inference with lower memory |
 | **Custom Kernels Support** | use your own `torch.compile` compatible ops |
 | **FSDP2** | Composable with FSDP2 for training|
 
@@ -488,7 +488,7 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 quantized_model = AutoModelForCausalLM.from_pretrained(
     model_id,
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     quantization_config=quantization_config,
 )
 print("quantized model:", quantized_model)
@@ -524,7 +524,7 @@ print("Response:", correct_output_text[0][len(prompt) :])
 reloaded_model = AutoModelForCausalLM.from_pretrained(
     save_to,
     device_map=torch.accelerator.current_accelerator(),
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     # quantization_config=quantization_config,
 )
 

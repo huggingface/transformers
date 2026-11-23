@@ -44,7 +44,7 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.20.0"
+MIN_PEFT_VERSION = "0.22.0"
 
 
 logger = logging.get_logger(__name__)

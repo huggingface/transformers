@@ -53,10 +53,10 @@ class GraniteSpeechModelTester(ALMModelTester):
 
     audio_config_key = "encoder_config"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("projector_intermediate_size", 256)
-        kwargs.setdefault("projector_encoder_hidden_size", 32)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "projector_intermediate_size": 256,
+        "projector_encoder_hidden_size": 32,
+    }
 
     def create_audio_features(self, batch_size: int | None = None):
         # GraniteSpeech expects [B, seq_len, features] (time-first), unlike the standard [B, features, seq_len]

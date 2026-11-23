@@ -107,7 +107,6 @@ class Llama4TextConfig(PreTrainedConfig):
     """
 
     model_type = "llama4_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -187,7 +186,8 @@ class Llama4TextConfig(PreTrainedConfig):
 
         if self.layer_types is None:
             self.layer_types = [
-                "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
+                "chunked_attention" if no_rope and self.attention_chunk_size is not None else "full_attention"
+                for no_rope in self.no_rope_layers
             ]
 
         super().__post_init__(**kwargs)

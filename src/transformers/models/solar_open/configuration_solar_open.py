@@ -34,7 +34,6 @@ class SolarOpenConfig(PreTrainedConfig):
     """
 
     model_type = "solar_open"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `SolarOpenModel`
     base_model_tp_plan = {

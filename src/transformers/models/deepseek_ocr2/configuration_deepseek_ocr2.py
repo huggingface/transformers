@@ -87,7 +87,6 @@ class DeepseekOcr2VisionEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_ocr2_encoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `DeepseekOcr2VisionEncoder`
     base_model_tp_plan = {
@@ -178,7 +177,6 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     """
 
     model_type = "deepseek_ocr2_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     # Override DeepseekV2's MLA TP plan with standard MHA projections
     base_model_tp_plan = {

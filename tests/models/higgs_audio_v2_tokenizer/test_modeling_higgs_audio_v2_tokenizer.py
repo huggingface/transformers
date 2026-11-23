@@ -18,6 +18,7 @@ import unittest
 
 import numpy as np
 
+from tests.model_tester_config import ModelTesterConfigMixin
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from transformers import DacConfig, HiggsAudioV2TokenizerConfig, HubertConfig
@@ -36,24 +37,22 @@ if is_torch_available():
 
 
 @require_torch
-class HiggsAudioV2TokenizerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,
-        num_channels=1,
-        sample_rate=16000,
-        codebook_size=1024,
-        num_samples=256,
-        is_training=False,
-    ):
+class HiggsAudioV2TokenizerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 4,
+        "num_channels": 1,
+        "sample_rate": 16000,
+        "codebook_size": 1024,
+        "is_training": False,
+        "num_samples": 256,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.sample_rate = sample_rate
-        self.codebook_size = codebook_size
-        self.is_training = is_training
-        self.num_samples = num_samples
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         self.acoustic_model_config = DacConfig(
             decoder_hidden_size=8, encoder_hidden_size=8, codebook_size=16, downsampling_ratios=[16, 16]
         )
@@ -102,6 +101,8 @@ class HiggsAudioV2TokenizerModelTester:
 @require_torch
 @require_torchaudio
 class HiggsAudioV2TokenizerModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = HiggsAudioV2TokenizerModelTester
+
     all_model_classes = (HiggsAudioV2TokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_resize_embeddings = False

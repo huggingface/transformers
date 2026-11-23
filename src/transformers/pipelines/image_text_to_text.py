@@ -127,6 +127,19 @@ class ImageTextToTextPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
+        # Decoder-only models require left-padding for correct batched generation. Encoder-decoder models are
+        # untouched, and so are processors with another component that sets its own padding side, because the
+        # collator pads all inputs on one side.
+        components = [self.feature_extractor, self.image_processor]
+        for name in ("feature_extractor", "image_processor", "audio_processor", "qformer_tokenizer"):
+            components.append(getattr(self.processor, name, None))
+        if (
+            self.tokenizer is not None
+            and self.tokenizer.padding_side == "right"
+            and not getattr(self.model.config, "is_encoder_decoder", False)
+            and all(getattr(component, "padding_side", None) is None for component in components)
+        ):
+            self.tokenizer.padding_side = "left"
 
     def _sanitize_parameters(
         self,
@@ -158,6 +171,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Forward kwargs
         if generate_kwargs is not None:
+            generate_kwargs = generate_kwargs.copy()
             forward_kwargs["generate_kwargs"] = generate_kwargs
         if stop_sequence is not None:
             if generate_kwargs is None:
@@ -350,7 +364,19 @@ class ImageTextToTextPipeline(Pipeline):
             # Handle Mistral tokenizer which does not accept processing kwargs
             if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
                 chat_template_kwargs = {
-                    k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
+                    k: v
+                    for k, v in chat_template_kwargs.items()
+                    if k
+                    in (
+                        "continue_final_message",
+                        "add_generation_prompt",
+                        "tokenize",
+                        "return_dict",
+                        "return_tensors",
+                        "padding",
+                        "truncation",
+                        "max_length",
+                    )
                 }
 
             model_inputs = self.processor.apply_chat_template(
@@ -418,8 +444,11 @@ class ImageTextToTextPipeline(Pipeline):
         input_texts = [text for text in input_texts for _ in range(candidates_per_input)]
         if return_type == ReturnType.TENSORS:
             return [
-                {"input_text": input_texts[i], "generated_token_ids": generated_sequence[i]}
-                for i in range(len(input_texts))
+                {
+                    "input_text": input_text.messages if isinstance(input_text, Chat) else input_text,
+                    "generated_token_ids": generated_sequence[i],
+                }
+                for i, input_text in enumerate(input_texts)
             ]
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
@@ -461,12 +490,17 @@ class ImageTextToTextPipeline(Pipeline):
                         continue_final_message = prompt_text.messages[-1]["role"] == "assistant"
                     if continue_final_message:
                         # With assistant prefill, concat onto the end of the last message
-                        new_text = dict(prompt_text.messages[-1]["content"][-1].items())
-                        new_text["text"] += generated_text
+                        content = prompt_text.messages[-1]["content"]
+                        if isinstance(content, str):
+                            content += generated_text
+                        else:
+                            new_text = dict(content[-1].items())
+                            new_text["text"] += generated_text
+                            content = content[:-1] + [new_text]
                         generated_text = list(prompt_text.messages)[:-1] + [
                             {
                                 "role": prompt_text.messages[-1]["role"],
-                                "content": prompt_text.messages[-1]["content"][:-1] + [new_text],
+                                "content": content,
                             }
                         ]
                     else:

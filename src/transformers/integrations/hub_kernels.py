@@ -37,6 +37,7 @@ from ..utils.import_utils import (
     is_torchdynamo_exporting,
     resolve_internal_import,
 )
+from .accelerate import keep_accelerate_hooks
 from .flash_attention import flash_attention_forward
 
 
@@ -188,24 +189,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=4,
+                        version=5,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_fn",
-                        version=4,
+                        version=5,
                     ),
                 },
             },
@@ -214,24 +215,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=4,
+                        version=5,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="causal_conv1d_update",
-                        version=4,
+                        version=5,
                     ),
                 },
             },
@@ -284,24 +285,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=4,
+                        version=5,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_chunk_scan_combined",
-                        version=4,
+                        version=5,
                     ),
                 },
             },
@@ -310,24 +311,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=4,
+                        version=5,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_split_conv1d_scan_combined",
-                        version=4,
+                        version=5,
                     ),
                 },
             },
@@ -336,24 +337,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=4,
+                        version=5,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="mamba_inner_fn",
-                        version=4,
+                        version=5,
                     ),
                 },
             },
@@ -362,24 +363,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=4,
+                        version=5,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_scan_fn",
-                        version=4,
+                        version=5,
                     ),
                 },
             },
@@ -388,24 +389,24 @@ if is_kernels_available():
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=4,
+                        version=5,
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=4,
+                        version=5,
                     ),
                     Mode.INFERENCE: LayerRepository(
                         repo_id="kernels-community/mamba-ssm",
                         layer_name="selective_state_update",
-                        version=4,
+                        version=5,
                     ),
                 },
             },
@@ -491,7 +492,7 @@ if is_kernels_available():
                 },
                 "mps": {
                     Mode.INFERENCE: LayerRepository(
-                        repo_id="kernels-community/mlx_rmsnorm",
+                        repo_id="kernels-community/mlx-rmsnorm",
                         layer_name="RMSNorm",
                         version=1,
                     )
@@ -960,12 +961,13 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
     use_fallback = KernelizeFallback.ALL
 
-    if model.kernel_config is not None:
-        inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
-        with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+    with keep_accelerate_hooks(model):
+        if model.kernel_config is not None:
+            inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
+            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
+                _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
+        else:
             _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
-    else:
-        _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
 
     model._use_kernels = True
 
