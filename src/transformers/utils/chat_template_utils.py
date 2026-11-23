@@ -415,7 +415,19 @@ def get_json_schema(func: Callable) -> dict:
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
         if enum_choices:
-            schema["enum"] = [c.strip() if isinstance(c, str) else c for c in json.loads(enum_choices.group(1))]
+            choices_src = enum_choices.group(1)
+            try:
+                choices = json.loads(choices_src)
+            except json.JSONDecodeError:
+                choices = None
+            # Anything else is iterated into nonsense: a string yields its characters, an object its keys
+            if not isinstance(choices, list):
+                raise DocstringParsingException(
+                    f"Cannot generate JSON schema for {func_name} because the '(choices: ...)' block for argument "
+                    f"'{arg}' is not a JSON list: {choices_src}. Write the choices as a JSON list, like "
+                    '(choices: ["tea", "coffee"]).'
+                ) from None
+            schema["enum"] = [c.strip() if isinstance(c, str) else c for c in choices]
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 

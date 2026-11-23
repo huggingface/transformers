@@ -518,6 +518,21 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_enum_extraction_rejects_choices_that_are_not_a_list(self):
+        def fn(beverage: str):
+            """
+            Test function
+
+            Args:
+                beverage: The beverage to drink (choices: "tea")
+            """
+            return beverage
+
+        # A bare string parses as JSON, and iterating it yields its characters: the model would be told
+        # the beverage must be "t", "e" or "a". Anything that is not a list has to be rejected instead
+        with self.assertRaisesRegex(DocstringParsingException, "beverage"):
+            get_json_schema(fn)
+
     def test_literal(self):
         def fn(
             temperature_format: Literal["celsius", "fahrenheit"],
