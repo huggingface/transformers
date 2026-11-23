@@ -1037,6 +1037,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM structured output, detokenizer, parsers and video processing"
+    if: false  # [Temporary] verified separately; trial run of vllm-test-multimodal-hf-comparison only
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1155,7 +1156,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run of vllm-test-tokenizer-features only
     runs-on:
       group: aws-m8i-8xl-cache
     container:
