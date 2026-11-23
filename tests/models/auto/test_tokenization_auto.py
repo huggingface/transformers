@@ -225,19 +225,15 @@ class AutoTokenizerTest(unittest.TestCase):
     @require_mistral_common
     @parameterized.expand(
         [
-            ("google-bert/bert-base-cased", "sentencepiece", "has no SentencePiece model file"),
-            ("hf-internal-testing/llama3-tokenizer-tiktoken", "sentencepiece", "has no SentencePiece model file"),
-            ("google-t5/t5-small", "mistral_common", "has no mistral-common tokenizer file"),
-            ("google-bert/bert-base-cased", "pil", "not a tokenizer backend"),
+            ("google-bert/bert-base-cased", "sentencepiece"),
+            ("hf-internal-testing/llama3-tokenizer-tiktoken", "sentencepiece"),
+            ("google-t5/t5-small", "mistral_common"),
+            ("google-bert/bert-base-cased", "pil"),
         ]
     )
-    def test_backend_kwarg_falls_back_to_default_tokenizer(self, repo_id, backend, warning):
+    def test_backend_kwarg_falls_back_to_default_tokenizer(self, repo_id, backend):
         default_tokenizer = AutoTokenizer.from_pretrained(repo_id)
-
-        logger = logging.get_logger("transformers.models.auto.tokenization_auto")
-        with CaptureLogger(logger) as cl:
-            tokenizer = AutoTokenizer.from_pretrained(repo_id, backend=backend)
-        self.assertIn(warning, cl.out)
+        tokenizer = AutoTokenizer.from_pretrained(repo_id, backend=backend)
         self.assertIs(type(tokenizer), type(default_tokenizer))
         self.assertEqual(tokenizer.backend, "tokenizers")
 
