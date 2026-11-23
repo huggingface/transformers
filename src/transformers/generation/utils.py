@@ -486,7 +486,12 @@ class DeferredStopCheck(StopCheck):
             self.cache.crop(-steps_to_undo)
             # We also need to deactivate past_recording, since we are giving the cache back to the user and it may lead to unneeded
             # memory spike on the next prefill
-            for layer in self.cache.layers:
+            cache_layers = (
+                self.cache.self_attention_cache.layers
+                if isinstance(self.cache, EncoderDecoderCache)
+                else self.cache.layers
+            )
+            for layer in cache_layers:
                 if hasattr(layer, "record_past"):
                     layer.record_past = False
         return steps_to_undo
@@ -3471,6 +3476,8 @@ class GenerationMixin(ContinuousMixin):
                 nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
             )
             topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
+            topk_log_probs, order = topk_log_probs.sort(dim=-1, descending=True)
+            topk_indices = topk_indices.gather(dim=-1, index=order)
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
 
@@ -4468,8 +4475,10 @@ def _speculative_sampling(
     # When probability_ratio > 1 (i.e. q_i(x) < p_i(x), or "assistant probability of the candidate token is smaller
     # than the model probability for the same token"), keep the token. Otherwise reject with p = 1 - probability_ratio
     # (= keep with p = probability_ratio). Keep all the tokens until the first rejection
+    # `r_i` is in [0, 1): a strict `<` accepts with probability exactly `probability_ratio`, so a token the model
+    # assigns zero probability is never accepted (`<=` would accept it when `r_i` is exactly 0)
     r_i = torch.rand_like(probability_ratio)
-    is_accepted = r_i <= probability_ratio
+    is_accepted = r_i < probability_ratio
     n_matches = ((~is_accepted).cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
 
     # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
