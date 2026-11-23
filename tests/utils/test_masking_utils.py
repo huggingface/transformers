@@ -38,6 +38,7 @@ if is_torch_available():
         create_recurrent_attention_mask,
         create_sliding_window_causal_mask,
         find_packed_sequence_indices,
+        get_layer_mask_keys,
     )
 
 
@@ -587,6 +588,28 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         # `None` (no padding) is deferred too.
         self.assertIsNone(create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, cache=None))
+
+    def test_create_masks_for_generate_per_layer_sliding_windows(self):
+        config = LlamaConfig(
+            num_hidden_layers=3,
+            layer_types=["full_attention", "sliding_attention", "sliding_attention"],
+            sliding_window=2,
+            per_layer_config={1: {"sliding_window": 4}},
+            attn_implementation="eager",
+        )
+        self.assertEqual(get_layer_mask_keys(config), ["full_attention", "sliding_attention_4", "sliding_attention_2"])
+
+        inputs_embeds = torch.zeros((1, 6, 1), device=torch_device)
+        masks = create_masks_for_generate(config, inputs_embeds=inputs_embeds, attention_mask=None, cache=None)
+        # Last query position: each sliding layer sees as many tokens as its own window
+        self.assertEqual((masks["sliding_attention_4"][0, 0, -1] == 0).tolist(), [False] * 2 + [True] * 4)
+        self.assertEqual((masks["sliding_attention_2"][0, 0, -1] == 0).tolist(), [False] * 4 + [True] * 2)
+
+        # Homogeneous configs keep plain layer-type keys
+        config = LlamaConfig(
+            num_hidden_layers=2, layer_types=["full_attention", "sliding_attention"], sliding_window=2
+        )
+        self.assertEqual(get_layer_mask_keys(config), ["full_attention", "sliding_attention"])
 
     def test_causal_mask_default_layer_skips_linear_layers(self):
         """A linear layer is not sliding either, so the default must not pick it over the full-attention layer."""

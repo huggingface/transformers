@@ -1540,6 +1540,20 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
 }
 
 
+def get_layer_mask_keys(config: PreTrainedConfig) -> list[str]:
+    """
+    Return the key of each layer's mask in the mapping built by `create_masks_for_generate`. This is the layer type,
+    except for sliding layers when `sliding_window` varies across layers (see `per_layer_config`): they get one key
+    per window size, e.g. `"sliding_attention_128"`.
+    """
+    if "sliding_window" not in (config.per_layer_attributes or ()):
+        return list(config.layer_types)
+    return [
+        f"{layer_type}_{layer_config.sliding_window}" if layer_type == "sliding_attention" else layer_type
+        for layer_type, layer_config in zip(config.layer_types, config.per_layer_config)
+    ]
+
+
 @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
 def create_masks_for_generate(
     config: PreTrainedConfig,
@@ -1594,14 +1608,17 @@ def create_masks_for_generate(
         "block_sequence_ids": block_sequence_ids,
     }
 
-    # If the attribute exists, we need several masks keyed by layer type.
+    # If the attribute exists, we need several masks keyed by layer type (see `get_layer_mask_keys`).
     if hasattr(effective_config, "layer_types"):
         layer_patterns = set(effective_config.layer_types)
         # Without a registered attention-mask function, defer to the model by returning the raw attention mask
         if any(layer_type not in LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING for layer_type in layer_patterns):
             return attention_mask
         causal_masks = {}
-        for layer_pattern in layer_patterns:
+        mask_keys = get_layer_mask_keys(effective_config)
+        for layer_idx, (layer_pattern, mask_key) in enumerate(zip(effective_config.layer_types, mask_keys)):
+            if mask_key in causal_masks:
+                continue
             mask_function = LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING[layer_pattern]
             # Some layer_pattern may point to several needed mask, e.g. `hybrid`
             if isinstance(mask_function, dict):
@@ -1609,8 +1626,12 @@ def create_masks_for_generate(
                     # It may already be present depending on the layer_types configuration
                     if actual_pattern not in causal_masks:
                         causal_masks[actual_pattern] = actual_function(**mask_kwargs)
+            elif mask_key != layer_pattern:
+                # The layer has its own `sliding_window`
+                layer_kwargs = {"config": effective_config.per_layer_config[layer_idx], "layer_idx": layer_idx}
+                causal_masks[mask_key] = mask_function(**(mask_kwargs | layer_kwargs))
             else:
-                causal_masks[layer_pattern] = mask_function(**mask_kwargs)
+                causal_masks[mask_key] = mask_function(**mask_kwargs)
         return causal_masks
     # In this case, all layers are sliding
     elif getattr(effective_config, "sliding_window", None) is not None:

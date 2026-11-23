@@ -16,7 +16,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_masks_for_generate, get_layer_mask_keys
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
@@ -177,6 +177,10 @@ class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
 
 
 class Dots1Model(Qwen3Model):
+    def __init__(self, config: Dots1Config):
+        super().__init__(config)
+        self.mask_keys = get_layer_mask_keys(config)
+
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -203,20 +207,13 @@ class Dots1Model(Qwen3Model):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache": cache,
-                "position_ids": position_ids,
-            }
-            mask_creation_functions = {
-                "full_attention": lambda: create_causal_mask(**mask_kwargs),
-                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
-            }
-            causal_mask_mapping = {}
-            for layer_type in set(self.config.layer_types):
-                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
+            causal_mask_mapping = create_masks_for_generate(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+                position_ids=position_ids,
+            )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -224,7 +221,7 @@ class Dots1Model(Qwen3Model):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                attention_mask=causal_mask_mapping[self.mask_keys[i]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 cache=cache,

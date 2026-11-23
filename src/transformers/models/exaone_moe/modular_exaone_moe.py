@@ -23,7 +23,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
@@ -34,10 +33,10 @@ from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
     Exaone4PreTrainedModel,
 )
+from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts, Glm5NextTextMLP
 from ..olmoe.modeling_olmoe import (
     OlmoeDecoderLayer,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
@@ -62,6 +61,9 @@ class ExaoneMoeConfig(Exaone4Config):
                                                     \--k dense layers--/
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
+    swiglu_limit (`float`, *optional*):
+        Bound that the SwiGLU gate (from above) and up projections (from both sides) are clamped to before the
+        activation. `None` means no clamping. Like `sliding_window`, it can be set per layer with `per_layer_config`.
 
     Example:
 
@@ -115,7 +117,7 @@ class ExaoneMoeConfig(Exaone4Config):
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
-    sliding_window: int = 4096
+    sliding_window: int | None = 4096
     sliding_window_pattern: str | int | None = 4
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
@@ -129,12 +131,37 @@ class ExaoneMoeConfig(Exaone4Config):
     routed_scaling_factor: float = 2.5
     n_group: int = 1
     topk_group: int = 1
+    swiglu_limit: float | None = None
 
     def __post_init__(self, **kwargs):
         if self.mlp_layer_types is None:
             self.mlp_layer_types = [
                 "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
             ]
+
+        # K-EXAONE 2.0 Hub configs store per-layer values as lists (`0` meaning none), which become `per_layer_config`
+        sliding_windows = kwargs.pop("sliding_windows", None)
+        swiglu_limits = kwargs.pop("swiglu_limits", None)
+        for name, values in (("sliding_windows", sliding_windows), ("swiglu_limits", swiglu_limits)):
+            if values is not None and len(values) != self.num_hidden_layers:
+                raise ValueError(
+                    f"`{name}` must have one entry per layer ({self.num_hidden_layers}), but got {len(values)}."
+                )
+
+        per_layer_config = {}
+        if sliding_windows is not None:
+            windows = [window for window in sliding_windows if window]
+            if windows:
+                self.sliding_window = max(set(windows), key=windows.count)
+            for layer_idx, window in enumerate(sliding_windows):
+                if window and window != self.sliding_window:
+                    per_layer_config.setdefault(layer_idx, {})["sliding_window"] = window
+        if swiglu_limits is not None:
+            for layer_idx, limit in enumerate(swiglu_limits):
+                if limit:
+                    per_layer_config.setdefault(layer_idx, {})["swiglu_limit"] = limit
+        if per_layer_config:
+            kwargs.setdefault("per_layer_config", per_layer_config)
 
         super().__post_init__(**kwargs)
 
@@ -143,8 +170,10 @@ class ExaoneMoeAttention(Exaone4Attention):
     pass
 
 
-class ExaoneMoeMLP(Qwen2MoeMLP):
-    pass
+class ExaoneMoeMLP(Glm5NextTextMLP):
+    def __init__(self, config, intermediate_size=None):
+        super().__init__(config, intermediate_size)
+        self.swiglu_limit = config.swiglu_limit or float("inf")
 
 
 class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
@@ -153,10 +182,11 @@ class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
         self.num_experts = config.num_experts
 
 
-class ExaoneMoeExperts(DeepseekV3Experts):
+class ExaoneMoeExperts(Glm5NextTextExperts):
     def __init__(self, config):
-        super().__init__(self, config)
+        super().__init__(config)
         self.num_experts = config.num_experts
+        self.swiglu_limit = config.swiglu_limit or float("inf")
 
 
 class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
@@ -170,6 +200,8 @@ class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
 
 class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):
     def __init__(self, config: ExaoneMoeConfig, layer_idx: int):
+        # K-EXAONE 2.0 sets `sliding_window` and `swiglu_limit` per layer
+        config = config.per_layer_config[layer_idx]
         super().__init__(config, layer_idx)
         self.mlp = (
             ExaoneMoeSparseMoEBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
