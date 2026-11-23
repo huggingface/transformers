@@ -238,6 +238,7 @@ if TYPE_CHECKING:
     from .hy_v4 import *
     from .hy_v4_vl import *
     from .hyperclovax import *
+    from .hyperclovax_vision import *
     from .hyperclovax_vision_v2 import *
     from .ibert import *
     from .idefics import *
