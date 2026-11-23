@@ -43,7 +43,13 @@ from ..glm4v.modeling_glm4v import (
 
 
 class GlmOcrRMSNorm(Glm4vRMSNorm):
-    pass
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return nn.functional.rms_norm(
+            hidden_states,
+            self.weight.shape,
+            weight=self.weight,
+            eps=self.variance_epsilon,
+        )
 
 
 class GlmOcrVisionMlp(Glm4VisionMlp):
