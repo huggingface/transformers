@@ -158,10 +158,10 @@ class DeepseekVLV2IntegrationTest(unittest.TestCase):
 
     def test_tiny_matches_the_original_implementation(self):
         text = self.generate(self.prompt, [load_image(self.image_url)])
-        # ("cpu", None) matches the greedy output of the original deepseek-ai/DeepSeek-VL2 code on the same inputs (bf16).
+        # Matches the greedy output of the original deepseek-ai/DeepSeek-VL2 code (bf16, CPU); identical on an sm86 GPU.
         expected = Expectations(
             {
-                ("cpu", None): ['A small dog is sleeping peacefully on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above'],
+                (None, None): ['A small dog is sleeping peacefully on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above'],
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(text, expected)
@@ -173,7 +173,7 @@ class DeepseekVLV2IntegrationTest(unittest.TestCase):
         )
         expected = Expectations(
             {
-                ("cpu", None): [
+                (None, None): [
                     'A small dog is sleeping peacefully on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above',
                     "Two cats are sleeping on a pink couch next to remote controls.",
                 ],
@@ -185,7 +185,7 @@ class DeepseekVLV2IntegrationTest(unittest.TestCase):
         text = self.generate(self.prompt, [load_image(self.image_url)], crop_to_patches=False)
         expected = Expectations(
             {
-                ("cpu", None): ['A small dog is lying down on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above'],
+                (None, None): ['A small dog is lying down on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above'],
             }
         ).get_expectation()  # fmt: skip
         self.assertEqual(text, expected)
