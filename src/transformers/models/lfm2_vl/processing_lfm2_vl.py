@@ -286,22 +286,34 @@ class Lfm2VlProcessor(ProcessorMixin):
         vision_data = {}
         if image_sizes is not None:
             images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            use_thumbnail = images_kwargs.get("use_thumbnail", self.image_processor.use_thumbnail)
+            image_processor = self.image_processor
+            layout_kwargs = {
+                name: images_kwargs.get(name, getattr(image_processor, name))
+                for name in (
+                    "downsample_factor",
+                    "min_tiles",
+                    "max_tiles",
+                    "min_image_tokens",
+                    "max_image_tokens",
+                    "encoder_patch_size",
+                    "tile_size",
+                    "max_pixels_tolerance",
+                )
+            }
+            if not images_kwargs.get("do_image_splitting", image_processor.do_image_splitting):
+                layout_kwargs["min_tiles"] = layout_kwargs["max_tiles"] = 1
+            use_thumbnail = images_kwargs.get("use_thumbnail", image_processor.use_thumbnail)
 
-            num_image_tokens = []
+            num_image_tokens, num_image_patches = [], []
             for image_size in image_sizes:
-                rows, cols, *resized_size = self.image_processor.get_image_layout(*image_size, images_kwargs)
+                _, rows, cols, *resized_size = image_processor._get_split_layout(*image_size, **layout_kwargs)
                 tokens_per_tile, tokens_for_image = self._get_image_num_tokens(resized_size, **images_kwargs)
                 if rows > 1 or cols > 1:
-                    num_tokens = rows * cols * tokens_per_tile + (tokens_for_image if use_thumbnail else 0)
+                    num_image_tokens.append(rows * cols * tokens_per_tile + (tokens_for_image if use_thumbnail else 0))
+                    num_image_patches.append(rows * cols + int(use_thumbnail))
                 else:
-                    num_tokens = tokens_for_image
-                num_image_tokens.append(num_tokens)
-
-            num_image_patches = [
-                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
-                for image_size in image_sizes
-            ]
+                    num_image_tokens.append(tokens_for_image)
+                    num_image_patches.append(1)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)

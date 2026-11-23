@@ -103,7 +103,8 @@ class DeepseekOcr2Processor(ProcessorMixin):
 
             num_image_tokens = []
             for image_size in image_sizes:
-                # Only the global view goes in `pixel_values`, the crops go in `pixel_values_local`
+                # `get_number_of_image_patches` also counts the global view, but `_get_num_image_tokens` takes the
+                # number of local crops only
                 num_crops = self.image_processor.get_number_of_image_patches(*image_size, images_kwargs) - 1
                 num_image_tokens.append(self._get_num_image_tokens(num_crops, **images_kwargs))
             num_image_patches = [1] * len(image_sizes)

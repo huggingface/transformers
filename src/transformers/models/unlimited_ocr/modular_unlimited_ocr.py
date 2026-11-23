@@ -210,21 +210,6 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
             skip_tensor_conversion=self.skip_tensor_conversion,
         )
 
-    def get_patches_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int] | None:
-        """
-        Returns the `(num_columns, num_rows)` grid of local patches for a given image size, or `None` if the
-        image is not cropped into local patches.
-        """
-        images_kwargs = images_kwargs or {}
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
-        tile_size = images_kwargs.get("tile_size", self.tile_size)
-        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
-
-        if crop_to_patches and max(height, width) > tile_size:
-            return get_optimal_tiled_canvas((height, width), (tile_size, tile_size), min_patches, max_patches)
-        return None
-
 
 class UnlimitedOcrProcessor(DeepseekOcr2Processor):
     images_kwargs = AttributeError()
@@ -287,12 +272,21 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
         vision_data = {}
         if image_sizes is not None:
             images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            num_image_tokens = [
-                self._get_num_image_tokens(
-                    self.image_processor.get_patches_grid(*image_size, images_kwargs), **images_kwargs
-                )
-                for image_size in image_sizes
-            ]
+            image_processor = self.image_processor
+            min_patches = images_kwargs.get("min_patches", image_processor.min_patches)
+            max_patches = images_kwargs.get("max_patches", image_processor.max_patches)
+            tile_size = images_kwargs.get("tile_size", image_processor.tile_size)
+            crop_to_patches = images_kwargs.get("crop_to_patches", image_processor.crop_to_patches)
+
+            num_image_tokens = []
+            for height, width in image_sizes:
+                # Images larger than a tile are also cropped into a grid of local patches
+                patches_grid = None
+                if crop_to_patches and max(height, width) > tile_size:
+                    patches_grid = get_optimal_tiled_canvas(
+                        (height, width), (tile_size, tile_size), min_patches, max_patches
+                    )
+                num_image_tokens.append(self._get_num_image_tokens(patches_grid, **images_kwargs))
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
