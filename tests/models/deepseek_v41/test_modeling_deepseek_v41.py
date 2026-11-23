@@ -13,7 +13,6 @@
 # limitations under the License.
 import copy
 import unittest
-import unittest.mock
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
@@ -32,8 +31,8 @@ if is_torch_available():
         select_candidate_blocks,
     )
 
-from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import floats_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 INPUTS_EMBEDS_SKIP_REASON = (
@@ -42,100 +41,99 @@ INPUTS_EMBEDS_SKIP_REASON = (
 )
 
 
-class DeepseekV41ModelTester(CausalLMModelTester):
+class DeepseekV41ModelTester(VLMModelTester):
     if is_torch_available():
         base_model_class = DeepseekV41Model
         config_class = DeepseekV41Config
-        causal_lm_class = DeepseekV41ForCausalLM
+        conditional_generation_class = DeepseekV41ForCausalLM
 
     small_config_overrides = {
         "batch_size": 3,
         "seq_length": 11,
+        "vocab_size": 100,
+        # Ids 0 to 3 are the pad, BOS, EOS and DSpark noise tokens
+        "image_token_id": 4,
         "hidden_size": 64,
         "num_hidden_layers": 5,
         "num_attention_heads": 4,
-        "text_config": {
-            "moe_intermediate_size": 32,
-            "head_dim": 32,
-            # RoPE on 8 of the 32 head dims
-            "partial_rotary_factor": 0.25,
-            "q_lora_rank": 32,
-            "o_groups": 2,
-            "o_lora_rank": 16,
-            "n_routed_experts": 4,
-            "num_experts_per_tok": 2,
-            "max_position_embeddings": 64,
-            "sliding_window": 4,
-            # One layer of each kind: sliding only, compressing (2-to-1), sharing that KV, compressing again (1-to-1),
-            # then sharing the KV but indexing it on its own inside the candidate blocks of the layer before
-            "compress_ratios": [0, 2, 2, 1, 1],
-            "kv_source_layer_ids": [1, 3],
-            "index_source_layer_ids": [1, 3, 4],
-            "candidate_source_layer_id": 3,
-            "candidate_topk_blocks": 2,
-            "candidate_block_size": 2,
-            # Enough heads that two entries never get the exact same index score. With a couple of heads, the ReLU
-            # leaves many scores at exactly 0, and how top-k breaks those ties depends on the shape of its input.
-            "index_n_heads": 16,
-            "index_head_dim": 16,
-            "index_topk": 3,
-            "hc_mult": 2,
-            "hc_sinkhorn_iters": 3,
-            "engram_layer_ids": [0, 2],
-            "engram_max_ngram_size": 3,
-            "engram_vocab_size": 50,
-            "engram_n_heads": 2,
-            "engram_head_dim": 8,
-            "engram_pad_token_id": 2,
-            "engram_num_embeddings": None,
-            "num_nextn_predict_layers": 0,
-            "dspark_noise_token_id": 3,
-            "rms_norm_eps": 1e-6,
-        },
-        "vision_config": {
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 48,
-            "patch_size": 2,
-            "downsample_ratio": 3,
-        },
+        # All the attention heads share a single KV head
+        "num_key_value_heads": 1,
+        "hidden_act": "silu",
+        "moe_intermediate_size": 32,
+        "head_dim": 32,
+        # RoPE on 8 of the 32 head dims
+        "partial_rotary_factor": 0.25,
+        "q_lora_rank": 32,
+        "o_groups": 2,
+        "o_lora_rank": 16,
+        "n_routed_experts": 4,
+        "num_experts_per_tok": 2,
+        "max_position_embeddings": 64,
+        "sliding_window": 4,
+        # One layer of each kind: sliding only, compressing (2-to-1), sharing that KV, compressing again (1-to-1),
+        # then sharing the KV but indexing it on its own inside the candidate blocks of the layer before
+        "compress_ratios": [0, 2, 2, 1, 1],
+        "kv_source_layer_ids": [1, 3],
+        "index_source_layer_ids": [1, 3, 4],
+        "candidate_source_layer_id": 3,
+        "candidate_topk_blocks": 2,
+        "candidate_block_size": 2,
+        # Enough heads that two entries never get the exact same index score. With a couple of heads, the ReLU
+        # leaves many scores at exactly 0, and how top-k breaks those ties depends on the shape of its input.
+        "index_n_heads": 16,
+        "index_head_dim": 16,
+        "index_topk": 3,
+        "hc_mult": 2,
+        "hc_sinkhorn_iters": 3,
+        "engram_layer_ids": [0, 2],
+        "engram_max_ngram_size": 3,
+        "engram_vocab_size": 50,
+        "engram_n_heads": 2,
+        "engram_head_dim": 8,
+        "engram_pad_token_id": 2,
+        "engram_num_embeddings": None,
+        "num_nextn_predict_layers": 0,
+        "dspark_noise_token_id": 3,
+        "rms_norm_eps": 1e-6,
+        # The vision tower. The fields that it shares with the language model take a `vision_` prefix.
+        "vision_hidden_size": 32,
+        "vision_num_hidden_layers": 2,
+        "vision_intermediate_size": 48,
+        "patch_size": 2,
+        "downsample_ratio": 3,
+        # Every prompt starts with one image of 3 x 6 patches. They are merged 3 x 3 into 1 x 2 tokens, so with
+        # the newline of the row and the two delimiters, the image takes 1 + 1 * (2 + 1) + 1 positions.
+        "grid_height": 3,
+        "grid_width": 6,
+        "num_image_tokens": 5,
     }
 
     @classmethod
     def get_small_config_defaults(cls, **kwargs):
         values = super().get_small_config_defaults(**kwargs)
-        # The inputs are text only, so the image token must not show up in the random ids
-        values["image_token_id"] = values["vocab_size"]
-        # The text config takes its sizes and special tokens from the tester, so that the common tests can
-        # read them there. Its vocab has one more id than the tester's, for the image token.
-        values["text_config"] = {
-            **values["text_config"],
-            "vocab_size": values["vocab_size"] + 1,
-            "hidden_size": values["hidden_size"],
-            "num_hidden_layers": values["num_hidden_layers"],
-            "num_attention_heads": values["num_attention_heads"],
-            # As large as the vocab, so that no tokens are merged and the model works without a tokenizer
-            "engram_compressed_vocab_size": values["vocab_size"] + 1,
-            "pad_token_id": values["pad_token_id"],
-            "bos_token_id": values["bos_token_id"],
-            "eos_token_id": values["eos_token_id"],
-        }
+        # As large as the vocab, so that no tokens are merged and the model works without a tokenizer
+        values["engram_compressed_vocab_size"] = values["vocab_size"]
         return values
 
-    def get_config(self):
-        return DeepseekV41Config(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_id=self.image_token_id,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-        )
+    def create_pixel_values(self, batch_size: int | None = None):
+        # `pixel_values` has a row per patch rather than per image, with the images one after the other
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        num_patches = batch_size * self.grid_height * self.grid_width
+        return floats_tensor([num_patches, self.num_channels * self.patch_size**2])
+
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        grid = [1, self.grid_height, self.grid_width]
+        return {"image_grid_thw": torch.tensor([grid] * batch_size, device=torch_device)}
+
+    def prepare_text_ids(self, batch_size, seq_length):
+        # Starts after the special tokens and the image token, so that none of them turn up in the text
+        low = max(self._special_token_ids) + 1
+        return torch.randint(low, self.vocab_size, (batch_size, seq_length), device=torch_device)
 
 
 @require_torch
-class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
+class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = DeepseekV41ModelTester
 
     # The indexer parameters only influence which compressed entries are selected, which is not differentiable
@@ -143,23 +141,12 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     # The Engram token map and n-gram tables are fixed to the vocabulary, so `resize_token_embeddings` raises
     test_resize_embeddings = False
 
-    def setUp(self):
-        super().setUp()
-        # The config is a composite, so the text fields like `vocab_size` are on its `text_config`
-        self.config_tester = ConfigTester(
-            self, config_class=DeepseekV41Config, has_text_modality=False, common_properties=["image_token_id"]
-        )
-
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
 
-    def _image_features_prepare_config_and_inputs(self):
-        # The common inputs are text only, so we make the image inputs here: two images with different grids
-        config = self.model_tester.get_config()
-        image_grid_thw = torch.tensor([[1, 5, 7], [1, 3, 6]], device=torch_device)
-        num_patches = int(image_grid_thw.prod(-1).sum())
-        pixel_values = torch.randn(num_patches, 3 * config.vision_config.patch_size**2, device=torch_device)
-        return config, {"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        # The common version reads `num_hidden_layers` from the tester, which is the depth of the language model
+        return self.model_tester.vision_num_hidden_layers
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
@@ -251,6 +238,15 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         # the model with a head. The base model on its own is saved without that prefix.
         super().test_reverse_loading_mapping(skip_base_model=True)
 
+    @unittest.skip(
+        reason=(
+            "The attention of the language model has sinks and reads selected compressed KV, so it is eager only, "
+            "and the top-level model cannot switch to SDPA."
+        )
+    )
+    def test_can_set_attention_dynamically_composite_model(self):
+        pass
+
     @unittest.skip(reason=INPUTS_EMBEDS_SKIP_REASON)
     def test_inputs_embeds(self):
         pass
@@ -268,22 +264,6 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_from_random_inputs_embeds(self):
         pass
 
-    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
-        # The common check watches the first checkpointing layer of the model, which is a vision layer. The
-        # common inputs are text only, so we put an image at the start of the first row to make that layer run.
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # 4 x 5 patches are merged 3 x 3 into 2 x 2 tokens, so the image takes 1 + 2 * (2 + 1) + 1 positions
-        height, width, num_image_tokens = 4, 5, 8
-        inputs_dict["input_ids"][0, :num_image_tokens] = config.image_token_id
-        inputs_dict["pixel_values"] = torch.randn(
-            height * width, 3 * config.vision_config.patch_size**2, device=torch_device
-        )
-        inputs_dict["image_grid_thw"] = torch.tensor([[1, height, width]], device=torch_device)
-        with unittest.mock.patch.object(
-            self.model_tester, "prepare_config_and_inputs_for_common", return_value=(config, inputs_dict)
-        ):
-            super().check_training_gradient_checkpointing(gradient_checkpointing_kwargs)
-
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         # Reentrant checkpointing only tracks the gradient of positional tensor arguments, so the compressed KV
         # that the layers share would silently lose theirs. The model refuses it instead.
@@ -299,7 +279,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         """
         config, model = self._get_model()
         model.train()
-        input_ids = torch.randint(0, self.model_tester.vocab_size, (2, 23), device=torch_device)
+        input_ids = self.model_tester.prepare_text_ids(2, 23)
         model(input_ids, labels=input_ids).loss.backward()
         expected = {name: param.grad.clone() for name, param in model.named_parameters() if param.grad is not None}
         self.assertTrue(any(".compressor." in name for name in expected))
@@ -324,7 +304,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_cached_decoding_matches_full_forward(self):
         """Decoding one token at a time with a cache gives the logits of a single forward over the whole sequence."""
         config, model = self._get_model()
-        input_ids = torch.randint(0, self.model_tester.vocab_size, (2, 19), device=torch_device)
+        input_ids = self.model_tester.prepare_text_ids(2, 19)
         with torch.no_grad():
             expected = model(input_ids=input_ids, use_cache=False).logits
             outputs = model(input_ids=input_ids[:, :7], use_cache=True)
@@ -337,7 +317,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_chunked_prefill_matches_full_forward(self):
         """The cache carries a pooling group that is still filling up across calls of any length."""
         config, model = self._get_model()
-        input_ids = torch.randint(0, self.model_tester.vocab_size, (2, 19), device=torch_device)
+        input_ids = self.model_tester.prepare_text_ids(2, 19)
         with torch.no_grad():
             expected = model(input_ids=input_ids, use_cache=False).logits
             outputs = model(input_ids=input_ids[:, :5], use_cache=True)
@@ -350,7 +330,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_compressed_attention_is_used(self):
         """Tokens outside the sliding window still reach the output, through the compressed KV."""
         config, model = self._get_model()
-        input_ids = torch.randint(0, self.model_tester.vocab_size, (1, 19), device=torch_device)
+        input_ids = self.model_tester.prepare_text_ids(1, 19)
         changed = input_ids.clone()
         # Far outside the window of the last position (4 tokens), and too old for the 2-token Engram look-back
         changed[0, 2] = (changed[0, 2] + 1) % self.model_tester.vocab_size
@@ -390,13 +370,17 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
                 "kv_shared_indexed_attention",
             ],
         )
-        text_config = self.model_tester.text_config
+        text_config = config.to_dict()
+        # The layer types are derived from the fields that we change below, so they have to be derived again
+        del text_config["attention_layer_types"]
         # A layer cannot read compressed KV that no layer before it has made
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "kv_source_layer_ids"):
-            DeepseekV41TextConfig(**{**text_config, "kv_source_layer_ids": [3], "index_source_layer_ids": [3, 4]})
+            DeepseekV41TextConfig.from_dict(
+                {**text_config, "kv_source_layer_ids": [3], "index_source_layer_ids": [3, 4]}
+            )
         # ... and the index keys are made from the compressed KV, so a KV source must index too
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "index_source_layer_ids"):
-            DeepseekV41TextConfig(**{**text_config, "index_source_layer_ids": [3, 4]})
+            DeepseekV41TextConfig.from_dict({**text_config, "index_source_layer_ids": [3, 4]})
 
     def test_engram_hash_ids(self):
         """The n-gram hash ids match the ones of the reference implementation, with and without a masked token."""
@@ -428,10 +412,10 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_engram_token_map_must_be_set(self):
         """With merged tokens, the map comes from the tokenizer, and the model says so instead of guessing."""
-        text_config = {**self.model_tester.text_config, "engram_compressed_vocab_size": 60}
-        config = DeepseekV41Config(text_config=text_config, vision_config=self.model_tester.vision_config)
+        config = self.model_tester.get_config()
+        config.text_config.engram_compressed_vocab_size = 60
         model = DeepseekV41ForCausalLM(config).to(torch_device).eval()
-        input_ids = torch.randint(0, self.model_tester.vocab_size, (1, 6), device=torch_device)
+        input_ids = self.model_tester.prepare_text_ids(1, 6)
         with self.assertRaisesRegex(ValueError, "set_engram_token_map"):
             model(input_ids=input_ids)
 
@@ -467,7 +451,7 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         height, width, num_image_tokens = 5, 7, 10
         pixel_values = torch.randn(height * width, 3 * config.vision_config.patch_size**2, device=torch_device)
         image_grid_thw = torch.tensor([[1, height, width]], device=torch_device)
-        text = torch.randint(0, self.model_tester.vocab_size, (1, 12), device=torch_device)
+        text = self.model_tester.prepare_text_ids(1, 12)
         image = torch.full((1, num_image_tokens), config.image_token_id, device=torch_device)
         input_ids = torch.cat([text[:, :4], image, text[:, 4:]], dim=1)
         with torch.no_grad():
@@ -494,6 +478,29 @@ class DeepseekV41ModelTest(CausalLMModelTest, unittest.TestCase):
         video_grid_thw = torch.tensor([[2, height, width]], device=torch_device)
         with self.assertRaisesRegex(ValueError, "temporal size"):
             model(input_ids=input_ids, pixel_values=pixel_values.repeat(2, 1), image_grid_thw=video_grid_thw)
+
+    def test_beam_search_keeps_each_image_whole(self):
+        """
+        `generate` repeats its inputs once per beam. `pixel_values` has a row per patch, so repeating its rows
+        would hand every beam the patches of a scrambled image. The common beam tests only check output shapes.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DeepseekV41ForCausalLM(config).to(torch_device).eval()
+        batch_size, num_beams = inputs_dict["input_ids"].shape[0], 2
+        with torch.no_grad():
+            expected = model(**inputs_dict).logits[:, -1]
+            outputs = model.generate(
+                **inputs_dict,
+                num_beams=num_beams,
+                max_new_tokens=2,
+                do_sample=False,
+                output_logits=True,
+                return_dict_in_generate=True,
+            )
+        # On the first step the beams of a prompt are still copies of it, so each one gets the logits of the prompt
+        first_step_logits = outputs.logits[0].view(batch_size, num_beams, -1)
+        for beam in range(num_beams):
+            torch.testing.assert_close(first_step_logits[:, beam], expected, atol=1e-4, rtol=1e-4)
 
     def test_image_features_of_several_images(self):
         """Images are encoded independently, whether or not they come in together."""

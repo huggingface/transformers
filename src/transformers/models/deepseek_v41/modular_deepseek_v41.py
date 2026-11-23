@@ -34,8 +34,9 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -1746,8 +1747,9 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
         cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> MultimodalMoeBaseModelOutputWithPast:
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`, *optional*):
             The flattened patches of all the images in the batch, one image after the other.
@@ -1759,24 +1761,36 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        # The images come in either as `pixel_values`, which we encode here, or already encoded. `generate` does
+        # the latter: it encodes them once before the first step, so that it can repeat whole images for beam
+        # search. Repeating the rows of `pixel_values` would repeat patches instead.
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if pixel_values is not None:
+            if mm_encoder_outputs.get("image") is not None:
+                raise ValueError(
+                    "Got both `pixel_values` and images that are already encoded in `mm_encoder_outputs`. "
+                    "Pass only one of the two."
+                )
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+
         # Every position of an image carries `image_token_id`, the delimiters included
         image_mask = input_ids == self.config.image_token_id if input_ids is not None else None
-        if pixel_values is not None:
+        if mm_encoder_outputs.get("image") is not None:
             if image_mask is None:
                 raise ValueError("`input_ids` are needed to find where the images go in the prompt.")
-            image_features = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
-            image_features = torch.cat(image_features).to(inputs_embeds.device, inputs_embeds.dtype)
+            features_per_image = mm_encoder_outputs["image"].pooler_output
+            image_features = torch.cat(features_per_image).to(inputs_embeds.device, inputs_embeds.dtype)
             num_image_tokens = image_mask.sum()
             torch_compilable_check(
                 num_image_tokens == image_features.shape[0],
                 lambda: (
                     f"The prompt has {int(num_image_tokens)} image tokens, but the images take up "
-                    f"{image_features.shape[0]} tokens (`image_grid_thw`: {image_grid_thw})."
+                    f"{image_features.shape[0]} tokens (per image: {[len(features) for features in features_per_image]})."
                 ),
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask.unsqueeze(-1), image_features)
 
-        return self.language_model(
+        outputs = self.language_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1786,6 +1800,7 @@ class DeepseekV41Model(DeepseekV41PreTrainedModel):
             image_mask=image_mask,
             **kwargs,
         )
+        return MultimodalMoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring(
@@ -1825,8 +1840,9 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
+    ) -> MultimodalMoeCausalLMOutputWithPast:
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`, *optional*):
             The flattened patches of all the images in the batch, one image after the other.
@@ -1837,7 +1853,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        outputs: MoeModelOutputWithPast = self.model(
+        outputs: MultimodalMoeBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
@@ -1846,6 +1862,7 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
             cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
@@ -1857,39 +1874,15 @@ class DeepseekV41ForCausalLM(DeepseekV41PreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits, labels, self.config.text_config.vocab_size, **kwargs)
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
+            image_outputs=outputs.image_outputs,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        cache=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        image_grid_thw=None,
-        attention_mask=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            cache=cache,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-        # The images are merged into the prompt on the first step, and after that they are in the cache
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_grid_thw"] = image_grid_thw
-        return model_inputs
 
 
 def get_resized_image_size(
