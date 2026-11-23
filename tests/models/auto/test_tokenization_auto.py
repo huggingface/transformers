@@ -120,6 +120,20 @@ class AutoTokenizerTest(unittest.TestCase):
         self.assertEqual(tokenizer.decode(tokenizer.encode(text, add_special_tokens=False)), text)
 
     @slow
+    @require_tokenizers
+    @parameterized.expand(
+        [
+            # " ½" must not merge into one pre-token: `tokenizer.json` splits digits off with a `Digits` pre-tokenizer
+            ("HuggingFaceTB/SmolLM2-135M", [7684, 216, 16738, 7118]),
+            ("bigcode/starcoder2-3b", [1121, 244, 162, 159, 24784]),
+        ]
+    )
+    def test_gpt2_tokenizer_class_with_digits_pre_tokenizer_uses_tokenizers_backend(self, repo_id, expected_ids):
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        self.assertIs(type(tokenizer), TokenizersBackend)
+        self.assertEqual(tokenizer.encode("Add ½ cup", add_special_tokens=False), expected_ids)
+
+    @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
