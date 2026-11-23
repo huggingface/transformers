@@ -18,6 +18,10 @@ rendered properly in your Markdown viewer.
 
 NVFP4 is NVIDIA's 4-bit floating-point format. Each block of 16 weights shares an FP8 scale, and each tensor has an FP32 scale on top. Transformers quantizes the weights while the model loads and quantizes activations on the fly, so prefill runs as a W4A4 matmul on Blackwell tensor cores and decode runs as a W4A16 matmul. Use it to run 4-bit models on a Blackwell GPU.
 
+> [!WARNING]
+> NVFP4 support is limited: Blackwell GPUs only, no tensor parallelism, no CPU or disk offload, no saving or training,
+> and MoE experts only from pre-quantized checkpoints. See [Limitations](#limitations).
+
 The table below summarizes what NVFP4 supports in Transformers.
 
 | | |
@@ -54,15 +58,39 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-NVFP4 replaces each `torch.nn.Linear` layer that has no bias and whose `in_features` and `out_features` are both divisible by 16. Other linear layers keep their original precision. [`NVFP4Config`] has no parameters that change how the weights are quantized.
+NVFP4 replaces each `torch.nn.Linear` layer that has no bias and whose `in_features` and `out_features` are both divisible by 16. Other linear layers keep their original precision. Pass `dequantize=True` to [`NVFP4Config`] to load a checkpoint in full precision instead.
+
+## Pre-quantized checkpoints
+
+Pre-quantized NVFP4 checkpoints store each linear as `weight` (e2m1 pairs), `weight_scale` (fp8 scales per 16
+values), `weight_scale_2` (a per-tensor scale) and `input_scale`, MoE experts included. This is the layout NVIDIA's
+[ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) exports, e.g.
+[nvidia/Qwen3-30B-A3B-NVFP4](https://huggingface.co/nvidia/Qwen3-30B-A3B-NVFP4). Such checkpoints load without a
+`quantization_config`. ModelOpt's config names the format with a `quant_algo`, one for the whole model or, with
+`MIXED_PRECISION`, one per layer (e.g. NVFP4 experts with FP8 attention), which loads as a
+[quantization plan](./overview#quantization-plans).
+
+```py
+model = AutoModelForCausalLM.from_pretrained("nvidia/Qwen3.6-35B-A3B-NVFP4", device_map="cuda")
+```
+
+Pass `NVFP4Config(dequantize=True)` to load such a checkpoint in full precision. Dequantizing is pure PyTorch, so it
+needs neither the kernel nor a Blackwell GPU.
+
+NVFP4 linear modules support `torch.compile`. The first compiled invocation includes graph compilation time, so warm up
+the model before measuring generation throughput.
 
 ## Limitations
 
-- NVFP4 needs a CUDA GPU with compute capability 10.0 or later. Loading without a CUDA GPU or on an older GPU raises a `RuntimeError`.
-- NVFP4 runs on one GPU. A `device_map` that spans several GPUs, or tensor parallelism, raises a `ValueError`.
-- NVFP4 can't offload to the CPU or disk. A `device_map` that includes `"cpu"` or `"disk"`, or no `device_map` at all, raises a `ValueError`.
-- NVFP4 can't load pre-quantized NVFP4 checkpoints. Loading one raises a `ValueError`.
-- NVFP4 models can't be saved or fine-tuned.
+- Quantizing while loading needs a CUDA GPU with compute capability 10.0 or later. Loading without a CUDA GPU or on an
+  older GPU raises a `RuntimeError`.
+- Quantizing while loading runs on one CUDA device. A pre-quantized checkpoint can span several with a `device_map`.
+- Expert parallelism shards NVFP4 experts. Tensor parallelism of NVFP4 layers is rejected, since their scales have no
+  sharding plan yet.
+- CPU and disk offload are not supported.
+- MoE experts are only quantized from pre-quantized checkpoints, not on the fly.
+- Weight-only (`W4A16_NVFP4`) layers dequantize their weights in each forward, without the kernels.
+- NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.
 
 ## Resources
 

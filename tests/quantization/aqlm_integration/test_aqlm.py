@@ -103,7 +103,7 @@ class AqlmTest(unittest.TestCase):
         """
         from aqlm import QuantizedLinear
 
-        from transformers.integrations import replace_with_aqlm_linear
+        from transformers.quantizers.quantizer_aqlm import AqlmHfQuantizer
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
@@ -117,7 +117,7 @@ class AqlmTest(unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 nb_linears += 1
 
-        model = replace_with_aqlm_linear(model, quantization_config=quantization_config)
+        AqlmHfQuantizer(quantization_config).replace_modules(model)
         nb_aqlm_linear = 0
         for module in model.modules():
             if isinstance(module, QuantizedLinear):
@@ -129,9 +129,9 @@ class AqlmTest(unittest.TestCase):
         with torch.device("meta"):
             model = OPTForCausalLM(config)
 
-        model = replace_with_aqlm_linear(
-            model, quantization_config=quantization_config, modules_to_not_convert=["lm_head"]
-        )
+        quantizer = AqlmHfQuantizer(quantization_config)
+        quantizer.modules_to_not_convert = ["lm_head"]
+        quantizer.replace_modules(model)
         nb_aqlm_linear = 0
         for module in model.modules():
             if isinstance(module, QuantizedLinear):

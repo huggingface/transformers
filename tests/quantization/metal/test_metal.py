@@ -32,6 +32,14 @@ if is_torch_available():
     import torch.nn as nn
 
 
+def replace_with_metal_linear(model, quantization_config, pre_quantized, modules_to_not_convert=None):
+    """Swaps the linears for `MetalLinear` through the quantizer, as `from_pretrained` does."""
+    quantizer = MetalHfQuantizer(quantization_config, pre_quantized=pre_quantized)
+    quantizer.modules_to_not_convert = modules_to_not_convert
+    quantizer.replace_modules(model)
+    return model
+
+
 @contextmanager
 def _patch_mps_available(available: bool = True):
     """Patch ``torch.backends.mps.is_available`` to simulate MPS presence/absence."""
@@ -348,7 +356,7 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
         return model
 
     def test_all_linears_replaced(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model = self._make_small_model()
         nb_linears = sum(1 for m in model.modules() if isinstance(m, nn.Linear))
@@ -361,7 +369,7 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
         self.assertEqual(nb_linears, nb_metal)
 
     def test_modules_to_not_convert(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model = self._make_small_model()
         config = MetalConfig(bits=4, group_size=64)
@@ -375,7 +383,7 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
         self.assertEqual(nb_metal, nb_linears - 1)
 
     def test_dequantize_skips_replacement(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model = self._make_small_model()
         config = MetalConfig(bits=4, group_size=64, dequantize=True)
@@ -385,7 +393,7 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
         self.assertEqual(nb_metal, 0, "No modules should be replaced when dequantize=True")
 
     def test_prequantized_dtype_is_uint32(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model = self._make_small_model()
         config = MetalConfig(bits=4, group_size=64)
@@ -397,7 +405,7 @@ class ReplaceWithMetalLinearTest(unittest.TestCase):
                 break
 
     def test_quantize_on_the_fly_dtype_is_not_uint32(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model = self._make_small_model()
         config = MetalConfig(bits=4, group_size=64)
@@ -526,7 +534,7 @@ class MetalModelConversionTest(unittest.TestCase):
         gc.collect()
 
     def test_quantized_model_conversion(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
         config = AutoConfig.from_pretrained(model_id)
@@ -541,7 +549,7 @@ class MetalModelConversionTest(unittest.TestCase):
         self.assertEqual(nb_linears, nb_metal)
 
     def test_quantized_model_conversion_with_exclusion(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
         config = AutoConfig.from_pretrained(model_id)
@@ -559,7 +567,7 @@ class MetalModelConversionTest(unittest.TestCase):
         self.assertEqual(nb_metal + nb_excluded, nb_linears)
 
     def test_param_needs_quantization(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
         config = AutoConfig.from_pretrained(model_id)
@@ -580,7 +588,7 @@ class MetalModelConversionTest(unittest.TestCase):
                 self.assertFalse(quantizer.param_needs_quantization(model, f"{name}.qbiases"))
 
     def test_param_needs_quantization_prequantized_is_false(self):
-        from transformers.integrations.metal_quantization import MetalLinear, replace_with_metal_linear
+        from transformers.integrations.metal_quantization import MetalLinear
 
         model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
         config = AutoConfig.from_pretrained(model_id)

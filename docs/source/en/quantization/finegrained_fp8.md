@@ -61,22 +61,45 @@ These [`FineGrainedFP8Config`] parameters change how the weights and activations
 | Parameter | Default | Effect |
 |---|---|---|
 | `weight_block_size` | `(128, 128)` | Size of the weight block that shares one scale. Set it to `None` for one scale per weight tensor. |
-| `activation_scheme` | `"dynamic"` | `"dynamic"` computes activation scales at runtime. `"static"` uses one stored activation scale per layer, read from a pre-quantized checkpoint. |
+| `activation_scheme` | `"dynamic"` | `"dynamic"` computes activation scales at runtime. `"static"` uses one stored activation scale per layer, read from a pre-quantized checkpoint. `"none"` keeps the activations in their dtype (weight-only FP8). |
 | `scale_fmt` | `"float"` | Storage format of the weight scales. `"float"` stores float32 scales. `"ue8m0"` stores 1-byte power-of-two scales (`torch.float8_e8m0fnu`), as in DeepSeek-V4 checkpoints, and needs PyTorch 2.7 or later. |
-| `expert_dtype` | `"fp8"` | Format of the mixture-of-experts weights. `"fp4"` loads the FP4-packed experts in DeepSeek-V4 checkpoints. |
+| `dequantize` | `False` | Load the checkpoint in full precision instead of keeping it quantized. |
 | `modules_to_convert` | `None` | Embedding tables to load in FP8 from a pre-quantized checkpoint, matched by module name suffix. |
 
-## Load a pre-quantized FP8 checkpoint
+## Activation schemes
 
-Checkpoints quantized with Fine-grained FP8 carry their quantization config, so load them without a [`FineGrainedFP8Config`].
+`activation_scheme` sets how activations are quantized:
+
+| scheme | activations |
+|---|---|
+| `"dynamic"` (default) | quantized per token group at runtime |
+| `"static"` | quantized with a stored per-tensor `activation_scale` |
+| `"none"` | not quantized (weight-only FP8): weights are dequantized to the activations' dtype in forward |
+
+`weight_block_size=None` stores one scale per tensor (per-tensor FP8).
+
+## Pre-quantized checkpoints
+
+FP8 checkpoints load without a `quantization_config`, e.g. [Qwen/Qwen3-30B-A3B-FP8](https://huggingface.co/Qwen/Qwen3-30B-A3B-FP8)
+or [deepseek-ai/DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) (`(128, 128)` blocks).
 
 ```py
 from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-8B-FP8", device_map="cuda")
 ```
+ Checkpoints that
+name their scales differently load too: DeepSeek-V4's `scale`, Mistral Large 4's `qscale_weight`, and per-tensor FP8's
+`weight_scale` / `input_scale`.
 
-Fine-grained FP8 also loads MXFP8 checkpoints, whose config sets `quant_method="mxfp8"`. MXFP8 stores FP8 weights with one power-of-two scale, saved as a byte, per block of 32 weights.
+Checkpoints that mix FP8 with other methods per layer load as a [quantization plan](./overview#quantization-plans),
+with fine-grained FP8 for their FP8 layers:
+
+- [DeepSeek-V4](https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash) is fine-grained FP8 (ue8m0 scales) except for its
+  routed experts, saved as MXFP4 (`expert_dtype: "fp4"`), which load with [MXFP4](./mxfp4).
+- ModelOpt checkpoints with `quant_algo: "MIXED_PRECISION"`, e.g. [nvidia/Qwen3.6-35B-A3B-NVFP4](https://huggingface.co/nvidia/Qwen3.6-35B-A3B-NVFP4),
+  list a `quant_algo` per layer: `FP8` (per-tensor, static activations) and `FP8_PB_WO` (`(128, 128)` blocks,
+  weight-only) layers load with fine-grained FP8, `NVFP4` ones with [NVFP4](./nvfp4).
 
 ## Use the DeepGEMM fast path
 
