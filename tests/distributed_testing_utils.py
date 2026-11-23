@@ -19,12 +19,14 @@ them once per (world_size, backend) and pytest(-xdist worker) process, and sends
 
 import os
 import sys
+import tempfile
 import time
 import traceback
+from contextlib import contextmanager
 from datetime import timedelta
 from multiprocessing.connection import wait
 
-from transformers import set_seed
+from transformers import AutoModelForCausalLM, set_seed
 from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import cleanup, is_torch_available
 
@@ -183,3 +185,37 @@ def run_distributed(world_size: int, backend: str | None = None):
         return wrapper
 
     return decorator
+
+
+SEED = 42
+
+
+@contextmanager
+def _distributed_tmpdir(rank):
+    """A temporary directory of rank 0, whose path every rank gets."""
+    if rank == 0:
+        tmpdir_obj = tempfile.TemporaryDirectory()
+        tmpdir_list = [tmpdir_obj.name]
+    else:
+        tmpdir_obj = None
+        tmpdir_list = [None]
+    dist.broadcast_object_list(tmpdir_list, src=0)
+    try:
+        yield tmpdir_list[0]
+    finally:
+        if rank == 0 and tmpdir_obj is not None:
+            tmpdir_obj.cleanup()
+
+
+@contextmanager
+def _deterministic_init_model_dir(rank, config, dtype, model_class=None):
+    """A checkpoint of `config` with seeded weights, saved by rank 0, that every rank loads the same model from."""
+    with _distributed_tmpdir(rank) as model_dir:
+        if rank == 0:
+            set_seed(SEED)
+            model = AutoModelForCausalLM.from_config(config) if model_class is None else model_class(config)
+            model = model.to(dtype)
+            model.save_pretrained(model_dir)
+            del model
+        dist.barrier()
+        yield model_dir

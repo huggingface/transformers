@@ -23,7 +23,6 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from contextlib import contextmanager
 
 from parameterized import parameterized
 
@@ -41,6 +40,9 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 
 from .distributed_testing_utils import (
+    SEED,
+    _deterministic_init_model_dir,
+    _distributed_tmpdir,
     _get_distributed_backend,
     _get_distributed_device_type,
     _get_rank_device,
@@ -72,7 +74,6 @@ BATCH_SIZE = 2
 SEQ_LEN = 64
 NUM_STEPS = 20
 LR = 3e-4
-SEED = 42
 DDP_FSDP_RTOL = 1e-5
 DDP_FSDP_ATOL = 1e-5
 BF16_GRAD_RTOL = 2e-2
@@ -110,34 +111,6 @@ def _set_determinism(seed):
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
     set_seed(seed)
-
-
-@contextmanager
-def _distributed_tmpdir(rank):
-    if rank == 0:
-        tmpdir_obj = tempfile.TemporaryDirectory()
-        tmpdir_list = [tmpdir_obj.name]
-    else:
-        tmpdir_obj = None
-        tmpdir_list = [None]
-    dist.broadcast_object_list(tmpdir_list, src=0)
-    try:
-        yield tmpdir_list[0]
-    finally:
-        if rank == 0 and tmpdir_obj is not None:
-            tmpdir_obj.cleanup()
-
-
-@contextmanager
-def _deterministic_init_model_dir(rank, config, dtype):
-    with _distributed_tmpdir(rank) as model_dir:
-        if rank == 0:
-            set_seed(SEED)
-            model = AutoModelForCausalLM.from_config(config).to(dtype)
-            model.save_pretrained(model_dir)
-            del model
-        dist.barrier()
-        yield model_dir
 
 
 def _fsdp_global_wrapper(
