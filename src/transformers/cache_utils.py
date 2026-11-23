@@ -314,90 +314,137 @@ class DynamicSlidingWindowLayer(DynamicLayer):
 
 
 class DynamicIndexedLayer(DynamicLayer):
-    """
-    A cache layer that extends `DynamicLayer` with an extra indexer key cache for Dynamic Sparse Attention (DSA)
-    models (e.g. GLM MoE DSA, DeepSeek V32).
+    """Dynamic cache of completed indexer groups and an unfinished raw group."""
 
-    The main K/V cache stores tensors of shape `[batch_size, num_heads, seq_len, head_dim]` (inherited).
-    The indexer key cache stores a tensor of shape `[batch_size, seq_len, index_head_dim]` (3D, single-head).
-    """
+    is_croppable = False
 
     def __init__(self, **kwargs):
-        super().__init__()
-        self.indexer_keys: torch.Tensor | None = None
-        # Optional indexer positions, shaped [position_dims, batch_size, seq_len].
-        self.indexer_position_ids: torch.Tensor | None = None
-        self.is_indexer_initialized: bool = False
+        super().__init__(**kwargs)
+        self.indexer_pools = None
+        self.indexer_tail = None
+        self.indexer_counts = None
+        self.indexer_first_slot = None
+        self.indexer_length = 0
 
-    def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
-        self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
-        self.indexer_keys = torch.tensor([], dtype=self.indexer_dtype, device=self.indexer_device)
-        self.is_indexer_initialized = True
+    def prepare_indexer(self, states, group_size, pool_dim, attention_mask=None):
+        batch, length, dim = states.shape
 
-    def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
-        """
-        Update the indexer key cache by concatenation, and return the full indexer keys.
+        if self.indexer_pools is None:
+            self.indexer_pools = states.new_empty(batch, 0, pool_dim)
+            self.indexer_tail = states.new_zeros(batch, group_size - 1, dim)
+            self.indexer_counts = torch.zeros(batch, dtype=torch.long, device=states.device)
+            self.indexer_first_slot = torch.full((batch,), -1, dtype=torch.long, device=states.device)
 
-        Args:
-            indexer_key_states (`torch.Tensor`): New indexer keys, shape `[batch_size, seq_len, index_head_dim]`.
+        valid = attention_mask[:, -length:].bool() if attention_mask is not None else torch.ones(
+            batch, length, dtype=torch.bool, device=states.device
+        )
+        old_counts = self.indexer_counts
+        old_tail_count = old_counts % group_size
+        new_counts = old_counts + valid.long().sum(-1)
 
-        Returns:
-            `torch.Tensor`: The full cached indexer keys, shape `[batch_size, total_len, index_head_dim]`.
-        """
-        if not self.is_indexer_initialized:
-            self.lazy_initialization_indexer(indexer_key_states)
-        self.indexer_keys = torch.cat([self.indexer_keys, indexer_key_states], dim=1)
-        return self.indexer_keys
+        packed = states.new_zeros(batch, group_size - 1 + length, dim)
+        if group_size > 1:
+            packed[:, :group_size - 1] = self.indexer_tail
+
+        write_slots = old_tail_count[:, None] + valid.long().cumsum(-1) - 1
+        packed.scatter_add_(
+            1,
+            write_slots.clamp(min=0)[..., None].expand(-1, -1, dim),
+            states * valid[..., None],
+        )
+
+        counts = old_counts[:, None] + valid.long().cumsum(-1)
+        complete_count = (old_tail_count + valid.long().sum(-1)) // group_size
+        group_count = (group_size - 1 + length) // group_size
+        groups = packed[:, :group_count * group_size].reshape(batch, group_count, group_size, dim)
+
+        if group_size > 1:
+            offsets = torch.arange(group_size - 1, device=states.device)
+            pending_size = new_counts % group_size
+            start = complete_count * group_size
+            pending = packed.gather(
+                1,
+                (start[:, None] + offsets).clamp(max=packed.shape[1] - 1)[..., None].expand(-1, -1, dim),
+            )
+            self.indexer_tail = pending * (offsets[None, :] < pending_size[:, None])[..., None]
+
+        self.indexer_first_slot = torch.where(
+            (old_counts == 0) & valid.any(-1),
+            self.indexer_length + valid.long().argmax(-1),
+            self.indexer_first_slot,
+        )
+        self.indexer_counts = new_counts
+        self.indexer_length += length
+
+        return groups, complete_count, counts, valid, self.indexer_first_slot
+
+    def update_indexer(self, new_pools, complete_count, group_size):
+        batch, groups, dim = new_pools.shape
+        capacity = self.indexer_length // group_size
+
+        extra = capacity - self.indexer_pools.shape[1]
+        if extra:
+            self.indexer_pools = torch.cat((
+                self.indexer_pools,
+                new_pools.new_zeros(batch, extra, dim),
+            ), dim=1)
+
+        if groups and capacity:
+            old_group_counts = self.indexer_counts // group_size - complete_count
+            offsets = torch.arange(groups, device=new_pools.device)
+            destinations = (old_group_counts[:, None] + offsets).clamp(max=capacity - 1)
+            completed = offsets[None, :] < complete_count[:, None]
+
+            self.indexer_pools.scatter_add_(
+                1,
+                destinations[..., None].expand_as(new_pools),
+                new_pools * completed[..., None],
+            )
+
+        return self.indexer_pools
 
     def offload(self):
         super().offload()
-        if self.is_indexer_initialized:
-            self.indexer_keys = self.indexer_keys.to("cpu", non_blocking=True)
+        if self.indexer_pools is not None:
+            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+                setattr(self, name, getattr(self, name).to("cpu", non_blocking=True))
 
     def prefetch(self):
         super().prefetch()
-        if self.is_indexer_initialized and self.indexer_keys.device != self.device:
-            self.indexer_keys = self.indexer_keys.to(self.device, non_blocking=True)
+        if self.indexer_pools is not None:
+            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+                setattr(self, name, getattr(self, name).to(self.device, non_blocking=True))
 
-    def reset(self) -> None:
+    def reset(self):
         super().reset()
-        # Dropped rather than zeroed, as `update_indexer` grows them by concatenation, like the main states
-        self.indexer_keys = None
-        self.indexer_position_ids = None
-        self.is_indexer_initialized = False
+        self.indexer_pools = self.indexer_tail = None
+        self.indexer_counts = self.indexer_first_slot = None
+        self.indexer_length = 0
 
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+    def crop(self, tokens_to_remove):
+        if tokens_to_remove:
+            raise RuntimeError("Compressed indexer caches cannot roll back completed groups")
+
+    def reorder_cache(self, beam_idx):
         super().reorder_cache(beam_idx)
-        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids.index_select(
-                1, beam_idx.to(self.indexer_position_ids.device)
-            )
+        if self.indexer_pools is not None:
+            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+                x = getattr(self, name)
+                setattr(self, name, x.index_select(0, beam_idx.to(x.device)))
 
-    def crop(self, tokens_to_remove: int) -> None:
-        super().crop(tokens_to_remove)
-        if tokens_to_remove == 0:
-            return
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids[..., : -abs(tokens_to_remove)]
-        if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
-            return
-        self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
-
-    def batch_repeat_interleave(self, repeats: int) -> None:
+    def batch_repeat_interleave(self, repeats):
         super().batch_repeat_interleave(repeats)
-        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys.repeat_interleave(repeats, dim=0)
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids.repeat_interleave(repeats, dim=1)
+        if self.indexer_pools is not None:
+            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+                x = getattr(self, name)
+                setattr(self, name, x.repeat_interleave(repeats, dim=0))
 
-    def batch_select_indices(self, indices: torch.Tensor) -> None:
+    def batch_select_indices(self, indices):
         super().batch_select_indices(indices)
-        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys[indices, ...]
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids[:, indices, :]
+        if self.indexer_pools is not None:
+            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+                x = getattr(self, name)
+                setattr(self, name, x.index_select(0, indices.to(x.device)))
 
 
 class StaticLayer(CacheLayerMixin):
@@ -668,88 +715,151 @@ class StaticSlidingWindowLayer(StaticLayer):
 
 
 class StaticIndexedLayer(StaticLayer):
-    """
-    A `StaticLayer` with an additional statically-allocated indexer key cache for Dynamic Sparse
-    Attention (DSA) models (e.g. GLM MoE DSA, DeepSeek V32). This is the static, `torch.compile`-friendly
-    counterpart of `DynamicIndexedLayer`: the indexer key buffer is preallocated once and mutated in-place.
+    """Fixed-address indexer cache with completed pools and an unfinished raw group."""
 
-    The main K/V cache is inherited from `StaticLayer` (`[batch_size, num_heads, max_cache_len, head_dim]`).
-    The indexer key cache stores a tensor of shape `[batch_size, max_cache_len, index_head_dim]` (3D, single-head).
-    """
+    is_croppable = False
 
-    def __init__(self, max_cache_len: int, **kwargs):
-        super().__init__(max_cache_len=max_cache_len)
-        self.indexer_keys: torch.Tensor | None = None
-        # Optional indexer positions, shaped [position_dims, batch_size, seq_len].
-        self.indexer_position_ids: torch.Tensor | None = None
-        self.indexer_cumulative_length: torch.Tensor | None = None
-        self.is_indexer_initialized: bool = False
+    def __init__(self, max_cache_len, **kwargs):
+        super().__init__(max_cache_len=max_cache_len, **kwargs)
+        self.indexer_pools = None
+        self.indexer_tail = None
+        self.indexer_counts = None
+        self.indexer_first_slot = None
+        self.indexer_length = None
 
-    def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
-        self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
-        batch_size, _, index_head_dim = indexer_key_states.shape
-        self.indexer_keys = torch.zeros(
-            (batch_size, self.max_cache_len, index_head_dim),
-            dtype=self.indexer_dtype,
-            device=self.indexer_device,
-        )
-        self.indexer_cumulative_length = torch.zeros((), dtype=torch.long, device=self.indexer_device)
-        # Tag as static addresses for cudagraphs / compile, mirroring the main K/V buffers.
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.indexer_keys)
-            torch._dynamo.mark_static_address(self.indexer_cumulative_length)
-        self.is_indexer_initialized = True
+    def prepare_indexer(self, states, group_size, pool_dim, attention_mask=None):
+        batch, length, dim = states.shape
 
-    def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
-        """
-        Update the indexer key cache in-place at the current positions, and return the full static buffer.
-
-        Args:
-            indexer_key_states (`torch.Tensor`): New indexer keys, shape `[batch_size, seq_len, index_head_dim]`.
-
-        Returns:
-            `torch.Tensor`: The full static indexer key cache, shape `[batch_size, max_cache_len, index_head_dim]`.
-                Unfilled positions are masked out downstream by the indexer's attention mask, exactly as the
-                main `StaticLayer` returns its full preallocated K/V.
-        """
-        if not self.is_indexer_initialized:
-            self.lazy_initialization_indexer(indexer_key_states)
-
-        seq_len = indexer_key_states.shape[1]
-        cache_position = torch.arange(seq_len, device=self.indexer_device) + self.indexer_cumulative_length
-        # In-place to preserve the static data pointer (required for cudagraphs).
-        self.indexer_cumulative_length.add_(seq_len)
-        try:
-            self.indexer_keys.index_copy_(1, cache_position, indexer_key_states)
-        except NotImplementedError:
-            # Fallback for devices like MPS where index_copy_ might not be supported.
-            self.indexer_keys[:, cache_position] = indexer_key_states
-
-        return self.indexer_keys
-
-    def crop(self, tokens_to_remove: int) -> None:
-        """
-        Remove `tokens_to_remove` tokens from the current cache layer.
-        """
-        super().crop(tokens_to_remove)
-        if self.is_indexer_initialized:
-            self.indexer_cumulative_length.sub_(abs(tokens_to_remove))
-
-    def reset(self) -> None:
-        super().reset()
-        self.indexer_position_ids = None
-        if self.is_indexer_initialized:
-            self.indexer_keys.zero_()
-            self.indexer_cumulative_length.zero_()
-
-    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
-        super().reorder_cache(beam_idx)
-        if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
-            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids.index_select(
-                1, beam_idx.to(self.indexer_position_ids.device)
+        if self.indexer_pools is None:
+            self.indexer_pools = states.new_zeros(
+                batch, self.max_cache_len // group_size, pool_dim
             )
+            self.indexer_tail = states.new_zeros(batch, group_size - 1, dim)
+            self.indexer_counts = torch.zeros(batch, dtype=torch.long, device=states.device)
+            self.indexer_first_slot = torch.full((batch,), -1, dtype=torch.long, device=states.device)
+            self.indexer_length = torch.zeros((), dtype=torch.long, device=states.device)
+
+            if not is_torchdynamo_compiling():
+                for name in (
+                    "indexer_pools",
+                    "indexer_tail",
+                    "indexer_counts",
+                    "indexer_first_slot",
+                    "indexer_length",
+                ):
+                    torch._dynamo.mark_static_address(getattr(self, name))
+
+        valid = attention_mask[:, -length:].bool() if attention_mask is not None else torch.ones(
+            batch, length, dtype=torch.bool, device=states.device
+        )
+        old_counts = self.indexer_counts
+        old_tail_count = old_counts % group_size
+        new_counts = old_counts + valid.long().sum(-1)
+
+        packed = states.new_zeros(batch, group_size - 1 + length, dim)
+        if group_size > 1:
+            packed[:, :group_size - 1] = self.indexer_tail
+
+        write_slots = old_tail_count[:, None] + valid.long().cumsum(-1) - 1
+        packed.scatter_add_(
+            1,
+            write_slots.clamp(min=0)[..., None].expand(-1, -1, dim),
+            states * valid[..., None],
+        )
+
+        counts = old_counts[:, None] + valid.long().cumsum(-1)
+        complete_count = (old_tail_count + valid.long().sum(-1)) // group_size
+        group_count = (group_size - 1 + length) // group_size
+        groups = packed[:, :group_count * group_size].reshape(batch, group_count, group_size, dim)
+
+        if group_size > 1:
+            offsets = torch.arange(group_size - 1, device=states.device)
+            pending_size = new_counts % group_size
+            start = complete_count * group_size
+            pending = packed.gather(
+                1,
+                (start[:, None] + offsets).clamp(max=packed.shape[1] - 1)[..., None].expand(-1, -1, dim),
+            )
+            pending = pending * (offsets[None, :] < pending_size[:, None])[..., None]
+            self.indexer_tail.copy_(pending)
+
+        first_slots = torch.where(
+            (old_counts == 0) & valid.any(-1),
+            self.indexer_length + valid.long().argmax(-1),
+            self.indexer_first_slot,
+        )
+        self.indexer_first_slot.copy_(first_slots)
+        self.indexer_counts.copy_(new_counts)
+        self.indexer_length.add_(length)
+
+        return groups, complete_count, counts, valid, self.indexer_first_slot
+
+
+    def update_indexer(self, new_pools, complete_count, group_size):
+        groups = new_pools.shape[1]
+        capacity = self.indexer_pools.shape[1]
+
+        if groups and capacity:
+            old_group_counts = self.indexer_counts // group_size - complete_count
+            offsets = torch.arange(groups, device=new_pools.device)
+            destinations = (old_group_counts[:, None] + offsets).clamp(max=capacity - 1)
+            completed = offsets[None, :] < complete_count[:, None]
+
+            self.indexer_pools.scatter_add_(
+                1,
+                destinations[..., None].expand_as(new_pools),
+                new_pools * completed[..., None],
+            )
+
+        return self.indexer_pools
+
+    def offload(self):
+        super().offload()
+        if self.indexer_pools is not None:
+            for name in (
+                "indexer_pools",
+                "indexer_tail",
+                "indexer_counts",
+                "indexer_first_slot",
+                "indexer_length",
+            ):
+                setattr(self, name, getattr(self, name).to("cpu", non_blocking=True))
+
+    def prefetch(self):
+        super().prefetch()
+        if self.indexer_pools is not None:
+            for name in (
+                "indexer_pools",
+                "indexer_tail",
+                "indexer_counts",
+                "indexer_first_slot",
+                "indexer_length",
+            ):
+                setattr(self, name, getattr(self, name).to(self.device, non_blocking=True))
+
+    def reset(self):
+        super().reset()
+        if self.indexer_pools is not None:
+            self.indexer_pools.zero_()
+            self.indexer_tail.zero_()
+            self.indexer_counts.zero_()
+            self.indexer_first_slot.fill_(-1)
+            self.indexer_length.zero_()
+
+    def crop(self, tokens_to_remove):
+        if tokens_to_remove:
+            raise RuntimeError("Compressed indexer caches cannot roll back completed groups")
+
+    def reorder_cache(self, beam_idx):
+        if self.is_initialized:
+            idx = beam_idx.to(self.keys.device)
+            self.keys.copy_(self.keys.index_select(0, idx))
+            self.values.copy_(self.values.index_select(0, idx))
+
+        if self.indexer_pools is not None:
+            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+                x = getattr(self, name)
+                x.copy_(x.index_select(0, beam_idx.to(x.device)))
 
 
 class BaseQuantizedLayer(DynamicLayer):
@@ -1696,25 +1806,18 @@ class Cache:
         recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, state_idx, **kwargs)
         return recurrent_states
 
-    def update_indexer(self, indexer_key_states: torch.Tensor, layer_idx: int) -> torch.Tensor:
-        """
-        Updates the indexer key cache for layer `layer_idx`.
-
-        Parameters:
-            indexer_key_states (`torch.Tensor`):
-                The new indexer key states to cache, shape `[batch_size, seq_len, index_head_dim]`.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-
-        Return:
-            `torch.Tensor`: The updated indexer key states (full cache).
-        """
-        if not hasattr(self.layers[layer_idx], "update_indexer"):
-            raise ValueError(
-                f"Cannot call `update_indexer` on layer {layer_idx} which is a {type(self.layers[layer_idx]).__name__}; it has no "
-                "indexer key cache (expected a `DynamicIndexedLayer` or `StaticIndexedLayer`)."
-            )
-        return self.layers[layer_idx].update_indexer(indexer_key_states)
+    def update_indexer(
+        self,
+        new_pools: torch.Tensor,
+        complete_count: torch.Tensor,
+        layer_idx: int,
+        group_size: int,
+    ):
+        return self.layers[layer_idx].update_indexer(
+            new_pools=new_pools,
+            complete_count=complete_count,
+            group_size=group_size,
+        )
 
     def early_initialization(
         self,

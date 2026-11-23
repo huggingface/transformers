@@ -29,7 +29,7 @@ from torch.nn import LayerNorm
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicIndexedLayer
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -769,18 +769,46 @@ class Glm5NextTextLinearAttention(nn.Module):
         return output
 
 
+def select_indexer_tokens(
+    scores: torch.Tensor,
+    counts: torch.Tensor,
+    query_valid: torch.Tensor,
+    first_slot: torch.Tensor,
+    budget: int,
+    group_size: int,
+    tail: bool = True,
+) -> torch.Tensor:
+    """Select completed groups and the unfinished tail as physical token indices."""
+    _, _, groups = scores.shape
+    offsets = torch.arange(group_size, device=scores.device)
+
+    # A query can only select groups completed by its own causal prefix.
+    complete = counts[..., None] >= (
+        torch.arange(1, groups + 1, device=scores.device) * group_size
+    )
+    complete &= query_valid[..., None]
+
+    topk = min(budget // group_size, groups)
+    top = scores.masked_fill(
+        ~complete, torch.finfo(scores.dtype).min
+    ).topk(topk, dim=-1).indices
+
+    chosen = first_slot[:, None, None, None] + top[..., None] * group_size + offsets
+    chosen = chosen.masked_fill(~complete.gather(-1, top)[..., None], -1)
+    chosen = torch.nn.functional.pad(chosen.flatten(-2), (0, budget - topk * group_size), value=-1)
+
+    if tail and group_size > 1:
+        tail_size = counts % group_size
+        tail_offsets = offsets[:-1]
+        tail_slots = first_slot[:, None, None] + (counts - tail_size)[..., None] + tail_offsets
+        tail_slots = tail_slots.masked_fill(tail_offsets >= tail_size[..., None], -1)
+        chosen = torch.cat((chosen, tail_slots), dim=-1)
+
+    return chosen.masked_fill(~query_valid[..., None], -1).to(torch.int32)
+
+
 class Glm5NextTextIndexer(nn.Module):
-    """
-    DeepSeek Sparse Attention (DSA) indexer with k-pool compression for GLM-5.3-Flash.
-
-    The indexer uses lightweight projections (`wq_b`, `wk`) separate from the main MLA
-    attention path. It scores compressed k-pool candidates, expands selected pools back
-    into raw cache indices, and optionally appends the current incomplete tail pool.
-
-    **Cache strategy**: the indexer state cache lives on the per-layer `DynamicIndexedLayer`
-    (or the `StaticIndexedLayer` for static caches) inside the shared cache, accessed via
-    `cache.update_indexer()`.
-    """
+    """GLM DSA indexer with learned key-pool compression."""
 
     def __init__(self, config, layer_idx: int):
         super().__init__()
@@ -802,7 +830,6 @@ class Glm5NextTextIndexer(nn.Module):
 
         self.index_kpool = config.index_kpool
         self.index_kpool_always_select_tail = config.index_kpool_always_select_tail
-
         self.index_kpool_compress_ape = nn.Parameter(torch.zeros(self.index_kpool, self.head_dim))
         self.index_kpool_compress_gate = nn.Parameter(torch.zeros(self.head_dim, self.hidden_size))
 
@@ -812,253 +839,57 @@ class Glm5NextTextIndexer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
-        attention_mask: torch.BoolTensor,
-        cache: Cache | None,
-    ) -> torch.LongTensor:
-        """
-        Selects the top-k tokens per query for DeepSeek Sparse Attention (DSA) based on grouping pools (and tails).
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+    ) -> torch.Tensor:
+        batch_size, seq_len, _ = hidden_states.shape
 
-        Args:
-            hidden_states: Input hidden states `[B, S, hidden_size]`.
-            q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
-            attention_mask: Local boolean padding mask of shape `[B, S]`.
-            cache: Cache object containing the indexer state cache for this layer.
+        if attention_mask is not None:
+            attention_mask = attention_mask.bool()
 
-        Returns:
-            `torch.Tensor`: the `int32` top-k token indices of shape `[B, S, topk]` (or `[B, S, 2*topk - 1]` with tail).
-            The eager / SDPA paths turn these into an additive sparse mask.
-        """
-        batch_size, seq_len = hidden_states.shape[:2]
-        hidden_shape = (batch_size, seq_len, -1, self.head_dim)
+        q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
+        k = self.k_norm(self.wk(hidden_states))
+        gates = F.linear(hidden_states, self.index_kpool_compress_gate)
+        states = torch.cat([k, gates], dim=-1)
 
-        q = self.wq_b(q_resid).view(hidden_shape)
-        k = self.k_norm(self.wk(hidden_states)).view(hidden_shape).squeeze(2)
-
-        gate_scores = F.linear(hidden_states, self.index_kpool_compress_gate)
-        valid_channel = attention_mask.to(k.dtype)[..., None]
-
-        packed_states = torch.cat([k, gate_scores, valid_channel], dim=-1)
-
-        kv_len = seq_len
-        current_length = seq_len
-        if cache is not None:
-            cache_layer = cache.layers[self.layer_idx]
-
-            packed_states = cache.update_indexer(packed_states, self.layer_idx)
-            # Only different on static caches where key is a static full tensor to max len
-            kv_len = cache_layer.keys.shape[-2]
-            current_length = cache_layer.get_seq_length()
-
-        # Get pools based on the valid key entries (based on padding / causality)
-        valid_keys = packed_states[..., -1].bool()
-        visible_tokens = self.get_visible_tokens(
-            valid_keys=valid_keys,
-            q_length=seq_len,
-            current_length=current_length,
+        # Assemble new groups and keep unfinished raw states in the cache.
+        layer = DynamicIndexedLayer() if cache is None else cache.layers[self.layer_idx]
+        groups, complete_count, counts, query_valid, first_slot = layer.prepare_indexer(
+            states=states,
+            group_size=self.index_kpool,
+            pool_dim=self.head_dim,
+            attention_mask=attention_mask,
         )
 
-        # Key difference: Score across pools, not on a per token basis
-        pool_keys, pool_indices, pool_valid = self.get_pooled_states(packed_states=packed_states)
-        scores = torch.matmul(q.float(), pool_keys.transpose(-1, -2).float().unsqueeze(1))
+        # GLM's learned weighted pooling over each completed group.
+        keys, gates = groups.split(self.head_dim, dim=-1)
+        logits = gates.float() + self.index_kpool_compress_ape.float()
+        probabilities = logits.softmax(dim=2).to(keys.dtype)
+        pooled_keys = (probabilities * keys).sum(dim=2)
+
+        k = layer.update_indexer(
+            new_pools=pooled_keys,
+            complete_count=complete_count,
+            group_size=self.index_kpool,
+        )
+
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = F.relu(scores * self.softmax_scale)
 
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, P] -> [B, S, P]
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
+        weights = self.weights_proj(
+            hidden_states.to(self.weights_proj.weight.dtype)
+        ).float() * (self.n_heads**-0.5)
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        # Clamp invalid / static pool ends
-        pool_end = pool_indices[..., -1].clamp(0, kv_len - 1)
-        pool_visible = visible_tokens.gather(
-            dim=-1,
-            index=pool_end[:, None, :].expand(batch_size, seq_len, -1),
+        return select_indexer_tokens(
+            scores=index_scores,
+            counts=counts,
+            query_valid=query_valid,
+            first_slot=first_slot,
+            budget=self.index_topk,
+            group_size=self.index_kpool,
+            tail=self.index_kpool_always_select_tail,
         )
-        # A pool is selectable only if its final token is visible to the query
-        valid_candidates = pool_visible & pool_valid[:, None]
-
-        index_scores = index_scores.masked_fill(
-            ~valid_candidates,
-            torch.finfo(index_scores.dtype).min,
-        )
-
-        # Similar budgeting as in original but compressed by its pool size
-        select_k = min(self.index_topk // self.index_kpool, index_scores.shape[-1])
-
-        # Selection is based on 2 steps
-        #   1. The actual scores (selected indices)
-        #   2. And removing invalid rows based on padding (selected valid)
-        selected = index_scores.topk(select_k, dim=-1).indices
-        batch_idx = torch.arange(batch_size, device=hidden_states.device)[:, None, None]
-
-        selected_valid = valid_candidates.gather(-1, selected)
-        selected_indices = pool_indices[batch_idx, selected]
-
-        # Convert selected pools back into the raw tokens
-        # [B, S, K, P] -> [B, S, K * P]
-        topk_indices = selected_indices.flatten(-2)
-        topk_indices = topk_indices.masked_fill(
-            ~selected_valid[..., None].expand_as(selected_indices).flatten(-2),
-            -1,
-        )
-
-        output_width = self.index_topk
-        if self.index_kpool_always_select_tail:
-            topk_indices = self.append_visible_tail(topk_indices, visible_tokens, valid_keys)
-            output_width += self.index_kpool - 1  # expanded tail size maximum
-
-        # Pad so we fill up with invalid entries instead of gathered selections
-        topk_indices = F.pad(topk_indices, (0, output_width - topk_indices.shape[-1]), value=-1)
-
-        topk_indices = topk_indices[..., :output_width]
-        topk_indices = topk_indices.masked_fill(~attention_mask[..., None], -1)
-
-        return topk_indices.to(torch.int32)
-
-    def get_visible_tokens(
-        self,
-        valid_keys: torch.BoolTensor,
-        q_length: int,
-        current_length: int,
-    ) -> torch.BoolTensor:
-        """
-        Check whether a token is visible for Q based on
-            - Causality
-            - Padding status
-                - Valid keys which is a (cached) variation of the attention mask
-        """
-        device = valid_keys.device
-
-        kv_positions = torch.arange(valid_keys.shape[-1], device=device)
-        q_positions = current_length - q_length + torch.arange(q_length, device=device)
-        causal = kv_positions[None, None, :] <= q_positions[None, :, None]
-
-        return causal & valid_keys[:, None, :]
-
-    def get_pooled_states(
-        self,
-        packed_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.LongTensor, torch.BoolTensor]:
-        """
-        (Re-)Build compressed k-pool candidates from the packed state.
-
-        Pooling starts at the first real token, not raw slot 0. This is the part
-        that makes:
-
-            [P, P, A, B, C, D, ...]
-
-        behave like:
-
-            [A, B, C, D, ...]
-
-        for k-pool grouping.
-        """
-        # All states we need
-        #   1. The actual keys
-        #   2. The compressed gate scores
-        #   3. The valid keys based on padding and causality
-        keys, gate_scores, valid_keys = torch.split(
-            packed_states,
-            [self.head_dim, self.head_dim, 1],
-            dim=-1,
-        )
-        valid_keys = valid_keys.bool().squeeze(-1)
-
-        # Metadata
-        batch_size, seq_len = keys.shape[:2]
-        number_of_pools = (seq_len + self.index_kpool - 1) // self.index_kpool
-        device = keys.device
-
-        # Example, index_kpool=4:
-        #   [P, P, A, B, C, D, E, F]
-        #          ^
-        #      first_key
-        #
-        #   pool 0 -> first_key + [0, 1, 2, 3] -> [A, B, C, D]
-        #   pool 1 -> first_key + [4, 5, 6, 7] -> [E, F, out, out]
-        first_key = torch.where(
-            valid_keys.any(-1),
-            valid_keys.long().argmax(-1),
-            torch.full((batch_size,), seq_len, dtype=torch.long, device=device),
-        )
-        pool_offsets = torch.arange(number_of_pools * self.index_kpool, device=device)
-        pool_offsets = pool_offsets.view(1, number_of_pools, self.index_kpool)
-        pool_indices = first_key[:, None, None] + pool_offsets
-
-        batch_idx = torch.arange(batch_size, device=device)[:, None, None]
-        safe_indices = pool_indices.clamp(0, seq_len - 1)
-
-        grouped_keys = keys[batch_idx, safe_indices]
-        grouped_gate_scores = gate_scores[batch_idx, safe_indices]
-        grouped_valid_keys = valid_keys[batch_idx, safe_indices]
-
-        # Only allow those within range (clamp)
-        grouped_valid_keys = grouped_valid_keys & (pool_indices < seq_len)
-        pool_valid = grouped_valid_keys.all(-1)
-        pool_indices = pool_indices.masked_fill(~grouped_valid_keys, -1)
-
-        # Learn a weighted average over the tokens inside each complete pool
-        logits = grouped_gate_scores.float() + self.index_kpool_compress_ape.float()[None, None]
-        logits = logits.masked_fill(~grouped_valid_keys[..., None], float("-inf"))
-        probabilities = torch.nan_to_num(logits.softmax(dim=2)).to(
-            grouped_keys.dtype
-        )  # nan to num for full invalid pools
-        pool_keys = (probabilities * grouped_keys).sum(dim=2)
-
-        # Avoids static cache allocated positions
-        keep = pool_valid.any(0)
-
-        return pool_keys[:, keep], pool_indices[:, keep], pool_valid[:, keep]
-
-    def append_visible_tail(
-        self,
-        topk_indices: torch.Tensor,
-        token_visible: torch.BoolTensor,
-        key_valid: torch.BoolTensor,
-    ) -> torch.Tensor:
-        """
-        Append the current incomplete pool as raw token indices.
-        So we if we have a pool size of 4:
-            - [P P A B C D E F]
-            - [A B C D] (selected pool)
-            - [E F] (appended tail)
-        """
-        if (max_tail_width := self.index_kpool - 1) == 0:
-            return topk_indices
-
-        batch_size, _, kv_length = token_visible.shape
-        device = token_visible.device
-
-        # Example, index_kpool=4:
-        #   visible keys: [A, B, C, D, E, F]
-        #   full pools:   [A, B, C, D]
-        #   tail:                     [E, F]
-        #
-        # visible_count = 6
-        # tail_count    = 6 % 4 = 2
-        # tail_start    = first_key + visible_count - tail_count
-        # tail_indices  = tail_start + [0, 1, ..., index_kpool - 2]
-        first_key = torch.where(
-            key_valid.any(-1),
-            key_valid.long().argmax(-1),
-            torch.full((batch_size,), kv_length, dtype=torch.long, device=device),
-        )
-        visible_count = token_visible.long().sum(-1)
-        tail_count = visible_count.remainder(self.index_kpool)
-        tail_offsets = torch.arange(max_tail_width, device=device)
-
-        tail_start = first_key[:, None] + visible_count - tail_count
-        tail_indices = tail_start[..., None] + tail_offsets
-
-        # We exclude tails that are just use to fill in positions + those that go beyond the max length
-        tail_valid = (tail_offsets[None, None, :] < tail_count[..., None]) & tail_indices.lt(kv_length)
-
-        # Also check for padding based tokens
-        kv_idx = tail_indices.clamp(0, kv_length - 1)
-        tail_visible = token_visible.gather(dim=-1, index=kv_idx)
-
-        # Get the valid conclusion
-        tail_indices = tail_indices.masked_fill(~(tail_valid & tail_visible), -1)
-
-        return torch.cat([topk_indices, tail_indices], dim=-1)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -1487,15 +1318,6 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
                 attention_mask=attention_mask,
                 cache=cache,
             )
-            # Guarantee the mask to exist for the indexer
-            if attention_mask is None:
-                attention_mask = torch.ones(
-                    inputs_embeds.shape[0],
-                    inputs_embeds.shape[1],
-                    dtype=torch.bool,
-                    device=inputs_embeds.device,
-                )
-            attention_mask = attention_mask.bool()
 
             causal_mask_mapping = {
                 "indexed_attention": attention_mask,
@@ -2350,31 +2172,6 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, GenerationMixin)
             if not is_split_images:
                 modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
         return mm_encoder_output
-
-    @staticmethod
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, **_):
-        # We only use the base 2D mask as the indexer is reliant on the padding, not the expanded masks.
-        # I.e. 4D masks are built afterwards after subsets have been selected in the indexer.
-        # Linear attention can reuse the mask as is, making the layer type difference only
-        # necessary for the cache.
-        attention_mask = create_recurrent_attention_mask(
-            config=config.get_text_config(),
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache=cache,
-        )
-        # Guarantee the mask to exist for the indexer
-        if attention_mask is None:
-            attention_mask = torch.ones(
-                inputs_embeds.shape[0],
-                inputs_embeds.shape[1],
-                dtype=torch.bool,
-                device=inputs_embeds.device,
-            )
-        attention_mask = attention_mask.bool()
-
-        return {"indexed_attention": attention_mask, "linear_attention": attention_mask}
 
 
 __all__ = [
