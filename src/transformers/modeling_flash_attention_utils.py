@@ -742,6 +742,9 @@ def _process_flash_attention_kwargs(
     return flash_kwargs
 
 
+_PROTO_KV_WRITE = os.environ.get("PROTO_KV_WRITE", "1") == "1"
+
+
 def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -825,11 +828,22 @@ def _flash_attention_forward(
     # padded tail of the queries belongs to no sequence (cu_seq_lens_q plateaus) and max_length_q is the padded size
     if is_fa_with_paged_kwargs and cache_seqlens is not None:
         q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
-        flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=cache_seqlens)
-        out = flash_kvcache_fn(
-            q, k_cache, v_cache, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k_new=cu_seq_lens_q, pack_gqa=True,
-            num_splits=1, **flash_kwargs,
-        )  # fmt: skip
+        if _PROTO_KV_WRITE:  # [scratch] write the new K/V first, then a plain paged call
+            from .integrations._proto_paged_kv_write import paged_kv_write
+
+            seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
+            flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=seqused)
+            out = flash_kvcache_fn(
+                q, k_cache, v_cache, cu_seqlens_q=cu_seq_lens_q, pack_gqa=True, num_splits=1, **flash_kwargs
+            )
+        else:
+            flash_kwargs = flash_kwargs_fn(
+                max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=cache_seqlens
+            )
+            out = flash_kvcache_fn(
+                q, k_cache, v_cache, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k_new=cu_seq_lens_q, pack_gqa=True,
+                num_splits=1, **flash_kwargs,
+            )  # fmt: skip
         out = out[0] if isinstance(out, tuple) else out
         return out.view(batch_size, -1, *out.shape[-2:])
 
