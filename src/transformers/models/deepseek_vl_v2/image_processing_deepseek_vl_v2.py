@@ -35,13 +35,14 @@ class DeepseekVLV2ImageProcessorKwargs(ImagesKwargs, total=False):
     candidate_resolutions (`list[list[int]]`, *optional*):
         Allowed `[width, height]` canvases for the local tiles; per image, the one that keeps the most of the image
         while wasting the least area is chosen.
-    crop_to_patches (`bool`, *optional*, defaults to `True`):
-        Whether to tile each image on its best canvas. When `False`, each image gets a single local tile, which is
-        what DeepSeek-VL2 does for prompts with more than two images.
+    crop_to_patches (`bool` or `list[bool]`, *optional*, defaults to `True`):
+        Whether to tile each image on its best canvas, for all images or per image. An image that is not tiled
+        gets a single local tile, which is what DeepSeek-VL2 does in prompts with more than two images; the
+        processor sets this per image from the prompts unless it is passed explicitly.
     """
 
     candidate_resolutions: list[list[int]]
-    crop_to_patches: bool
+    crop_to_patches: bool | list[bool]
 
 
 # The 23 tilings DeepSeek-VL2 was trained with, as [width, height] in pixels (from the checkpoints' processor config).
@@ -97,7 +98,7 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         image_std: float | list[float] | None,
         disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
-        crop_to_patches: bool = True,
+        crop_to_patches: bool | list[bool] = True,
         candidate_resolutions: list[list[int]] | None = None,
         **kwargs,
     ) -> BatchFeature:
@@ -106,7 +107,13 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         canvases = [(height, width) for width, height in (candidate_resolutions or self.candidate_resolutions)]
         # Padding is the mean colour, so it normalises to zero.
         background_color = [int(x * 255) for x in image_mean]
-        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        if isinstance(crop_to_patches, bool):
+            crop_to_patches = [crop_to_patches] * len(images)
+        if len(crop_to_patches) != len(images):
+            raise ValueError(f"Got {len(crop_to_patches)} crop_to_patches values for {len(images)} images")
+        grouped_images, grouped_crops, grouped_images_index = group_images_by_shape(
+            images, crop_to_patches, disable_grouping=disable_grouping
+        )
         global_views, local_tiles, spatial_crop = {}, {}, {}
         for shape, stacked_images in grouped_images.items():
             global_view = self.resize_and_pad(stacked_images, tile, tile, resample, background_color)
@@ -114,15 +121,23 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
                 global_view, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
 
-            best_height, best_width = (tile, tile)
-            if crop_to_patches:
-                best_height, best_width = select_best_resolution(tuple(stacked_images.shape[-2:]), canvases)
-            canvas = self.resize_and_pad(stacked_images, best_height, best_width, resample, background_color)
-            tiles = torch.stack(divide_to_patches(canvas, patch_size=tile), dim=1)
-            local_tiles[shape] = self.rescale_and_normalize(
-                tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
-            spatial_crop[shape] = [[best_width // tile, best_height // tile]] * stacked_images.shape[0]
+            # Same-shape images can still differ in whether they are tiled, so each setting is its own batch.
+            local_tiles[shape], spatial_crop[shape] = [None] * len(stacked_images), [None] * len(stacked_images)
+            for crop in set(grouped_crops[shape]):
+                indices = [idx for idx, image_crop in enumerate(grouped_crops[shape]) if image_crop == crop]
+                best_height, best_width = (tile, tile)
+                if crop:
+                    best_height, best_width = select_best_resolution(tuple(stacked_images.shape[-2:]), canvases)
+                canvas = self.resize_and_pad(
+                    stacked_images[indices], best_height, best_width, resample, background_color
+                )
+                tiles = torch.stack(divide_to_patches(canvas, patch_size=tile), dim=1)
+                tiles = self.rescale_and_normalize(
+                    tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
+                for batch_idx, idx in enumerate(indices):
+                    local_tiles[shape][idx] = tiles[batch_idx]
+                    spatial_crop[shape][idx] = [best_width // tile, best_height // tile]
 
         local_tiles = reorder_images(local_tiles, grouped_images_index)
         return BatchFeature(

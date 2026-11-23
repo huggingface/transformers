@@ -56,7 +56,7 @@ print(processor.decode(generated[0, inputs["input_ids"].shape[1]:], skip_special
 
 ## Notes
 
-- The original model tiles an image only when the prompt has at most two images; for more, call the processor with `crop_to_patches=False` so each image gets a single local tile, as in training.
+- As in the original model, the processor tiles an image only when its prompt has at most two images; with more, each image gets a single local tile. Pass `crop_to_patches` to override this.
 
 ## DeepseekVLV2Config
 

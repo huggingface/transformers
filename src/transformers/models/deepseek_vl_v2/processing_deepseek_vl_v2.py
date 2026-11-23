@@ -20,9 +20,10 @@
 
 import math
 
-from ...image_utils import make_flat_list_of_images
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import TextInput
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput, make_flat_list_of_images
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 
 
@@ -40,6 +41,24 @@ class DeepseekVLV2Processor(ProcessorMixin):
         self.patch_size = patch_size
         self.downsample_ratio = downsample_ratio
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    @auto_docstring
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature:
+        r"""
+        Unless `crop_to_patches` is passed, an image is tiled only when its prompt has at most two images, as in the
+        original model.
+        """
+        explicit_crop = "crop_to_patches" in kwargs or "crop_to_patches" in kwargs.get("images_kwargs", {})
+        if images is not None and text is not None and not explicit_crop:
+            prompts = [text] if isinstance(text, str) else text
+            image_counts = [prompt.count(self.image_token) for prompt in prompts]
+            kwargs["crop_to_patches"] = [count <= 2 for count in image_counts for _ in range(count)]
+        return super().__call__(images=images, text=text, **kwargs)
 
     def prepare_inputs_layout(self, images=None, text=None, videos=None, audio=None, **kwargs):
         images, text, videos, audio = super().prepare_inputs_layout(
