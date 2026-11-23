@@ -394,7 +394,7 @@ class ResponseHandler(BaseHandler):
         # The Responses API's input (a string, items, instructions) as chat messages, then rendered like a chat's
         inputs = await self.run_in_thread(self.render_messages, engine, self._normalize_input(body), body)
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
-        streaming = body.get("stream", True)
+        streaming = body.get("stream", False)
         self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
         if streaming:
             return self._streaming(request_id, engine, body, inputs, generation_kwargs)
