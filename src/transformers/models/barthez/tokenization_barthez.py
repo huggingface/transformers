@@ -128,7 +128,7 @@ class BarthezTokenizer(TokenizersBackend):
         else:
             list_normalizers = [
                 normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
-                normalizers.NFC(), # NFC() is a fallback approximation when no charsmap is available.
+                normalizers.NFC(),  # NFC() is a fallback approximation when no charsmap is available.
                 normalizers.Strip(left=False, right=True),
             ]
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
