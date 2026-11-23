@@ -147,6 +147,8 @@ class UlyssesAttention(SequenceParallelAttention):
 
     The first exchange gathers the whole sequence for each rank's assigned heads. The original attention function
     runs on those heads; the second exchange returns each token's output with all heads to its original rank.
+    Under tensor parallelism, a rank holds only `num_heads / tp_size` heads, and Ulysses splits those across the `sp`
+    ranks.
     """
 
     def install_forward(self, module: nn.Module, sp_mesh: DeviceMesh):
@@ -168,12 +170,15 @@ class UlyssesAttention(SequenceParallelAttention):
         config = module.config.get_text_config()
         num_kv_heads = getattr(config, "num_key_value_heads", None) or config.num_attention_heads
         sp_size = sp_mesh.size()
-        if config.num_attention_heads % sp_size or num_kv_heads % sp_size:
+        distributed_config = getattr(module.config, "distributed_config", None)
+        tp_size = 1 if distributed_config is None else distributed_config.tp_size
+        if config.num_attention_heads % (sp_size * tp_size) or num_kv_heads % (sp_size * tp_size):
             raise ValueError(
                 f"Ulysses sequence parallelism splits the attention heads across the {sp_size} ranks of the `sp` "
-                f"mesh, so `sp_size` must divide both the number of attention heads "
-                f"({config.num_attention_heads}) and the number of key/value heads ({num_kv_heads}) of "
-                f"{module.__class__.__name__}. Use another `sp_size`, or disable sequence parallelism."
+                f"mesh and the {tp_size} ranks of the `tp` mesh, so `sp_size * tp_size` must divide both the number "
+                f"of attention heads ({config.num_attention_heads}) and the number of key/value heads "
+                f"({num_kv_heads}) of {module.__class__.__name__}. Use smaller `sp_size` or `tp_size`, or disable "
+                "sequence parallelism."
             )
 
     def attention(self, sp_mesh: DeviceMesh, attention_function, module, query, key, value, attention_mask, **kwargs):
