@@ -437,15 +437,6 @@ def _rename_kwargs_for_bc(kwargs: dict) -> dict:
         logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
 
 
-_LEGACY_CACHE_NAMES = ("past_key_values", "cache_params")
-
-
-def _declares_legacy_cache_name(cls) -> bool:
-    """Whether an output class (usually from remote code) still declares a field with an old cache name."""
-    class_fields = getattr(cls, "__dataclass_fields__", {})
-    return any(name in class_fields for name in _LEGACY_CACHE_NAMES)
-
-
 class _BCCacheNameMeta(type):
     """
     This meta class is only here to allow BC on all __init__ of ModelOutput subclasses. Indeed, since the subclasses
@@ -462,7 +453,10 @@ class _BCCacheNameMeta(type):
         `return OutputClass(past_key_values=past_key_values,...)` which would crash without this. Classes which still
         declare one of the old names as a field keep their `__init__` untouched, as the old name is valid for them.
         """
-        if name == "__init__" and not _declares_legacy_cache_name(cls):
+        if name == "__init__" and all(
+            deprecated not in getattr(cls, "__dataclass_fields__", {})
+            for deprecated in ("past_key_values", "cache_params")
+        ):
             init = value
 
             # Wrap with the kwarg name change
@@ -606,6 +600,8 @@ class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
         This property is used for BC of output.past_key_values. Indeed, dynamo cannot trace the class if we override
         `__getattribute__` the same way as `__getitem__` to change the key, so it's the easiest way to keep BC for it.
         """
+        if "past_key_values" in getattr(self, "__dataclass_fields__", {}):
+            return self["past_key_values"]
         if not is_tracing():
             logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
         return self.cache  # ty:ignore[unresolved-attribute] <- it exists on most output classes
@@ -616,6 +612,8 @@ class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
         This property is used for BC of output.cache_params. Indeed, dynamo cannot trace the class if we override
         `__getattribute__` the same way as `__getitem__` to change the key, so it's the easiest way to keep BC for it.
         """
+        if "cache_params" in getattr(self, "__dataclass_fields__", {}):
+            return self["cache_params"]
         if not is_tracing():
             logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
         return self.cache  # ty:ignore[unresolved-attribute] <- it exists on most output classes
@@ -652,7 +650,7 @@ class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
     def _replace_old_cache_name(self, key: str) -> str:
         """Handle BC key rename from old `past_key_values`/`cache_params` to the newer `cache`, with warning if needed."""
         # For BC, unless the class still declares the old name as a field
-        if key in _LEGACY_CACHE_NAMES and key not in getattr(self, "__dataclass_fields__", {}):
+        if key in ("past_key_values", "cache_params") and key not in getattr(self, "__dataclass_fields__", {}):
             if not is_tracing():
                 logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
             return "cache"
