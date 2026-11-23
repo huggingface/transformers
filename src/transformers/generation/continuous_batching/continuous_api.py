@@ -691,6 +691,7 @@ class ContinuousBatchingManager:
         self.output_router = OutputRouter()
         self.batch_processor: ContinuousBatchProcessor | None = None
         self._generation_thread = None
+        self._start_stop_lock = threading.RLock()
 
         # Control flow attributes
         self.warmed_up = False  # Set to True after warmup is completed. Useful for persistent managers.
@@ -800,20 +801,22 @@ class ContinuousBatchingManager:
 
     def is_running(self) -> bool:
         """Returns True if the background generation thread has been started and is still alive."""
-        return self._generation_thread is not None and self._generation_thread.is_alive()
+        thread = self._generation_thread
+        return thread is not None and thread.is_alive()
 
     def start(self) -> None:
         """Start the background generation thread."""
-        if self.is_running():
-            logger.warning("Manager thread is already running.")
-            return None
-        self.background_thread_status.clear()
-        # Inference mode is thread-local: run the generation loop with the same inference mode as the caller
-        use_inference_mode = torch.is_inference_mode_enabled()
-        self._generation_thread = threading.Thread(
-            target=self._run_generation_loop, kwargs={"use_inference_mode": use_inference_mode}
-        )
-        self._generation_thread.start()
+        with self._start_stop_lock:
+            if self.is_running():
+                logger.warning("Manager thread is already running.")
+                return None
+            self.background_thread_status.clear()
+            # Inference mode is thread-local: run the generation loop with the same inference mode as the caller
+            use_inference_mode = torch.is_inference_mode_enabled()
+            self._generation_thread = threading.Thread(
+                target=self._run_generation_loop, kwargs={"use_inference_mode": use_inference_mode}
+            )
+            self._generation_thread.start()
 
     def stop(
         self,
@@ -831,29 +834,30 @@ class ContinuousBatchingManager:
         if self.batch_processor is None:
             logger.warning("\nBatch processor was not initialized.")
 
-        # If the manager is not started, warn and return.
-        if self._generation_thread is None:
-            msg = "Manager not started."
-            if keep_for_next_session:
-                msg += " Hence the unstarted manager will not be kept for next session."
-            logger.warning(msg)
-            return None
+        with self._start_stop_lock:
+            # If the manager is not started, warn and return.
+            if self._generation_thread is None:
+                msg = "Manager not started."
+                if keep_for_next_session:
+                    msg += " Hence the unstarted manager will not be kept for next session."
+                logger.warning(msg)
+                return None
 
-        # Stopping and pausing are conflicting operations: a thread inside a pause cannot stop the manager, because that
-        # would deadlock (pause waits for the stop to complete, stop hangs because the loop is paused)
-        if self.background_thread_status.is_pause_requested(local=True):
-            raise RuntimeError(
-                "Cannot stop the manager from inside a pause: the generation loop is paused and cannot exit, so "
-                "this would wait forever. Leave the `pause` context before calling `stop`."
-            )
+            # Stopping and pausing are conflicting operations: a thread inside a pause cannot stop the manager, because that
+            # would deadlock (pause waits for the stop to complete, stop hangs because the loop is paused)
+            if self.background_thread_status.is_pause_requested(local=True):
+                raise RuntimeError(
+                    "Cannot stop the manager from inside a pause: the generation loop is paused and cannot exit, so "
+                    "this would wait forever. Leave the `pause` context before calling `stop`."
+                )
 
-        # Signal the background thread to stop
-        stop_trigger_time = perf_counter()
-        stop_status = BackgroundThreadStatus.HARD_STOP if hard_stop else BackgroundThreadStatus.FLUSH_AND_STOP
-        self.background_thread_status.request_stop(stop_status, self.distributed_helper.global_rank)
-        # And maybe wait for that to happen
-        if block:
-            self.join(stop_trigger_time, timeout)
+            # Signal the background thread to stop
+            stop_trigger_time = perf_counter()
+            stop_status = BackgroundThreadStatus.HARD_STOP if hard_stop else BackgroundThreadStatus.FLUSH_AND_STOP
+            self.background_thread_status.request_stop(stop_status, self.distributed_helper.global_rank)
+            # And maybe wait for that to happen
+            if block:
+                self.join(stop_trigger_time, timeout)
 
         # If the manager is not being kept for next session, we clear the batch processor
         if not keep_for_next_session:
@@ -875,18 +879,19 @@ class ContinuousBatchingManager:
 
     def join(self, stop_trigger_time: float, timeout: float | None = None) -> None:
         """Wait for the background thread to finish. Wait can be capped using the timeout argument (in seconds)."""
-        # Early return if the thread is not running
-        if self._generation_thread is None:
-            return None
-        # Join (maybe w/ timeout) and check if the thread is still alive afterwards. If it is, then it means the thread
-        # is still running despite the stop signal, so we warn the user who might expect otherwise.
-        self._generation_thread.join(timeout=timeout)
-        if self._generation_thread.is_alive():
-            logger.warning(f"Generation thread did not exit after join timeout ({timeout}).")
-        else:
-            end = perf_counter()
-            logger.info(f"Background generation thread stopped after {end - stop_trigger_time:.2f}s.")
-            self._generation_thread = None
+        with self._start_stop_lock:
+            # Early return if the thread is not running
+            if self._generation_thread is None:
+                return None
+            # Join (maybe w/ timeout) and check if the thread is still alive afterwards. If it is, then it means the thread
+            # is still running despite the stop signal, so we warn the user who might expect otherwise.
+            self._generation_thread.join(timeout=timeout)
+            if self._generation_thread.is_alive():
+                logger.warning(f"Generation thread did not exit after join timeout ({timeout}).")
+            else:
+                end = perf_counter()
+                logger.info(f"Background generation thread stopped after {end - stop_trigger_time:.2f}s.")
+                self._generation_thread = None
 
     def destroy(self) -> None:
         """Terminate the manager and release distributed resources. Safe to call multiple times. After calling this,

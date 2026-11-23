@@ -1044,6 +1044,7 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         manager._wake_up_loop = threading.Event()
         manager.background_thread_status = status
         manager._generation_thread = thread
+        manager._start_stop_lock = threading.RLock()
         manager.distributed_helper = SimpleNamespace(cpu_comm_group=None, global_rank=0)
         # Attributes torn down by `stop`
         manager.batch_processor = None
@@ -1258,6 +1259,84 @@ class ContinuousBatchingPauseTest(unittest.TestCase):
         finished, error = self._pause_in_thread(manager)
         self.assertTrue(finished, "pause blocked on an already stopped manager")
         self.assertIsInstance(error, RuntimeError)
+
+    def test_concurrent_start_spawns_single_thread(self) -> None:
+        """Concurrent calls to `start()` on the same manager must serialize and spawn only one generation loop."""
+        for _ in range(10):
+            status = BackgroundThreadStatus()
+            manager = self._get_minimal_manager(status, None)
+            release_loop = threading.Event()
+            started_count = 0
+            count_lock = threading.Lock()
+
+            def fake_loop(use_inference_mode: bool = False) -> None:
+                nonlocal started_count
+                with count_lock:
+                    started_count += 1
+                release_loop.wait(timeout=10)
+
+            manager._run_generation_loop = fake_loop
+
+            n_threads = 8
+            barrier = threading.Barrier(n_threads)
+            threads = [
+                threading.Thread(target=lambda: (barrier.wait(timeout=10), manager.start()), daemon=True)
+                for _ in range(n_threads)
+            ]
+            for th in threads:
+                th.start()
+            for th in threads:
+                th.join(timeout=10)
+
+            self.assertEqual(started_count, 1)
+            self.assertTrue(manager.is_running())
+
+            release_loop.set()
+            manager.stop(block=True, timeout=10)
+            self.assertFalse(manager.is_running())
+
+    def test_start_waits_for_stop_join(self) -> None:
+        """A `start()` racing a blocking `stop()` must wait for `join()` to finish before spawning a new thread."""
+        status = BackgroundThreadStatus()
+        manager = self._get_minimal_manager(status, None)
+        first_stopping = threading.Event()
+        allow_first_exit = threading.Event()
+        second_started = threading.Event()
+        started_threads: list[threading.Thread] = []
+
+        def fake_loop(use_inference_mode: bool = False) -> None:
+            started_threads.append(threading.current_thread())
+            if len(started_threads) == 1:
+                while status.local_status < BackgroundThreadStatus.FLUSH_AND_STOP:
+                    time.sleep(0.005)
+                first_stopping.set()
+                allow_first_exit.wait(timeout=10)
+            else:
+                second_started.set()
+                while status.local_status < BackgroundThreadStatus.FLUSH_AND_STOP:
+                    time.sleep(0.005)
+
+        manager._run_generation_loop = fake_loop
+        manager.start()
+
+        stopper = threading.Thread(target=lambda: manager.stop(block=True, timeout=10))
+        stopper.start()
+        self.assertTrue(first_stopping.wait(timeout=10))
+
+        # Race start() while stop() is blocked in join()
+        starter = threading.Thread(target=manager.start)
+        starter.start()
+        time.sleep(0.05)
+        self.assertEqual(len(started_threads), 1, "start() spawned a second thread before stop() finished joining")
+
+        allow_first_exit.set()
+        stopper.join(timeout=10)
+        starter.join(timeout=10)
+
+        self.assertTrue(second_started.wait(timeout=10))
+        self.assertEqual(len(started_threads), 2)
+        self.assertIs(manager._generation_thread, started_threads[1])
+        manager.stop(block=True, timeout=10)
 
 
 @require_torch_accelerator
