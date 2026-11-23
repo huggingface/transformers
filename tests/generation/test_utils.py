@@ -5921,6 +5921,57 @@ class GenerationIntegrationTests(unittest.TestCase):
                 f"Unexpected warning when input_ids are provided: {warn_msgs}",
             )
 
+    def test_beam_search_fills_finished_sequences_with_pad_token_id_zero(self):
+        # Regression test: `pad_token_id=0` is falsy, so beam search used to fill finished sequences with
+        # `eos_token_id` instead of `pad_token_id`.
+        from transformers import GPT2Config, GPT2LMHeadModel, LogitsProcessor, LogitsProcessorList
+
+        pad_token_id, eos_token_id, num_beams, max_new_tokens = 0, 1, 2, 6
+        input_ids = torch.tensor([[5, 6, 7], [8, 9, 10]], device=torch_device)
+        prompt_len = input_ids.shape[1]
+
+        class ForceEosForSecondItem(LogitsProcessor):
+            # Batch item 0 never emits EOS, batch item 1 is forced to emit EOS as its 2nd generated token.
+            def __call__(self, input_ids, scores):
+                scores = scores.clone()
+                is_second_item = (torch.arange(input_ids.shape[0], device=input_ids.device) // num_beams) == 1
+                scores[:, eos_token_id] = -1e9
+                if input_ids.shape[1] >= prompt_len + 1:
+                    scores[is_second_item] = -1e9
+                    scores[is_second_item, eos_token_id] = 0.0
+                return scores
+
+        config = GPT2Config(
+            vocab_size=50,
+            n_embd=16,
+            n_layer=1,
+            n_head=2,
+            n_positions=32,
+            bos_token_id=2,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
+        )
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=torch.ones_like(input_ids),
+            num_beams=num_beams,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            logits_processor=LogitsProcessorList([ForceEosForSecondItem()]),
+        )
+
+        generated = outputs[:, prompt_len:].tolist()
+        self.assertEqual(len(generated[0]), max_new_tokens)
+        row = generated[1]
+        eos_position = row.index(eos_token_id)
+        tail = row[eos_position + 1 :]
+        self.assertGreater(len(tail), 0)
+        self.assertEqual(tail, [pad_token_id] * len(tail))
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
