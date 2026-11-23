@@ -31,8 +31,6 @@ class DeepseekVLV2Config(PreTrainedConfig):
     r"""
     downsample_ratio (`int`, *optional*, defaults to 2):
         Side of the square of neighbouring vision patches that the projector concatenates into one token.
-    projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-        Activation between the two linear layers of the multimodal projector.
 
     Example:
 

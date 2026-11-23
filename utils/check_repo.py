@@ -416,7 +416,6 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "Apertus1p5VisionTokenizerModel",  # no autoclass for VQ-VAE-style tokenizer models
         "JanusVQVAE",  # no autoclass for VQ-VAE models
         "JanusVisionModel",  # Building part of bigger (tested) model
-        "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
         "Step3p7TextModel",  # Building part of bigger (tested) model
         "Step3p7VisionModel",  # Building part of bigger (tested) model

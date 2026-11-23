@@ -20,10 +20,12 @@
 
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, select_best_resolution
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -53,8 +55,8 @@ DEFAULT_CANDIDATE_RESOLUTIONS = [
 @auto_docstring
 class DeepseekVLV2ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     size = {"height": 384, "width": 384}
     do_resize = True
     do_rescale = True
@@ -69,25 +71,21 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         super().__init__(**kwargs)
         self.background_color = [int(x * 255) for x in self.image_mean]
 
-    def resize_and_pad(self, image: "torch.Tensor", height: int, width: int, resample) -> "torch.Tensor":
+    def resize_and_pad(self, images: "torch.Tensor", height: int, width: int, resample) -> "torch.Tensor":
         """
-        Fit `image` inside `height x width` keeping its aspect ratio, then pad it centred with the mean colour. The
-        arithmetic follows `PIL.ImageOps.pad`, which the original model was trained with.
+        Fit `images` inside `height x width` keeping their aspect ratio, then pad them centred with the mean colour.
+        Sizes and offsets are rounded as in `PIL.ImageOps.pad`, which the original model was trained with; the
+        floor-split `pad_to_square` moves some images by one pixel.
         """
-        image_height, image_width = image.shape[-2:]
+        image_height, image_width = images.shape[-2:]
         if image_width / image_height > width / height:
             new_height, new_width = round(image_height / image_width * width), width
         else:
             new_height, new_width = height, round(image_width / image_height * height)
-        image = self.resize(image, SizeDict(height=new_height, width=new_width), resample=resample)
-        if (new_height, new_width) == (height, width):
-            return image
-        canvas = torch.empty((image.shape[0], height, width), dtype=image.dtype, device=image.device)
-        for channel, colour in enumerate(self.background_color):
-            canvas[channel] = colour
+        images = self.resize(images, SizeDict(height=new_height, width=new_width), resample=resample)
         top, left = round((height - new_height) * 0.5), round((width - new_width) * 0.5)
-        canvas[:, top : top + new_height, left : left + new_width] = image
-        return canvas
+        padding = [left, top, width - new_width - left, height - new_height - top]
+        return tvF.pad(images, padding=padding, fill=self.background_color)
 
     def _preprocess(
         self,
@@ -99,6 +97,7 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         crop_to_patches: bool = True,
         candidate_resolutions: list[list[int]] | None = None,
@@ -107,29 +106,30 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         tile = size.height
         # select_best_resolution works on (height, width); the checkpoints store [width, height].
         canvases = [(height, width) for width, height in (candidate_resolutions or self.candidate_resolutions)]
-        global_views, local_tiles, spatial_crop = [], [], []
-        for image in images:
-            global_views.append(self.resize_and_pad(image, tile, tile, resample))
-            best_height, best_width = (
-                select_best_resolution(tuple(image.shape[-2:]), canvases) if crop_to_patches else (tile, tile)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        global_views, local_tiles, spatial_crop = {}, {}, {}
+        for shape, stacked_images in grouped_images.items():
+            global_view = self.resize_and_pad(stacked_images, tile, tile, resample)
+            global_views[shape] = self.rescale_and_normalize(
+                global_view, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            canvas = self.resize_and_pad(image, best_height, best_width, resample)
-            for top in range(0, best_height, tile):
-                for left in range(0, best_width, tile):
-                    local_tiles.append(canvas[:, top : top + tile, left : left + tile])
-            spatial_crop.append([best_width // tile, best_height // tile])
 
-        pixel_values = self.rescale_and_normalize(
-            torch.stack(global_views), do_rescale, rescale_factor, do_normalize, image_mean, image_std
-        )
-        pixel_values_local = self.rescale_and_normalize(
-            torch.stack(local_tiles), do_rescale, rescale_factor, do_normalize, image_mean, image_std
-        )
+            best_height, best_width = (tile, tile)
+            if crop_to_patches:
+                best_height, best_width = select_best_resolution(tuple(stacked_images.shape[-2:]), canvases)
+            canvas = self.resize_and_pad(stacked_images, best_height, best_width, resample)
+            tiles = torch.stack(divide_to_patches(canvas, patch_size=tile), dim=1)
+            local_tiles[shape] = self.rescale_and_normalize(
+                tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            spatial_crop[shape] = [[best_width // tile, best_height // tile]] * stacked_images.shape[0]
+
+        local_tiles = reorder_images(local_tiles, grouped_images_index)
         return BatchFeature(
             data={
-                "pixel_values": pixel_values,
-                "pixel_values_local": pixel_values_local,
-                "image_spatial_crop": torch.tensor(spatial_crop, dtype=torch.long),
+                "pixel_values": reorder_images(global_views, grouped_images_index),
+                "pixel_values_local": [image_tile for image_tiles in local_tiles for image_tile in image_tiles],
+                "image_spatial_crop": reorder_images(spatial_crop, grouped_images_index),
             },
             tensor_type=return_tensors,
         )

@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import AutoProcessor, DeepseekVLV2Config, is_torch_available, is_vision_available
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -94,6 +94,10 @@ class DeepseekVLV2ModelTest(VLMModelTest, unittest.TestCase):
     def test_tp_plan_matches_params(self):
         pass
 
+    @unittest.skip("New model: `cache` only, no `past_key_values` BC")
+    def test_bc_cache_name_forward(self):
+        pass
+
     def test_image_token_layout(self):
         """A 2x1 local grid adds one newline per stitched row, so the token count follows the original formula."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -120,13 +124,11 @@ class DeepseekVLV2IntegrationTest(unittest.TestCase):
     model_id = "deepseek-community/deepseek-vl2-tiny"
     # DeepSeek's own demo image from github.com/deepseek-ai/DeepSeek-VL2 (images/monday.jpg).
     image_url = "https://raw.githubusercontent.com/deepseek-ai/DeepSeek-VL2/main/images/monday.jpg"
+    cats_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def test_tiny_matches_the_original_implementation(self):
-        processor = AutoProcessor.from_pretrained(self.model_id)
-        model = DeepseekVLV2ForConditionalGeneration.from_pretrained(
+    def setUp(self):
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+        self.model = DeepseekVLV2ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.bfloat16, device_map=torch_device
         )
         messages = [
@@ -135,15 +137,48 @@ class DeepseekVLV2IntegrationTest(unittest.TestCase):
                 "content": [{"type": "image"}, {"type": "text", "text": "Describe this image in one sentence."}],
             }
         ]
-        prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-        inputs = processor(
-            text=prompt, images=[load_image(self.image_url)], add_special_tokens=False, return_tensors="pt"
-        ).to(model.device, dtype=model.dtype)
+        self.prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
 
-        generated = model.generate(**inputs, max_new_tokens=24, do_sample=False)
-        text = processor.decode(generated[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        # Greedy output of the original deepseek-ai/DeepSeek-VL2 code on the same inputs (bf16, CPU).
-        expected = (
-            'A small dog is sleeping peacefully on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above'
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def generate(self, prompts, images, **processor_kwargs):
+        inputs = self.processor(
+            text=prompts, images=images, add_special_tokens=False, return_tensors="pt", **processor_kwargs
+        ).to(self.model.device, dtype=self.model.dtype)
+        generated = self.model.generate(**inputs, max_new_tokens=24, do_sample=False)
+        return self.processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+    def test_tiny_matches_the_original_implementation(self):
+        text = self.generate(self.prompt, [load_image(self.image_url)])
+        # ("cpu", None) matches the greedy output of the original deepseek-ai/DeepSeek-VL2 code on the same inputs (bf16).
+        expected = Expectations(
+            {
+                ("cpu", None): ['A small dog is sleeping peacefully on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above'],
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(text, expected)
+
+    def test_batched_generation(self):
+        self.processor.tokenizer.padding_side = "left"
+        text = self.generate(
+            [self.prompt, self.prompt], [load_image(self.image_url), load_image(self.cats_url)], padding=True
         )
+        expected = Expectations(
+            {
+                ("cpu", None): [
+                    'A small dog is sleeping peacefully on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above',
+                    "Two cats are sleeping on a pink couch next to remote controls.",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
+        self.assertEqual(text, expected)
+
+    def test_generation_without_cropping(self):
+        text = self.generate(self.prompt, [load_image(self.image_url)], crop_to_patches=False)
+        expected = Expectations(
+            {
+                ("cpu", None): ['A small dog is lying down on a blue wooden floor with the text "MONDAY. JUST...MONDAY." above'],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(text, expected)

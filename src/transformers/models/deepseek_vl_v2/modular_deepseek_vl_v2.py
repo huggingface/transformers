@@ -18,23 +18,33 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, select_best_resolution
-from ...image_utils import PILImageResampling, SizeDict, make_flat_list_of_images
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    PILImageResampling,
+    SizeDict,
+    make_flat_list_of_images,
+)
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoConfig, AutoModel
-from ..llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextModelOutputWithPast
+from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 
 
 logger = logging.get_logger(__name__)
@@ -46,8 +56,6 @@ class DeepseekVLV2Config(PreTrainedConfig):
     r"""
     downsample_ratio (`int`, *optional*, defaults to 2):
         Side of the square of neighbouring vision patches that the projector concatenates into one token.
-    projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-        Activation between the two linear layers of the multimodal projector.
 
     Example:
 
@@ -86,14 +94,6 @@ class DeepseekVLV2Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
 
-class DeepseekVLV2ModelOutputWithPast(LlavaNextModelOutputWithPast):
-    pass
-
-
-class DeepseekVLV2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    pass
-
-
 class DeepseekVLV2MultiModalProjector(nn.Module):
     """
     Merges each `downsample_ratio x downsample_ratio` block of vision patches into one token (zero-padding the grid
@@ -127,7 +127,6 @@ class DeepseekVLV2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = False
@@ -142,7 +141,7 @@ class DeepseekVLV2PreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
+class DeepseekVLV2Model(DeepseekOcr2Model):
     def __init__(self, config: DeepseekVLV2Config):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -152,18 +151,6 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
         # Sits between the global view and the stitched local tiles.
         self.view_separator = nn.Parameter(torch.empty(config.text_config.hidden_size))
         self.language_model = AutoModel.from_config(config.text_config)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def _add_row_newlines(self, grid: torch.Tensor) -> torch.Tensor:
-        rows, _, hidden_size = grid.shape
-        newline = self.image_newline.to(grid.dtype).expand(rows, 1, hidden_size)
-        return torch.cat([grid, newline], dim=1).reshape(-1, hidden_size)
 
     @can_return_tuple
     @auto_docstring
@@ -182,6 +169,7 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
         image_spatial_crop (`torch.Tensor` or `list[list[int]]` of shape `(num_images, 2)`):
             `[width_tiles, height_tiles]` of the local grid of each image.
         """
+        # The tile grid sets how many tokens each image gets, so the output shapes need it on the host.
         if isinstance(image_spatial_crop, torch.Tensor):
             image_spatial_crop = image_spatial_crop.tolist()
 
@@ -190,50 +178,52 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
         local_outputs = self.vision_tower(pixel_values_local, **kwargs)
         local_features = self.multi_modal_projector(local_outputs.last_hidden_state)
 
-        _, tokens_per_view, hidden_size = global_features.shape
+        num_images, tokens_per_view, hidden_size = global_features.shape
         side = math.isqrt(tokens_per_view)
-        per_image_local = torch.split(local_features, [w * h for w, h in image_spatial_crop], dim=0)
-        separator = self.view_separator.to(global_features.dtype).unsqueeze(0)
+        # Every image token is one row of this table, so the whole layout is a single gather.
+        table = torch.cat(
+            [
+                global_features.reshape(-1, hidden_size),
+                local_features.reshape(-1, hidden_size),
+                self.image_newline.to(global_features.dtype).unsqueeze(0),
+                self.view_separator.to(global_features.dtype).unsqueeze(0),
+            ]
+        )
+        newline_row, separator_row = table.shape[0] - 2, table.shape[0] - 1
+        separator = torch.full((1,), separator_row, device=table.device)
 
-        image_features = []
-        for global_view, local_tiles, (width_tiles, height_tiles) in zip(
-            global_features, per_image_local, image_spatial_crop
-        ):
-            global_rows = self._add_row_newlines(global_view.reshape(side, side, hidden_size))
-            # (th * tw, side * side, D) -> (th * side, tw * side, D): stitch the tiles back into one canvas.
-            canvas = local_tiles.reshape(height_tiles, width_tiles, side, side, hidden_size)
-            canvas = canvas.permute(0, 2, 1, 3, 4).reshape(height_tiles * side, width_tiles * side, hidden_size)
-            local_rows = self._add_row_newlines(canvas)
-            image_features.append(torch.cat([global_rows, separator, local_rows], dim=0))
+        def canvas_rows(first_row: int, width_tiles: int, height_tiles: int) -> torch.Tensor:
+            # Stitch row-major tiles of `side x side` tokens into one canvas and end each canvas row with a newline.
+            y = torch.arange(height_tiles * side, device=table.device).unsqueeze(1)
+            x = torch.arange(width_tiles * side, device=table.device).unsqueeze(0)
+            tile = (y // side) * width_tiles + x // side
+            rows = first_row + tile * tokens_per_view + (y % side) * side + x % side
+            return torch.cat([rows, torch.full_like(rows[:, :1], newline_row)], dim=1).flatten()
+
+        image_rows, first_tile = [], 0
+        for image_idx, (width_tiles, height_tiles) in enumerate(image_spatial_crop):
+            first_local_row = (num_images + first_tile) * tokens_per_view
+            image_rows.append(
+                torch.cat(
+                    [
+                        canvas_rows(image_idx * tokens_per_view, 1, 1),
+                        separator,
+                        canvas_rows(first_local_row, width_tiles, height_tiles),
+                    ]
+                )
+            )
+            first_tile += width_tiles * height_tiles
+        image_features = table[torch.cat(image_rows)].split([len(rows) for rows in image_rows])
 
         return BaseModelOutputWithPooling(
             last_hidden_state=global_outputs.last_hidden_state,
-            pooler_output=image_features,
+            pooler_output=list(image_features),
             hidden_states=global_outputs.hidden_states,
             attentions=global_outputs.attentions,
         )
 
-    def get_placeholder_mask(
-        self, input_ids: torch.LongTensor | None, inputs_embeds: torch.Tensor, image_features: torch.Tensor
-    ) -> torch.Tensor:
-        if input_ids is None:
-            image_token = self.get_input_embeddings()(
-                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = (inputs_embeds == image_token).all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-        n_image_tokens = int(special_image_mask.sum())
-        if n_image_tokens != image_features.shape[0]:
-            raise ValueError(
-                f"Image features and image tokens do not match: {n_image_tokens} image tokens in the text, "
-                f"{image_features.shape[0]} image features"
-            )
-        return special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-
     @can_return_tuple
     @auto_docstring
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -247,7 +237,7 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | DeepseekVLV2ModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         r"""
         pixel_values_local (`torch.Tensor` of shape `(total_tiles, 3, image_size, image_size)`, *optional*):
             The local tiles of every image, row by row, concatenated across images.
@@ -268,7 +258,6 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
                 pixel_values, pixel_values_local, image_spatial_crop, return_dict=True
             )
 
-        image_features = None
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
@@ -284,7 +273,7 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
             **kwargs,
         )
 
-        return DeepseekVLV2ModelOutputWithPast(
+        return MultimodalBaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
@@ -294,25 +283,7 @@ class DeepseekVLV2Model(DeepseekVLV2PreTrainedModel):
 
 
 @auto_docstring
-class DeepseekVLV2ForConditionalGeneration(DeepseekVLV2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-
-    def __init__(self, config: DeepseekVLV2Config):
-        super().__init__(config)
-        self.model = DeepseekVLV2Model(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Module:
-        return self.lm_head
-
+class DeepseekVLV2ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
     @auto_docstring
     def get_image_features(
         self,
@@ -331,9 +302,11 @@ class DeepseekVLV2ForConditionalGeneration(DeepseekVLV2PreTrainedModel, Generati
         """
         return self.model.get_image_features(pixel_values, pixel_values_local, image_spatial_crop, **kwargs)
 
+    def pack_image_features(self):
+        raise AttributeError("Not needed for DeepseekVLV2")
+
     @can_return_tuple
     @auto_docstring
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -349,7 +322,7 @@ class DeepseekVLV2ForConditionalGeneration(DeepseekVLV2PreTrainedModel, Generati
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | DeepseekVLV2CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         pixel_values_local (`torch.Tensor` of shape `(total_tiles, 3, image_size, image_size)`, *optional*):
             The local tiles of every image, row by row, concatenated across images.
@@ -382,7 +355,7 @@ class DeepseekVLV2ForConditionalGeneration(DeepseekVLV2PreTrainedModel, Generati
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return DeepseekVLV2CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
@@ -390,25 +363,6 @@ class DeepseekVLV2ForConditionalGeneration(DeepseekVLV2PreTrainedModel, Generati
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        pixel_values=None,
-        pixel_values_local=None,
-        image_spatial_crop=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids, is_first_iteration=is_first_iteration, **kwargs
-        )
-        # Images only go in on the prefill step; later steps reuse the cache.
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["pixel_values_local"] = pixel_values_local
-            model_inputs["image_spatial_crop"] = image_spatial_crop
-        return model_inputs
 
 
 # The 23 tilings DeepSeek-VL2 was trained with, as [width, height] in pixels (from the checkpoints' processor config).
@@ -436,8 +390,8 @@ class DeepseekVLV2ImageProcessorKwargs(ImagesKwargs, total=False):
 @auto_docstring
 class DeepseekVLV2ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
-    image_mean = [0.5, 0.5, 0.5]
-    image_std = [0.5, 0.5, 0.5]
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     size = {"height": 384, "width": 384}
     do_resize = True
     do_rescale = True
@@ -452,25 +406,21 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         super().__init__(**kwargs)
         self.background_color = [int(x * 255) for x in self.image_mean]
 
-    def resize_and_pad(self, image: "torch.Tensor", height: int, width: int, resample) -> "torch.Tensor":
+    def resize_and_pad(self, images: "torch.Tensor", height: int, width: int, resample) -> "torch.Tensor":
         """
-        Fit `image` inside `height x width` keeping its aspect ratio, then pad it centred with the mean colour. The
-        arithmetic follows `PIL.ImageOps.pad`, which the original model was trained with.
+        Fit `images` inside `height x width` keeping their aspect ratio, then pad them centred with the mean colour.
+        Sizes and offsets are rounded as in `PIL.ImageOps.pad`, which the original model was trained with; the
+        floor-split `pad_to_square` moves some images by one pixel.
         """
-        image_height, image_width = image.shape[-2:]
+        image_height, image_width = images.shape[-2:]
         if image_width / image_height > width / height:
             new_height, new_width = round(image_height / image_width * width), width
         else:
             new_height, new_width = height, round(image_width / image_height * height)
-        image = self.resize(image, SizeDict(height=new_height, width=new_width), resample=resample)
-        if (new_height, new_width) == (height, width):
-            return image
-        canvas = torch.empty((image.shape[0], height, width), dtype=image.dtype, device=image.device)
-        for channel, colour in enumerate(self.background_color):
-            canvas[channel] = colour
+        images = self.resize(images, SizeDict(height=new_height, width=new_width), resample=resample)
         top, left = round((height - new_height) * 0.5), round((width - new_width) * 0.5)
-        canvas[:, top : top + new_height, left : left + new_width] = image
-        return canvas
+        padding = [left, top, width - new_width - left, height - new_height - top]
+        return tvF.pad(images, padding=padding, fill=self.background_color)
 
     def _preprocess(
         self,
@@ -482,6 +432,7 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        disable_grouping: bool | None,
         return_tensors: str | TensorType | None,
         crop_to_patches: bool = True,
         candidate_resolutions: list[list[int]] | None = None,
@@ -490,29 +441,30 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         tile = size.height
         # select_best_resolution works on (height, width); the checkpoints store [width, height].
         canvases = [(height, width) for width, height in (candidate_resolutions or self.candidate_resolutions)]
-        global_views, local_tiles, spatial_crop = [], [], []
-        for image in images:
-            global_views.append(self.resize_and_pad(image, tile, tile, resample))
-            best_height, best_width = (
-                select_best_resolution(tuple(image.shape[-2:]), canvases) if crop_to_patches else (tile, tile)
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        global_views, local_tiles, spatial_crop = {}, {}, {}
+        for shape, stacked_images in grouped_images.items():
+            global_view = self.resize_and_pad(stacked_images, tile, tile, resample)
+            global_views[shape] = self.rescale_and_normalize(
+                global_view, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            canvas = self.resize_and_pad(image, best_height, best_width, resample)
-            for top in range(0, best_height, tile):
-                for left in range(0, best_width, tile):
-                    local_tiles.append(canvas[:, top : top + tile, left : left + tile])
-            spatial_crop.append([best_width // tile, best_height // tile])
 
-        pixel_values = self.rescale_and_normalize(
-            torch.stack(global_views), do_rescale, rescale_factor, do_normalize, image_mean, image_std
-        )
-        pixel_values_local = self.rescale_and_normalize(
-            torch.stack(local_tiles), do_rescale, rescale_factor, do_normalize, image_mean, image_std
-        )
+            best_height, best_width = (tile, tile)
+            if crop_to_patches:
+                best_height, best_width = select_best_resolution(tuple(stacked_images.shape[-2:]), canvases)
+            canvas = self.resize_and_pad(stacked_images, best_height, best_width, resample)
+            tiles = torch.stack(divide_to_patches(canvas, patch_size=tile), dim=1)
+            local_tiles[shape] = self.rescale_and_normalize(
+                tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            spatial_crop[shape] = [[best_width // tile, best_height // tile]] * stacked_images.shape[0]
+
+        local_tiles = reorder_images(local_tiles, grouped_images_index)
         return BatchFeature(
             data={
-                "pixel_values": pixel_values,
-                "pixel_values_local": pixel_values_local,
-                "image_spatial_crop": torch.tensor(spatial_crop, dtype=torch.long),
+                "pixel_values": reorder_images(global_views, grouped_images_index),
+                "pixel_values_local": [image_tile for image_tiles in local_tiles for image_tile in image_tiles],
+                "image_spatial_crop": reorder_images(spatial_crop, grouped_images_index),
             },
             tensor_type=return_tensors,
         )
