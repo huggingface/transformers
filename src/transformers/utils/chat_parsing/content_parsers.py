@@ -312,6 +312,12 @@ CONTENT_PARSERS = {
 # flagged `dirty=True` while the parsed value is delivered in `region_close`.
 STREAMABLE_PARSERS = frozenset({"text", "int", "float", "bool"})
 
+# Structured parsers whose syntax already distinguishes quoted strings from typed
+# literals (numbers, booleans, null/None, lists, dicts). Schema-driven string
+# coercion in `ResponseParser` leaves parameters allowing `string` untouched,
+# while still coercing quoted strings for non-string parameter schemas.
+TYPED_STRUCTURED_PARSERS = frozenset({"json", "python-call-list"})
+
 
 def parse_content(text: str, name: str, args: dict) -> Any:
     return CONTENT_PARSERS[name](text, args)
@@ -401,6 +407,7 @@ def process_field(body: str, field, captures: dict) -> Any:
 __all__ = [
     "CONTENT_PARSERS",
     "STREAMABLE_PARSERS",
+    "TYPED_STRUCTURED_PARSERS",
     "parse_content",
     "process_field",
     "validate_transform_strings",
