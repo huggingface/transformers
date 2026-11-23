@@ -46,27 +46,27 @@ class BailingHybridModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = BailingHybridModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
-        self.hidden_act = "silu"
-        self.num_hidden_layers = 2
-        self.layer_types = ["linear_attention", "full_attention"]
-        self.first_k_dense_replace = 1
-        self.short_conv_kernel_size = 2
+    small_config_overrides = {
+        "hidden_act": "silu",
+        "num_hidden_layers": 2,
+        "layer_types": ["linear_attention", "full_attention"],
+        "first_k_dense_replace": 1,
+        "short_conv_kernel_size": 2,
         # Keep the KDA head size distinct from the MLA RoPE size to cover config save/load semantics.
-        self.head_dim = 24
-        self.kv_lora_rank = 16
-        self.q_lora_rank = None
-        self.qk_nope_head_dim = 32
-        self.qk_rope_head_dim = 16
-        self.v_head_dim = 32
-        self.moe_intermediate_size = 16
-        self.num_local_experts = 4
-        self.n_shared_experts = 1
-        self.num_experts_per_tok = 2
-        self.n_group = 1
-        self.topk_group = 1
-        self.num_mtp_layers = 0
+        "head_dim": 24,
+        "kv_lora_rank": 16,
+        "q_lora_rank": None,
+        "qk_nope_head_dim": 32,
+        "qk_rope_head_dim": 16,
+        "v_head_dim": 32,
+        "moe_intermediate_size": 16,
+        "num_local_experts": 4,
+        "n_shared_experts": 1,
+        "num_experts_per_tok": 2,
+        "n_group": 1,
+        "topk_group": 1,
+        "num_mtp_layers": 0,
+    }
 
 
 @require_torch

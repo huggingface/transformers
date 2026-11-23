@@ -42,20 +42,13 @@ class Glm4MoeModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Glm4MoeModel
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        n_shared_experts=1,
-        n_group=1,
-        topk_group=1,
-        num_experts_per_tok=8,
-    ):
-        super().__init__(parent=parent, num_experts_per_tok=num_experts_per_tok)
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.n_group = n_group
-        self.topk_group = topk_group
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "n_shared_experts": 1,
+        "n_group": 1,
+        "topk_group": 1,
+        "num_experts_per_tok": 8,
+    }
 
 
 @require_torch

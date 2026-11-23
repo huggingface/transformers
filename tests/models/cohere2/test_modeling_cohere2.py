@@ -60,6 +60,8 @@ class Cohere2ModelTester(CohereModelTester):
 
 @require_torch
 class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Cohere2ModelTester
+
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

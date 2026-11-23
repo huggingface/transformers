@@ -19,6 +19,7 @@ from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
+    DataCollatorWithFlattening,
     Inkling2Config,
     Inkling2TextConfig,
     Inkling2VisionConfig,
@@ -26,6 +27,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    require_causal_conv1d,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
@@ -63,13 +65,19 @@ class Inkling2TextModelTester(CausalLMModelTester):
         base_model_class = Inkling2TextModel
         causal_lm_class = Inkling2ForCausalLM
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.layer_types = ["hybrid_sliding", "hybrid"]
-        self.swa_num_attention_heads = self.num_attention_heads
-        self.swa_num_key_value_heads = self.num_key_value_heads
-        self.swa_head_dim = self.head_dim
-        self.n_routed_experts = 8
+    small_config_overrides = {
+        "layer_types": ["hybrid_sliding", "hybrid"],
+        "n_routed_experts": 8,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["swa_num_attention_heads"] = values["num_attention_heads"]
+        values["swa_num_key_value_heads"] = values["num_key_value_heads"]
+        values["swa_head_dim"] = values["head_dim"]
+        values["unpadded_vocab_size"] = values["vocab_size"]
+        return values
 
 
 @require_torch
@@ -94,6 +102,28 @@ class Inkling2TextModelTest(CausalLMModelTest, unittest.TestCase):
             self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
+    @require_causal_conv1d
+    @require_torch_accelerator
+    def test_padding_free_matches_separate_sequences(self):
+        """Tests that packed sequences do not leak through the causal_conv1 layers."""
+        config = self.model_tester.get_config()
+        model = Inkling2ForCausalLM(config).to(torch_device).eval()
+        features = [{"input_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9]}, {"input_ids": [10, 11, 12, 13, 14, 15, 16]}]
+        batch = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True)(features)
+        batch.pop("labels")
+        batch = {key: value.to(torch_device) for key, value in batch.items()}
+
+        with torch.no_grad():
+            separate_logits = torch.cat(
+                [
+                    model(input_ids=torch.tensor([feature["input_ids"]], device=torch_device)).logits[0]
+                    for feature in features
+                ]
+            )
+            packed_logits = model(**batch, use_cache=False).logits[0]
+
+        torch.testing.assert_close(packed_logits, separate_logits, atol=1e-5, rtol=1e-5)
+
 
 class Inkling2VisionText2TextModelTester(VLMModelTester):
     base_model_class = Inkling2Model
@@ -102,21 +132,27 @@ class Inkling2VisionText2TextModelTester(VLMModelTester):
     vision_config_class = Inkling2VisionConfig
     conditional_generation_class = Inkling2ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("posemb_grid_size", 4)
-        kwargs.setdefault("projection_hidden_dim", 32)
-        kwargs.setdefault("layer_types", ["hybrid_sliding", "hybrid"])
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("swa_num_attention_heads", 2)
-        kwargs.setdefault("swa_num_key_value_heads", 2)
-        kwargs.setdefault("swa_head_dim", 16)
-        super().__init__(parent, **kwargs)
-        self.text_hidden_size = self.hidden_size
+    small_config_overrides = {
+        "image_token_id": 4,
+        "patch_size": 2,
+        "spatial_merge_size": 2,
+        "num_image_tokens": 4,
+        "posemb_grid_size": 4,
+        "projection_hidden_dim": 32,
+        "layer_types": ["hybrid_sliding", "hybrid"],
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 8,
+        "swa_num_attention_heads": 2,
+        "swa_num_key_value_heads": 2,
+        "swa_head_dim": 16,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["text_hidden_size"] = values["hidden_size"]
+        values["unpadded_vocab_size"] = values["vocab_size"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
@@ -131,7 +167,8 @@ class Inkling2VisionText2TextModelTester(VLMModelTester):
 @require_torch
 class Inkling2VisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Inkling2VisionText2TextModelTester
-    # each image adds a class token and `spatial_merge_size**2` vision tokens per `pixel_values` row
+    # `last_hidden_state` holds `spatial_merge_size**2` patch states per `pixel_values` row plus a class token per image,
+    # but the common test expects one state per `pixel_values` row
     skip_test_image_features_output_shape = True
 
     def _get_conv_state_shape(self, batch_size: int, config):

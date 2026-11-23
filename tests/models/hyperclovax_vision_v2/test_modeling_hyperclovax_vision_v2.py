@@ -47,18 +47,17 @@ class HCXVisionV2VisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = HyperCLOVAXVisionV2ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_size", 28)
-        kwargs.setdefault("patch_size", 14)
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("out_hidden_size", 32)
-        kwargs.setdefault("tokens_per_second", 1)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("video_token_id", 4)
-
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_size": 28,
+        "patch_size": 14,
+        "num_heads": 4,
+        "depth": 2,
+        "spatial_merge_size": 1,
+        "out_hidden_size": 32,
+        "tokens_per_second": 1,
+        "temporal_patch_size": 2,
+        "video_token_id": 4,
+    }
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
