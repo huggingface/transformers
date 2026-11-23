@@ -946,9 +946,6 @@ jobs:
       MODALITY: ${{ matrix.modality }}
       # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
       VLLM_CPU_CI_ENV: "1"
-      # The transformers reference model of a test is still in memory when vLLM starts: with the workflow's 32 GiB,
-      # vLLM fails to allocate the KV cache for the larger models (e.g. VibeVoice-ASR: 20-25 GiB free).
-      VLLM_CPU_KVCACHE_SPACE: 8
 
     steps:
       - name: Checkout Transformers
@@ -1024,9 +1021,11 @@ jobs:
       - name: "Test: Transformers backend multimodal generation (${{ matrix.modality }})"
         working-directory: vllm
         run: |
-          # gemma-3n / gemma-4 (omni): their audio encoder passes a permuted (non-contiguous) tensor to a linear layer,
-          # which vLLM's CPU matmul (onednn_mm) rejects ("Expected a.stride(-1) == 1"). vLLM CPU limitation.
-          pytest -v -s "tests/models/multimodal/generation/test_transformers_${MODALITY}.py"             --deselect 'tests/models/multimodal/generation/test_transformers_omni.py::test_transformers_omni_generation[google/gemma-3n-E2B-it]'             --deselect 'tests/models/multimodal/generation/test_transformers_omni.py::test_transformers_omni_generation[google/gemma-4-E2B-it]'
+          # gemma-3n / gemma-4 (omni) and VibeVoice-ASR (audio; test_transformers_audio_mixed_lengths only uses it): their
+          # audio encoder passes a transposed (non-contiguous) tensor to a linear layer, which vLLM's CPU linear kernels
+          # reject ("Expected a.stride(-1) == 1" / "mat1 must be contiguous at last dimension"). vLLM CPU limitation;
+          # vLLM runs these test files on GPU only.
+          pytest -v -s "tests/models/multimodal/generation/test_transformers_${MODALITY}.py"             --deselect 'tests/models/multimodal/generation/test_transformers_audio.py::test_transformers_audio_generation[microsoft/VibeVoice-ASR-HF]'             --deselect 'tests/models/multimodal/generation/test_transformers_audio.py::test_transformers_audio_mixed_lengths'             --deselect 'tests/models/multimodal/generation/test_transformers_omni.py::test_transformers_omni_generation[google/gemma-3n-E2B-it]'             --deselect 'tests/models/multimodal/generation/test_transformers_omni.py::test_transformers_omni_generation[google/gemma-4-E2B-it]'
 
   # Initialize every other registered architecture (the complement of `vllm-test-init`'s small subset) from its real
   # HF config: catches transformers config changes that break text-only / less common models (e.g. renamed config
