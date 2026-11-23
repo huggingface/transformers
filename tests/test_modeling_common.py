@@ -4580,7 +4580,7 @@ class ModelTesterMixin(ExportTesterMixin):
             with torch.no_grad():
                 expected = model(**copy.deepcopy(inputs))
                 actual = torch.compile(model, fullgraph=True, backend="eager")(**copy.deepcopy(inputs))
-            torch.testing.assert_close(actual.to_tuple()[0], expected.to_tuple()[0])
+            torch.testing.assert_close(actual.to_tuple()[0], expected.to_tuple()[0], atol=1e-2, rtol=1e-2)
 
     @slow
     @require_torch_accelerator

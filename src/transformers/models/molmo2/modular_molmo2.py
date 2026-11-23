@@ -17,6 +17,7 @@
 import itertools
 import math
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -39,7 +40,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_masks_for_generate
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_flash_attention_utils import FlashAttentionKwargs, _get_unpad_data
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
@@ -61,7 +62,7 @@ from ...utils import (
     logging,
 )
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoInput, VideoMetadata
@@ -1349,6 +1350,20 @@ class Molmo2ImageProjectorMLP(LlamaMLP):
         self.down_proj = nn.Linear(config.intermediate_size, config.text_hidden_size, bias=False)
 
 
+def get_pooling_packing(token_pooling: torch.Tensor) -> dict[str, Any]:
+    """The adapter's pooling as varlen cross-attention: the tokens with at least one patch to pool
+    (`valid_token_index`), and their valid patches packed as keys (`key_index`, `cu_seqlens_k`, `max_seqlen_k`)."""
+    valid_mask = token_pooling >= 0
+    valid_token_index = valid_mask.any(-1).nonzero().squeeze(-1)
+    key_index, cu_seqlens_k, max_seqlen_k = _get_unpad_data(valid_mask[valid_token_index])
+    return {
+        "valid_token_index": valid_token_index,
+        "key_index": key_index,
+        "cu_seqlens_k": cu_seqlens_k,
+        "max_seqlen_k": max_seqlen_k,
+    }
+
+
 @auto_docstring(
     custom_intro="""
     The Molmo2 vision adapter: pools ViT patch features with a cross-attention layer and projects them into the
@@ -1375,6 +1390,10 @@ class Molmo2Adapter(Molmo2PreTrainedModel):
         self,
         image_features: torch.Tensor,
         pooled_patches_idx: torch.Tensor,
+        valid_token_index: torch.LongTensor | None = None,
+        key_index: torch.LongTensor | None = None,
+        cu_seqlens_k: torch.Tensor | None = None,
+        max_seqlen_k: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -1382,8 +1401,40 @@ class Molmo2Adapter(Molmo2PreTrainedModel):
             Concatenated intermediate ViT features of every crop.
         pooled_patches_idx (`torch.Tensor` of shape `(num_tokens, pool_h * pool_w)`):
             Indices into the flattened patch sequence pooled by each output token; `-1` marks padding slots.
+        valid_token_index (`torch.LongTensor`, *optional*):
+            Under flash attention, the tokens with at least one patch to pool, as [`get_pooling_packing`] returns them
+            with `key_index`, `cu_seqlens_k` and `max_seqlen_k`. Computed if not given.
+        key_index (`torch.LongTensor`, *optional*):
+            Under flash attention, the valid patches to pool of those tokens, in their flattened pooling windows.
+        cu_seqlens_k (`torch.Tensor`, *optional*):
+            Under flash attention, the cumulative valid patch counts of those tokens.
+        max_seqlen_k (`int`, *optional*):
+            Under flash attention, the largest valid patch count of a token.
         """
         flat_features = image_features.reshape(-1, image_features.shape[-1])
+        if is_flash_attention_requested(self.config):
+            if valid_token_index is None:
+                packing = get_pooling_packing(pooled_patches_idx)
+                valid_token_index, key_index = packing["valid_token_index"], packing["key_index"]
+                cu_seqlens_k, max_seqlen_k = packing["cu_seqlens_k"], packing["max_seqlen_k"]
+            # Varlen cross-attention: each token with patches to pool attends to its valid ones
+            pooled_patches_idx = pooled_patches_idx[valid_token_index]
+            valid_mask = pooled_patches_idx >= 0
+            patches_to_pool = flat_features[torch.clip(pooled_patches_idx, 0)]
+            patches_to_pool = patches_to_pool * valid_mask.to(patches_to_pool.dtype)[..., None]
+            num_valid_patches = valid_mask.sum(-1, keepdim=True).to(patches_to_pool.dtype)
+            query = patches_to_pool.sum(-2) / num_valid_patches
+            cu_seqlens_q = torch.arange(query.shape[0] + 1, device=query.device, dtype=torch.int32)
+            pooled_features, _ = self.image_pooling_2d(
+                query[None],
+                patches_to_pool.flatten(0, 1)[key_index][None],
+                cu_seq_lens_q=cu_seqlens_q,
+                cu_seq_lens_k=cu_seqlens_k,
+                max_length_q=1,
+                max_length_k=max_seqlen_k,
+                **kwargs,
+            )
+            return BaseModelOutput(last_hidden_state=self.image_projector(pooled_features[0]))
 
         valid_mask = pooled_patches_idx >= 0
         valid_token_mask = torch.any(valid_mask, -1)
@@ -1507,7 +1558,24 @@ class Molmo2Model(LlavaModel):
         self.language_model = Molmo2TextModel(config.text_config)
         self.post_init()
 
+    def get_data_dependent_inputs(
+        self,
+        image_token_pooling: torch.Tensor | None = None,
+        video_token_pooling: torch.Tensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """Under flash attention, the adapter's pooling packed for varlen cross-attention ([`get_pooling_packing`]),
+        prefixed `image_` and `video_`."""
+        if not is_flash_attention_requested(self.multi_modal_projector.config):
+            return {}
+        inputs = {}
+        for modality, token_pooling in (("image", image_token_pooling), ("video", video_token_pooling)):
+            if token_pooling is not None:
+                inputs |= {f"{modality}_{name}": value for name, value in get_pooling_packing(token_pooling).items()}
+        return inputs
+
     @can_return_tuple
+    @accepts_precomputed_kwargs(modality="image")
     @filter_output_hidden_states
     @auto_docstring(
         custom_intro="Obtains pooled image features from the vision tower and the adapter: the `pooler_output` is "
@@ -1525,6 +1593,9 @@ class Molmo2Model(LlavaModel):
             image_shape = pixel_values.shape[:3]
             pixel_values = pixel_values.reshape(-1, pixel_values.shape[-2], pixel_values.shape[-1])
 
+        pooling_packing = {
+            name: kwargs.pop(name, None) for name in ("valid_token_index", "key_index", "cu_seqlens_k", "max_seqlen_k")
+        }
         image_outputs: BaseModelOutputWithPooling = self.vision_tower(pixel_values, **kwargs)
         image_features = torch.cat(
             [
@@ -1536,12 +1607,15 @@ class Molmo2Model(LlavaModel):
 
         if image_shape is not None:
             image_features = image_features.reshape(*image_shape, -1)
-        pooled_features = self.multi_modal_projector(image_features, image_token_pooling).last_hidden_state
+        pooled_features = self.multi_modal_projector(
+            image_features, image_token_pooling, **pooling_packing
+        ).last_hidden_state
         image_outputs.pooler_output = pooled_features
         image_outputs.split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
         return image_outputs
 
     @can_return_tuple
+    @accepts_precomputed_kwargs(modality="video")
     @auto_docstring(
         custom_intro="Obtains pooled video features from the vision tower and the adapter: the `pooler_output` is "
         "one `(num_video_tokens, hidden_size)` tensor for all videos."
@@ -1599,10 +1673,12 @@ class Molmo2Model(LlavaModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_token_pooling, image_grids)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
+                pixel_values, image_token_pooling, image_grids, **kwargs
+            )
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
             mm_encoder_outputs["video"] = self.get_video_embeddings(
-                pixel_values_videos, video_token_pooling, video_grids
+                pixel_values_videos, video_token_pooling, video_grids, **kwargs
             )
 
         image_features: torch.Tensor | None = None
