@@ -215,10 +215,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     test_disk_offload_bin = False
     _is_composite = True
 
-    @unittest.skip(reason="Each image's features are interpolated to an anyres-max size from `image_sizes`")
-    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
-
     def setUp(self):
         self.model_tester = LlavaOnevisionVisionText2TextModelTester(self)
         common_properties = ["image_token_index", "video_token_index", "vision_feature_layer"]

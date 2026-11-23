@@ -4573,10 +4573,9 @@ class ModelTesterMixin(ExportTesterMixin):
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            data_dependent_inputs = model.get_data_dependent_inputs(**inputs)
-            if not data_dependent_inputs:
-                continue
-            inputs |= {name: value for name, value in data_dependent_inputs.items() if name not in inputs}
+            inputs |= {
+                name: value for name, value in model.get_data_dependent_inputs(**inputs).items() if name not in inputs
+            }
             torch.compiler.reset()
             with torch.no_grad():
                 expected = model(**copy.deepcopy(inputs))
