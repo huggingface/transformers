@@ -28,6 +28,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -366,7 +367,9 @@ class PI05RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class PI05ActionExpertModel(PI05PreTrainedModel):
-    def __init__(self, config):
+    config: PreTrainedConfig
+
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size

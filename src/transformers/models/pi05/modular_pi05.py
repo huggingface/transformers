@@ -20,6 +20,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
@@ -267,7 +268,9 @@ class PI05PreTrainedModel(PI0PreTrainedModel):
 
 @auto_docstring
 class PI05ActionExpertModel(GemmaModel):
-    def __init__(self, config):
+    config: PreTrainedConfig
+
+    def __init__(self, config: PreTrainedConfig):
         super().__init__(config)
         del self.embed_tokens
         self.norm = PI05AdaptiveRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
