@@ -168,6 +168,7 @@ class FusedSampler:
         self.seed = seed & ((1 << 63) - 1)
         self.counter = torch.zeros(1, dtype=torch.int64, device=device)
 
+    @torch.compiler.disable  # Triton launches on symbolic grids: run eager (still inside the CUDA graph)
     def __call__(
         self,
         logits: torch.Tensor,

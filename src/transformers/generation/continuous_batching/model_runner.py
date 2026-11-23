@@ -82,7 +82,7 @@ _CB_MTP_DRAFT_SAMPLE = _glue_os.environ.get("CB_MTP_DRAFT", "greedy") == "sample
 # softmax, multinomial or noise over the whole vocabulary. Temperature is applied in the kernel; other logits
 # processors keep the old path. CB_FUSED_SAMPLE_CHECK=1 also computes the old path's log softmax for the emitted tokens
 # and prints the largest difference so far every 50 steps.
-_CB_FUSED_SAMPLE = _glue_os.environ.get("CB_FUSED_SAMPLE", "0") == "1"
+_CB_FUSED_SAMPLE = _glue_os.environ.get("CB_FUSED_SAMPLE", "1") == "1"
 _CB_FUSED_SAMPLE_CHECK = _glue_os.environ.get("CB_FUSED_SAMPLE_CHECK", "0") == "1"
 # CB_FUSED_SAMPLE_SHARDED=1 (with CB_FUSED_SAMPLE=1; no MTP, or MTP spec verification with one draft): when the
 # lm_head is vocabulary-sharded (TP plan `colwise_gather_output`), each rank samples its own shard of the logits and
