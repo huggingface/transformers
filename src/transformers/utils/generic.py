@@ -600,8 +600,6 @@ class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
         This property is used for BC of output.past_key_values. Indeed, dynamo cannot trace the class if we override
         `__getattribute__` the same way as `__getitem__` to change the key, so it's the easiest way to keep BC for it.
         """
-        if "past_key_values" in getattr(self, "__dataclass_fields__", {}):
-            return self["past_key_values"]
         if not is_tracing():
             logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
         return self.cache  # ty:ignore[unresolved-attribute] <- it exists on most output classes
@@ -612,8 +610,6 @@ class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
         This property is used for BC of output.cache_params. Indeed, dynamo cannot trace the class if we override
         `__getattribute__` the same way as `__getitem__` to change the key, so it's the easiest way to keep BC for it.
         """
-        if "cache_params" in getattr(self, "__dataclass_fields__", {}):
-            return self["cache_params"]
         if not is_tracing():
             logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
         return self.cache  # ty:ignore[unresolved-attribute] <- it exists on most output classes
