@@ -1,14 +1,16 @@
 name: record-mic
 
-# Re-record the expected values of model integration contracts (MIC) on a PR's code, for that PR
-# only, when the PR changes a model's outputs on purpose. Someone with write access asks for it:
+# When a PR changes a model's outputs on purpose, its model integration contracts (MIC) go red and
+# its contracts job records the new values for the cases its gate would block. Someone with write
+# access publishes them, for this PR only:
 #
 #   a PR comment whose first line is   record-mic: gptj codegen
 #   or, from a checkout of the branch   make record-mic MODEL="gptj codegen" [PR=<number>]
 #
-# The values are measured on the PR CI runner and image, posted on the PR for review, and apply to
-# this PR's contracts job only until it merges (record-mic-close.yml then makes them the fleet's).
-# huggingface/transformers-ci .github/workflows/pr-ci_record_mic.yml does the work.
+# huggingface/transformers-ci .github/workflows/pr-ci_record_mic.yml does the work, the same way
+# self-comment-ci.yml handles run-slow: PR facts from get-pr-info.yml, the merge commit must be
+# older than the request, only the contracts run of that commit is used, and errors are replied
+# on the PR. No job runs the PR's code. The values go live in the fleet when the PR merges.
 
 on:
   issue_comment:
@@ -33,80 +35,22 @@ permissions:
   contents: read
 
 jobs:
-  request:
-    name: Parse the request
+  record-mic:
+    # The run-slow trigger condition (self-comment-ci.yml), with its own prefix.
     if: >-
       github.event_name == 'workflow_dispatch'
       || (github.event.issue.pull_request && github.event.issue.state == 'open'
+          && contains(fromJSON('["MEMBER", "OWNER", "COLLABORATOR"]'), github.event.comment.author_association)
           && startsWith(github.event.comment.body, 'record-mic:'))
-    permissions: {}
-    runs-on: ubuntu-22.04
-    outputs:
-      pr: ${{ steps.parse.outputs.pr }}
-      models: ${{ steps.parse.outputs.models }}
-      by: ${{ steps.parse.outputs.by }}
-      requested_at: ${{ steps.parse.outputs.requested_at }}
-    steps:
-      - name: Parse
-        id: parse
-        env:
-          EVENT: ${{ github.event_name }}
-          BODY: ${{ github.event.comment.body }}
-          COMMENT_PR: ${{ github.event.issue.number }}
-          COMMENT_BY: ${{ github.event.comment.user.login }}
-          COMMENT_AT: ${{ github.event.comment.created_at }}
-          INPUT_PR: ${{ inputs.pr }}
-          INPUT_MODELS: ${{ inputs.models }}
-          ACTOR: ${{ github.actor }}
-        run: |
-          if [[ "$EVENT" == issue_comment ]]; then
-            pr=$COMMENT_PR; by=$COMMENT_BY; at=$COMMENT_AT
-            models=$(printf '%s\n' "$BODY" | head -1 | sed -e 's/^record-mic://' | tr -d '\r')
-          else
-            pr=$INPUT_PR; by=$ACTOR; at=$(date -u +%Y-%m-%dT%H:%M:%SZ); models=$INPUT_MODELS
-          fi
-          # The reusable workflow validates them again; never interpolate them into a script.
-          [[ "$pr" =~ ^[0-9]+$ ]] || { echo "::error::not a PR number: $pr"; exit 1; }
-          models=$(echo "$models" | tr ',' ' ' | xargs)
-          [[ -n "$models" && "$models" =~ ^[A-Za-z0-9_.\ -]+$ ]] || { echo "::error::record-mic: <model> [<model> ...]"; exit 1; }
-          { echo "pr=$pr"; echo "models=$models"; echo "by=$by"; echo "requested_at=$at"; } >> "$GITHUB_OUTPUT"
-
-  get-pr-info:
-    name: Get PR commit SHA
-    needs: request
-    uses: ./.github/workflows/get-pr-info.yml
-    with:
-      pr_number: ${{ needs.request.outputs.pr }}
-
-  check-timestamps:
-    name: Check timestamps (security check)
-    needs: [request, get-pr-info]
-    permissions: {}
-    runs-on: ubuntu-22.04
-    outputs:
-      PR_MERGE_SHA: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
-    steps:
-      - name: The approved code is older than the request
-        env:
-          REQUESTED_AT: ${{ needs.request.outputs.requested_at }}
-          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
-        run: |
-          if [ "$(date -d "$REQUESTED_AT" +%s)" -le "$PR_MERGE_COMMIT_TIMESTAMP" ]; then
-            echo "The pull request changed after the record-mic request; ask again."
-            exit 1
-          fi
-
-  record-mic:
-    needs: [request, check-timestamps]
     permissions:
       contents: read
+      actions: read
       pull-requests: write
     uses: huggingface/transformers-ci/.github/workflows/pr-ci_record_mic.yml@main
     with:
-      pr: ${{ needs.request.outputs.pr }}
-      models: ${{ needs.request.outputs.models }}
-      requested_by: ${{ needs.request.outputs.by }}
-      merge_sha: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
+      pr: ${{ github.event.issue.number || inputs.pr }}
+      request: "${{ github.event.comment.body || format('record-mic: {0}', inputs.models) }}"
+      requested_by: ${{ github.event.comment.user.login || github.actor }}
+      requested_at: ${{ github.event.comment.created_at }}
     secrets:
-      # Write access to the huggingface-mic contract repos and fleet dataset only.
       mic_write_token: ${{ secrets.MIC_RECORD_WRITE_TOKEN }}

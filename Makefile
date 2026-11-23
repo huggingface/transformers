@@ -76,9 +76,10 @@ run-mic: export JOBS := $(JOBS)
 run-mic:
 	@python utils/checkers.py mic
 
-# Re-record MIC expected values on this PR's code, in the cloud, for this PR only (MODEL="gptj codegen",
-# PR=<number>, default: the PR of the current branch). Needs write access; same as commenting
-# `record-mic: <models>` on the PR. The values are posted on the PR and go live when it merges.
+# Publish the MIC expected values this PR's contracts job recorded for the cases its gate would block,
+# for this PR only (MODEL="gptj codegen", PR=<number>, default: the PR of the current branch). Needs
+# write access; same as commenting `record-mic: <models>` on the PR. The values are posted on the PR
+# and go live when it merges.
 record-mic:
 	@test -n "$(MODEL)" || { echo 'usage: make record-mic MODEL="<model> ..." [PR=<number>]'; exit 1; }
 	@pr="$(PR)"; test -n "$$pr" || pr=$$(gh pr view --repo huggingface/transformers --json number --jq .number) || exit 1; \
