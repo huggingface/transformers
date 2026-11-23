@@ -512,10 +512,10 @@ def _tokenizers_backend_in_place_of_hub_class(
     *inputs,
     **kwargs,
 ):
-    """Load `TokenizersBackend` in place of the Hub `tokenizer_class`, keeping the side that class pads on by default
-    (left for `LlamaTokenizer`). `TokenizersBackend` pads on the right otherwise. A model-specific class (e.g.
-    `LlamaTokenizer`) also builds BOS/EOS from `add_bos_token`/`add_eos_token` in `tokenizer_config.json`, so keep them
-    (e.g. DeepSeek-Coder, whose `tokenizer.json` doesn't add the BOS its config asks for)."""
+    """Load `TokenizersBackend` in place of the Hub `tokenizer_class`, keeping that class's behaviour:
+    - its default padding side, unless `tokenizer_config.json` sets one.
+    - for a model-specific class, `add_bos_token` / `add_eos_token` from `tokenizer_config.json`, even when the
+      `tokenizer.json` post-processor doesn't add those tokens."""
     hub_class = tokenizer_class_from_name(hub_class_name) if hub_class_name is not None else None
     if isinstance(hub_class, type) and issubclass(hub_class, TokenizersBackend):
         kwargs["_hub_class_padding_side"] = hub_class.padding_side
