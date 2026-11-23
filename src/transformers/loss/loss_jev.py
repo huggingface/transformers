@@ -15,8 +15,9 @@ import torch
 from torch.nn import functional as F
 
 
-def _masked_log_softmax(scores: torch.Tensor, option_mask: torch.Tensor) -> torch.Tensor:
-    scores = scores.masked_fill(~option_mask, -torch.inf)
+def masked_log_softmax(scores: torch.Tensor, option_mask: torch.Tensor) -> torch.Tensor:
+    """Compute stable log probabilities over the active options of each question."""
+    scores = scores.float().masked_fill(~option_mask, -torch.inf)
     # Exclude the maximum before log1p to retain tiny losses and target gradients at confident predictions.
     maximum = scores.argmax(-1, keepdim=True)
     is_maximum = torch.arange(scores.shape[-1], device=scores.device) == maximum
@@ -25,9 +26,10 @@ def _masked_log_softmax(scores: torch.Tensor, option_mask: torch.Tensor) -> torc
     return (shifted - torch.log1p(others)).masked_fill(~option_mask, 0.0)
 
 
-def _ranked_probability_score(
+def ranked_probability_score(
     probabilities: torch.Tensor, targets: torch.Tensor, num_options: torch.Tensor
 ) -> torch.Tensor:
+    """Average the squared CDF error over the gaps between adjacent ranks."""
     difference = probabilities.cumsum(-1) - targets.cumsum(-1)
     gaps = torch.arange(probabilities.shape[-1], device=probabilities.device) < (num_options - 1)[:, None]
     return (difference.square() * gaps).sum(-1) / (num_options - 1).clamp_min(1)
@@ -38,7 +40,6 @@ def JevForDecisionLoss(
     labels: torch.Tensor,
     num_options: torch.Tensor,
     is_score: torch.Tensor,
-    rps_weight: float = 0.5,
     loss_weights: torch.Tensor | None = None,
     num_items_in_batch: torch.Tensor | int | None = None,
     ignore_index: int = -100,
@@ -46,36 +47,35 @@ def JevForDecisionLoss(
 ) -> torch.Tensor:
     """AutoTrust JEV's documented KL(target || model) + ordinal RPS objective over each question's active slots.
 
-    Source: autotrust/JEV-9B@7ac669b8fb476ba926491e3d1c39f9330d68dbed, README.md, "Training details".
+    Source: https://huggingface.co/autotrust/JEV-9B/blob/7ac669b8fb476ba926491e3d1c39f9330d68dbed/README.md#training-details
     """
-    logits, labels = logits.float(), labels.to(logits.device).reshape(-1)
+    labels = labels.to(logits.device).reshape(-1)
     num_options = num_options.to(logits.device).reshape(-1)
+    soft_labels = labels.is_floating_point()
+    expected_size = logits.numel() if soft_labels else num_options.numel()
+    if labels.numel() != expected_size:
+        raise ValueError("Expected one soft label per active option or one integer label per question.")
+
+    valid = torch.ones_like(num_options, dtype=torch.bool) if soft_labels else labels != ignore_index
+    if not soft_labels and torch.any(valid & ((labels < 0) | (labels >= num_options))):
+        raise ValueError("Each integer label must select an active option of its question.")
+
     positions = torch.arange(num_options.max(), device=logits.device)
-    option_mask = positions[None] < num_options[:, None]
+    option_mask = positions < num_options[:, None]
     starts = num_options.cumsum(0) - num_options
     indices = (starts[:, None] + positions).clamp_max(logits.numel() - 1)
+    log_probabilities = masked_log_softmax(logits[indices], option_mask)
 
-    log_probabilities = _masked_log_softmax(logits[indices], option_mask)
-
-    if labels.is_floating_point():
-        if labels.numel() != logits.numel():
-            raise ValueError("Soft labels must contain one probability per active option.")
+    if soft_labels:
         targets = labels[indices].float().clamp_min(0).masked_fill(~option_mask, 0.0)
-        valid = torch.ones_like(num_options, dtype=torch.bool)
     else:
-        if labels.numel() != num_options.numel():
-            raise ValueError("Integer labels must contain one option index per question.")
-        valid = labels != ignore_index
-        if torch.any(valid & ((labels < 0) | (labels >= num_options))):
-            raise ValueError("Each integer label must select an active option of its question.")
-        targets = F.one_hot(labels.masked_fill(~valid, 0).long(), num_classes=positions.shape[0]).float()
+        targets = F.one_hot(labels.masked_fill(~valid, 0).long(), num_classes=positions.numel()).float()
         targets = targets * valid[:, None]
 
     # Keep target entropy: soft-target CE has the same gradients, but a different loss value.
     losses = F.kl_div(log_probabilities, targets, reduction="none").sum(-1)
-    if rps_weight:
-        rps = _ranked_probability_score(log_probabilities.exp() * option_mask, targets, num_options)
-        losses = losses + rps_weight * rps * is_score.to(logits.device).reshape(-1)
+    rps = ranked_probability_score(log_probabilities.exp() * option_mask, targets, num_options)
+    losses = losses + 0.5 * rps * is_score.to(logits.device).reshape(-1)
 
     if loss_weights is not None:
         losses = losses * loss_weights.to(logits.device).reshape(-1)

@@ -36,7 +36,7 @@ class JevPreTrainedModel(PreTrainedModel):
 class JevDecisionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `()`, *optional*):
-        Mean KL loss plus the weighted ranked probability score on `score` questions, when labels are supplied.
+        Mean KL loss plus half the ranked probability score on `score` questions, when labels are supplied.
     logits (`torch.FloatTensor` of shape `(total_num_options,)`):
         Uncalibrated active-option scores concatenated in question order.
     """
@@ -99,7 +99,6 @@ class JevForDecision(DecisionMixin, JevPreTrainedModel):
                 labels=labels,
                 num_options=num_options,
                 is_score=question_type_ids == Question.questions_types.index("score"),
-                rps_weight=self.config.rps_weight,
                 loss_weights=loss_weights,
                 **kwargs,
             )

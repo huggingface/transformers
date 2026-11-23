@@ -20,7 +20,6 @@ from types import SimpleNamespace
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoConfig, AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.decision import Question
 from transformers.testing_utils import torch_device
 
 
@@ -64,6 +63,7 @@ class DecisionHeadTesterMixin:
     `backbone_class` model.
     """
 
+    is_training = False
     backbone_class = Qwen2ForCausalLM if is_torch_available() else None
 
     @classmethod
@@ -110,20 +110,15 @@ class DecisionHeadTesterMixin:
                 torch.testing.assert_close(loaded_scores, scores)
                 self.assertEqual([len(s) for s in scores], [len(question.options) for question in prompt.questions])
 
-
-class DecisionHeadTrainingTesterMixin:
-    """Shared training check for heads that accept integer option labels."""
-
     def test_loss_backward(self):
-        prompt = self.prompts[0]
-        counts = torch.tensor([[len(q.options) for q in prompt.questions]])
-        types = torch.tensor([[Question.questions_types.index(q.type) for q in prompt.questions]])
-        inputs = {**prompt.inputs, "marks": prompt.inputs["marks"][None]}
+        if not self.is_training:
+            self.skipTest("This decision head has no training test.")
 
+        inputs = self.model_tester.prepare_training_inputs(self.prompts[0])
         for model_class in self.all_model_classes:
             with self.subTest(model=model_class.__name__):
                 model = model_class(self.config).train()
-                output = model(**inputs, num_options=counts, question_type_ids=types, labels=torch.zeros_like(counts))
+                output = model(**inputs)
 
                 self.assertTrue(torch.isfinite(output.loss))
                 output.loss.backward()

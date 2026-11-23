@@ -84,7 +84,7 @@ pipeline("decision", model="vllm-sr/d3")(request)  # or perplexity-ai/pplx-decid
 ## Training
 
 [JEV](https://huggingface.co/autotrust/JEV-9B#training-details) uses KL divergence over the active options and adds
-a ranked probability score for ordered Score questions.
+half the ranked probability score for ordered Score questions.
 Using the model and request above, train on the first option of each question:
 
 ```python
