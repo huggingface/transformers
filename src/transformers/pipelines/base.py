@@ -93,9 +93,7 @@ def _pad(items, key, padding_value, padding_side):
         dim = items[0][key].ndim
         if key == "position_ids" and dim == 3:
             max_length = max(item[key].shape[-1] for item in items)
-            tensor = items[0][key].new_full(
-                (shape[0], batch_size, max_length), padding_value
-            )
+            tensor = items[0][key].new_full((shape[0], batch_size, max_length), padding_value)
             for i, item in enumerate(items):
                 length = item[key].shape[-1]
                 if padding_side == "left":
