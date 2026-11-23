@@ -254,9 +254,11 @@ class DistributedMixin:
         # HSDP shards each replica with the FSDP plan.
         fsdp_plan = dict(self.fsdp_plan) if distributed_config.dp_size > 1 else {}
 
+        # `tp_plan={}` is an explicit request for no TP rules (e.g. the EP plan alone across the TP ranks).
+        tp_disabled = distributed_config.tp_plan == {}
         for kind, plan in (("tp", tp_plan), ("ep", ep_plan), ("fsdp", fsdp_plan)):
             size = distributed_config.dp_size if kind == "fsdp" else getattr(distributed_config, f"{kind}_size")
-            if size > 1 and not plan:
+            if size > 1 and not plan and not (kind == "tp" and tp_disabled):
                 raise ValueError(
                     f"`{kind}_size={size}` was requested, but `{type(self).__name__}` has no `{kind}_plan`. Pass "
                     f"`{kind}_plan` in `DistributedConfig`, add `base_model_{kind}_plan` to the model's config, "
