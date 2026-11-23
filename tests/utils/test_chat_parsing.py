@@ -2107,8 +2107,9 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(without, with_tools)
         self.assertEqual(_first_tool_args(with_tools), {"hour": 7, "enabled": True})
 
-    def test_tools_preserves_explicit_strings_in_json_tool_calls(self):
+    def test_tools_typed_parsers_preserve_string_schemas_and_coerce_non_string(self):
         tools = _set_alarm_tools(
+            hour={"type": "integer"},
             msg={"anyOf": [{"type": "string"}, {"type": "null"}]},
             alt={"type": "string", "nullable": True},
             code={"anyOf": [{"type": "string"}, {"type": "integer"}]},
@@ -2117,6 +2118,7 @@ class ToolArgCoercionTest(unittest.TestCase):
             obj={"anyOf": [{"type": "string"}, {"type": "object"}]},
         )
         expected = {
+            "hour": 7,
             "msg": "null",
             "alt": "None",
             "code": "0123",
@@ -2126,15 +2128,12 @@ class ToolArgCoercionTest(unittest.TestCase):
         }
         smollm_out = (
             '<tool_call>{"name": "set_alarm", "arguments": '
-            '{"msg": "null", "alt": "None", "code": "0123", "flag": "true", "items": "[1, 2]", "obj": "{}"}}'
-            "</tool_call>"
+            '{"hour": "7", "msg": "null", "alt": "None", "code": "0123", '
+            '"flag": "true", "items": "[1, 2]", "obj": "{}"}}</tool_call>'
         )
-        without = parse_response(smollm_out, smollm_template, prefix="")
-        with_tools = parse_response(smollm_out, smollm_template, prefix="", tools=tools)
-        self.assertEqual(without, with_tools)
-        self.assertEqual(_first_tool_args(with_tools), expected)
-        for val in _first_tool_args(with_tools).values():
-            self.assertIsInstance(val, str)
+        json_args = _first_tool_args(parse_response(smollm_out, smollm_template, prefix="", tools=tools))
+        self.assertEqual(json_args, expected)
+        self.assertIs(type(json_args["hour"]), int)
 
         stream = ResponseParser(smollm_template, prefix="", tools=tools)
         events = stream.feed(smollm_out[:25]) + stream.feed(smollm_out[25:])
@@ -2144,41 +2143,30 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertEqual(closes[0]["value"]["function"]["arguments"], expected)
 
         gemma_out = (
-            '<|tool_call>call:set_alarm{msg:<|"|>null<|"|>, alt:<|"|>None<|"|>, '
+            '<|tool_call>call:set_alarm{hour:<|"|>7<|"|>, msg:<|"|>null<|"|>, alt:<|"|>None<|"|>, '
             'code:<|"|>0123<|"|>, flag:<|"|>true<|"|>, items:<|"|>[1, 2]<|"|>, obj:<|"|>{}<|"|>}<tool_call|>'
         )
-        gemma_without = parse_response(gemma_out, gemma4_template, prefix="")
-        gemma_with = parse_response(gemma_out, gemma4_template, prefix="", tools=tools)
-        self.assertEqual(gemma_without, gemma_with)
-        self.assertEqual(_first_tool_args(gemma_with), expected)
+        gemma_args = _first_tool_args(parse_response(gemma_out, gemma4_template, prefix="", tools=tools))
+        self.assertEqual(gemma_args, expected)
+        self.assertIs(type(gemma_args["hour"]), int)
 
-    def test_tools_preserves_explicit_strings_in_python_call_list_tool_calls(self):
-        tools = _set_alarm_tools(
-            msg={"anyOf": [{"type": "string"}, {"type": "null"}]},
-            alt={"type": "string", "nullable": True},
-            code={"anyOf": [{"type": "string"}, {"type": "integer"}]},
-            flag={"anyOf": [{"type": "string"}, {"type": "boolean"}]},
-            items={"anyOf": [{"type": "string"}, {"type": "array"}]},
-            obj={"anyOf": [{"type": "string"}, {"type": "object"}]},
-        )
-        model_out = (
-            '<|tool_call_start|>[set_alarm(msg="null", alt="None", code="0123", '
+        lfm2_out = (
+            '<|tool_call_start|>[set_alarm(hour="7", msg="null", alt="None", code="0123", '
             'flag="true", items="[1, 2]", obj="{}"), '
-            "set_alarm(msg=None, alt=None, code=123, flag=True, items=[1, 2], obj={})]"
+            "set_alarm(hour=7, msg=None, alt=None, code=123, flag=True, items=[1, 2], obj={})]"
             "<|tool_call_end|>"
         )
-        without = parse_response(model_out, lfm2_template, prefix="")
-        with_tools = parse_response(model_out, lfm2_template, prefix="", tools=tools)
-        self.assertEqual(without, with_tools)
-        str_args = with_tools["tool_calls"][0]["function"]["arguments"]
-        typed_args = with_tools["tool_calls"][1]["function"]["arguments"]
+        lfm2_parsed = parse_response(lfm2_out, lfm2_template, prefix="", tools=tools)
+        str_args = lfm2_parsed["tool_calls"][0]["function"]["arguments"]
+        typed_args = lfm2_parsed["tool_calls"][1]["function"]["arguments"]
+        self.assertEqual(str_args, expected)
+        self.assertIs(type(str_args["hour"]), int)
+        for key in ("msg", "alt", "code", "flag", "items", "obj"):
+            self.assertIsInstance(str_args[key], str)
         self.assertEqual(
-            str_args,
-            {"msg": "null", "alt": "None", "code": "0123", "flag": "true", "items": "[1, 2]", "obj": "{}"},
+            typed_args,
+            {"hour": 7, "msg": None, "alt": None, "code": 123, "flag": True, "items": [1, 2], "obj": {}},
         )
-        for val in str_args.values():
-            self.assertIsInstance(val, str)
-        self.assertEqual(typed_args, {"msg": None, "alt": None, "code": 123, "flag": True, "items": [1, 2], "obj": {}})
         self.assertIs(type(typed_args["code"]), int)
         self.assertIs(type(typed_args["flag"]), bool)
 

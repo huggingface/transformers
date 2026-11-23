@@ -314,7 +314,8 @@ STREAMABLE_PARSERS = frozenset({"text", "int", "float", "bool"})
 
 # Structured parsers whose syntax already distinguishes quoted strings from typed
 # literals (numbers, booleans, null/None, lists, dicts). Schema-driven string
-# coercion in `ResponseParser` skips these so explicit string arguments are preserved.
+# coercion in `ResponseParser` leaves parameters allowing `string` untouched,
+# while still coercing quoted strings for non-string parameter schemas.
 TYPED_STRUCTURED_PARSERS = frozenset({"json", "python-call-list"})
 
 
