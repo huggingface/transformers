@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial, wraps
 from itertools import cycle
+from pathlib import Path
 from threading import Thread
 from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints, overload
 from zipfile import is_zipfile
@@ -563,6 +564,13 @@ def _get_resolved_checkpoint_files(
                     "(*.safetensors) nor a safetensors index file (*.safetensors.index.json): "
                     f"{transformers_explicit_filename}"
                 )
+        # `transformers_weights` comes from the repo's config, so we can't let it leave the model directory. As with
+        # shard filenames, we check the name itself, which covers local folders and Hub repos alike.
+        if Path(transformers_explicit_filename).anchor or ".." in Path(transformers_explicit_filename).parts:
+            raise ValueError(
+                "`transformers_weights` must reference a file inside the model directory, got "
+                f"{transformers_explicit_filename}"
+            )
 
     is_sharded = False
 
@@ -573,20 +581,7 @@ def _get_resolved_checkpoint_files(
         if is_local:
             if transformers_explicit_filename is not None:
                 # If the filename is explicitly defined, load this by default
-                base_dir = os.path.join(pretrained_model_name_or_path, subfolder)
-                archive_file = os.path.join(base_dir, transformers_explicit_filename)
-                # Just a small check to make sure `transformers_explicit_filename` does not escape the base_dir, i.e. it does not
-                # contain `..` for example
-                try:
-                    absolute_base_dir = os.path.abspath(base_dir)
-                    absolute_archive_file = os.path.abspath(archive_file)
-                    contained = os.path.commonpath([absolute_base_dir, absolute_archive_file]) == absolute_base_dir
-                except ValueError:
-                    contained = False
-                if not contained:
-                    raise ValueError(
-                        f"`transformers_weights` must reference a file inside the model directory, got {transformers_explicit_filename}"
-                    )
+                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
                 is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
             elif use_safetensors is not False and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, _add_variant(SAFE_WEIGHTS_NAME, variant))
