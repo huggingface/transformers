@@ -71,6 +71,7 @@ class DistributedMixin:
     _ep_plan: dict[str, str] | None = None
     _tp_size = None
     _fsdp_size = None
+    _sp_size = None
     _pp_plan: dict[str, tuple[str, str]] | None = None
     _fsdp_plan: dict[str, str] | None = None
     _sp_plan: dict[str, str] | None = None
@@ -368,6 +369,7 @@ class DistributedMixin:
         model._is_distributed_loading_by_transformers = True
         model._tp_size = distributed_config.tp_size
         model._fsdp_size = distributed_config.fsdp_size
+        model._sp_size = distributed_config.sp_size
 
         tp_plan, ep_plan, fsdp_plan, sp_plan = model._resolve_parallel_plans(distributed_config)
 
