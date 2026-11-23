@@ -31,6 +31,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ..auto import AutoConfig, AutoModel
 from ..clip.modeling_clip import CLIPMLP
@@ -124,7 +125,7 @@ class Xcodec2Config(LlamaConfig):
 @dataclass
 class Xcodec2Output(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained using the decoder
         part of Xcodec2. These represent the reconstructed audio signal.
     audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
@@ -136,7 +137,7 @@ class Xcodec2Output(ModelOutput):
         Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
     audio_codes: torch.LongTensor | None = None
     latents: torch.Tensor | None = None
     audio_codes_mask: torch.Tensor | None = None
@@ -165,13 +166,13 @@ class Xcodec2EncoderOutput(ModelOutput):
 @dataclass
 class Xcodec2DecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`, *optional*):
+    audio_values (`torch.Tensor` of shape `(batch_size, 1, segment_length)`, *optional*):
         Decoded audio waveform values in the time domain, obtained by converting
         the discrete codes back into continuous audio signals. This represents
         the reconstructed audio that can be played back.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):
@@ -190,12 +191,13 @@ class Xcodec2Attention(LlamaAttention):
         super().__init__(config, layer_idx)
         self.is_causal = False
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -211,8 +213,8 @@ class Xcodec2Attention(LlamaAttention):
         # q/k of shape (batch, num_heads, seq_len, head_dim), unlike Llama's default of 1.
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward

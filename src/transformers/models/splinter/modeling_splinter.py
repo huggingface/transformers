@@ -57,7 +57,7 @@ class SplinterEmbeddings(nn.Module):
         input_ids: torch.LongTensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> tuple:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -134,7 +134,7 @@ class SplinterSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -188,7 +188,7 @@ class SplinterAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -245,7 +245,7 @@ class SplinterLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states = self.attention(
@@ -277,7 +277,7 @@ class SplinterEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         for layer_module in self.layer:
@@ -570,19 +570,19 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
 @dataclass
 class SplinterForPreTrainingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when start and end positions are provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when start and end positions are provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    start_logits (`torch.FloatTensor` of shape `(batch_size, num_questions, sequence_length)`):
+    start_logits (`torch.Tensor` of shape `(batch_size, num_questions, sequence_length)`):
         Span-start scores (before SoftMax).
-    end_logits (`torch.FloatTensor` of shape `(batch_size, num_questions, sequence_length)`):
+    end_logits (`torch.Tensor` of shape `(batch_size, num_questions, sequence_length)`):
         Span-end scores (before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    start_logits: torch.FloatTensor | None = None
-    end_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    start_logits: torch.Tensor | None = None
+    end_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -638,7 +638,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_questions, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_questions, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.

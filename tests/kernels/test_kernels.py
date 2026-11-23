@@ -49,12 +49,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_kernels_available
+from transformers.utils.import_utils import get_device_type, is_kernels_available
 from transformers.utils.kernel_config import add_to_mapping_local
 
 
 if is_kernels_available():
-    from kernels import Device, LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
+    from kernels import LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
+    from kernels.validate import DigestValidator
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -183,7 +184,7 @@ class TestHubKernels(MemoryCleanupTestCase):
 
     def test_kernelize(self):
         model = copy.deepcopy(self.model_not_kernelized)
-        kernelize(model, mode=Mode.INFERENCE, device=Device(type=model.device.type))  # type: ignore[arg-type]
+        kernelize(model, mode=Mode.INFERENCE, device=get_device_type(model.device))
         self.assert_kernelized_forward_is_different(model, self.model_not_kernelized)
         self.assert_kernelized_forward_is_the_same(model, self.model_kernelized)
         del model
@@ -330,10 +331,15 @@ class TestHubKernels(MemoryCleanupTestCase):
             baseline_out = baseline(**inputs).logits
         del baseline
 
-        fused = AutoModelForCausalLM.from_pretrained(
-            model_id, use_kernels=True, kernel_config=kernel_config, device_map=torch_device
-        )
-        fused.eval()
+        # It would mismatch in its digest validation but the kernel is not production ready anyways
+        with patch.object(DigestValidator, "validate_kernel", return_value=None):
+            fused = AutoModelForCausalLM.from_pretrained(
+                model_id,
+                use_kernels=True,
+                kernel_config=kernel_config,
+                device_map=torch_device,
+            )
+
         with torch.no_grad():
             fused_out = fused(**inputs).logits
 
@@ -414,7 +420,7 @@ class TestHubKernels(MemoryCleanupTestCase):
                 ),
             }
         )
-        with self.assertRaises(ValueError):
+        with patch.object(DigestValidator, "validate_kernel", return_value=None), self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(
                 model_id,
                 use_kernels=True,
@@ -794,6 +800,47 @@ class TestAttentionKernelRegistration(TestCasePlus):
         with patch("transformers.integrations.hub_kernels.get_kernel", return_value=kernel_obj):
             attn_impl = "org/model:my_func"
             load_and_register_attn_kernel(attn_impl)
+            self.assertIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
+            # Cleanup registration to avoid leaking functions across tests
+            try:
+                ALL_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception as e:
+                print(f"Could not clean up `ALL_ATTENTION_FUNCTIONS`: {e}")
+            try:
+                ALL_MASK_ATTENTION_FUNCTIONS.pop(attn_impl, None)
+            except Exception as e:
+                print(f"Could not clean up `ALL_MASK_ATTENTION_FUNCTIONS`: {e}")
+
+    def test_lazy_import_flash_attention_retries_failed_kernel_load(self):
+        import transformers.modeling_flash_attention_utils as fa_utils
+
+        kernel_obj = types.SimpleNamespace(flash_attn_varlen_func=lambda *a, **k: None)
+        attn_impl = "org/model"
+        # The first load fails (e.g. a network error), the second one succeeds
+        with (
+            patch(
+                "transformers.integrations.hub_kernels.get_kernel",
+                side_effect=[RuntimeError("transient error"), kernel_obj],
+            ),
+            # Restore the loaded flash attention functions to avoid leaking them across tests
+            patch.multiple(
+                fa_utils,
+                _loaded_implementation=fa_utils._loaded_implementation,
+                _flash_fn=fa_utils._flash_fn,
+                _flash_varlen_fn=fa_utils._flash_varlen_fn,
+                _flash_with_kvcache_fn=fa_utils._flash_with_kvcache_fn,
+                _pad_fn=fa_utils._pad_fn,
+                _unpad_fn=fa_utils._unpad_fn,
+                _process_flash_kwargs_fn=fa_utils._process_flash_kwargs_fn,
+                _process_with_kvcache_kwargs_fn=fa_utils._process_with_kvcache_kwargs_fn,
+            ),
+        ):
+            with self.assertRaisesRegex(ValueError, "transient error"):
+                fa_utils.lazy_import_flash_attention(attn_impl)
+            self.assertNotIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
+
+            # The failed load is not cached: the kernel is loaded and registered on the next call
+            fa_utils.lazy_import_flash_attention(attn_impl)
             self.assertIn(attn_impl, ALL_ATTENTION_FUNCTIONS.valid_keys())
             # Cleanup registration to avoid leaking functions across tests
             try:

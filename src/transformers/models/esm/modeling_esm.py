@@ -138,7 +138,6 @@ class EsmRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids, layer_type=None):
         inv_freq = getattr(self, "inv_freq")
@@ -342,9 +341,9 @@ class EsmSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
@@ -584,7 +583,6 @@ class EsmPreTrainedModel(PreTrainedModel):
         ],
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -697,7 +695,7 @@ class EsmModel(EsmPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `((batch_size, sequence_length), hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `((batch_size, sequence_length), hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -719,7 +717,7 @@ class EsmModel(EsmPreTrainedModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=None,
+            cache=None,
         )
 
         if self.position_embedding_type == "rotary":
@@ -753,14 +751,14 @@ class EsmModel(EsmPreTrainedModel):
         encoder_attention_mask,
         embedding_output,
         encoder_hidden_states,
-        past_key_values,
+        cache,
     ):
         if self.config.is_decoder:
             attention_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=embedding_output,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
             )
         else:
             attention_mask = create_bidirectional_mask(
@@ -822,8 +820,8 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -903,7 +901,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SequenceClassifierOutput:
@@ -969,7 +967,7 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | TokenClassifierOutput:

@@ -49,41 +49,41 @@ class MiniCPMOcrVisionText2TextModelTester(VLMModelTester):
     vision_config_class = MiniCPMOcrVisionConfig
     conditional_generation_class = MiniCPMOcrForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("image_token_id", 100)
+    small_config_overrides = {
+        "batch_size": 2,
+        "image_token_id": 100,
         # `downsample_mode="4x"` skips the ViT insert merger, so only the downsample MLP merges:
         # patch_size=8, image_size=32 → 4×4 grid → merger [2×2] = 4 tokens
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 8)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 32)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("rope_parameters", {"type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1]})
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
+        "image_size": 32,
+        "patch_size": 8,
+        "num_image_tokens": 4,
+        "vocab_size": 256,
+        "hidden_size": 64,
+        "intermediate_size": 37,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 32,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "rope_parameters": {"type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1]},
+        "tie_word_embeddings": True,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
         # Qwen3.5 hybrid attention
-        kwargs.setdefault("layer_types", ["full_attention", "linear_attention"])
-        kwargs.setdefault("linear_conv_kernel_dim", 2)
-        kwargs.setdefault("linear_key_head_dim", 16)
-        kwargs.setdefault("linear_value_head_dim", 16)
-        kwargs.setdefault("linear_num_key_heads", 4)
-        kwargs.setdefault("linear_num_value_heads", 8)
+        "layer_types": ["full_attention", "linear_attention"],
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
         # Vision config overrides
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("vision_intermediate_size", 128)
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "vision_intermediate_size": 128,
         # MiniCPM-OCR specific
-        kwargs.setdefault("insert_layer_id", 0)
-        super().__init__(parent, **kwargs)
+        "insert_layer_id": 0,
+    }
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -309,6 +309,7 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_input_ids = Expectations(
             {
                 ("cuda", (8, 0)): [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 271, 248069, 271],
+                ("xpu", 5): [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 271, 248069, 271],
             }
         ).get_expectation()
         self.assertEqual(inputs["input_ids"][0].tolist(), expected_input_ids)
@@ -323,12 +324,14 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): [-2.4219, 7.4063, -3.7188, 1.3594, -0.1069, -2.1094, 5.2188, 0.4180],
                 ("cuda", (8, 6)): [-2.2031, 7.5313, -3.4063, 1.7188, 0.1611, -1.9844, 5.2813, 0.5781],
+                ("xpu", 5): [-2.1719, 7.5312, -3.6250, 1.5312, -0.1245, -2.0469, 5.1875, 0.5039],
             }
         ).get_expectation()
         torch.testing.assert_close(
             logits[0, -1, :8], torch.tensor(expected_slice, device=torch_device), rtol=1e-4, atol=1e-4
         )
-        expected_argmax = Expectations({("cuda", (8, 0)): 12675}).get_expectation()
+        # On XPU, 12675 ("Hi") and 9419 ("Hello") round to the same bf16 logit; argmax returns the lowest index on ties.
+        expected_argmax = Expectations({("cuda", (8, 0)): 12675, ("xpu", 5): 9419}).get_expectation()
         self.assertEqual(logits[0, -1].argmax().item(), expected_argmax)
 
     def test_small_model_vision_generation(self):
@@ -365,7 +368,12 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         decoded = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected = Expectations({("cuda", 8): "Document No : TD01167104\nDate : 25/12/2018 8:1"}).get_expectation()
+        expected = Expectations(
+            {
+                ("cuda", 8): "Document No : TD01167104\nDate : 25/12/2018 8:1",
+                ("xpu", 5): "Document No : TD01167104\nDate : 25/12/2018 8:1",
+            }
+        ).get_expectation()
         self.assertEqual(decoded, expected)
 
     def test_small_model_document_markdown(self):
@@ -405,6 +413,9 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected = Expectations(
             {
                 ("cuda", 8): (
+                    "```markdown\nR&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann,"
+                ),
+                ("xpu", 5): (
                     "```markdown\nR&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann,"
                 ),
             }
@@ -466,7 +477,11 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", 8): [
                     "Document No : TD01167104\nDate : 25/12/2018 8:1",
                     "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann P. Harper P",
-                ]
+                ],
+                ("xpu", 5): [
+                    "Document No : TD01167104\nDate : 25/12/2018 8:1",
+                    "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\n\nName/Phone Ext.: M. Hamann P. Harper P",
+                ],
             }
         ).get_expectation()
         self.assertEqual(decoded, expected)

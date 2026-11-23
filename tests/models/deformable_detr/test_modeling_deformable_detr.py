@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -47,57 +48,46 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class DeformableDetrModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=8,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        intermediate_size=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        num_queries=12,
-        num_channels=3,
-        image_size=196,
-        n_targets=8,
-        num_labels=91,
-        num_feature_levels=4,
-        encoder_n_points=2,
-        decoder_n_points=6,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_queries = num_queries
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.n_targets = n_targets
-        self.num_labels = num_labels
-        self.num_feature_levels = num_feature_levels
-        self.encoder_n_points = encoder_n_points
-        self.decoder_n_points = decoder_n_points
+class DeformableDetrModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 8,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 8,
+        "intermediate_size": 4,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "num_queries": 12,
+        "num_channels": 3,
+        "image_size": 196,
+        "n_targets": 8,
+        "num_labels": 91,
+        "num_feature_levels": 4,
+        "encoder_n_points": 2,
+        "decoder_n_points": 6,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = (
-            math.ceil(self.image_size / 8) ** 2
-            + math.ceil(self.image_size / 16) ** 2
-            + math.ceil(self.image_size / 32) ** 2
-            + math.ceil(self.image_size / 64) ** 2
+        values["encoder_seq_length"] = (
+            math.ceil(values["image_size"] / 8) ** 2
+            + math.ceil(values["image_size"] / 16) ** 2
+            + math.ceil(values["image_size"] / 32) ** 2
+            + math.ceil(values["image_size"] / 64) ** 2
         )
-        self.decoder_seq_length = self.num_queries
+        values["decoder_seq_length"] = values["num_queries"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -187,6 +177,8 @@ class DeformableDetrModelTester:
 
 @require_torch
 class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DeformableDetrModelTester
+
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}

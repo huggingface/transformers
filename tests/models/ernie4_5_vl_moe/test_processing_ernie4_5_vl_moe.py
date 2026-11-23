@@ -91,7 +91,7 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_images_inputs()
 
         input_image_proc = image_processor(image_input, return_tensors="pt")
-        input_processor = processor(images=image_input, text="dummy", return_tensors="pt")
+        input_processor = processor(images=image_input, text=f"dummy {self.image_token}", return_tensors="pt")
 
         for key in input_image_proc:
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
@@ -105,7 +105,7 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
         )
 
-        input_str = "lower newer"
+        input_str = f"lower newer {self.image_token}"
         image_input = self.prepare_images_inputs()
         inputs = processor(text=input_str, images=image_input)
 
@@ -132,7 +132,7 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_kwargs_overrides_custom_image_processor_kwargs(self):
         processor = self.get_processor()
 
-        input_str = self.prepare_text_inputs()
+        input_str = self.prepare_text_inputs(modalities=["image"])
         image_input = self.prepare_images_inputs()
 
         size = {"shortest_edge": processor.image_processor.size["shortest_edge"], "longest_edge": 56 * 56 * 4}

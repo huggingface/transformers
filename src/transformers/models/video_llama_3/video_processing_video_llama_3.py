@@ -400,7 +400,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
 
     def _get_compression_mask(
         self,
-        pixel_values_videos: torch.FloatTensor,
+        pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
         threshold: float | None = 0.1,
@@ -409,7 +409,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         """
         Get the compression mask for video tokens based on pixel differences.
         Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input videos.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video in LLM.

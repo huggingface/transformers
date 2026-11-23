@@ -173,7 +173,6 @@ class EdgeTamFeedForward(Sam2FeedForward):
 class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = None
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EdgeTamModel):
@@ -202,7 +201,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
     @capture_outputs
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | EdgeTamVisionEncoderOutput:
         if pixel_values is None:
@@ -243,7 +242,7 @@ class EdgeTamModel(Sam2Model):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | EdgeTamVisionEncoderOutput:
         # original_sizes is returned by the processor for post-processing only and must not
