@@ -289,6 +289,22 @@ class DeepseekV41TextConfig(DeepseekV4Config):
                 f"`index_source_layer_ids` ({self.index_source_layer_ids})."
             )
 
+    def validate_fake_quantization(self):
+        """Checks that the activations which are rounded to FP8 or FP4 split into whole blocks of 32 values."""
+        widths = {
+            "head_dim": self.head_dim,
+            "num_attention_heads * head_dim // o_groups": self.num_attention_heads * self.head_dim // self.o_groups,
+        }
+        if self.compress_ratios is not None and any(self.compress_ratios):
+            # Only the layers that attend to compressed KV have index keys and queries
+            widths["index_head_dim"] = self.index_head_dim
+        bad = {name: width for name, width in widths.items() if width % 32 != 0}
+        if bad:
+            raise ValueError(
+                "The KV, the input of the grouped output projection and the index keys and queries are rounded to "
+                f"FP8 or FP4 in blocks of 32 values, so their widths must be multiples of 32. Got {bad}."
+            )
+
     def __post_init__(self, **kwargs):
         legacy_qk_rope_head_dim = kwargs.pop("qk_rope_head_dim", None)
         PreTrainedConfig.__post_init__(self, **kwargs)
@@ -517,6 +533,92 @@ class DeepseekV41Float32Linear(nn.Linear):
         return F.linear(hidden_states.float(), self.weight.float())
 
 
+# The low-precision formats that activations are rounded to, as (largest value, mantissa bits, lowest normal
+# exponent). FP8 is E4M3 and FP4 is E2M1.
+MINIFLOAT_FORMATS = {"fp8": (448.0, 3, -6), "fp4": (6.0, 1, 0)}
+
+
+def _round_to_minifloat(values: torch.Tensor, value_format: str) -> torch.Tensor:
+    max_value, mantissa_bits, min_exponent = MINIFLOAT_FORMATS[value_format]
+    # Casting to these formats saturates, so we clamp before we round
+    values = values.clamp(-max_value, max_value)
+    # Between two powers of two, the values of the format are evenly spaced, so we round to a multiple of the
+    # spacing. `frexp` gives `values = mantissa * 2**exponent` with `0.5 <= |mantissa| < 1`, so the power of two
+    # below a value is `2**(exponent - 1)`. Under the lowest normal exponent the spacing stops shrinking, which
+    # is where the subnormals are.
+    _, exponent = torch.frexp(values)
+    spacing = torch.ldexp(torch.ones_like(values), (exponent - 1).clamp(min=min_exponent) - mantissa_bits)
+    # `torch.round` sends ties to the even multiple, like the cast does
+    return torch.round(values / spacing) * spacing
+
+
+def fake_quantize(
+    hidden_states: torch.Tensor, value_format: str, block_size: int, scale_format: str = "ue8m0"
+) -> torch.Tensor:
+    """
+    Rounds activations to the values that a low-precision float format can hold, and returns them in their own
+    dtype. The reference implementation does this to the KV, the attention output, the index keys and queries
+    and the compressed KV, mirroring the quantized formats that they are kept in during training. Nothing gets
+    smaller: the point is that the model sees the same rounded values as it was trained with.
+
+    The last dim is cut into blocks of `block_size` values, and each block gets a scale of its own. The block
+    is divided by its scale, which brings its largest value to the top of the format's range, then rounded to
+    the format, then multiplied by the scale again.
+
+    Args:
+        hidden_states (`torch.Tensor` of shape `(..., hidden_size)`):
+            The activations to round. `hidden_size` must be a multiple of `block_size`.
+        value_format (`str`):
+            The format to round to: `"fp8"` (E4M3, 3 mantissa bits, up to 448) or `"fp4"` (E2M1, 1 mantissa bit,
+            up to 6).
+        block_size (`int`):
+            Number of consecutive values that share a scale.
+        scale_format (`str`, *optional*, defaults to `"ue8m0"`):
+            The format of the scales: `"ue8m0"` for a power of two, or `"fp8"` for an FP8 number.
+
+    Returns:
+        `torch.Tensor`: The rounded activations, with the shape and dtype of `hidden_states`. The gradient skips
+        the rounding and goes straight through to `hidden_states`.
+
+    Example:
+
+    ```python
+    >>> import torch
+    >>> hidden_states = torch.tensor([[0.3, -1.0, 2.6, 5.5]])
+    >>> fake_quantize(hidden_states, value_format="fp4", block_size=4)
+    tensor([[ 0.5000, -1.0000,  3.0000,  6.0000]])
+
+    ```
+    """
+    max_value = MINIFLOAT_FORMATS[value_format][0]
+    # The reference computes the scales and the rounding in float32, whatever the dtype of the activations
+    blocks = hidden_states.detach().float().unflatten(-1, (-1, block_size))
+    largest = blocks.abs().amax(dim=-1, keepdim=True)
+    if scale_format == "ue8m0":
+        # A power of two: the smallest one that still brings the largest value of the block into range. The
+        # floors keep the scale of an all-zero block away from zero.
+        largest = largest.clamp(min=1e-4 if value_format == "fp8" else max_value * 2.0**-126)
+        # We want `2**ceil(log2(x))` to the bit, which `torch.log2` cannot promise around powers of two.
+        # `frexp` can: `x = mantissa * 2**exponent` with `0.5 <= mantissa < 1`, and only a power of two has a
+        # mantissa of exactly 0.5.
+        mantissa, exponent = torch.frexp(largest * (1.0 / max_value))
+        scale = torch.ldexp(torch.ones_like(largest), exponent - (mantissa == 0.5).int())
+    elif scale_format == "fp8":
+        # An FP8 number, which follows the largest value more closely than a power of two does. The floor is
+        # the smallest FP8 number, so again the scale of an all-zero block is not zero.
+        scale = _round_to_minifloat(largest.clamp(min=max_value * 2.0**-9) / max_value, "fp8")
+    else:
+        raise ValueError(f'`scale_format` must be "ue8m0" or "fp8", but got "{scale_format}".')
+
+    quantized = _round_to_minifloat(blocks / scale, value_format) * scale
+    quantized = quantized.flatten(-2).to(hidden_states.dtype)
+    if hidden_states.requires_grad:
+        # Straight-through estimator: rounding has a gradient of zero almost everywhere, so the backward pass
+        # treats it as the identity. The term that we add is exactly zero, so the values stay the rounded ones.
+        quantized = quantized + (hidden_states - hidden_states.detach())
+    return quantized
+
+
 class DeepseekV41Compressor(nn.Module):
     """
     Pools every `compress_ratio` consecutive tokens into one KV latent with a learned softmax gate. With a
@@ -655,6 +757,8 @@ class DeepseekV41Indexer(nn.Module):
         cos, sin = position_embeddings
         queries = self.q_b_proj(q_residual).view(batch_size, seq_len, self.num_heads, self.head_dim)
         queries = apply_rotary_pos_emb(queries, cos, sin, unsqueeze_dim=2)
+        # The index keys are FP4 as well, see the attention layer that makes them
+        queries = fake_quantize(queries, "fp4", block_size=32)
         scores = torch.einsum("bshd,btd->bsht", queries, index_keys.to(queries.dtype))
         weights = self.weights_proj(hidden_states) * self.scaling
         scores = (F.relu(scores) * weights.unsqueeze(-1)).sum(dim=2)
@@ -756,6 +860,9 @@ class DeepseekV41Attention(nn.Module):
 
         kv = self.kv_norm(self.kv_proj(hidden_states)).view(*hidden_shape).transpose(1, 2)
         kv = apply_rotary_pos_emb(kv, cos, sin)
+        # The KV are FP8 from here on, in the cache too. They are rounded after RoPE, so on the rotated dims
+        # it is the rotated values that land on the FP8 grid.
+        kv = fake_quantize(kv, "fp8", block_size=32)
         if cache is not None:
             kv = cache.update(kv, kv, self.layer_idx)[0]
 
@@ -769,6 +876,10 @@ class DeepseekV41Attention(nn.Module):
             index_keys = self.indexer.k_norm(self.indexer.k_proj(latents))
             index_keys = apply_rotary_pos_emb(index_keys.unsqueeze(1), entry_cos, entry_sin).squeeze(1)
             compressed_kv = apply_rotary_pos_emb(latents.unsqueeze(1), entry_cos, entry_sin).squeeze(1)
+            # Both are FP4 from here on. The compressed KV get a finer scale than the index keys: one per 16
+            # values instead of 32, and an FP8 number instead of a power of two.
+            index_keys = fake_quantize(index_keys, "fp4", block_size=32)
+            compressed_kv = fake_quantize(compressed_kv, "fp4", block_size=16, scale_format="fp8")
             if cache_layer is not None:
                 compressed_kv, index_keys = cache_layer.update_compressed_states(compressed_kv, index_keys)
             # We publish both for the indexers and the KV-sharing layers after us, starting with our own
@@ -816,6 +927,8 @@ class DeepseekV41Attention(nn.Module):
         attn_output = apply_rotary_pos_emb(attn_output, cos, -sin, unsqueeze_dim=2)
 
         grouped = attn_output.reshape(*input_shape, self.config.o_groups, -1)
+        # The grouped projection was trained as an FP8 matmul, which rounds its input to FP8
+        grouped = fake_quantize(grouped, "fp8", block_size=32)
         grouped = self.o_a_proj(grouped).flatten(2)
         output = self.o_b_proj(grouped)
         return output, attn_weights, shared_states

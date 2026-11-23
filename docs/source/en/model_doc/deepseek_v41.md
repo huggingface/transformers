@@ -112,6 +112,9 @@ print(processor.decode(outputs[0, inputs["input_ids"].shape[1] :]))
   already has.
 - Batched generation with left padding does not match unpadded generation yet. The compressor pools consecutive
   tokens, so padding shifts its groups.
+- Like the original implementation, the model rounds its KV and attention output to FP8, and its index keys, index
+  queries and compressed KV to FP4. That is how they were quantized in training, so it happens whatever dtype you load
+  the model in. The rounded values keep that dtype, so this does not make the cache any smaller (yet!).
 - The DSpark draft layers of the checkpoint (`mtp.*`) are not loaded.
 - The image processor resizes with torchvision, while the original preprocessing uses PIL. Sizes and padding are the
   same, but resampling leaves a fraction of a percent of the pixel values off by one or two levels out of 255.

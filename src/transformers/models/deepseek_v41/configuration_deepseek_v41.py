@@ -417,6 +417,22 @@ class DeepseekV41TextConfig(PreTrainedConfig):
                 compress.setdefault("attention_factor", 1.0)
             self.rope_parameters = {"main": main, "compress": compress}
 
+    def validate_fake_quantization(self):
+        """Checks that the activations which are rounded to FP8 or FP4 split into whole blocks of 32 values."""
+        widths = {
+            "head_dim": self.head_dim,
+            "num_attention_heads * head_dim // o_groups": self.num_attention_heads * self.head_dim // self.o_groups,
+        }
+        if self.compress_ratios is not None and any(self.compress_ratios):
+            # Only the layers that attend to compressed KV have index keys and queries
+            widths["index_head_dim"] = self.index_head_dim
+        bad = {name: width for name, width in widths.items() if width % 32 != 0}
+        if bad:
+            raise ValueError(
+                "The KV, the input of the grouped output projection and the index keys and queries are rounded to "
+                f"FP8 or FP4 in blocks of 32 values, so their widths must be multiples of 32. Got {bad}."
+            )
+
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4.1-Flash")
 @strict

@@ -28,6 +28,7 @@ if is_torch_available():
     from transformers.models.deepseek_v41.modeling_deepseek_v41 import (
         DeepseekV41Compressor,
         DeepseekV41NgramHasher,
+        fake_quantize,
         select_candidate_blocks,
     )
 
@@ -81,7 +82,7 @@ class DeepseekV41ModelTester(VLMModelTester):
         # Enough heads that two entries never get the exact same index score. With a couple of heads, the ReLU
         # leaves many scores at exactly 0, and how top-k breaks those ties depends on the shape of its input.
         "index_n_heads": 16,
-        "index_head_dim": 16,
+        "index_head_dim": 32,
         "index_topk": 3,
         "hc_mult": 2,
         "hc_sinkhorn_iters": 3,
@@ -140,6 +141,10 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     # The Engram token map and n-gram tables are fixed to the vocabulary, so `resize_token_embeddings` raises
     test_resize_embeddings = False
+    # Tolerance for our tests that compute the same logits in two ways. The model rounds its KV to FP8, so when
+    # float noise tips a value over a rounding boundary, the two ways differ by a rounding step instead of by
+    # the noise: up to 8e-3 on the logits over 300 random models, against 5e-7 without the rounding.
+    rounded_logits_tolerance = 1e-2
 
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
@@ -312,7 +317,8 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
             for position in range(7, input_ids.shape[1]):
                 outputs = model(input_ids=input_ids[:, position : position + 1], cache=outputs.cache, use_cache=True)
                 logits.append(outputs.logits)
-        torch.testing.assert_close(torch.cat(logits, dim=1), expected, atol=1e-4, rtol=1e-4)
+        tolerance = self.rounded_logits_tolerance
+        torch.testing.assert_close(torch.cat(logits, dim=1), expected, atol=tolerance, rtol=tolerance)
 
     def test_chunked_prefill_matches_full_forward(self):
         """The cache carries a pooling group that is still filling up across calls of any length."""
@@ -325,7 +331,8 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
             for start, end in ((5, 12), (12, 13), (13, 19)):
                 outputs = model(input_ids=input_ids[:, start:end], cache=outputs.cache, use_cache=True)
                 logits.append(outputs.logits)
-        torch.testing.assert_close(torch.cat(logits, dim=1), expected, atol=1e-4, rtol=1e-4)
+        tolerance = self.rounded_logits_tolerance
+        torch.testing.assert_close(torch.cat(logits, dim=1), expected, atol=tolerance, rtol=tolerance)
 
     def test_compressed_attention_is_used(self):
         """Tokens outside the sliding window still reach the output, through the compressed KV."""
@@ -434,6 +441,56 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
             model.resize_token_embeddings(config.text_config.vocab_size + 10)
         self.assertEqual(model.get_input_embeddings().weight.shape[0], config.text_config.vocab_size)
 
+    def test_fake_quantize(self):
+        # First, FP4 with a scale of 1, which the largest value of 6 gives. FP4 holds 0, 0.5, 1, 1.5, 2, 3, 4 and 6
+        # times the scale, and a value halfway between two of them goes to the one with the even mantissa.
+        values = [6.0, 5.0, 3.5, 2.5, 1.75, 1.25, 0.75, 0.25, 0.2, -0.3, -2.6, -5.5, 0.0, 1.0, 1.5, 3.0]
+        expected = [6.0, 4.0, 4.0, 2.0, 2.0, 1.0, 1.0, 0.0, 0.0, -0.5, -3.0, -6.0, 0.0, 1.0, 1.5, 3.0]
+        values = torch.tensor([values], device=torch_device)
+        self.assertEqual(fake_quantize(values, "fp4", block_size=16).tolist(), [expected])
+        # Each block has its own scale: an all-zero block stays at zero, next to the block from before
+        two_blocks = torch.cat([values, torch.zeros_like(values)], dim=-1)
+        self.assertEqual(fake_quantize(two_blocks, "fp4", block_size=16).tolist(), [expected + [0.0] * 16])
+
+        # Next, the scale is a power of two. Scaling the block by one changes nothing else, but a largest value
+        # just over 6 doubles the scale, and everything is rounded twice as coarsely.
+        scaled = fake_quantize(values * 2.0**-20, "fp4", block_size=16)
+        self.assertEqual((scaled * 2.0**20).tolist(), [expected])
+        coarse = fake_quantize(torch.tensor([[6.5, 5.0, 3.0, 1.4]], device=torch_device), "fp4", block_size=4)
+        self.assertEqual(coarse.tolist(), [[6.0, 4.0, 3.0, 1.0]])
+
+        # With an FP8 scale, the scale is the largest value over 6, rounded to FP8: 5 / 6 becomes 0.8125. The
+        # largest value itself is then cut off at 6 times the scale.
+        fine = fake_quantize(torch.tensor([[5.0, 2.5, 1.0, 0.0]], device=torch_device), "fp4", 4, scale_format="fp8")
+        self.assertEqual(fine.tolist(), [[4.875, 2.4375, 0.8125, 0.0]])
+
+        # Finally, FP8 against the cast to FP8 of PyTorch, with the power-of-two scale of each block. The scale
+        # has a floor: a block whose largest value is under 1e-4 is scaled as if it were 1e-4.
+        values = torch.randn(64, 32, device=torch_device) * torch.logspace(-6, 6, 64, device=torch_device)[:, None]
+        largest = values.abs().amax(dim=-1, keepdim=True).clamp(min=1e-4)
+        scale = torch.exp2(torch.ceil(torch.log2(largest.double() / 448))).float()
+        expected = (values / scale).to(torch.float8_e4m3fn).float() * scale
+        torch.testing.assert_close(fake_quantize(values, "fp8", block_size=32), expected, rtol=0, atol=0)
+
+    def test_fake_quantize_passes_the_gradient_through(self):
+        values = torch.randn(3, 64, device=torch_device, requires_grad=True)
+        rounded = fake_quantize(values, "fp8", block_size=32)
+        rounded.sum().backward()
+        self.assertTrue(torch.equal(values.grad, torch.ones_like(values)))
+        # ... and the values are the rounded ones to the bit, as without a gradient
+        self.assertTrue(torch.equal(rounded, fake_quantize(values.detach(), "fp8", block_size=32)))
+
+    def test_cache_holds_rounded_kv(self):
+        """The KV and the index keys are rounded before they go in the cache, so rounding them again is a no-op."""
+        config, model = self._get_model()
+        input_ids = self.model_tester.prepare_text_ids(2, 19)
+        with torch.no_grad():
+            cache = model(input_ids=input_ids, use_cache=True).cache
+        for layer, attention_type in zip(cache.layers, config.text_config.attention_layer_types):
+            self.assertTrue(torch.equal(fake_quantize(layer.keys, "fp8", block_size=32), layer.keys))
+            if attention_type == "compressed_attention":
+                self.assertTrue(torch.equal(fake_quantize(layer.index_keys, "fp4", block_size=32), layer.index_keys))
+
     def test_select_candidate_blocks(self):
         scores = torch.tensor([[[0.1, 0.9, 0.3, 0.2, 0.8, float("-inf")]]])
         # The best block is the first one, and the block with the newest visible entry is always kept
@@ -499,8 +556,9 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
             )
         # On the first step the beams of a prompt are still copies of it, so each one gets the logits of the prompt
         first_step_logits = outputs.logits[0].view(batch_size, num_beams, -1)
+        tolerance = self.rounded_logits_tolerance
         for beam in range(num_beams):
-            torch.testing.assert_close(first_step_logits[:, beam], expected, atol=1e-4, rtol=1e-4)
+            torch.testing.assert_close(first_step_logits[:, beam], expected, atol=tolerance, rtol=tolerance)
 
     def test_image_features_of_several_images(self):
         """Images are encoded independently, whether or not they come in together."""
