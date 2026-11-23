@@ -34,7 +34,6 @@ from .utils import (
     is_soundfile_available,
     is_soxr_available,
     is_torch_tensor,
-    is_torchaudio_available,
     is_torchcodec_greater_or_equal,
     is_torchcodec_usable,
     requires_backends,
@@ -50,9 +49,6 @@ if is_soundfile_available():
 
 if is_soxr_available():
     import soxr
-
-if is_torchaudio_available():
-    import torchaudio
 
 
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
@@ -293,6 +289,9 @@ def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None, backe
 
     if resolved_backend == "torchaudio":
         requires_backends(load_audio, ["torchaudio"])
+        # Import torchaudio lazily rather than at module scope, see https://github.com/huggingface/transformers/pull/47422
+        import torchaudio
+
         waveform, src_sampling_rate = torchaudio.load(BytesIO(source) if isinstance(source, bytes) else source)
         waveform = waveform.mean(dim=0)  # to mono
 
