@@ -456,8 +456,8 @@ class Ernie4_5_MoePreTrainedModel(PreTrainedModel):
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
-    # Not supporting multi-token prediction (MTP) atm
-    _keys_to_ignore_on_load_unexpected = ["mtp"]
+    # Also lists the final norm so that `MtpModel` loads it as the post-norm of its MTP layer
+    _keys_to_ignore_on_load_unexpected = ["mtp", r"^model\.norm\.weight$"]
     _keep_in_fp32_modules_strict = ["gate.weight", "e_score_correction_bias"]
 
     def _init_weights(self, module):

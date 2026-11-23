@@ -13,10 +13,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Ernie4.5 MoE model."""
 
+import os
 import tempfile
 import unittest
 
 import pytest
+from safetensors.torch import load_file, save_file
 
 from transformers import BitsAndBytesConfig, is_torch_available
 from transformers.models.ernie4_5_moe.modeling_ernie4_5_moe import load_balancing_loss_func
@@ -43,6 +45,7 @@ if is_torch_available():
         Ernie4_5_MoeForCausalLM,
         Ernie4_5_MoeModel,
     )
+    from transformers.modeling_layers import MtpModel
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -147,6 +150,40 @@ class Ernie4_5_MoeModelTest(CausalLMModelTest, unittest.TestCase):
         masked_loss = load_balancing_loss_func((synthetic_logits,), num_experts, top_k, synthetic_mask)
         unmasked_loss = load_balancing_loss_func((synthetic_logits,), num_experts, top_k, attention_mask=None)
         self.assertNotAlmostEqual(masked_loss.item(), unmasked_loss.item(), places=6)
+
+    def test_mtp_loads_ernie_checkpoint_layout(self):
+        """Ernie 4.5 stores MTP layer `k` as `model.mtp_{part}.{k}` and applies the final norm after it."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_mtp_layers = 1
+        model = Ernie4_5_MoeForCausalLM(config)
+        model.model.norm.weight.data.normal_()
+        mtp_layer = MtpModel(model, num_mtp_layers=1).layers[0]
+        expected = {f"mtp_block.{k}": torch.randn_like(v) for k, v in mtp_layer.mtp_block.state_dict().items()}
+        expected |= {
+            f"{k}.weight": torch.randn_like(getattr(mtp_layer, k).weight) for k in ("enorm", "hnorm", "eh_proj")
+        }
+        renames = {
+            "mtp_block.": "mtp_block.0.",
+            "enorm.": "mtp_emb_norm.0.",
+            "hnorm.": "mtp_hidden_norm.0.",
+            "eh_proj.": "mtp_linear_proj.0.",
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            weights_path = os.path.join(tmpdirname, "model.safetensors")
+            state_dict = load_file(weights_path)
+            for name, tensor in expected.items():
+                prefix = next(p for p in renames if name.startswith(p))
+                state_dict["model." + renames[prefix] + name.removeprefix(prefix)] = tensor
+            save_file(state_dict, weights_path, metadata={"format": "pt"})
+
+            reloaded = Ernie4_5_MoeForCausalLM.from_pretrained(tmpdirname)
+            loaded = MtpModel.from_pretrained(reloaded).layers[0].state_dict()
+
+        for name, tensor in expected.items():
+            torch.testing.assert_close(loaded[name], tensor.to(loaded[name].dtype))
+        torch.testing.assert_close(loaded["post_norm.weight"], reloaded.model.norm.weight)
 
 
 @slow
