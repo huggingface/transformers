@@ -404,6 +404,8 @@ class NVFP4Deserialize(ConversionOps):
             tensor = value[0] if isinstance(value, list) else value
             if key.endswith("_scale") and not key.endswith("input_scale"):  # the block scales
                 output[key] = tensor = tensor.view(torch.uint8)
+                if getattr(self.hf_quantizer, "metal", False):  # the Metal kernels read them row-major
+                    continue
                 sf_shape = swizzled_sf_shape(tensor.shape[-2], tensor.shape[-1] * SF_VEC_SIZE)
                 swizzled = swizzle_sf(tensor).view(torch.int32).view(*tensor.shape[:-2], *sf_shape)
                 output[key.removesuffix("scale") + "sf"] = swizzled

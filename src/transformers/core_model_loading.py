@@ -243,18 +243,23 @@ class Interleave(ConversionOps):
         self.inverse = inverse
 
     def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
-        tensor = next(iter(input_dict.values()))
-        tensor = tensor[0] if isinstance(tensor, list) else tensor
+        # One tensor, or a quantized weight with its block scales (named after their targets): each along `dim`
+        if len(input_dict) == 1:
+            input_dict = {target_patterns[0]: next(iter(input_dict.values()))}
+        return {
+            key: self._interleave(value[0] if isinstance(value, list) else value) for key, value in input_dict.items()
+        }
 
+    def _interleave(self, tensor):
+        if tensor.ndim <= self.dim + 1 and tensor.shape[self.dim] <= 2:  # e.g. global scales of gate / up: as they are
+            return tensor
         # Split into two in given dim and transpose to interleave along it
         shape = list(tensor.shape)
         if self.inverse:
             shape[self.dim : self.dim + 1] = [2, shape[self.dim] // 2]
         else:
             shape[self.dim : self.dim + 1] = [shape[self.dim] // 2, 2]
-
-        tensor = tensor.reshape(shape).transpose(self.dim, self.dim + 1).reshape(tensor.shape).contiguous()
-        return {target_patterns[0]: tensor}
+        return tensor.reshape(shape).transpose(self.dim, self.dim + 1).reshape(tensor.shape).contiguous()
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -777,8 +782,9 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
 
 class Inkling2LoopDequantizeExperts(ConversionOps):
     r"""
-    Temporary op that dequantizes the NVFP4 and MXFP8 expert weights of the original Inkling2Loop checkpoints to the
-    dtype of the model param, until these formats can be loaded quantized.
+    Op that dequantizes the NVFP4 and MXFP8 expert weights of the original Inkling2Loop checkpoints to the dtype of the
+    model param, or, when the param is quantized (a quantization plan's NVFP4 / FP8 experts, e.g. on MPS), passes the
+    banks through under the plan's names.
 
     - NVFP4 (`amax` present): two E2M1 codes per byte (even element in the low nibble), one float8 scale per 16 values
       and a per-expert factor `amax / outer_scale_denominator`.
@@ -800,6 +806,19 @@ class Inkling2LoopDequantizeExperts(ConversionOps):
             dtype = model.get_parameter(full_layer_name).dtype
         except (AttributeError, TypeError):
             dtype = torch.bfloat16
+        target = target_patterns[0]
+        if torch.empty(0, dtype=dtype).element_size() == 1:
+            # Quantized experts (a quantization plan's NVFP4 / FP8 module, e.g. on MPS): the banks as they are, under the
+            # plan's names. NVFP4's global scale per expert is `amax / outer_scale_denominator` (gate and up share it)
+            if amax is None:
+                return {target: weight, f"{target}_scale_inv": scale.view(torch.uint8)}
+            factor = amax.float() / denominator.float()
+            factor = factor[:, None].expand(-1, 2).contiguous() if "gate_up" in target else factor
+            return {
+                target: weight.view(torch.uint8),
+                f"{target}_scale": scale.view(torch.uint8),
+                f"{target}_scale_2": factor,
+            }
         num_experts, rows = weight.shape[:2]
         columns = weight.shape[2] * 2 if amax is not None else weight.shape[2]
         output = torch.empty(num_experts, rows, columns, dtype=dtype, device=weight.device)

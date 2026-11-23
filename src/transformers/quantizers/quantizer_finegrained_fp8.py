@@ -36,6 +36,15 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize:
             return
 
+        from ..integrations.metal_quantization import metal_fp4_experts_available
+
+        # Apple Silicon: pre-quantized MXFP8 experts (e8m0 scales per 32) run on the `metal-moe-decode` kernels
+        config = self.quantization_config
+        mxfp8 = config.scale_fmt == "ue8m0" and tuple(config.weight_block_size or ()) == (1, 32)
+        self.metal = self.pre_quantized and mxfp8 and metal_fp4_experts_available(kwargs.get("device_map"))
+        if self.metal:
+            return
+
         if not torch.cuda.is_available() and not is_torch_xpu_available():
             if self.pre_quantized:
                 logger.warning_once(
@@ -135,6 +144,10 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         config = self.quantization_config
         if config.dequantize:
             return None
+        if getattr(self, "metal", False):
+            from ..integrations.metal_quantization import metal_fp4_module
+
+            return metal_fp4_module(name, module, "mxfp8")
 
         kwargs = {
             "block_size": config.weight_block_size,
@@ -223,8 +236,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         "input_scale": "activation_scale",
     }
 
-    def get_checkpoint_renames(self, model):
-        # Inkling2 has params ending with `.scale` which should not be renamed (e.g. `q_norm.scale`)
+    def checkpoint_renames_for(self, model):
+        # Inkling2 has params ending with `.scale` that are not FP8 scales (e.g. `q_l2_clip.scale`)
         if model.config.model_type.startswith("inkling2"):
-            return {theirs: ours for theirs, ours in self.checkpoint_renames.items() if theirs != "scale"}
+            return {name: ours for name, ours in self.checkpoint_renames.items() if name != "scale"}
         return self.checkpoint_renames
