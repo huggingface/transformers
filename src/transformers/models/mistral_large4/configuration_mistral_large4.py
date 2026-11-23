@@ -188,6 +188,8 @@ class MistralLarge4TextConfig(PreTrainedConfig):
                 f"`attention_layer_types` ({self.attention_layer_types}) does not match the one derived from "
                 f"`no_rope_layers` and `kv_source_layers` ({attention_layer_types})."
             )
+        # Per-layer rotary width: NoPE layers fold the rotary head dims into the non-rotary ones
+        self.qk_rope_head_dims = [self.qk_rope_head_dim * int(use_rope) for use_rope in self.no_rope_layers]
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")
