@@ -616,7 +616,6 @@ if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("mla_kv_a_proj", MlaKvAProjParallel())
     ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
     ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
-    ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
     ALL_PARALLEL_STYLES.register("local_params", LocalParamsParallel())
     # Every rank keeps the full param, e.g. a per-tensor quantization scale
     ALL_PARALLEL_STYLES.register("replicate", TensorParallelLayer())
@@ -643,7 +642,7 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())
 
-    if "moe_tp_experts" in tp_plan.values() or "moe_identity_expert" in tp_plan.values():
+    if "moe_tp_experts" in tp_plan.values():
         _warning_once_on_rank_zero(
             "The `moe_tp_experts` parallel style has been deprecated (removal in v5.28.0). "
             "Use expert parallelism with `ep_dispatch_experts` and `grouped_gemm` instead. "

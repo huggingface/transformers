@@ -119,7 +119,6 @@ ALL_PARALLEL_STYLES.register("replicated_with_grad_allreduce", ReplicatedWithGra
 ALL_PARALLEL_STYLES.register("mla_kv_a_proj", MlaKvAProjParallel())
 ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
 ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
-ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
 ALL_PARALLEL_STYLES.register("local_params", LocalParamsParallel())
 ```
 
