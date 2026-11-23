@@ -876,6 +876,8 @@ class ModelTesterMixin(ExportTesterMixin):
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
+            "Inkling2LoopTextModelTest": 4,  # need to test all layer types (before loop, loop, after loop). 2 layers for loop because of sliding and full attention layers.
+            "LaraMiniModelTest": 3,  # One layer per token mixer: ["linear_attention", "sliding_attention", "full_attention"]
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -1028,6 +1030,40 @@ class ModelTesterMixin(ExportTesterMixin):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
                             self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT be")
+
+    def test_keep_in_fp32_modules_strict_also_hardcode_fp32(self):
+        """
+        Test that models using `_keep_in_fp32_modules_strict` actually hardcode the `dtype=torch.float32` in the parameter/buffer
+        creation, as otherwise the dtype is lost when instantiating a model from `__init__` or `from_config`.
+        """
+        from transformers.core_model_loading import build_glob_alternation
+        from transformers.modeling_utils import local_torch_dtype
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # Init an empty model in fp16 to check if the params inside _keep_in_fp32_modules_strict are correctly
+                # kept in fp32
+                with local_torch_dtype(torch.float16, model_class.__name__):
+                    model = model_class(config).to(torch_device)
+                    model.eval()
+
+                if len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest("No `_keep_in_fp32_modules_strict` defined")
+
+                dtype_policy_alt, _, _ = build_glob_alternation(list(model._keep_in_fp32_modules_strict))
+
+                missing = []
+                for k, v in model.state_dict().items():
+                    # Check is_floating_point as well, as some params (e.g. norm's `num_batches_tracked` buffers) can be int
+                    if dtype_policy_alt.search(k) is not None and v.dtype != torch.float32 and v.is_floating_point():
+                        missing.append(k)
+
+                self.assertTrue(
+                    len(missing) == 0,
+                    f"The following parameters/buffers are part of `_keep_in_fp32_modules_strict` but do not hardcode their dtype in the __init__: {(*missing,)}",
+                )
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1745,8 +1781,12 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
-                pre_hook_mock = unittest.mock.Mock(return_value=None)
-                checkpointing_layer.register_forward_pre_hook(pre_hook_mock)
+                # record whether gradients are on at each call of the layer: only those calls are checkpointed (HrmText
+                # runs some of its layers under `torch.no_grad()`)
+                grad_enabled_calls = []
+                checkpointing_layer.register_forward_pre_hook(
+                    lambda *_: grad_enabled_calls.append(torch.is_grad_enabled())
+                )
                 # count the runs of the forward that the layer hands to the checkpoint function
                 checkpoint_func = checkpointing_layer._gradient_checkpointing_func
                 forward_mock = unittest.mock.Mock()
@@ -1767,7 +1807,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
                     # forward more than once.
                     self.assertGreater(forward_mock.call_count, 1)
-                    self.assertEqual(pre_hook_mock.call_count, checkpoint_mock.call_count)
+                    self.assertEqual(sum(grad_enabled_calls), checkpoint_mock.call_count)
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
@@ -2269,6 +2309,64 @@ class ModelTesterMixin(ExportTesterMixin):
             config.output_hidden_states = True
             self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_multimodal_outputs_are_returned(self):
+        """
+        Tests that we can return multimodal encoded outputs from a VLM. Currently only
+        images and video are supported while 'audio' is not consistent, so we don't test
+        audio models.
+
+        FIXME raushan/eustlib - add video and audio to this test when they are supported!
+        """
+
+        def check_multimodal_output(inputs_dict, config, model_class):
+            # force eager attention to support output attentions
+            model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # most testers have no video pixels in inputs dict so we can't expect
+            # video outputs to be present, it is pure lottery :(s
+            self.assertTrue(hasattr(outputs, "image_outputs"))
+            self.assertTrue(hasattr(outputs.image_outputs, "attentions"))
+            self.assertTrue(hasattr(outputs.image_outputs, "hidden_states"))
+            # Some models do not return pooler output, e.g. Mllama
+            if hasattr(outputs.image_outputs, "pooler_output"):
+                self.assertEqual(len(outputs.image_outputs.pooler_output), self.model_tester.batch_size)
+
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            # DO NOT modify this list and fix your model or override if needed!
+            if any(
+                config.model_type == old_model
+                for old_model in ["blip-2", "instructblip", "instructblipvideo", "imagegpt", "phi4_multimodal", "git"]
+            ):
+                continue
+
+            # Skip if model has no vision-config, i.e. Audio/TextModelTester
+            if getattr(config, "vision_config", None) is None:
+                continue
+
+            # No standard model output for seq2seq VLMs yet as they aren't popular
+            if config.is_encoder_decoder or config.get_text_config(decoder=True).is_encoder_decoder:
+                continue
+
+            inputs_dict["output_hidden_states"] = True
+            inputs_dict["output_attentions"] = True
+            check_multimodal_output(inputs_dict, config, model_class)
+
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
+            self._set_subconfig_attributes(config, "output_attentions", True)
+            check_multimodal_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
@@ -4194,13 +4292,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname, dtype=dtype)
 
-                sub_models_supporting_fa = [
-                    module._supports_flash_attn
-                    for name, module in model.named_modules()
-                    if isinstance(module, PreTrainedModel) and name != ""
-                ]
-                supports_fa_all_modules = (
-                    all(sub_models_supporting_fa) if len(sub_models_supporting_fa) > 0 else model._supports_flash_attn
+                supports_fa_all_modules = all(
+                    module._supports_flash_attn for module in model.modules() if isinstance(module, PreTrainedModel)
                 )
                 if not supports_fa_all_modules:
                     with self.assertRaises(ValueError):
@@ -5528,10 +5621,10 @@ class ModelTesterMixin(ExportTesterMixin):
                     return
 
                 last_hidden_state_shape = outputs.last_hidden_state.shape
-                batch_size = (
-                    inputs_dict["pixel_values"].shape[0]
-                    if "pixel_values" in inputs_dict
-                    else inputs_dict["pixel_values_images"].shape[0]
+                batch_size = next(
+                    inputs_dict[key].shape[0]
+                    for key in ("pixel_values", "pixel_values_images", "flattened_patches")
+                    if key in inputs_dict
                 )
                 self.assertEqual(
                     last_hidden_state_shape[0],

@@ -127,6 +127,19 @@ class ImageTextToTextPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
+        # Decoder-only models require left-padding for correct batched generation. Encoder-decoder models are
+        # untouched, and so are processors with another component that sets its own padding side, because the
+        # collator pads all inputs on one side.
+        components = [self.feature_extractor, self.image_processor]
+        for name in ("feature_extractor", "image_processor", "audio_processor", "qformer_tokenizer"):
+            components.append(getattr(self.processor, name, None))
+        if (
+            self.tokenizer is not None
+            and self.tokenizer.padding_side == "right"
+            and not getattr(self.model.config, "is_encoder_decoder", False)
+            and all(getattr(component, "padding_side", None) is None for component in components)
+        ):
+            self.tokenizer.padding_side = "left"
 
     def _sanitize_parameters(
         self,
@@ -431,8 +444,11 @@ class ImageTextToTextPipeline(Pipeline):
         input_texts = [text for text in input_texts for _ in range(candidates_per_input)]
         if return_type == ReturnType.TENSORS:
             return [
-                {"input_text": input_texts[i], "generated_token_ids": generated_sequence[i]}
-                for i in range(len(input_texts))
+                {
+                    "input_text": input_text.messages if isinstance(input_text, Chat) else input_text,
+                    "generated_token_ids": generated_sequence[i],
+                }
+                for i, input_text in enumerate(input_texts)
             ]
 
         # Decode inputs and outputs the same way to remove input text from generated text if present

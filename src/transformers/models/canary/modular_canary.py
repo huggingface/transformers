@@ -102,7 +102,6 @@ class CanaryConfig(PreTrainedConfig):
     """
 
     model_type = "canary"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "encoder_config": SubConfigSpec(
             config_class=AutoConfig,

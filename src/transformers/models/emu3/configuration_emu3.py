@@ -95,7 +95,6 @@ class Emu3TextConfig(PreTrainedConfig):
     model_type = "emu3_text_model"
     base_model_tp_plan = {"embed_tokens": "embedding_rowwise"}
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     vocab_size: int = 184622
@@ -128,7 +127,6 @@ class Emu3Config(PreTrainedConfig):
     """
 
     model_type = "emu3"
-    keys_to_ignore_at_inference = ["cache"]
     sub_configs_defaults = {
         "vq_config": Emu3VQVAEConfig,
         "text_config": Emu3TextConfig,

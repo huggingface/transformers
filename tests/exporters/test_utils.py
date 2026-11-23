@@ -253,6 +253,15 @@ class ExportedModelTest(unittest.TestCase):
                 loaded = ExportedModel.from_pretrained(directory, trust_remote_code=True)
         self.assertEqual(loaded.components["model"].program, "program")
 
+    def test_only_pickled_programs_need_trust_remote_code(self):
+        """Only the Dynamo exporter's `.pt2` programs are pickled: the exporters built on it write programs that run no
+        code when loaded, so they load without `trust_remote_code=True`."""
+        from transformers.exporters import DynamoExporter, ExecutorchExporter, OnnxExporter, OpenVINOExporter
+
+        self.assertTrue(DynamoExporter.requires_trust_remote_code)
+        for exporter in (OnnxExporter, OpenVINOExporter, ExecutorchExporter):
+            self.assertFalse(exporter.requires_trust_remote_code, exporter.__name__)
+
     def test_from_pretrained_loads_a_newer_manifest(self):
         """An export from a newer transformers, with a field this version doesn't know, loads with a warning."""
         components = {"model": ExportedComponent("program", ExportMetadata(architecture="Stub"))}

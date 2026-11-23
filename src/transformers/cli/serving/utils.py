@@ -19,13 +19,18 @@ import asyncio
 import copy
 import enum
 import json
+import os
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
+from functools import lru_cache
 from queue import Queue
 from typing import TYPE_CHECKING
+
+from huggingface_hub import scan_cache_dir
+from tqdm import tqdm
 
 from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
@@ -58,16 +63,83 @@ X_REQUEST_ID = "x-request-id"
 
 
 def split_model_id(model_id: str) -> tuple[str, str | None]:
-    """`<repo>[@revision][:<file>.gguf]` -> the id without the file, and the file if one was named.
+    """Split the GGUF file off a model name: `"org/model:weights.gguf"` -> `("org/model", "weights.gguf")`.
 
-    `<repo>:<file>.gguf` is how GGUF clients name a file inside a repository: the repository says which
-    model, the file which weights, and both are answered for rather than one of them dropped. A colon
-    that is not a `.gguf` file is left alone -- it is part of the id.
+    Only a `.gguf` file after the last colon counts. Any other colon is part of the name, as in a local
     """
-    head, _, named = model_id.partition(":")
-    if named and not named.endswith(".gguf"):
+    name, colon, gguf_file = model_id.rpartition(":")
+    names_gguf_file = bool(colon) and gguf_file.endswith(".gguf")
+    if not names_gguf_file:
         return model_id, None
-    return head, named or None
+    return name, gguf_file
+
+
+def split_revision(model_id_and_revision: str) -> tuple[str, str | None]:
+    """Split the revision off a model name: `"org/model@dev"` -> `("org/model", "dev")`.
+
+    An existing local path has no revision, and an `@` in it is part of the path:
+    `"/tmp/ckpt@1000"` -> `("/tmp/ckpt@1000", None)`.
+    """
+    if os.path.exists(model_id_and_revision):
+        return model_id_and_revision, None
+    model_id, _, revision = model_id_and_revision.partition("@")
+    return model_id, revision or None
+
+
+def model_owner(model_id: str) -> str:
+    """Owner of a model for `/v1/models`: `"local"` for a local path, the organization of a Hub repo."""
+    if os.path.exists(model_id):
+        return "local"
+    return model_id.split("/")[0] if "/" in model_id else ""
+
+
+@lru_cache
+def get_gen_models(cache_dir: str | None = None) -> list[dict]:
+    """List generative models (LLMs and VLMs) available in the HuggingFace cache.
+
+    Args:
+        cache_dir (`str`, *optional*): Path to the HuggingFace cache directory.
+            Defaults to the standard cache location.
+
+    Returns:
+        `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc.
+    """
+    from transformers.models.auto.modeling_auto import (
+        MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+        MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+        MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
+    )
+
+    generative_architectures = {
+        *MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values(),
+        *MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values(),
+        *MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values(),
+    }
+
+    generative_models = []
+    for repo in tqdm(scan_cache_dir(cache_dir).repos):
+        if repo.repo_type != "model":
+            continue
+        owned_by = repo.repo_id.split("/")[0] if "/" in repo.repo_id else ""
+
+        for ref, revision_info in repo.refs.items():
+            # One quantization per file, each a separate model, so list files rather than the repo.
+            gguf_files = sorted(f.file_name for f in revision_info.files if f.file_name.endswith(".gguf"))
+            model_ids = [f"{repo.repo_id}:{gguf_file}" for gguf_file in gguf_files]
+
+            # The repo itself is listed when its config names a generative architecture.
+            config_path = next((f.file_path for f in revision_info.files if f.file_name == "config.json"), None)
+            config = json.loads(config_path.read_text()) if config_path is not None else None
+            architectures = (config.get("architectures") or []) if isinstance(config, dict) else []
+            if any(architecture in generative_architectures for architecture in architectures):
+                model_ids.append(repo.repo_id if ref == "main" else f"{repo.repo_id}@{ref}")
+
+            for model_id in model_ids:
+                generative_models.append(
+                    {"owned_by": owned_by, "id": model_id, "object": "model", "created": int(repo.last_modified)}
+                )
+
+    return generative_models
 
 
 class Modality(enum.Enum):

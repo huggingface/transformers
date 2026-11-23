@@ -413,6 +413,7 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
         "Emu3VQVAE",  # no autoclass for VQ-VAE models
         "Emu3TextModel",  # Building part of bigger (tested) model
+        "Apertus1p5VisionTokenizerModel",  # no autoclass for VQ-VAE-style tokenizer models
         "JanusVQVAE",  # no autoclass for VQ-VAE models
         "JanusVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
@@ -492,6 +493,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("inkling_mm_model", "inkling"),
         ("inkling2_text", "inkling2"),
         ("inkling2_vision", "inkling2"),
+        ("inkling2_loop_text", "inkling2_loop"),
         ("nemo_speechlm", "nemotron3_5_transcribe"),
     ]
 )
