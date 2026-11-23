@@ -216,7 +216,7 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     _is_composite = True
 
     @unittest.skip(reason="Each image's features are interpolated to an anyres-max size from `image_sizes`")
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
         pass
 
     def setUp(self):

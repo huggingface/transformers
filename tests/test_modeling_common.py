@@ -4553,53 +4553,34 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        """Given `get_data_dependent_inputs`, each modality's encoder compiles with `fullgraph=True` and matches eager."""
-        tested = False
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        """Given `get_data_dependent_inputs`, the whole forward compiles with `fullgraph=True` and matches eager. The
+        encoders run flash attention, which takes their precomputed `cu_seqlens`, and the text model SDPA."""
         for model_class in self.all_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            try:
-                model = model_class._from_config(config, attn_implementation="flash_attention_2", dtype=torch.bfloat16)
-            except (ValueError, ImportError):
+            if not hasattr(model_class, "get_data_dependent_inputs"):
                 continue
-            model = model.to(torch_device).eval().base_model
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device, torch.bfloat16).eval()
+            encoders = {name: "flash_attention_2" for name in config.sub_configs if "text" not in name}
+            try:
+                text_attention = "sdpa" if "text" in model_class.input_modalities else "flash_attention_2"
+                model.set_attn_implementation({"": text_attention, **encoders})
+            except ValueError:
+                continue
             inputs = {
-                name: value.to(torch.bfloat16)
-                if isinstance(value, torch.Tensor) and value.is_floating_point()
+                name: value.to(torch_device, torch.bfloat16 if value.is_floating_point() else value.dtype)
+                if isinstance(value, torch.Tensor)
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            if (get_data_dependent_inputs := getattr(model, "get_data_dependent_inputs", None)) is not None:
-                inputs.update(get_data_dependent_inputs(**inputs))
-            for modality in ("image", "video", "audio"):
-                encoder = getattr(model, f"get_{modality}_embeddings", None) or getattr(
-                    model, f"get_{modality}_features", None
-                )
-                if encoder is None:
-                    continue
-                parameters = inspect.signature(encoder).parameters
-                takes_kwargs = any(parameter.kind is parameter.VAR_KEYWORD for parameter in parameters.values())
-                encoder_inputs = {
-                    name: value
-                    for name, value in inputs.items()
-                    if name in parameters or (takes_kwargs and name.startswith(f"{modality}_"))
-                }
-                missing_required = any(
-                    parameter.default is parameter.empty
-                    and parameter.kind is parameter.POSITIONAL_OR_KEYWORD
-                    and name not in encoder_inputs
-                    for name, parameter in parameters.items()
-                )
-                if not encoder_inputs or missing_required:
-                    continue
-                torch._dynamo.reset()
-                with torch.no_grad():
-                    expected = encoder(**copy.deepcopy(encoder_inputs))
-                    actual = torch.compile(encoder, fullgraph=True, backend="eager")(**copy.deepcopy(encoder_inputs))
-                torch.testing.assert_close(actual, expected)
-                tested = True
-        if not tested:
-            self.skipTest(reason="The model has no modality encoder taking these inputs")
+            inputs |= {
+                name: value for name, value in model.get_data_dependent_inputs(**inputs).items() if name not in inputs
+            }
+            torch.compiler.reset()
+            with torch.no_grad():
+                expected = model(**copy.deepcopy(inputs))
+                actual = torch.compile(model, fullgraph=True, backend="eager")(**copy.deepcopy(inputs))
+            torch.testing.assert_close(actual.to_tuple()[0], expected.to_tuple()[0])
 
     @slow
     @require_torch_accelerator

@@ -483,7 +483,7 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_split_percents = [0.85, 0.9]
 
     @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
         pass
 
     def setUp(self):

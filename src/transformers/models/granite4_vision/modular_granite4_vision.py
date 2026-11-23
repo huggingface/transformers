@@ -15,6 +15,7 @@
 import math
 from dataclasses import dataclass
 from fractions import Fraction
+from typing import Any
 
 import numpy as np
 import torch
@@ -30,7 +31,7 @@ from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import select_hidden_states
 from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
@@ -43,7 +44,9 @@ from ..llava_next.modeling_llava_next import (
     LlavaNextModelOutputWithPast,
     LlavaNextPreTrainedModel,
     get_anyres_image_grid_shape,
-    image_size_to_num_patches,
+    get_pack_index,
+    get_pack_sizes,
+    get_patch_index,
     unpad_image,
 )
 from ..llava_next.processing_llava_next import LlavaNextProcessor
@@ -477,8 +480,36 @@ class Granite4VisionModel(LlavaNextModel):
         # Replace the inherited LLM backbone with our deepstack-aware subclass
         self.language_model = Granite4VisionTextModel(config.text_config)
 
-    def get_data_dependent_inputs(self):
-        raise AttributeError("Granite4Vision packs its image features differently")
+    def get_data_dependent_inputs(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        image_sizes: torch.Tensor | None = None,
+        vision_feature_select_strategy: str | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What the forward derives from `image_sizes` with data-dependent ops: the patches each image was cut into
+        (`patch_index`) and how their downsampled features are packed (`pack_index`, `pack_sizes`), prefixed `image_`,
+        as `get_image_embeddings` takes them."""
+        if pixel_values is None or image_sizes is None:
+            return {}
+        if vision_feature_select_strategy is None:
+            vision_feature_select_strategy = self.config.vision_feature_select_strategy
+        grid_size = int(
+            self.config.vision_config.image_size
+            // self.config.vision_config.patch_size
+            * Fraction(self.downsample_rate)
+        )
+        inputs = {
+            "image_pack_index": get_pack_index(
+                image_sizes, self.config, vision_feature_select_strategy, grid_size=grid_size
+            ),
+            "image_pack_sizes": get_pack_sizes(
+                image_sizes, self.config, vision_feature_select_strategy, grid_size=grid_size
+            ),
+        }
+        if pixel_values.dim() == 5:
+            inputs["image_patch_index"] = get_patch_index(pixel_values, image_sizes, self.config)
+        return inputs
 
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
@@ -536,6 +567,7 @@ class Granite4VisionModel(LlavaNextModel):
             new_image_features.append(image_feature)
         return new_image_features
 
+    @accepts_precomputed_kwargs(modality="image")
     @merge_with_config_defaults
     @can_return_tuple
     @select_hidden_states(
@@ -569,22 +601,31 @@ class Granite4VisionModel(LlavaNextModel):
             Can be one of `"default"` or `"full"`
         """
 
-        image_num_patches = [
-            image_size_to_num_patches(
-                image_size=imsize,
-                grid_pinpoints=self.config.image_grid_pinpoints,
-                patch_size=self.config.vision_config.image_size,
-            )
-            for imsize in image_sizes
-        ]
-
+        grid_size = int(
+            self.config.vision_config.image_size
+            // self.config.vision_config.patch_size
+            * Fraction(self.downsample_rate)
+        )
+        pack_index = get_pack_index(
+            image_sizes, self.config, vision_feature_select_strategy, kwargs=kwargs, grid_size=grid_size
+        )
+        split_sizes = get_pack_sizes(
+            image_sizes, self.config, vision_feature_select_strategy, kwargs=kwargs, grid_size=grid_size
+        )
         if pixel_values.dim() == 5:
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
-            pixel_values = torch.cat(_pixel_values_list, dim=0)
+            pixel_values = pixel_values.flatten(0, 1)[
+                get_patch_index(pixel_values, image_sizes, self.config, kwargs=kwargs)
+            ]
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
         vision_outputs = self.vision_tower(pixel_values, **kwargs)
+
+        def pack(features: torch.Tensor) -> torch.Tensor:
+            """Each image's packed features, `image_newline` closing each row of its grid, as one sequence."""
+            features = features.flatten(0, 1)
+            newline = self.image_newline.to(features.device, features.dtype)
+            return torch.cat([features, newline[None]])[pack_index.to(features.device)]
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
         all_features = []
@@ -594,16 +635,7 @@ class Granite4VisionModel(LlavaNextModel):
             if vision_feature_select_strategy == "default":
                 selected_feature = selected_feature[:, 1:]
 
-            projected_features = self.layerwise_projectors[projection_idx](selected_feature)
-            projected_features = torch.split(projected_features, image_num_patches, dim=0)
-
-            packed_features = self.pack_image_features(
-                projected_features,
-                image_sizes,
-                vision_feature_select_strategy=vision_feature_select_strategy,
-                image_newline=self.image_newline,
-            )
-            all_features.append(torch.cat(packed_features, dim=0))
+            all_features.append(pack(self.layerwise_projectors[projection_idx](selected_feature)))
 
         # Spatial features: extract 4 offset groups from a single vision layer
         spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
@@ -612,21 +644,12 @@ class Granite4VisionModel(LlavaNextModel):
             spatial_feature = spatial_feature[:, 1:]
 
         for group_idx in range(len(self.config.spatial_target_layers)):
-            projected_group = self.spatial_projectors[group_idx](spatial_feature)
-            projected_group_split = torch.split(projected_group, image_num_patches, dim=0)
-
-            packed_group = self.pack_image_features(
-                projected_group_split,
-                image_sizes,
-                vision_feature_select_strategy=vision_feature_select_strategy,
-                image_newline=self.image_newline,
-            )
-            all_features.append(torch.cat(packed_group, dim=0))
+            all_features.append(pack(self.spatial_projectors[group_idx](spatial_feature)))
 
         return Granite4VisionImageFeaturesOutput(
             deepstack_features=all_features,
             hidden_states=vision_outputs.hidden_states,
-            split_sizes=torch.tensor([len(features) for features in packed_group], device=spatial_feature.device),
+            split_sizes=split_sizes,
         )
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -662,6 +685,7 @@ class Granite4VisionModel(LlavaNextModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
+                **kwargs,
             )
 
         # Build deepstack injection map and scatter initial image embeddings

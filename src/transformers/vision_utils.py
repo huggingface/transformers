@@ -188,6 +188,23 @@ def get_vision_window_index(
     return window_index, cu_window_seqlens
 
 
+def _antialiased_axis_taps_weights(
+    index: torch.Tensor, size: torch.Tensor, side: int
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-axis taps and weights of `F.interpolate(mode="bilinear", align_corners=False, antialias=True)`: a triangle
+    filter as wide as the downscale factor (plain bilinear when upscaling), normalized over the taps in the table."""
+    index = index.to(torch.float32)
+    scale = side / size.to(torch.float32)
+    support = scale.clamp(min=1.0)
+    center = (index + 0.5) * scale
+    # Taps per axis cover the widest filter, the extra ones get a zero weight
+    num_taps = int(torch.ceil(support.max()).item()) * 2 + 1
+    raw_taps = torch.floor(center - support + 0.5).long()[:, None] + torch.arange(num_taps, device=index.device)
+    weights = (1 - ((raw_taps + 0.5 - center[:, None]) / support[:, None]).abs()).clamp(min=0)
+    weights = weights * ((raw_taps >= 0) & (raw_taps <= side - 1))
+    return raw_taps.clamp(0, side - 1), weights / weights.sum(-1, keepdim=True)
+
+
 def _interpolation_axis_taps_weights(
     index: torch.Tensor, size: torch.Tensor, side: int, mode: str, align_corners: bool, padding: str = "border"
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -236,6 +253,7 @@ def get_vision_interpolation_indices_and_weights(
     spatial_merge_size: int = 1,
     padding: str = "border",
     resize_to_longest_side: bool = False,
+    antialias: bool = False,
     kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-patch gather indices/weights that resample a square learned `(num_grid_per_side,
@@ -258,6 +276,7 @@ def get_vision_interpolation_indices_and_weights(
         spatial_merge_size: merge block size; `1` keeps raster patch order.
         resize_to_longest_side: resize the table to a square of each image's longest side and crop it to the
             image's grid (RADIO's cropped position embedding), instead of resizing it to the grid.
+        antialias: matches `F.interpolate(antialias=True)`, for `mode="bilinear"` and `align_corners=False`.
         kwargs: optional caller kwargs — if it contains both `"interp_indices"` and `"interp_weights"`
             they are popped and returned.
 
@@ -294,12 +313,16 @@ def get_vision_interpolation_indices_and_weights(
     target_heights, target_widths = heights, widths
     if resize_to_longest_side:
         target_heights = target_widths = torch.maximum(heights, widths)
-    h_taps, h_weights = _interpolation_axis_taps_weights(row, target_heights, side, mode, align_corners, padding)
-    w_taps, w_weights = _interpolation_axis_taps_weights(col, target_widths, side, mode, align_corners, padding)
-    n = h_taps.shape[1]  # taps per axis
-    # 2D separable: outer product of the per-axis taps/weights → n*n taps per patch.
-    indices = (h_taps[:, :, None] * side + w_taps[:, None, :]).reshape(-1, n * n)
-    weights = (h_weights[:, :, None] * w_weights[:, None, :]).reshape(-1, n * n)
+    if antialias:
+        h_taps, h_weights = _antialiased_axis_taps_weights(row, target_heights, side)
+        w_taps, w_weights = _antialiased_axis_taps_weights(col, target_widths, side)
+    else:
+        h_taps, h_weights = _interpolation_axis_taps_weights(row, target_heights, side, mode, align_corners, padding)
+        w_taps, w_weights = _interpolation_axis_taps_weights(col, target_widths, side, mode, align_corners, padding)
+    taps = h_taps.shape[1] * w_taps.shape[1]
+    # 2D separable: outer product of the per-axis taps/weights.
+    indices = (h_taps[:, :, None] * side + w_taps[:, None, :]).reshape(-1, taps)
+    weights = (h_weights[:, :, None] * w_weights[:, None, :]).reshape(-1, taps)
     return indices, weights
 
 

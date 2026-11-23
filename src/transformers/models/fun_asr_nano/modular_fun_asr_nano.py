@@ -564,6 +564,9 @@ class FunAsrNanoForConditionalGeneration(Qwen3ASRForConditionalGeneration):
         ```"""
         return super().forward(**super_kwargs)
 
+    def get_data_dependent_inputs(self):
+        raise AttributeError("FunAsrNano's encoder takes no precomputed inputs")
+
 
 __getattr__ = deprecate_attr(__name__, rename={"FunAsrNanoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 

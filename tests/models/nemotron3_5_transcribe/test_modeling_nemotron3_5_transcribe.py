@@ -121,7 +121,7 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
 
     # FIXME: @eustlb, experts converter collision (`nemo_speechlm` vs `nemotron_h`), see TODO in `ALMModelTest`
     @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
         pass
 
     @unittest.skip(

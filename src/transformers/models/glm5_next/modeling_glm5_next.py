@@ -1816,6 +1816,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
         "hidden_states": Glm5NextVisionBlock,
         "attentions": Glm5NextVisionAttention,
     }
+    _supports_flash_attn = True
 
     def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
