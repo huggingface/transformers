@@ -861,7 +861,6 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel, MultimodalMixin):
         last_hidden_state = vision_outputs.last_hidden_state
         image_features = self.multi_modal_projector(last_hidden_state)
         vision_outputs.pooler_output = image_features
-
         vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 

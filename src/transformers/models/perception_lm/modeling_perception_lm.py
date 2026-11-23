@@ -193,7 +193,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel, MultimodalMixin):
             last_hidden_state = last_hidden_state[:, 1:, :]
         image_features = self.multi_modal_projector(last_hidden_state)
         image_outputs.pooler_output = image_features
-
         image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 

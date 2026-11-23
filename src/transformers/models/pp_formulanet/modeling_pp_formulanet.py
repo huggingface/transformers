@@ -34,7 +34,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
@@ -961,7 +961,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     return prev_output_tokens
 
 
-class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
+class PPFormulaNetModel(PPFormulaNetPreTrainedModel, MultimodalMixin):
     def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
 
@@ -969,6 +969,15 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
 
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Encodes images into the features the decoder cross-attends to.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.encoder(pixel_values=pixel_values, **kwargs)
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring

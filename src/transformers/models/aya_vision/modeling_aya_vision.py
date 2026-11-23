@@ -183,7 +183,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel, MultimodalMixin):
         image_outputs.pooler_output = pooler_output.reshape(
             selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
         )
-
         image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 

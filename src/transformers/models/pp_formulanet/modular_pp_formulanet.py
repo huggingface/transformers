@@ -26,6 +26,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
 )
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     Seq2SeqLMOutput,
@@ -347,7 +348,7 @@ class PPFormulaNetTextModel(MBartDecoder):
         super().__init__(config)
 
 
-class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
+class PPFormulaNetModel(PPFormulaNetPreTrainedModel, MultimodalMixin):
     def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
 
@@ -355,6 +356,15 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
 
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Encodes images into the features the decoder cross-attends to.")
+    def get_image_embeddings(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.encoder(pixel_values=pixel_values, **kwargs)
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring

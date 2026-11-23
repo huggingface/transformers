@@ -186,7 +186,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
 
         image_features = self.multi_modal_projector(selected_hidden_state)
         image_outputs.pooler_output = image_features
-
         image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 

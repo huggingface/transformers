@@ -841,7 +841,6 @@ class AriaModel(AriaPreTrainedModel, MultimodalMixin):
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-
         image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 

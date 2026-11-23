@@ -378,9 +378,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
                 # the videos of one call are stacked, so they share the number of tubelets in `last_hidden_state`
                 video_outputs = mm_encoder_outputs["video"]
                 num_tubelets = video_outputs.last_hidden_state.shape[1]
-                video_features = video_outputs.pooler_output
-                if isinstance(video_features, torch.Tensor):
-                    video_features = video_features.unflatten(0, (len(video_outputs.split_sizes), -1))
+                video_features = video_outputs.pooler_output.unflatten(0, (len(video_outputs.split_sizes), -1))
                 evs_mask = torch.cat(
                     [
                         compute_retention_mask(features, num_tubelets, self.video_pruning_rate)

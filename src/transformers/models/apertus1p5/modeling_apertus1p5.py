@@ -69,8 +69,8 @@ class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
 @dataclass
 class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`torch.Tensor` or `tuple[torch.Tensor]`):
-        The embedded image tokens of every input image, split per image by `get_image_features`.
+    pooler_output (`torch.Tensor` of shape `(num_image_tokens, hidden_size)`):
+        The embedded image tokens of every input image, concatenated.
     image_tokens (`list[torch.LongTensor]`):
         One flat tensor of shared-vocabulary token ids per input image: its `(height // factor) * (width // factor)`
         codes in row-major order, offset by `config.image_token_offset`, where `factor` is the vision tokenizer's

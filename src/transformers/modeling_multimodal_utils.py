@@ -34,7 +34,7 @@ def flatten_items(features: torch.Tensor) -> tuple[torch.Tensor, torch.LongTenso
 def split_modality_outputs(outputs):
     """Splits flat `get_*_embeddings` outputs per item by their `split_sizes`."""
     split_sizes = outputs.split_sizes.tolist()
-    # Granite 4 Vision has only deepstack features
+    # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
     if outputs.pooler_output is not None:
         outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
     if getattr(outputs, "deepstack_features", None) is not None:
@@ -87,7 +87,8 @@ def merge_mm_encoder_outputs(forward):
 
     @functools.wraps(forward)
     def wrapper(self, *args, mm_encoder_outputs=None, **kwargs):
-        if mm_encoder_outputs:
+        # Idefics' deprecated `mm_encoder_outputs` can be a bare tensor: only a dict of outputs is merged
+        if isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs:
             merged = {modality: merge_modality_outputs(outputs) for modality, outputs in mm_encoder_outputs.items()}
             is_per_item = any(merged[modality] is not outputs for modality, outputs in mm_encoder_outputs.items())
             if is_per_item and not is_torchdynamo_compiling():

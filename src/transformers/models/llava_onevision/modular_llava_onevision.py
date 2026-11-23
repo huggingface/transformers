@@ -611,7 +611,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
         image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
         vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
-
         vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 

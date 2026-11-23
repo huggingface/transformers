@@ -158,7 +158,6 @@ class VipLlavaModel(VipLlavaPreTrainedModel, MultimodalMixin):
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
         image_outputs.pooler_output = image_features
-
         image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 
