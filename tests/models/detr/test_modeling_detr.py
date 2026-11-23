@@ -227,6 +227,14 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_config_with_null_backbone_kwargs(self):
+        """Regression test for configs with backbone_kwargs=None"""
+        config = DetrConfig(backbone_kwargs=None)
+        self.assertEqual(config.backbone_config.model_type, "timm_backbone")
+
+        config = DetrConfig(backbone="microsoft/resnet-18", use_timm_backbone=False, backbone_kwargs=None)
+        self.assertIsInstance(config.backbone_config, ResNetConfig)
+
     def test_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_detr_model(*config_and_inputs)
