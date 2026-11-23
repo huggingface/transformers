@@ -13,32 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring, logging
 from ..auto.configuration_auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
+@strict
 class VisionEncoderDecoderConfig(PreTrainedConfig):
     r"""
-    [`VisionEncoderDecoderConfig`] is the configuration class to store the configuration of a
-    [`VisionEncoderDecoderModel`]. It is used to instantiate a Vision-Encoder-Text-Decoder model according to the
-    specified arguments, defining the encoder and decoder configs.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the encoder config.
-                - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
-
     Examples:
 
     ```python
@@ -48,7 +37,7 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
     >>> config_encoder = ViTConfig()
     >>> config_decoder = BertConfig()
 
-    >>> config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+    >>> config = VisionEncoderDecoderConfig(encoder=config_encoder, decoder=config_decoder)
 
     >>> # Initializing a ViTBert model (with random weights) from a ViT & google-bert/bert-base-uncased style configurations
     >>> model = VisionEncoderDecoderModel(config=config)
@@ -69,25 +58,16 @@ class VisionEncoderDecoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vision-encoder-decoder"
-    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
-    has_no_defaults_at_init = True
+    sub_configs_defaults = {
+        "decoder": SubConfigSpec(
+            config_class=AutoConfig, model_type="bert", init_kwargs={"is_decoder": True, "add_cross_attention": True}
+        ),
+        "encoder": SubConfigSpec(config_class=AutoConfig, model_type="vit"),
+    }
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        if "encoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because "
-                f"not both `encoder` and `decoder` sub-configurations are passed, but only {kwargs}"
-            )
-
-        encoder_config = kwargs.pop("encoder")
-        encoder_model_type = encoder_config.pop("model_type")
-        decoder_config = kwargs.pop("decoder")
-        decoder_model_type = decoder_config.pop("model_type")
-
-        self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
-        self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
-        self.is_encoder_decoder = True
+    encoder: PreTrainedConfig | dict | None = None
+    decoder: PreTrainedConfig | dict | None = None
+    is_encoder_decoder: bool = True
 
     @classmethod
     def from_encoder_decoder_configs(

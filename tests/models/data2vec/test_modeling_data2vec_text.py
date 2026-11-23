@@ -246,7 +246,7 @@ class Data2VecTextModelTester:
             encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -272,7 +272,7 @@ class Data2VecTextModelTester:
             attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -373,7 +373,6 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         {
             "feature-extraction": Data2VecTextModel,
             "fill-mask": Data2VecTextForMaskedLM,
-            "question-answering": Data2VecTextForQuestionAnswering,
             "text-classification": Data2VecTextForSequenceClassification,
             "text-generation": Data2VecTextForCausalLM,
             "token-classification": Data2VecTextForTokenClassification,
@@ -392,7 +391,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -431,6 +430,11 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
             encoder_hidden_states,
             encoder_attention_mask,
         )
+
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()

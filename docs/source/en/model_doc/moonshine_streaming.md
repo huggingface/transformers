@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-10-21 and added to Hugging Face Transformers on 2026-02-03.*
+*This model was published in HF papers on 2024-10-21 and contributed to Hugging Face Transformers on 2026-02-04.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-          <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-          <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+            <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
           <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -29,7 +28,7 @@ Moonshine Streaming is a streaming variant of the [Moonshine](https://huggingfac
 
 Moonshine Streaming is available in three sizes: tiny, small, and medium, offering a trade-off between speed and accuracy. It is particularly well-suited for on-device streaming transcription and voice command applications.
 
-You can find all the original Moonshine Streaming checkpoints under the [Useful Sensors](https://huggingface.co/UsefulSensors) organization.
+You can find all the original Moonshine Streaming checkpoints under the [Moonshine AI](https://huggingface.co/moonshine-ai) organization.
 
 > [!TIP]
 > Moonshine Streaming processes raw audio waveforms directly without requiring mel-spectrogram preprocessing, making it efficient for real-time applications.
@@ -39,14 +38,13 @@ The example below demonstrates how to transcribe speech into text with [`Pipelin
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="automatic-speech-recognition",
-    model="UsefulSensors/moonshine-streaming-tiny",
-    dtype=torch.float16,
+    model="moonshine-ai/moonshine-streaming-tiny",
     device=0
 )
 pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
@@ -55,15 +53,15 @@ pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from datasets import load_dataset
+
 from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
 
-processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-streaming-tiny")
+
+processor = AutoProcessor.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
 model = MoonshineStreamingForConditionalGeneration.from_pretrained(
-    "UsefulSensors/moonshine-streaming-tiny",
-    dtype=torch.float16,
+    "moonshine-ai/moonshine-streaming-tiny",
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -71,7 +69,7 @@ model = MoonshineStreamingForConditionalGeneration.from_pretrained(
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio_sample = ds[0]["audio"]
 
-inputs = processor(audio_sample["array"], return_tensors="pt")
+inputs = processor(audio_sample["array"], return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=100)

@@ -196,10 +196,12 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self.encoder = self.vocab[target_lang]
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        # Remove conflicting entries from _added_tokens_decoder so vocabulary tokens take precedence
+        # Remove conflicting entries from both added-token dicts so vocabulary tokens take
+        # precedence; leaving the encoder entry behind makes the removed token encode to an
+        # id that now belongs to an unrelated vocabulary token
         for token_id in list(self._added_tokens_decoder.keys()):
             if token_id in self.decoder:
-                del self._added_tokens_decoder[token_id]
+                self._added_tokens_encoder.pop(self._added_tokens_decoder.pop(token_id).content, None)
 
         # make sure that tokens made of several
         # characters are not split at tokenization
@@ -281,9 +283,10 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             return self._added_tokens_decoder[ids].content if ids in self._added_tokens_decoder else self.unk_token
 
         tokens = []
+        all_special_ids = set(self.all_special_ids)
         for index in ids:
             index = int(index)
-            if skip_special_tokens and index in self.all_special_ids:
+            if skip_special_tokens and index in all_special_ids:
                 continue
             if index in self.decoder:
                 tokens.append(self.decoder[index])
@@ -357,31 +360,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return {"text": string, "char_offsets": char_offsets, "word_offsets": word_offsets}
 
     @staticmethod
-    def clean_up_tokenization(out_string: str) -> str:
-        """
-        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
-
-        Args:
-            out_string (`str`): The text to clean up.
-
-        Returns:
-            `str`: The cleaned-up string.
-        """
-        out_string = (
-            out_string.replace(" .", ".")
-            .replace(" ?", "?")
-            .replace(" !", "!")
-            .replace(" ,", ",")
-            .replace(" ' ", "'")
-            .replace(" n't", "n't")
-            .replace(" 'm", "'m")
-            .replace(" 's", "'s")
-            .replace(" 've", "'ve")
-            .replace(" 're", "'re")
-        )
-        return out_string
-
-    @staticmethod
     def _compute_offsets(char_repetitions: list[int], chars: list[str], ctc_token: int) -> list[dict[str, str | int]]:
         end_indices = np.asarray(char_repetitions).cumsum()
         start_indices = np.concatenate(([0], end_indices[:-1]))
@@ -451,8 +429,9 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=False)
 
         result = []
+        all_special_tokens = set(self.all_special_tokens)
         for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_tokens and token != self.word_delimiter_token:
+            if skip_special_tokens and token in all_special_tokens and token != self.word_delimiter_token:
                 continue
             result.append(token)
 

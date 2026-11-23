@@ -13,12 +13,11 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-03-23 and added to Hugging Face Transformers on 2022-08-04.*
+*This model was published in HF papers on 2022-03-23 and contributed to Hugging Face Transformers on 2022-08-04.*
 
 # VideoMAE
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -51,9 +50,11 @@ page for more information.
 SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```py
+```python
 from transformers import VideoMAEForVideoClassification
-model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics", attn_implementation="sdpa", dtype=torch.float16)
+
+
+model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics", attn_implementation="sdpa", device_map="auto")
 ...
 ```
 
@@ -88,6 +89,11 @@ to fine-tune a VideoMAE model on a custom dataset.
 ## VideoMAEImageProcessor
 
 [[autodoc]] VideoMAEImageProcessor
+    - preprocess
+
+## VideoMAEImageProcessorPil
+
+[[autodoc]] VideoMAEImageProcessorPil
     - preprocess
 
 ## VideoMAEVideoProcessor

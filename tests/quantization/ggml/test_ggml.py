@@ -27,6 +27,7 @@ from transformers import (
 from transformers.testing_utils import (
     require_gguf,
     require_torch_accelerator,
+    require_torch_accelerator_memory,
     slow,
     torch_device,
 )
@@ -351,6 +352,8 @@ class GgufModelTests(unittest.TestCase):
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
     q8_0_umt5_encoder_model_id = "umt5-xxl-encoder-Q8_0.gguf"
     q4_k_m_lfm2_model_id = "LFM2-1.2B-Q4_K_M.gguf"
+    gpt_oss_model_id = "unsloth/gpt-oss-20b-GGUF"
+    gpt_oss_gguf_file = "gpt-oss-20b-Q5_K_M.gguf"
 
     example_text = "Hello"
 
@@ -382,6 +385,22 @@ class GgufModelTests(unittest.TestCase):
         out = model.generate(**text, max_new_tokens=10)
 
         EXPECTED_TEXT = "Hello.jsoup\n\nI am a beginner"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    # GGUF weights are dequantized on load, so this is ~21B parameters in float16 (~39 GiB).
+    @require_torch_accelerator_memory(memory=48)
+    def test_gpt_oss_q5_k_m(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.gpt_oss_model_id, gguf_file=self.gpt_oss_gguf_file)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.gpt_oss_model_id,
+            gguf_file=self.gpt_oss_gguf_file,
+            device_map="auto",
+            dtype=torch.float16,
+        )
+
+        text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        out = model.generate(**text, max_new_tokens=10)
+        EXPECTED_TEXT = "Hello, I just want to say that I am just"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_qwen2moe_q8(self):
@@ -1041,14 +1060,14 @@ class GgufModelTests(unittest.TestCase):
         self.assertIsNone(deci_mapping["rope.dimension_count"])
 
     def test_deci_architecture_mapping(self):
-        """Test that Deci architectures are mapped to GGUFLlamaConverter."""
-        from transformers.integrations.ggml import GGUF_TO_FAST_CONVERTERS, GGUFLlamaConverter
+        """Test that Deci architectures use the plain sentencepiece tokenizer."""
+        from transformers.integrations.gguf.gguf_tokenizer_mapping import (
+            select_tokenizer_builder,
+            sentencepiece_tokenizer,
+        )
 
-        self.assertIn("deci", GGUF_TO_FAST_CONVERTERS)
-        self.assertIn("decilm", GGUF_TO_FAST_CONVERTERS)
-
-        self.assertEqual(GGUF_TO_FAST_CONVERTERS["deci"], GGUFLlamaConverter)
-        self.assertEqual(GGUF_TO_FAST_CONVERTERS["decilm"], GGUFLlamaConverter)
+        self.assertEqual(select_tokenizer_builder("deci", "llama"), sentencepiece_tokenizer)
+        self.assertEqual(select_tokenizer_builder("decilm", "llama"), sentencepiece_tokenizer)
 
     @unittest.skipUnless(is_gguf_available("0.16.0"), "test requires gguf version >= 0.16.0")
     def test_qwen3_q8_0(self):

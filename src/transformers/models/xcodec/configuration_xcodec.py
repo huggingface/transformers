@@ -16,51 +16,31 @@
 import math
 
 import numpy as np
+from huggingface_hub.dataclasses import strict
 
-from transformers import AutoConfig, DacConfig, HubertConfig, WavLMConfig
-
-from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
+@auto_docstring(checkpoint="Manel/X-Codec")
+@strict
 class XcodecConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`XcodecModel`]. It is used to instantiate a
-    Xcodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [Manel/X-Codec](https://huggingface.co/Manel/X-Codec) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
-            The range of different bandwidths (in kbps) the model can encode audio with.
-        sample_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
-        kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size for the initial semantic convolution.
-        channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
-            Expansion factors for the number of output channels in each semantic block.
-        strides (`List[int]`, *optional*, defaults to `[1, 1]`):
-            Strides for each semantic encoder block.
-        block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
-            Dilation factors for the residual units in semantic blocks.
-        unit_kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size inside each ResidualUnit in semantic blocks.
-        codebook_size (`int`, *optional*, defaults to 1024):
-            Number of entries in each residual quantizer's codebook.
-        codebook_dim (`int`, *optional*):
-            Dimensionality of each codebook vector. Defaults to sum of hidden size of acoustic and semantic models.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation of the truncated normal initializer for all weight matrices.
-        acoustic_model_config (`Union[Dict, DacConfig]`, *optional*):
-            An instance of the configuration for the acoustic (DAC) model.
-        semantic_model_config (`Union[Dict, HubertConfig, WavLMConfig]`, *optional*):
-            An instance of the configuration object for the semantic (HuBERT) model.
+    target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
+        The range of different bandwidths (in kbps) the model can encode audio with.
+    channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
+        Expansion factors for the number of output channels in each semantic block.
+    strides (`List[int]`, *optional*, defaults to `[1, 1]`):
+        Strides for each semantic encoder block.
+    block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
+        Dilation factors for the residual units in semantic blocks.
+    unit_kernel_size (`int`, *optional*, defaults to 3):
+        Kernel size inside each ResidualUnit in semantic blocks.
+    acoustic_model_config (`Union[Dict, DacConfig]`, *optional*):
+        An instance of the configuration for the acoustic (DAC) model.
+    semantic_model_config (`Union[Dict, HubertConfig, WavLMConfig]`, *optional*):
+        An instance of the configuration object for the semantic (HuBERT) model.
 
     Example:
 
@@ -78,83 +58,51 @@ class XcodecConfig(PreTrainedConfig):
     ```"""
 
     model_type = "xcodec"
-
-    sub_configs = {
-        "acoustic_model_config": DacConfig,
-        "semantic_model_config": AutoConfig,
-    }
-
-    def __init__(
-        self,
-        target_bandwidths: list[float] | None = None,
-        sample_rate: int = 16000,
-        kernel_size: int = 3,
-        channel_ratios: list[float] = [1, 1],
-        strides: list[int] = [1, 1],
-        block_dilations: list[int] = [1, 1],
-        unit_kernel_size: int = 3,
-        codebook_size: int = 1024,
-        codebook_dim: int | None = None,
-        initializer_range: float = 0.02,
-        acoustic_model_config: dict | DacConfig | None = None,
-        semantic_model_config: dict | HubertConfig | None = None,
-        **kwargs,
-    ):
-        if acoustic_model_config is None:
-            self.acoustic_model_config = DacConfig(
-                encoder_hidden_size=64,
+    sub_configs_defaults = {
+        "acoustic_model_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="dac",
+            init_kwargs={
+                "encoder_hidden_size": 64,
                 # NOTE: original DAC uses [2, 4, 8, 8] `downsampling ratios`, namely reverse of `upsampling_ratios`
                 # (not sure if intentional by Xcodec but we keep it)
-                downsampling_ratios=[8, 5, 4, 2],
-                decoder_hidden_size=1024,
-                upsampling_ratios=[8, 5, 4, 2],
-                hidden_size=256,
-            )
-        elif isinstance(acoustic_model_config, dict):
-            self.acoustic_model_config = DacConfig(**acoustic_model_config)
-        elif isinstance(acoustic_model_config, DacConfig):
-            self.acoustic_model_config = acoustic_model_config
-        else:
-            raise ValueError(
-                f"acoustic_model_config must be a dict or DacConfig instance, but got {type(acoustic_model_config)}"
-            )
+                "downsampling_ratios": [8, 5, 4, 2],
+                "decoder_hidden_size": 1024,
+                "upsampling_ratios": [8, 5, 4, 2],
+                "hidden_size": 256,
+            },
+        ),
+        "semantic_model_config": SubConfigSpec(config_class=AutoConfig, model_type="hubert"),
+    }
 
-        if semantic_model_config is None:
-            self.semantic_model_config = HubertConfig()
-        elif isinstance(semantic_model_config, dict):
-            if "_name_or_path" in semantic_model_config:
-                # If the config is a path, load it using AutoConfig
-                self.semantic_model_config = AutoConfig.from_pretrained(semantic_model_config["_name_or_path"])
-            else:
-                # assume HubertConfig as probably created from scratch
-                logger.warning(
-                    "Could not determine semantic model type from config architecture. Defaulting to `HubertConfig`."
-                )
-                self.semantic_model_config = HubertConfig(**semantic_model_config)
-        elif isinstance(semantic_model_config, WavLMConfig) or isinstance(semantic_model_config, HubertConfig):
-            self.semantic_model_config = semantic_model_config
-        else:
-            raise ValueError(
-                f"semantic_model_config must be a dict, HubertConfig, or WavLMConfig instance, but got {type(semantic_model_config)}"
-            )
+    target_bandwidths: list[int | float] | tuple[int | float, ...] = (0.5, 1, 1.5, 2, 4)
+    sample_rate: int = 16000
+    kernel_size: int = 3
+    channel_ratios: list[int] | tuple[int, ...] = (1, 1)
+    strides: list[int] | tuple[int, ...] = (1, 1)
+    block_dilations: list[int] | tuple[int, ...] = (1, 1)
+    unit_kernel_size: int = 3
+    codebook_size: int = 1024
+    codebook_dim: int | None = None
+    initializer_range: float = 0.02
+    acoustic_model_config: dict | PreTrainedConfig | None = None
+    semantic_model_config: dict | PreTrainedConfig | None = None
 
-        if target_bandwidths is None:
-            target_bandwidths = [0.5, 1, 1.5, 2, 4]
-
-        self.target_bandwidths = target_bandwidths
-        self.sample_rate = sample_rate
-        self.kernel_size = kernel_size
-        self.channel_ratios = channel_ratios
-        self.strides = strides
-        self.block_dilations = block_dilations
-        self.unit_kernel_size = unit_kernel_size
-        self.codebook_size = codebook_size
-        self.initializer_range = initializer_range
-        if codebook_dim is None:
-            codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
-        self.codebook_dim = codebook_dim
-
-        super().__init__(**kwargs)
+    def __post_init__(self, **kwargs):
+        # Keep for BC only - shouldn't appear in new releases!
+        if isinstance(self.acoustic_model_config, dict):
+            self.acoustic_model_config = {
+                **self.sub_configs_defaults["acoustic_model_config"].init_kwargs,
+                **self.acoustic_model_config,
+            }
+        if isinstance(self.semantic_model_config, dict):
+            self.semantic_model_config = {
+                **self.sub_configs_defaults["semantic_model_config"].init_kwargs,
+                **self.semantic_model_config,
+            }
+        super().__post_init__(**kwargs)
+        if self.codebook_dim is None:
+            self.codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
 
     @property
     def frame_rate(self) -> int:

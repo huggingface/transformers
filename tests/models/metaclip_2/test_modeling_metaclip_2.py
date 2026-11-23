@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
@@ -34,7 +33,9 @@ from transformers.utils import (
     is_vision_available,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -60,49 +61,40 @@ if is_torch_available():
     )
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import CLIPProcessor
 
 
-class MetaClip2VisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class MetaClip2VisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -207,6 +199,8 @@ class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = MetaClip2VisionModelTester
+
     all_model_classes = (MetaClip2VisionModel, MetaClip2VisionModelWithProjection) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -214,7 +208,7 @@ class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = MetaClip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MetaClip2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=MetaClip2VisionConfig, has_text_modality=False, hidden_size=36
         )
 
     def test_config(self):
@@ -292,46 +286,32 @@ class MetaClip2VisionModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
         super().test_sdpa_can_dispatch_composite_models()
 
 
-class MetaClip2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        eos_token_id=2,
-        scope=None,
-    ):
+class MetaClip2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "eos_token_id": 2,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.eos_token_id = eos_token_id
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -397,13 +377,15 @@ class MetaClip2TextModelTester:
 
 @require_torch
 class MetaClip2TextModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
+    model_tester_class = MetaClip2TextModelTester
+
     all_model_classes = (MetaClip2TextModel, MetaClip2TextModelWithProjection) if is_torch_available() else ()
 
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = MetaClip2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MetaClip2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MetaClip2TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -465,8 +447,20 @@ class MetaClip2TextModelTest(MetaClip2ModelTesterMixin, unittest.TestCase):
         )
 
 
-class MetaClip2ModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class MetaClip2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # need bs for batching_equivalence test
+        values["batch_size"] = MetaClip2TextModelTester.get_small_config_defaults(**(text_kwargs or {}))["batch_size"]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -475,8 +469,8 @@ class MetaClip2ModelTester:
         self.parent = parent
         self.text_model_tester = MetaClip2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = MetaClip2VisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -518,6 +512,8 @@ class MetaClip2ModelTester:
 
 @require_torch
 class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = MetaClip2ModelTester
+
     all_model_classes = (MetaClip2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": MetaClip2Model, "image-feature-extraction": MetaClip2VisionModel}
@@ -621,12 +617,13 @@ class MetaClip2ModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittes
 
 
 class MetaClip2ForImageClassificationModelTester(MetaClip2ModelTester):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.batch_size = self.vision_model_tester.batch_size
-        self.num_hidden_layers = self.vision_model_tester.num_hidden_layers
-        self.hidden_size = self.vision_model_tester.hidden_size
-        self.seq_length = self.vision_model_tester.seq_length
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs)
+        vision_values = MetaClip2VisionModelTester.get_small_config_defaults(**(vision_kwargs or {}))
+        for key in ("batch_size", "num_hidden_layers", "hidden_size", "seq_length"):
+            values[key] = vision_values[key]
+        return values
 
     def prepare_config_and_inputs(self):
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
@@ -643,6 +640,8 @@ class MetaClip2ForImageClassificationModelTester(MetaClip2ModelTester):
 
 @require_torch
 class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = MetaClip2ForImageClassificationModelTester
+
     all_model_classes = (MetaClip2ForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": MetaClip2ForImageClassification} if is_torch_available() else {}
 
@@ -685,8 +684,8 @@ class MetaClip2ForImageClassificationModelTest(MetaClip2ModelTesterMixin, Pipeli
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 

@@ -26,6 +26,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -42,61 +43,47 @@ if is_vision_available():
     from transformers import VivitImageProcessor
 
 
-class VivitModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        is_training=True,
-        use_labels=True,
-        num_labels=10,
-        image_size=10,
-        num_frames=8,  # decreased, because default 32 takes too much RAM at inference
-        tubelet_size=[2, 4, 4],
-        num_channels=3,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu_fast",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-06,
-        qkv_bias=True,
-        scope=None,
-        attn_implementation="eager",
-        mask_ratio=0.5,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.num_labels = num_labels
-        self.image_size = image_size
-        self.num_frames = num_frames
-        self.tubelet_size = tubelet_size
-        self.num_channels = num_channels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.scope = scope
-        self.attn_implementation = attn_implementation
+class VivitModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "is_training": True,
+        "use_labels": True,
+        "num_labels": 10,
+        "image_size": 10,
+        "num_frames": 8,  # decreased, because default 32 takes too much RAM at inference
+        "tubelet_size": [2, 4, 4],
+        "num_channels": 3,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu_fast",
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-06,
+        "qkv_bias": True,
+        "scope": None,
+        "attn_implementation": "eager",
+        "mask_ratio": 0.5,
+    }
 
-        self.seq_length = (
-            (self.image_size // self.tubelet_size[2])
-            * (self.image_size // self.tubelet_size[1])
-            * (self.num_frames // self.tubelet_size[0])
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = (
+            (values["image_size"] // values["tubelet_size"][2])
+            * (values["image_size"] // values["tubelet_size"][1])
+            * (values["num_frames"] // values["tubelet_size"][0])
         ) + 1  # CLS token
-        self.mask_ratio = mask_ratio
-        self.num_masks = int(mask_ratio * self.seq_length)
+        values["num_masks"] = int(values["mask_ratio"] * values["seq_length"])
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -164,6 +151,8 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = VivitModelTester
+
     all_model_classes = (VivitModel, VivitForVideoClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": VivitModel, "video-classification": VivitForVideoClassification}
@@ -175,7 +164,7 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VivitModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VivitConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VivitConfig, has_text_modality=False, hidden_size=32)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -354,7 +343,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.9498, 2.7971, -1.4049, 0.1024, -1.8353],
-                ("cuda", 8): [-0.9502, 2.7967, -1.4046, 0.1027, -1.8345],
+                ("cuda", 8): [-0.9498, 2.7971, -1.4049, 0.1025, -1.8353],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

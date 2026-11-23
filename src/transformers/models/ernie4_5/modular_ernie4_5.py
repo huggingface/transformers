@@ -18,7 +18,8 @@ from torch import nn
 
 from ...modeling_rope_utils import dynamic_rope_update
 from ...utils import auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import no_inherit_decorator
 from ..glm.modeling_glm import rotate_half
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -30,18 +31,12 @@ from .configuration_ernie4_5 import Ernie4_5Config
 
 
 class Ernie4_5RotaryEmbedding(OlmoRotaryEmbedding):
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         # keeping it in full precision
         return cos, sin
@@ -90,6 +85,7 @@ class Ernie4_5MLP(LlamaMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
 
+@no_inherit_decorator
 class Ernie4_5Attention(LlamaAttention):
     def __init__(self, config: Ernie4_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -105,6 +101,7 @@ class Ernie4_5Attention(LlamaAttention):
 class Ernie4_5ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(self, **super_kwargs):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

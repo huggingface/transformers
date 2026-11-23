@@ -214,7 +214,7 @@ def load_model_state_dict(input_path: str) -> dict:
     if os.path.exists(index_path):
         print("Loading sharded model...")
         state_dict = {}
-        with open(index_path, "r") as f:
+        with open(index_path, "r", encoding="utf-8") as f:
             index = json.load(f)
 
         # Get unique shard files and load each one only once
@@ -271,13 +271,13 @@ def convert_model(
             "Please ensure you have downloaded all necessary model files."
         )
 
-    with open(os.path.join(input_path, "config.json"), "r") as f:
+    with open(os.path.join(input_path, "config.json"), "r", encoding="utf-8") as f:
         config_data = json.load(f)
-    with open(os.path.join(input_path, "preprocessor_config.json"), "r") as f:
+    with open(os.path.join(input_path, "preprocessor_config.json"), "r", encoding="utf-8") as f:
         preprocessor_config = json.load(f)
-    with open(os.path.join(input_path, "special_tokens_map.json"), "r") as f:
+    with open(os.path.join(input_path, "special_tokens_map.json"), "r", encoding="utf-8") as f:
         special_tokens_map = json.load(f)
-    with open(os.path.join(input_path, "tokenizer_config.json"), "r") as f:
+    with open(os.path.join(input_path, "tokenizer_config.json"), "r", encoding="utf-8") as f:
         tokenizer_config = json.load(f)
 
     # Create tokenizer directly from tokenizer.json if it exists

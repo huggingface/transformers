@@ -20,7 +20,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -28,9 +28,9 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     auto_docstring,
     is_natten_available,
-    logging,
     requires_backends,
 )
+from ...utils.generic import can_return_tuple
 from .configuration_dinat import DinatConfig
 
 
@@ -45,84 +45,78 @@ else:
         raise OptionalDependencyNotAvailable()
 
 
-logger = logging.get_logger(__name__)
-
-
-# drop_path and DinatDropPath are from the timm library.
-
-
-@dataclass
 @auto_docstring(
     custom_intro="""
     Dinat encoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class DinatEncoderOutput(ModelOutput):
     r"""
-    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    reshaped_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, hidden_size, height, width)`.
 
         Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
         include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    reshaped_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Dinat model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class DinatModelOutput(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
         Average pooling of the last layer hidden-state.
-    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    reshaped_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, hidden_size, height, width)`.
 
         Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
         include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    pooler_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    reshaped_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Dinat outputs for image classification.
     """
 )
+@dataclass
 class DinatImageClassifierOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+    reshaped_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, hidden_size, height, width)`.
 
         Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
         include the spatial dimensions.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    reshaped_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 class DinatEmbeddings(nn.Module):
@@ -138,7 +132,7 @@ class DinatEmbeddings(nn.Module):
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values: torch.FloatTensor | None) -> tuple[torch.Tensor]:
+    def forward(self, pixel_values: torch.Tensor | None) -> tuple[torch.Tensor]:
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
 
@@ -171,7 +165,7 @@ class DinatPatchEmbeddings(nn.Module):
             nn.Conv2d(hidden_size // 2, hidden_size, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)),
         )
 
-    def forward(self, pixel_values: torch.FloatTensor | None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor | None) -> torch.Tensor:
         _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -206,37 +200,6 @@ class DinatDownsampler(nn.Module):
         return input_feature
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Dinat
-class DinatDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class NeighborhoodAttention(nn.Module):
     def __init__(self, config, dim, num_heads, kernel_size, dilation):
         super().__init__()
@@ -265,22 +228,11 @@ class NeighborhoodAttention(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        key_layer = (
-            self.key(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
-        value_layer = (
-            self.value(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_layer = self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Apply the scale factor before computing attention weights. It's usually more efficient because
         # attention weights are typically a bigger tensor compared to query.
@@ -362,6 +314,31 @@ class DinatOutput(nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
+
+
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->DinatDropPath
+class DinatDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 class DinatLayer(nn.Module):
@@ -562,7 +539,7 @@ class DinatPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DinatModel(DinatPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: DinatConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -590,7 +567,7 @@ class DinatModel(DinatPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -600,7 +577,7 @@ class DinatModel(DinatPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -643,7 +620,7 @@ class DinatModel(DinatPreTrainedModel):
     """
 )
 class DinatForImageClassification(DinatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DinatConfig):
         super().__init__(config)
 
         requires_backends(self, ["natten"])
@@ -662,20 +639,14 @@ class DinatForImageClassification(DinatPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | DinatImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.dinat(
             pixel_values,
@@ -711,7 +682,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
     """
 )
 class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DinatConfig):
         super().__init__(config)
 
         requires_backends(self, ["natten"])
@@ -732,6 +703,8 @@ class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -748,7 +721,7 @@ class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -768,7 +741,7 @@ class DinatBackbone(BackboneMixin, DinatPreTrainedModel):
         >>> list(feature_maps[-1].shape)
         [1, 512, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

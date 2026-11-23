@@ -20,6 +20,7 @@ from transformers import ViTMSNConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -35,56 +36,49 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
-class ViTMSNModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        scope=None,
-        attn_implementation="eager",
-        mask_ratio=0.5,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.attn_implementation = attn_implementation
+class ViTMSNModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "scope": None,
+        "attn_implementation": "eager",
+        "mask_ratio": 0.5,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # `mask_ratio` only sizes `num_masks`: the tester never stored it
+        mask_ratio = values.pop("mask_ratio")
         # in ViT MSN, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.mask_length = self.seq_length - 1
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        values["num_masks"] = int(mask_ratio * values["seq_length"])
+        values["mask_length"] = values["seq_length"] - 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -154,6 +148,8 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = ViTMSNModelTester
+
     all_model_classes = (ViTMSNModel, ViTMSNForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": ViTMSNModel, "image-classification": ViTMSNForImageClassification}
@@ -165,7 +161,7 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ViTMSNModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViTMSNConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -209,7 +205,7 @@ def prepare_img():
 class ViTMSNModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
+        return ViTImageProcessorPil.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):

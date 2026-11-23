@@ -24,6 +24,7 @@ from parameterized import parameterized
 from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_timm, require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -43,51 +44,42 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DetrImageProcessor
+    from transformers import DetrImageProcessorPil
 
 
-class DetrModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=8,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        intermediate_size=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        num_queries=12,
-        num_channels=3,
-        min_size=200,
-        max_size=200,
-        n_targets=8,
-        num_labels=91,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_queries = num_queries
-        self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
-        self.n_targets = n_targets
-        self.num_labels = num_labels
+class DetrModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 8,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 8,
+        "intermediate_size": 4,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "num_queries": 12,
+        "num_channels": 3,
+        "min_size": 200,
+        "max_size": 200,
+        "n_targets": 8,
+        "num_labels": 91,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
-        self.decoder_seq_length = self.num_queries
+        values["encoder_seq_length"] = math.ceil(values["min_size"] / 32) * math.ceil(values["max_size"] / 32)
+        values["decoder_seq_length"] = values["num_queries"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
@@ -176,6 +168,8 @@ class DetrModelTester:
 
 @require_torch
 class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DetrModelTester
+
     all_model_classes = (
         (
             DetrModel,
@@ -240,11 +234,6 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_detr_object_detection_head_model(*config_and_inputs)
-
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip(reason="DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -322,8 +311,8 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
                 if model_class.__name__ == "DetrForSegmentation":
                     correct_outlen += 3
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -541,7 +530,7 @@ def prepare_img():
 class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return DetrImageProcessor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+        return DetrImageProcessorPil.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)

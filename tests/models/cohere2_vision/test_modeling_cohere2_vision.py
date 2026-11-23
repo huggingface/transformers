@@ -27,14 +27,18 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -46,20 +50,12 @@ if is_torch_available():
     )
 
 
-class Cohere2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        downsample_factor=2,
-        alignment_intermediate_size=32,
-        ignore_index=-100,
-        image_token_id=2,
-        num_channels=3,
-        image_size=64,
-        is_training=True,
-        text_config={
+class Cohere2VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_id": 2,
+        "text_config": {
             "model_type": "cohere2",
             "vocab_size": 99,
             "hidden_size": 128,
@@ -74,7 +70,7 @@ class Cohere2VisionText2TextModelTester:
             "eos_token_id": 0,
             "pad_token_id": 0,
         },
-        vision_config={
+        "vision_config": {
             "model_type": "siglip_vision_model",
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -84,28 +80,34 @@ class Cohere2VisionText2TextModelTester:
             "patch_size": 8,
             "vision_use_head": False,
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = image_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.downsample_factor = downsample_factor
-        self.alignment_intermediate_size = alignment_intermediate_size
-        self.is_training = is_training
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.image_seq_length = 16
-        self.seq_length = seq_length + self.image_seq_length
+        "batch_size": 3,
+        "downsample_factor": 2,
+        "alignment_intermediate_size": 32,
+        "is_training": True,
+        "num_channels": 3,
+        "image_size": 64,
+        "seq_length": 7,
+        "image_seq_length": 16,
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["bos_token_id"] = text_config["bos_token_id"]
+        values["eos_token_id"] = text_config["eos_token_id"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Cohere2VisionConfig(
@@ -140,6 +142,8 @@ class Cohere2VisionText2TextModelTester:
 
 @require_torch
 class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Cohere2VisionText2TextModelTester
+
     all_model_classes = (
         (
             Cohere2VisionModel,
@@ -169,12 +173,10 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 @require_torch
-class Cohere2IntegrationTest(unittest.TestCase):
+class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         self.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     def get_model(self, dummy=True):
         device_type, major, _ = get_device_properties()
@@ -203,7 +205,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
             }
@@ -279,7 +286,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
             }
@@ -315,7 +327,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -326,7 +343,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Describe this image"},
                     ],
@@ -343,8 +362,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'Dock stretches to calm',
-                ("cuda", 8): 'Dock stretches to calm',
+                (None, None): 'Dock meets silent lake',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -384,7 +402,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
+                        {
+                            "type": "image",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
+                        },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
                 },
@@ -395,11 +418,15 @@ class Cohere2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
+                            ),
                         },
                         {
                             "type": "text",
@@ -446,3 +473,86 @@ class Cohere2IntegrationTest(unittest.TestCase):
             expected_output,
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
+
+
+@slow
+@require_torch_large_accelerator
+class Cohere2MoeVisionIntegrationTest(unittest.TestCase):
+    """Integration tests for Cohere2VisionForConditionalGeneration with the Command A+ Model."""
+
+    model_checkpoint = "/root/repos/moe/engines/command_a+_bf16"
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def get_model(self):
+        return Cohere2VisionForConditionalGeneration.from_pretrained(
+            self.model_checkpoint,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+        ).eval()
+
+    @slow
+    @require_torch_large_accelerator
+    def test_model_forward_vision(self):
+        """Forward pass with an image + text input; checks first token logit values."""
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
+                    {"type": "text", "text": "Please describe the image explicitly."},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.bfloat16)
+
+        with torch.inference_mode():
+            output = model(**inputs)
+
+        actual_logits = output.logits[0, -1, :5].cpu().to(torch.float32)
+        expected_logits = torch.tensor([0.7383, 0.6172, 2.125, -67.5, -4.7813])
+        self.assertTrue(
+            torch.allclose(actual_logits, expected_logits, atol=0.1),
+            f"Actual logits: {actual_logits}\nExpected logits: {expected_logits}",
+        )
+
+    @slow
+    @require_torch_large_accelerator
+    def test_model_generate_vision(self):
+        """Image + text generation with the cohere2moe backbone."""
+        processor = AutoProcessor.from_pretrained(self.model_checkpoint)
+        model = self.get_model()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
+                    {"type": "text", "text": "Please describe the image explicitly."},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        ).to(model.device, dtype=torch.bfloat16)
+
+        with torch.no_grad():
+            gen_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        decoded = processor.decode(gen_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+        expected = "<|START_THINKING|><|END_THINKING|><|START_TEXT|>The image shows two tabby cats sleeping on a bright pink blanket or couch. Both"
+        self.assertEqual(decoded, expected, f"Decoded: {decoded!r}")

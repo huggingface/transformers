@@ -16,7 +16,9 @@
 import unittest
 
 from transformers import AutoTokenizer, DogeConfig, is_torch_available, set_seed
+from transformers.models.doge.modeling_doge import load_balancing_loss_func
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -24,6 +26,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -39,50 +42,34 @@ if is_torch_available():
     )
 
 
-class DogeModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=8,
-        seq_length=16,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=128,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=64,
-        hidden_act="silu",
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        pad_token_id=0,
-        scope=None,
-    ):
+class DogeModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 8,
+        "seq_length": 16,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 128,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 64,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "pad_token_id": 0,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.pad_token_id = pad_token_id
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -199,7 +186,7 @@ class DogeModelTester:
             encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -221,7 +208,7 @@ class DogeModelTester:
             attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -234,6 +221,22 @@ class DogeModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_sdpa_decoder_is_causal(self, config, input_ids, *args):
+        model = DogeForCausalLM(config).to(torch_device).eval()
+        model.set_attn_implementation("sdpa")
+        other_input_ids = input_ids.clone()
+        other_input_ids[:, -1] = (input_ids[:, -1] + 1) % config.vocab_size
+        # The three inputs for which `create_causal_mask` may return `None` under sdpa
+        for attention_mask, use_cache in ((None, False), (torch.ones_like(input_ids), False), (None, True)):
+            with torch.no_grad():
+                logits = model(input_ids, attention_mask=attention_mask, use_cache=use_cache).logits
+                other_logits = model(other_input_ids, attention_mask=attention_mask, use_cache=use_cache).logits
+            self.parent.assertTrue(
+                torch.allclose(logits[:, :-1], other_logits[:, :-1], atol=1e-5, rtol=1e-5),
+                msg=f"Max diff: {(logits[:, :-1] - other_logits[:, :-1]).abs().max().item():.6f} "
+                f"(attention_mask={attention_mask is not None}, use_cache={use_cache})",
+            )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -251,6 +254,8 @@ class DogeModelTester:
 
 @require_torch
 class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DogeModelTester
+
     all_model_classes = (
         (
             DogeModel,
@@ -335,15 +340,48 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
+    def test_output_router_logits_from_config(self):
+        prepare_config_and_inputs_for_common = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_with_moe():
+            config, inputs_dict = prepare_config_and_inputs_for_common()
+            config.is_moe = True
+            return config, inputs_dict
+
+        with unittest.mock.patch.object(
+            self.model_tester,
+            "prepare_config_and_inputs_for_common",
+            side_effect=prepare_with_moe,
+        ):
+            super().test_output_router_logits_from_config()
+
+    def test_load_balancing_loss_is_invariant_to_expert_relabeling(self):
+        r"""
+        Permuting the x-keys only renames the experts, so the load balancing loss must not change.
+        """
+        torch.manual_seed(0)
+        num_keys, top_k = 4, 2
+        router_logits = torch.randn(2, 64, num_keys)
+        shuffled = router_logits.clone()
+        shuffled[0] = router_logits[0][:, [2, 0, 3, 1]]
+
+        loss = load_balancing_loss_func((router_logits,), num_experts=num_keys**2, num_keys=num_keys, top_k=top_k)
+        loss_shuffled = load_balancing_loss_func((shuffled,), num_experts=num_keys**2, num_keys=num_keys, top_k=top_k)
+        torch.testing.assert_close(loss, loss_shuffled)
+
+    def test_sdpa_decoder_is_causal(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_sdpa_decoder_is_causal(*config_and_inputs)
+
     def test_tp_plan_matches_params(self):
         """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
         be valid all at the same time"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         # They are valid but not always used, depending on config.is_moe flag (the modules are not the same in both cases)
         problematic_keys = {
-            "layers.*.mlp.router_gate": "colwise_rep",
-            "layers.*.mlp.down_embed": "rowwise_rep",
-            "layers.*.mlp.up_embed": "rowwise_rep",
+            "layers.*.mlp.router_gate": "colwise_gather_output",
+            "layers.*.mlp.down_embed": "rowwise_split_input",
+            "layers.*.mlp.up_embed": "rowwise_split_input",
         }
         if not config.is_moe:
             for key in problematic_keys:
@@ -370,7 +408,12 @@ class DogeIntegrationTest(unittest.TestCase):
         """
         An integration test for Doge-20M. It tests against a long output to ensure the subtle numerical differences
         """
-        EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world. It is a very popular and popular dog in the United States. It is a very popular"
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "Here's everything I know about dogs. Dogs is the best animal in the world, and they are the most common pets. Dogs are known for their unique personalities and behaviors,",
+                ("cuda", 8): "Here's everything I know about dogs. Dogs is the best animal in the world, and they are the most common pets. Dogs are known for their unique personalities and behaviors,",
+            }
+        ).get_expectation()  # fmt: skip
 
         tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
         model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto", dtype=torch.bfloat16)

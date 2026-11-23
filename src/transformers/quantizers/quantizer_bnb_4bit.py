@@ -19,6 +19,7 @@ from .quantizers_utils import get_module_from_name
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import BitsAndBytesConfig
 
 from ..utils import (
     ACCELERATE_MIN_VERSION,
@@ -36,7 +37,6 @@ from ..utils import (
 if is_torch_available():
     import torch
 
-    from ..core_model_loading import WeightConverter
 
 logger = logging.get_logger(__name__)
 
@@ -47,9 +47,11 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "BitsAndBytesConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    @property
+    def quantized_element_size(self) -> float:
+        return 0.5
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -78,14 +80,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
                     "for more details. "
                 )
 
-    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name):
-            # 4 bit
-            return 0.5
-
-        return super().param_element_size(model, param_name, param)
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
@@ -101,9 +95,9 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         if device_map is None:
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(torch, "npu"):
                 device_map = {"": f"npu:{torch.npu.current_device()}"}
-            elif is_torch_hpu_available():
+            elif is_torch_hpu_available() and hasattr(torch, "hpu"):
                 device_map = {"": f"hpu:{torch.hpu.current_device()}"}
             elif is_torch_xpu_available():
                 device_map = {"": torch.xpu.current_device()}
@@ -141,8 +135,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_loaded_in_4bit = True
-        model.is_4bit_serializable = self.is_serializable()
+        setattr(model, "is_loaded_in_4bit", True)
         return model
 
     def is_serializable(self):
@@ -163,23 +156,19 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
         return Bnb4bitQuantize(self)
 
-    def get_weight_conversions(self):
+    serialized_names = {
+        "weight": [
+            "weight",
+            "weight.nested_absmax",
+            "weight.nested_quant_map",
+            "weight.quant_map",
+            "weight.absmax",
+            "weight.quant_state.bitsandbytes__nf4",
+            "weight.quant_state.bitsandbytes__fp4",
+        ]
+    }
+
+    def get_load_operations(self):
         from ..integrations.bitsandbytes import Bnb4bitDeserialize
 
-        if self.pre_quantized:
-            return [
-                WeightConverter(
-                    source_patterns=[
-                        "weight.nested_absmax",
-                        "weight.nested_quant_map",
-                        "weight.quant_map",
-                        "weight.absmax",
-                        "weight.quant_state.bitsandbytes__nf4",
-                        "weight.quant_state.bitsandbytes__fp4",
-                        "weight",
-                    ],
-                    target_patterns="weight",
-                    operations=[Bnb4bitDeserialize(self)],
-                )
-            ]
-        return []
+        return {"deserialize": Bnb4bitDeserialize}

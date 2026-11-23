@@ -334,30 +334,6 @@ class PLBartTokenizer(SentencePieceBackend):
         lang = FAIRSEQ_LANGUAGE_CODES_MAP.get(lang, lang)
         return lang
 
-    def clean_up_tokenization(self, out_string: str) -> str:
-        """
-        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
-
-        Args:
-            out_string (`str`): The text to clean up.
-
-        Returns:
-            `str`: The cleaned-up string.
-        """
-        out_string = (
-            out_string.replace(" .", ".")
-            .replace(" ?", "?")
-            .replace(" !", "!")
-            .replace(" ,", ",")
-            .replace(" ' ", "'")
-            .replace(" n't", "n't")
-            .replace(" 'm", "'m")
-            .replace(" 's", "'s")
-            .replace(" 've", "'ve")
-            .replace(" 're", "'re")
-        )
-        return out_string
-
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=None, **kwargs):
         """Override to use self.clean_up_tokenization_spaces as default for batched input."""
         return super().decode(

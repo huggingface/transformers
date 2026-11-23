@@ -23,6 +23,7 @@ from ...generation.logits_process import (
     DiaEOSChannelFilterLogitsProcessor,
     DiaEOSDelayPatternLogitsProcessor,
     LogitsProcessorList,
+    RepetitionPenaltyLogitsProcessor,
     TemperatureLogitsWarper,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
@@ -32,6 +33,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -85,6 +87,13 @@ class DiaGenerationMixin(GenerationMixin):
             negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
 
+        # Dia expand inputs and thus cannot use tensor `prompt_ignore_length` correctly
+        for processor in merged_processors:
+            if isinstance(processor, RepetitionPenaltyLogitsProcessor) and isinstance(
+                getattr(processor, "prompt_ignore_length", None), torch.Tensor
+            ):
+                processor.prompt_ignore_length = None
+
         # Custom processors we need at specific positions
         if original_guidance_scale is not None and original_guidance_scale != 1:
             cfg_processor = DiaClassifierFreeGuidanceLogitsProcessor(
@@ -120,7 +129,9 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config.temperature = 1.0
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
-        generation_config.max_length += max(self.config.delay_pattern)
+        # `max_length` can be unset in favor of `max_new_tokens`, which then defines it
+        if generation_config.max_length is not None:
+            generation_config.max_length += max(self.config.delay_pattern)
 
         # Internal flag to indicate CFG that needs to prepare unconditioned input
         self._uses_cfg = generation_config.guidance_scale is not None and generation_config.guidance_scale != 1
@@ -205,6 +216,7 @@ class DiaGenerationMixin(GenerationMixin):
         input_ids,
         encoder_outputs=None,  # Using this to easily get the batch size
         decoder_delay_mask=None,
+        is_first_iteration: bool | None = False,
         **kwargs,
     ):
         # Reshape decoder input_ids to 3D to be compile friendly and to fit the expected model input shape
@@ -221,7 +233,7 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # Depending on cache usage we need to pass all or just one
-        if model_inputs.get("use_cache", False) and model_inputs["cache_position"][0] > 0:
+        if model_inputs.get("use_cache", False) and not is_first_iteration:
             model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"][:, -1, :][:, None, :]
 
         # Be compile friendly
@@ -307,7 +319,7 @@ class DiaGenerationMixin(GenerationMixin):
         # 4. Define other model kwargs
         if "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+            model_kwargs = self._maybe_prepare_encoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config
             )
 
@@ -350,7 +362,7 @@ class DiaGenerationMixin(GenerationMixin):
 
         # 7. Prepare the cache.
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
-        # - different models have a different cache name expected by the model (default = "past_key_values")
+        # - different models have a different cache name expected by the model (default = "cache")
         # - `max_length`, prepared above, is used to determine the maximum cache length
         max_cache_length = generation_config.max_length - 1
         if (
@@ -403,6 +415,8 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
     @torch.no_grad()
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
         inputs: torch.Tensor | None = None,

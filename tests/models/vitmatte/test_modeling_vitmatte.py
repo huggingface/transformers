@@ -26,6 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -40,47 +41,40 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import VitMatteImageProcessor
+    from transformers import VitMatteImageProcessorPil
 
 
-class VitMatteModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=32,
-        patch_size=16,
-        num_channels=4,
-        is_training=True,
-        use_labels=False,
-        hidden_size=2,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        hidden_act="gelu",
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        scope=None,
-        out_features=["stage1"],
-        fusion_hidden_sizes=[128, 64, 32, 16],
-    ):
+class VitMatteModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 32,
+        "patch_size": 16,
+        "num_channels": 4,
+        "is_training": True,
+        "use_labels": False,
+        "hidden_size": 2,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "hidden_act": "gelu",
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "scope": None,
+        "out_features": ["stage1"],
+        "fusion_hidden_sizes": [128, 64, 32, 16],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = (values["image_size"] // values["patch_size"]) ** 2
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.out_features = out_features
-        self.fusion_hidden_sizes = fusion_hidden_sizes
-
-        self.seq_length = (self.image_size // self.patch_size) ** 2
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -135,6 +129,8 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     attention_mask and seq_length.
     """
 
+    model_tester_class = VitMatteModelTester
+
     all_model_classes = (VitMatteForImageMatting,) if is_torch_available() else ()
     pipeline_model_mapping = {}
 
@@ -146,7 +142,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self,
             config_class=VitMatteConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["hidden_size"],
         )
 
@@ -267,7 +263,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 class VitMatteModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        processor = VitMatteImageProcessor.from_pretrained("hustvl/vitmatte-small-composition-1k")
+        processor = VitMatteImageProcessorPil.from_pretrained("hustvl/vitmatte-small-composition-1k")
         model = VitMatteForImageMatting.from_pretrained("hustvl/vitmatte-small-composition-1k").to(torch_device)
 
         filepath = hf_hub_download(

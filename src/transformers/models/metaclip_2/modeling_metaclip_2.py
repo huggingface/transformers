@@ -4,6 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_metaclip_2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -33,15 +48,13 @@ class MetaClip2TextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_embedding.weight.shape[0]
@@ -85,7 +98,7 @@ class MetaClip2VisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
@@ -128,7 +141,7 @@ class MetaClip2VisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding=False) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
@@ -177,11 +190,6 @@ class MetaClip2Attention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
         self.scale = self.head_dim**-0.5
         self.dropout = config.attention_dropout
         self.is_causal = False
@@ -199,15 +207,16 @@ class MetaClip2Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
+        hidden_shape = (*input_shape, -1, self.head_dim)
         queries = self.q_proj(hidden_states)
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
-        queries = queries.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, -1, self.head_dim).transpose(1, 2)
+        queries = queries.view(hidden_shape).transpose(1, 2)
+        keys = keys.view(hidden_shape).transpose(1, 2)
+        values = values.view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -224,7 +233,7 @@ class MetaClip2Attention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -259,7 +268,7 @@ class MetaClip2EncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -278,11 +287,19 @@ class MetaClip2EncoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+def _init_child_weight(child: nn.Module, std: float) -> None:
+    """Initialize `child.weight` if the child module still carries one. Guards against quantization methods that set `weight` to `None`."""
+    if getattr(child, "weight", None) is not None:
+        init.normal_(child.weight, std=std)
+
+
 @auto_docstring
 class MetaClip2PreTrainedModel(PreTrainedModel):
     config: MetaClip2Config
     base_model_prefix = "metaclip_2"
     input_modalities = ("image", "text")
+    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer", "MetaClip2VisionEmbeddings"]
+
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -293,64 +310,42 @@ class MetaClip2PreTrainedModel(PreTrainedModel):
         "attentions": MetaClip2Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor
         if isinstance(module, MetaClip2TextEmbeddings):
-            init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
-            init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            _init_child_weight(module.token_embedding, factor * 0.02)
+            _init_child_weight(module.position_embedding, factor * 0.02)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, MetaClip2VisionEmbeddings):
-            factor = self.config.initializer_factor
             init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            _init_child_weight(module.patch_embedding, module.config.initializer_range * factor)
+            _init_child_weight(module.position_embedding, module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, MetaClip2Attention):
-            factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
-            init.normal_(module.q_proj.weight, std=in_proj_std)
-            init.normal_(module.k_proj.weight, std=in_proj_std)
-            init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            _init_child_weight(module.q_proj, in_proj_std)
+            _init_child_weight(module.k_proj, in_proj_std)
+            _init_child_weight(module.v_proj, in_proj_std)
+            _init_child_weight(module.out_proj, out_proj_std)
         elif isinstance(module, MetaClip2MLP):
-            factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            _init_child_weight(module.fc1, fc_std)
+            _init_child_weight(module.fc2, in_proj_std)
         elif isinstance(module, MetaClip2Model):
-            init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
+            _init_child_weight(module.text_projection, module.text_embed_dim**-0.5 * factor)
+            _init_child_weight(module.visual_projection, module.vision_embed_dim**-0.5 * factor)
         elif isinstance(module, MetaClip2VisionModelWithProjection):
-            init.normal_(
-                module.visual_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
+            _init_child_weight(module.visual_projection, self.config.hidden_size**-0.5 * factor)
         elif isinstance(module, MetaClip2TextModelWithProjection):
-            init.normal_(
-                module.text_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
+            _init_child_weight(module.text_projection, self.config.hidden_size**-0.5 * factor)
         elif isinstance(module, MetaClip2ForImageClassification):
-            init.normal_(
-                module.classifier.weight,
-                std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-
-        if isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            init.zeros_(module.bias)
+            _init_child_weight(module.classifier, self.config.vision_config.hidden_size**-0.5 * factor)
+        if hasattr(module, "logit_scale"):
+            init.constant_(module.logit_scale, self.config.logit_scale_init_value)
 
 
 class MetaClip2Encoder(nn.Module):
@@ -374,20 +369,6 @@ class MetaClip2Encoder(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-        """
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -398,72 +379,6 @@ class MetaClip2Encoder(nn.Module):
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-        )
-
-
-class MetaClip2TextTransformer(MetaClip2PreTrainedModel):
-    config: MetaClip2TextConfig
-    input_modalities = ("text",)
-
-    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
-
-    def __init__(self, config: MetaClip2TextConfig):
-        super().__init__(config)
-        self.config = config
-        embed_dim = config.hidden_size
-        self.embeddings = MetaClip2TextEmbeddings(config)
-        self.encoder = MetaClip2Encoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-        # For `pooled_output` computation
-        self.eos_token_id = config.eos_token_id
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        input_ids,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        input_shape = input_ids.size()
-        input_ids = input_ids.view(-1, input_shape[-1])
-
-        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
-
-        attention_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            cache_position=torch.arange(hidden_states.shape[1], device=hidden_states.device),
-            past_key_values=None,
-        )
-
-        kwargs.pop("is_causal", None)
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            is_causal=True,
-            **kwargs,
-        )
-
-        last_hidden_state = encoder_outputs.last_hidden_state
-        last_hidden_state = self.final_layer_norm(last_hidden_state)
-
-        # Use robust pooling like CLIP - finds the first EOS token position per sequence
-        pooled_output = last_hidden_state[
-            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id).int().argmax(dim=-1),
-        ]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -505,21 +420,21 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
 
     config: MetaClip2TextConfig
     input_modalities = ("text",)
-
-    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
+    _input_embed_layer = "token_embedding"
 
     def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
-        self.text_model = MetaClip2TextTransformer(config)
-        # Initialize weights and apply final processing
+        embed_dim = config.hidden_size
+        self.embeddings = MetaClip2TextEmbeddings(config)
+        self.encoder = MetaClip2Encoder(config)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        # For `pooled_output` computation
+        self.eos_token_id = config.eos_token_id
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -543,31 +458,61 @@ class MetaClip2TextModel(MetaClip2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
+        # Unlike CLIP, this model doesn't handle bc for `self.eos_token_id`, even if the EOS
+        # token is 2 (it is set to 2 in released weights)
+        input_shape = input_ids.size()
+        input_ids = input_ids.view(-1, input_shape[-1])
 
-        return self.text_model(
-            input_ids=input_ids,
+        hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
+
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            position_ids=position_ids,
+            cache=None,
+        )
+
+        kwargs.pop("is_causal", None)
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+            is_causal=True,
             **kwargs,
         )
 
+        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-@dataclass
+        # Use robust pooling like CLIP - finds the first EOS token position per sequence
+        pooled_output = last_hidden_state[
+            torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
+            (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id).int().argmax(dim=-1),
+        ]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class MetaClip2TextModelOutput(ModelOutput):
     r"""
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The text embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    text_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    text_embeds: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -603,16 +548,13 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
     ```"""
 
     config: MetaClip2TextConfig
+    base_model_prefix = "text_model"
     input_modalities = ("text",)
-
-    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer"]
 
     def __init__(self, config: MetaClip2TextConfig):
         super().__init__(config)
 
-        text_model = MetaClip2TextModel._from_config(config)
-        self.text_model = text_model.text_model
-
+        self.text_model = MetaClip2TextModel._from_config(config)
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
@@ -665,21 +607,21 @@ class MetaClip2TextModelWithProjection(MetaClip2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class MetaClip2Output(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+    logits_per_image (`torch.Tensor` of shape `(image_batch_size, text_batch_size)`):
         The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
         similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+    logits_per_text (`torch.Tensor` of shape `(text_batch_size, image_batch_size)`):
         The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
         similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`MetaClip2TextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The image embeddings obtained by applying the projection layer to the pooled output of [`MetaClip2VisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`MetaClip2TextModel`].
@@ -687,19 +629,16 @@ class MetaClip2Output(ModelOutput):
         The output of the [`MetaClip2VisionModel`].
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_per_image: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_per_image: torch.Tensor | None = None
+    logits_per_text: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 # contrastive loss function, adapted from
@@ -708,9 +647,9 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-def metaclip_2_loss(similarity: torch.Tensor) -> torch.Tensor:
+def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
+    image_loss = contrastive_loss(similarity.T)
     return (caption_loss + image_loss) / 2.0
 
 
@@ -745,7 +684,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -765,23 +704,8 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
     ```"""
 
-    config: MetaClip2Config
-    _no_split_modules = ["MetaClip2TextEmbeddings", "MetaClip2EncoderLayer", "MetaClip2VisionEmbeddings"]
-
     def __init__(self, config: MetaClip2Config):
         super().__init__(config)
-
-        if not isinstance(config.text_config, MetaClip2TextConfig):
-            raise TypeError(
-                "config.text_config is expected to be of type MetaClip2TextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
-
-        if not isinstance(config.vision_config, MetaClip2VisionConfig):
-            raise TypeError(
-                "config.vision_config is expected to be of type MetaClip2VisionConfig but is of type"
-                f" {type(config.vision_config)}."
-            )
 
         text_config = config.text_config
         vision_config = config.vision_config
@@ -790,11 +714,8 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        text_model = MetaClip2TextModel._from_config(text_config)
-        self.text_model = text_model.text_model
-
-        vision_model = MetaClip2VisionModel._from_config(vision_config)
-        self.vision_model = vision_model.vision_model
+        self.text_model = MetaClip2TextModel._from_config(text_config)
+        self.vision_model = MetaClip2VisionModel._from_config(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -840,7 +761,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -849,7 +770,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -880,7 +801,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,
@@ -895,7 +816,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
@@ -914,13 +835,13 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.get_image_features(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
 
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.get_text_features(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -928,10 +849,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         )
 
         image_embeds = vision_outputs.pooler_output
-        image_embeds = self.visual_projection(image_embeds)
-
         text_embeds = text_outputs.pooler_output
-        text_embeds = self.text_projection(text_embeds)
 
         # normalized features
         image_embeds = image_embeds / _get_vector_norm(image_embeds)
@@ -945,7 +863,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = metaclip_2_loss(logits_per_text)
+            loss = image_text_contrastive_loss(logits_per_text)
 
         return MetaClip2Output(
             loss=loss,
@@ -955,53 +873,6 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
             image_embeds=image_embeds,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
-        )
-
-
-class MetaClip2VisionTransformer(MetaClip2PreTrainedModel):
-    config: MetaClip2VisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["MetaClip2EncoderLayer"]
-
-    def __init__(self, config: MetaClip2VisionConfig):
-        super().__init__(config)
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = MetaClip2VisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = MetaClip2Encoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor | None = None,
-        interpolate_pos_encoding: bool | None = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        hidden_states = self.pre_layrnorm(hidden_states)
-
-        encoder_outputs: BaseModelOutput = self.encoder(
-            inputs_embeds=hidden_states,
-            **kwargs,
-        )
-
-        last_hidden_state = encoder_outputs.last_hidden_state
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
         )
 
 
@@ -1031,7 +902,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -1052,21 +923,24 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
     config: MetaClip2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["MetaClip2EncoderLayer"]
+    _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: MetaClip2VisionConfig):
         super().__init__(config)
-        self.vision_model = MetaClip2VisionTransformer(config)
-        # Initialize weights and apply final processing
+        embed_dim = config.hidden_size
+
+        self.embeddings = MetaClip2VisionEmbeddings(config)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.encoder = MetaClip2Encoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -1075,7 +949,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
@@ -1092,30 +966,40 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.pre_layrnorm(hidden_states)
 
-        return self.vision_model(
-            pixel_values=pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
             **kwargs,
         )
 
+        last_hidden_state = encoder_outputs.last_hidden_state
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
 
-@dataclass
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+        )
+
+
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 class MetaClip2VisionModelOutput(ModelOutput):
     r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    image_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    image_embeds: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
@@ -1140,7 +1024,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
     ```python
     >>> from PIL import Image
-    >>> import httpx
+    >>> from huggingface_hub.utils import httpx
     >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
@@ -1158,15 +1042,14 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
     ```"""
 
     config: MetaClip2VisionConfig
+    base_model_prefix = "vision_model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
     def __init__(self, config: MetaClip2VisionConfig):
         super().__init__(config)
 
-        vision_model = MetaClip2VisionModel._from_config(config)
-        self.vision_model = vision_model.vision_model
-
+        self.vision_model = MetaClip2VisionModel._from_config(config)
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
@@ -1179,7 +1062,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MetaClip2VisionModelOutput:
@@ -1188,7 +1071,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
@@ -1235,8 +1118,7 @@ class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        vision_model = MetaClip2VisionModel._from_config(config.vision_config)
-        self.vision_model = vision_model.vision_model
+        self.vision_model = MetaClip2VisionModel._from_config(config.vision_config)
 
         # Classifier head
         self.classifier = (
@@ -1254,12 +1136,6 @@ class MetaClip2ForImageClassification(MetaClip2PreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
             **kwargs,

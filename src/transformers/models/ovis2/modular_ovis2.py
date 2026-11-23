@@ -22,9 +22,10 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..aimv2.modeling_aimv2 import Aimv2Attention, Aimv2EncoderLayer
@@ -46,15 +47,15 @@ def hard_softmax(logits: torch.Tensor, dim: int):
     return ret
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
     r"""
-    visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
+    visual_indicator_features (`torch.Tensor` of shape `(batch_size, visual_indicator_size)`):
         Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.
     """
 
-    visual_indicator_features: torch.FloatTensor | None = None
+    visual_indicator_features: torch.Tensor | None = None
 
 
 class Ovis2ModelOutputWithPast(LlavaNextModelOutputWithPast):
@@ -81,7 +82,7 @@ class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
     def interpolate_pos_encoding(self):
         raise NotImplementedError("Not needed for Ovis2")
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
@@ -165,7 +166,6 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Ovis2VisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -205,7 +205,7 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     def forward(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
@@ -246,8 +246,6 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
 
 
 class Ovis2Model(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.vision_tower = Ovis2VisionModel(config.vision_config)
@@ -265,7 +263,7 @@ class Ovis2Model(LlavaModel):
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
@@ -293,44 +291,43 @@ class Ovis2Model(LlavaModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | Ovis2ModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_outputs = self.get_image_features(pixel_values=pixel_values, return_dict=True)
-            image_features = image_outputs.pooler_output
-            visual_indicator_features = image_outputs.visual_indicator_features
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
+            visual_indicator_features = mm_encoder_outputs["image"].visual_indicator_features
 
             special_image_mask = self.get_placeholder_mask(
                 input_ids,
                 inputs_embeds=inputs_embeds,
                 image_features=image_features,
             )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
             for i, visual_indicator_id in enumerate(self.visual_indicator_token_ids):
@@ -343,79 +340,55 @@ class Ovis2Model(LlavaModel):
                     mask = (input_ids == visual_indicator_id).to(inputs_embeds.device)
 
                 if mask.any():
-                    inputs_embeds[mask] = (
-                        visual_indicator_features[i]
-                        .expand_as(inputs_embeds[mask])
-                        .to(inputs_embeds.device, inputs_embeds.dtype)
-                    )
+                    inputs_embeds[mask] = visual_indicator_features[i].to(inputs_embeds.device, inputs_embeds.dtype)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
-            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
-        return Ovis2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-        )
+        return Ovis2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
 class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Ovis2Config):
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
     ) -> tuple | Ovis2CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Ovis2ForConditionalGeneration
 
@@ -434,30 +407,21 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True)[0]
         "user\n\nDescribe the image.\nassistant\nThe image features a brown dog standing on a wooden floor, looking up with"
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -468,10 +432,10 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         return Ovis2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

@@ -17,7 +17,6 @@ import copy
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     AutoProcessor,
@@ -26,8 +25,8 @@ from transformers import (
     T5Gemma2EncoderConfig,
     T5Gemma2TextConfig,
     is_torch_available,
-    is_vision_available,
 )
+from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer, EncoderDecoderCache
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -37,8 +36,10 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -53,12 +54,10 @@ if is_torch_available():
         T5Gemma2Model,
     )
 
-if is_vision_available():
-    from PIL import Image
 
-
-class T5Gemma2ModelTester:
+class T5Gemma2ModelTester(ModelTesterConfigMixin):
     config_class = T5Gemma2Config
+
     text_config_class = T5Gemma2TextConfig
     encoder_config_class = T5Gemma2EncoderConfig
     decoder_config_class = T5Gemma2DecoderConfig
@@ -69,34 +68,33 @@ class T5Gemma2ModelTester:
         sequence_classification_class = T5Gemma2ForSequenceClassification
         token_classification_class = T5Gemma2ForTokenClassification
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        is_training=True,
-        use_attention_mask=True,
-        use_labels=True,
-        vocab_size=99,
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "is_training": True,
+        "use_attention_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
         # decoder-specific
-        seq_length=7,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=37,
+        "seq_length": 7,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "intermediate_size": 37,
         # encoder-specific
-        encoder_seq_length=7,
-        encoder_hidden_size=32,
-        encoder_num_hidden_layers=2,
-        encoder_num_attention_heads=4,
-        encoder_num_key_value_heads=2,
-        encoder_intermediate_size=37,
+        "encoder_seq_length": 7,
+        "encoder_hidden_size": 32,
+        "encoder_num_hidden_layers": 2,
+        "encoder_num_attention_heads": 4,
+        "encoder_num_key_value_heads": 2,
+        "encoder_intermediate_size": 37,
         # vision-specific
-        mm_tokens_per_image=2,
-        image_token_index=4,
-        boi_token_index=5,
-        eoi_token_index=6,
-        siglip_config={
+        "mm_tokens_per_image": 2,
+        "image_token_index": 4,
+        "boi_token_index": 5,
+        "eoi_token_index": 6,
+        "siglip_config": {
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -112,67 +110,35 @@ class T5Gemma2ModelTester:
             "initializer_range": 0.02,
         },
         # common
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        layer_types=["full_attention", "sliding_attention"],
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "layer_types": ["full_attention", "sliding_attention"],
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
         # special ids
-        eos_token_id=1,
-        pad_token_id=0,
-        bos_token_id=2,
-    ):
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "bos_token_id": 2,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_channels"] = values["siglip_config"]["num_channels"]
+        values["image_size"] = values["siglip_config"]["image_size"]
+        values["head_dim"] = values["hidden_size"] // values["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        # decoder
-        self.seq_length = seq_length
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        # encoder
-        self.encoder_seq_length = encoder_seq_length
-        self.encoder_hidden_size = encoder_hidden_size
-        self.encoder_num_hidden_layers = encoder_num_hidden_layers
-        self.encoder_num_attention_heads = encoder_num_attention_heads
-        self.encoder_num_key_value_heads = encoder_num_key_value_heads
-        self.encoder_intermediate_size = encoder_intermediate_size
-        # vision
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_index = image_token_index
-        self.boi_token_index = boi_token_index
-        self.eoi_token_index = eoi_token_index
-        self.siglip_config = siglip_config
-        self.num_channels = siglip_config["num_channels"]
-        self.image_size = siglip_config["image_size"]
-        # common
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.layer_types = layer_types
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        # special ids
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_encoder_config(self):
         return self.encoder_config_class(
@@ -332,7 +298,7 @@ class T5Gemma2ModelTester:
         )
 
         decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(
@@ -455,7 +421,7 @@ class T5Gemma2ModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -464,9 +430,9 @@ class T5Gemma2ModelTester:
         next_input_ids = torch.cat([decoder_input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids, encoder_hidden_states=encoder_hidden_states)["last_hidden_state"]
-        output_from_past = model(
-            next_tokens, encoder_hidden_states=encoder_hidden_states, past_key_values=past_key_values
-        )["last_hidden_state"]
+        output_from_past = model(next_tokens, encoder_hidden_states=encoder_hidden_states, cache=cache)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -498,7 +464,7 @@ class T5Gemma2ModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(
+        output, cache = model(
             decoder_input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attn_mask, use_cache=True
         ).to_tuple()
 
@@ -524,7 +490,7 @@ class T5Gemma2ModelTester:
         output_from_past = model(
             next_tokens,
             encoder_hidden_states=encoder_hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attn_mask,
         )["last_hidden_state"]
 
@@ -559,7 +525,7 @@ class T5Gemma2ModelTester:
             use_cache=True,
         )
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -576,7 +542,7 @@ class T5Gemma2ModelTester:
             next_tokens,
             encoder_hidden_states=encoder_hidden_states,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
         )["last_hidden_state"]
 
         # select random slice
@@ -589,7 +555,7 @@ class T5Gemma2ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_generate_with_past_key_values(
+    def create_and_check_generate_with_cache(
         self,
         config,
         input_ids,
@@ -609,6 +575,48 @@ class T5Gemma2ModelTester:
             input_ids, pixel_values=pixel_values, num_beams=2, max_length=5, do_sample=True
         )
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
+
+    def create_and_check_cross_attention_cache_is_not_sliding(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+        pixel_values,
+    ):
+        """
+        Regression test for #45521. Checks whether the cross attention cache is correctly handled, i.e. not a SWA cache.
+        This would previously fail on instances where the sliding window < encoder len.
+        """
+        config.decoder.sliding_window = self.encoder_seq_length // 2
+        self.parent.assertGreater(self.encoder_seq_length, config.decoder.sliding_window)
+        model = self.causal_lm_class(config=config).to(torch_device).eval()
+        output = model.generate(
+            input_ids,
+            pixel_values=pixel_values,
+            max_new_tokens=2,
+            do_sample=False,
+            use_cache=True,
+            return_dict_in_generate=True,
+        )
+        self.parent.assertIsInstance(output.cache, EncoderDecoderCache)
+        cross_cache = output.cache.cross_attention_cache
+        for layer_idx, layer in enumerate(cross_cache.layers):
+            self.parent.assertNotIsInstance(
+                layer,
+                DynamicSlidingWindowLayer,
+                msg=(
+                    f"Cross-attention layer {layer_idx} must not be a sliding-window layer "
+                    f"(got {type(layer).__name__}); cross-attention attends to all encoder tokens."
+                ),
+            )
+            self.parent.assertIs(
+                type(layer),
+                DynamicLayer,
+                msg=(f"Cross-attention layer {layer_idx} must be DynamicLayer (got {type(layer).__name__})."),
+            )
 
     def create_and_check_model_fp16_forward(
         self,
@@ -673,6 +681,8 @@ class T5Gemma2ModelTester:
 
 @require_torch
 class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = T5Gemma2ModelTester
+
     all_model_classes = (
         (
             T5Gemma2Model,
@@ -769,9 +779,13 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_generate_with_past_key_values(self):
+    def test_generate_with_cache(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+        self.model_tester.create_and_check_generate_with_cache(*config_and_inputs)
+
+    def test_cross_attention_cache_is_not_sliding(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_cross_attention_cache_is_not_sliding(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
@@ -859,10 +873,10 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_load_with_mismatched_shapes(self):
         pass
 
-    # Based on tests.generation.test_utils.GenerationTesterMixin.test_generate_continue_from_past_key_values
+    # Based on tests.generation.test_utils.GenerationTesterMixin.test_generate_continue_from_cache
     # Updated decoder_attention_mask to consider the appended bos token
     @pytest.mark.generate
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
             if model_class == self.model_tester.token_classification_class:
@@ -896,10 +910,10 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs:
+                self.skipTest(reason="This model doesn't return `cache`")
 
             generate_kwargs = {
                 "pad_token_id": -1,
@@ -920,7 +934,7 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[-1]
 
             # It must be encoder-decoder models
@@ -947,8 +961,8 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            assert_similar_generate_outputs(outputs, outputs_cached)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
     @unittest.skip("T5Gemma 2 only support final layer hidden states.")
     def test_hidden_states_output(self):
@@ -1040,6 +1054,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): ' a bumble bee in a flower bed.',
+                ("xpu", None): ' a bumble bee in a flower bed.',
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -1048,8 +1063,8 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
             "google/t5gemma-2-270m-270m", device_map="auto", dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
+        image = load_test_image(url)
 
         prompt = "<start_of_image> in this image, there is"
         model_inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
@@ -1060,7 +1075,7 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
     def test_model_generation_batch_270m(self):
         expected_texts = Expectations(
             {
-                ("cuda", None): [' a bumble bee in a flower bed.', ', a bumblebee is seen in the garden of a house in the UK.'],
+                ("cuda", (8, 6)): [" a bumble bee in a flower bed.", " you can see a bumble bee in the garden.\n\nThe bumble bee is a very common species in the UK. It is a very common species in"],
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -1069,8 +1084,8 @@ class T5Gemma2IntegrationTest(unittest.TestCase):
             "google/t5gemma-2-270m-270m", device_map="auto", dtype=torch.bfloat16
         )
         processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/bee.jpg"
+        image = load_test_image(url)
 
         prompt = ["<start_of_image> in this image, there is", "<start_of_image> in this image"]
         model_inputs = processor(text=prompt, images=[[image], [image]], padding=True, return_tensors="pt").to(

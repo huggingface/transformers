@@ -16,10 +16,13 @@
 import unittest
 from unittest.util import safe_repr
 
+from parameterized import parameterized
+
 from transformers import AutoTokenizer, RwkvConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -34,55 +37,43 @@ if is_torch_available():
     )
 
 
-class RwkvModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        is_training=True,
-        use_token_type_ids=False,
-        use_input_mask=True,
-        use_labels=True,
-        use_mc_token_ids=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-    ):
+class RwkvModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 14,
+        "seq_length": 7,
+        "is_training": True,
+        "use_token_type_ids": False,
+        "use_input_mask": True,
+        "use_labels": True,
+        "use_mc_token_ids": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["bos_token_id"] = values["vocab_size"] - 1
+        values["eos_token_id"] = values["vocab_size"] - 1
+        values["pad_token_id"] = values["vocab_size"] - 1
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_token_type_ids = use_token_type_ids
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.use_mc_token_ids = use_mc_token_ids
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 1
-        self.pad_token_id = vocab_size - 1
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -211,12 +202,13 @@ class RwkvModelTester:
 
 @require_torch
 class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = RwkvModelTester
+
     all_model_classes = (RwkvModel, RwkvForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
     test_missing_keys = False
-    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)
@@ -367,6 +359,22 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip("This model doesn't support padding")
     def test_left_padding_compatibility(self):
         pass
+
+    @unittest.skip("This model doesn't support beam search with cache, as the cache cannot be reordered")
+    def test_beam_search_generate(self):
+        pass
+
+    @unittest.skip("This model doesn't support beam search with cache, as the cache cannot be reordered")
+    def test_beam_sample_generate(self):
+        pass
+
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    def test_generate_from_inputs_embeds(self, _, num_beams):
+        # Skip beam search
+        if num_beams == 2:
+            self.skipTest("This model doesn't support beam search with cache, as the cache cannot be reordered")
+        else:
+            super().test_generate_from_inputs_embeds("greedy", 1)
 
 
 @slow

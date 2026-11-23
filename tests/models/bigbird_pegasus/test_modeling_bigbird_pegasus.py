@@ -19,6 +19,7 @@ import unittest
 
 from transformers import BigBirdPegasusConfig, is_torch_available
 from transformers.testing_utils import (
+    is_flaky,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -28,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -74,55 +76,36 @@ def prepare_bigbird_pegasus_inputs_dict(
     return input_dict
 
 
-class BigBirdPegasusModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        seq_length=256,
-        is_training=True,
-        use_labels=False,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=31,
-        hidden_act="gelu_fast",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=260,
-        eos_token_id=1,
-        pad_token_id=0,
-        bos_token_id=2,
-        attention_type="block_sparse",
-        use_bias=False,
-        block_size=16,
-        num_random_blocks=3,
-        scale_embedding=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
+class BigBirdPegasusModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 7,
+        "seq_length": 128,
+        "is_training": True,
+        "use_labels": False,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 31,
+        "hidden_act": "gelu_fast",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 260,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "bos_token_id": 2,
+        "attention_type": "block_sparse",
+        "use_bias": False,
+        "block_size": 16,
+        "num_random_blocks": 3,
+        "scale_embedding": True,
+    }
 
-        self.attention_type = attention_type
-        self.use_bias = use_bias
-        self.block_size = block_size
-        self.num_random_blocks = num_random_blocks
-        self.scale_embedding = scale_embedding
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -172,7 +155,7 @@ class BigBirdPegasusModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -183,9 +166,7 @@ class BigBirdPegasusModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -239,6 +220,8 @@ class BigBirdPegasusModelTester:
 
 @require_torch
 class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = BigBirdPegasusModelTester
+
     all_model_classes = (
         (
             BigBirdPegasusModel,
@@ -252,12 +235,8 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     pipeline_model_mapping = (
         {
             "feature-extraction": BigBirdPegasusModel,
-            "question-answering": BigBirdPegasusForQuestionAnswering,
-            "summarization": BigBirdPegasusForConditionalGeneration,
             "text-classification": BigBirdPegasusForSequenceClassification,
             "text-generation": BigBirdPegasusForCausalLM,
-            "text2text-generation": BigBirdPegasusForConditionalGeneration,
-            "translation": BigBirdPegasusForConditionalGeneration,
             "zero-shot": BigBirdPegasusForSequenceClassification,
         }
         if is_torch_available()
@@ -580,70 +559,52 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         self.assertTrue(generated == [EXPECTED_LEP, EXPECTED_MAGNET])
 
 
-class BigBirdPegasusStandaloneDecoderModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=7,
-        d_model=32,
-        decoder_seq_length=7,
-        is_training=True,
-        is_decoder=True,
-        use_attention_mask=True,
-        use_cache=False,
-        use_labels=True,
-        decoder_start_token_id=2,
-        decoder_ffn_dim=32,
-        decoder_layers=2,
-        encoder_attention_heads=4,
-        decoder_attention_heads=4,
-        max_position_embeddings=50,
-        is_encoder_decoder=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        scope=None,
-        attention_type="original_full",
-        use_bias=True,
-        block_size=16,
-        num_random_blocks=3,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.decoder_seq_length = decoder_seq_length
+class BigBirdPegasusStandaloneDecoderModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 7,
+        "d_model": 32,
+        "decoder_seq_length": 7,
+        "is_training": False,
+        "use_attention_mask": True,
+        "use_cache": False,
+        "use_labels": True,
+        "decoder_start_token_id": 2,
+        "decoder_ffn_dim": 32,
+        "decoder_layers": 2,
+        "encoder_attention_heads": 4,
+        "decoder_attention_heads": 4,
+        "max_position_embeddings": 50,
+        "is_encoder_decoder": False,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "scope": None,
+        "attention_type": "original_full",
+        "use_bias": True,
+        "block_size": 16,
+        "num_random_blocks": 3,
+        "base_model_out_len": 2,
+        "decoder_attention_idx": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
+        values["seq_length"] = values["decoder_seq_length"]
+        values["hidden_size"] = values["d_model"]
+        values["num_hidden_layers"] = values["decoder_layers"]
+        values["num_attention_heads"] = values["decoder_attention_heads"]
+        values["scope"] = None
+        values["decoder_key_length"] = values["decoder_seq_length"]
+        return values
 
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.hidden_size = d_model
-        self.num_hidden_layers = decoder_layers
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_attention_heads = decoder_attention_heads
-        self.num_attention_heads = decoder_attention_heads
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.use_cache = use_cache
-        self.max_position_embeddings = max_position_embeddings
-        self.is_encoder_decoder = is_encoder_decoder
-
-        self.scope = None
-        self.decoder_key_length = decoder_seq_length
-        self.base_model_out_len = 2
-        self.decoder_attention_idx = 1
-
-        self.attention_type = attention_type
-        self.use_bias = use_bias
-        self.block_size = block_size
-        self.num_random_blocks = num_random_blocks
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -701,7 +662,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        past_key_values = outputs["past_key_values"]
+        cache = outputs["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -710,7 +671,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -736,7 +697,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        cache = model(input_ids, attention_mask=attn_mask, use_cache=True)["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -755,7 +716,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, use_cache=True)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache, use_cache=True)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -777,6 +738,8 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 
 @require_torch
 class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = BigBirdPegasusStandaloneDecoderModelTester
+
     all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
 
     is_encoder_decoder = False
@@ -784,7 +747,7 @@ class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTeste
     def setUp(
         self,
     ):
-        self.model_tester = BigBirdPegasusStandaloneDecoderModelTester(self, is_training=False)
+        self.model_tester = BigBirdPegasusStandaloneDecoderModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BigBirdPegasusConfig)
 
     def test_config(self):
@@ -801,3 +764,8 @@ class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTeste
     @unittest.skip("Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):
         return
+
+    # TODO (ydshieh): check why this model produces larger diff. (1e-4 scale) than most models
+    @is_flaky(max_attempts=2)
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()

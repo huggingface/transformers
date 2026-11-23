@@ -22,6 +22,7 @@ from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ...utils.output_capturing import OutputRecorder
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
     Wav2Vec2EncoderStableLayerNorm,
@@ -49,7 +50,7 @@ class HubertPositionalConvEmbedding(nn.Module):
         )
 
         self.batch_norm = None
-        if config.conv_pos_batch_norm:
+        if getattr(config, "conv_pos_batch_norm", False):
             self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         else:
             weight_norm = nn.utils.weight_norm
@@ -127,26 +128,20 @@ class HubertPreTrainedModel(PreTrainedModel):
     base_model_prefix = "hubert"
     main_input_name = "input_values"
     input_modalities = "audio"
+    _no_split_modules = ["HubertEncoderLayer", "ParametrizedConv1d"]
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": [HubertEncoderLayer, HubertEncoderLayerStableLayerNorm],  # noqa: F821
+        "attentions": OutputRecorder(HubertAttention, index=1, layer_name="encoder"),  # noqa: F821
+    }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.Conv1d):
+        super()._init_weights(module)
+        if isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
@@ -223,7 +218,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         self,
         input_values: torch.Tensor | None,
         attention_mask: torch.Tensor | None = None,
-        mask_time_indices: torch.FloatTensor | None = None,
+        mask_time_indices: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -259,7 +254,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)

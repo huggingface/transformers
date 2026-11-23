@@ -15,12 +15,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
+import unicodedata
 from queue import Queue
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 
 if TYPE_CHECKING:
-    from ..models.auto import AutoTokenizer
+    from ..tokenization_utils_base import PreTrainedTokenizerBase
 
 
 class BaseStreamer:
@@ -39,17 +41,11 @@ class BaseStreamer:
 
 class TextStreamer(BaseStreamer):
     """
-    Simple text streamer that prints the token(s) to stdout as soon as entire words are formed.
-
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
+    Simple text streamer that prints the token(s) to stdout as soon as they are decoded.
 
     Parameters:
         tokenizer (`AutoTokenizer`):
-            The tokenized used to decode the tokens.
+            The tokenizer used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
         decode_kwargs (`dict`, *optional*):
@@ -71,19 +67,19 @@ class TextStreamer(BaseStreamer):
         ```
     """
 
-    def __init__(self, tokenizer: AutoTokenizer, skip_prompt: bool = False, **decode_kwargs):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, skip_prompt: bool = False, **decode_kwargs: Any):
         self.tokenizer = tokenizer
         self.skip_prompt = skip_prompt
         self.decode_kwargs = decode_kwargs
 
         # variables used in the streaming process
-        self.token_cache = []
+        self.token_cache: list[int] = []
         self.print_len = 0
         self.next_tokens_are_prompt = True
 
     def put(self, value):
         """
-        Receives tokens, decodes them, and prints them to stdout as soon as they form entire words.
+        Receives tokens, decodes them, and prints them to stdout as soon as they are decoded.
         """
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")
@@ -96,15 +92,22 @@ class TextStreamer(BaseStreamer):
 
         # Add the new token to the cache and decodes the entire thing.
         self.token_cache.extend(value.tolist())
-        text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
+        text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))
 
-        # After the symbol for a new line, we flush the cache.
+        # After the symbol for a new line, we flush the cache but keep the last token as decoding context to preserve leading spaces
+        # on the next line
         if text.endswith("\n"):
             printable_text = text[self.print_len :]
-            self.token_cache = []
-            self.print_len = 0
+            self.token_cache = self.token_cache[-1:]
+            self.print_len = len(self.tokenizer.decode(self.token_cache[-1], **self.decode_kwargs))
         # If the last token is a CJK character, we print the characters.
         elif len(text) > 0 and self._is_chinese_char(ord(text[-1])):
+            printable_text = text[self.print_len :]
+            self.print_len += len(printable_text)
+        # Letters (with their combining marks), digits and spaces are printed right away, so text without spaces (long
+        # words, Thai) streams too. Symbols wait for the next space: they may start some formatting (`\n`, `<br>`) or
+        # be an incomplete character (`\ufffd`).
+        elif all(char.isspace() or unicodedata.category(char)[0] in "LMN" for char in text[self.print_len :]):
             printable_text = text[self.print_len :]
             self.print_len += len(printable_text)
         # Otherwise, prints until the last space char (simple heuristic to avoid printing incomplete words,
@@ -119,7 +122,7 @@ class TextStreamer(BaseStreamer):
         """Flushes any remaining cache and prints a newline to stdout."""
         # Flush the cache, if it exists
         if len(self.token_cache) > 0:
-            text = self.tokenizer.decode(self.token_cache, **self.decode_kwargs)
+            text = cast(str, self.tokenizer.decode(self.token_cache, **self.decode_kwargs))
             printable_text = text[self.print_len :]
             self.token_cache = []
             self.print_len = 0
@@ -164,15 +167,9 @@ class TextIteratorStreamer(TextStreamer):
     useful for applications that benefit from accessing the generated text in a non-blocking way (e.g. in an interactive
     Gradio demo).
 
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
-
     Parameters:
         tokenizer (`AutoTokenizer`):
-            The tokenized used to decode the tokens.
+            The tokenizer used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
         timeout (`float`, *optional*):
@@ -205,7 +202,11 @@ class TextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: AutoTokenizer, skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        skip_prompt: bool = False,
+        timeout: float | None = None,
+        **decode_kwargs: Any,
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = Queue()
@@ -235,15 +236,9 @@ class AsyncTextIteratorStreamer(TextStreamer):
     This is useful for applications that benefit from accessing the generated text asynchronously (e.g. in an
     interactive Gradio demo).
 
-    <Tip warning={true}>
-
-    The API for the streamer classes is still under development and may change in the future.
-
-    </Tip>
-
     Parameters:
         tokenizer (`AutoTokenizer`):
-            The tokenized used to decode the tokens.
+            The tokenizer used to decode the tokens.
         skip_prompt (`bool`, *optional*, defaults to `False`):
             Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
         timeout (`float`, *optional*):
@@ -283,14 +278,17 @@ class AsyncTextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: AutoTokenizer, skip_prompt: bool = False, timeout: float | None = None, **decode_kwargs
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        skip_prompt: bool = False,
+        timeout: float | None = None,
+        **decode_kwargs: Any,
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = asyncio.Queue()
         self.stop_signal = None
         self.timeout = timeout
         self.loop = asyncio.get_running_loop()
-        self.has_asyncio_timeout = hasattr(asyncio, "timeout")
 
     def on_finalized_text(self, text: str, stream_end: bool = False):
         """Put the new text in the queue. If the stream is ending, also put a stop signal in the queue."""
@@ -302,16 +300,104 @@ class AsyncTextIteratorStreamer(TextStreamer):
         return self
 
     async def __anext__(self):
-        try:
-            if self.has_asyncio_timeout:
-                async with asyncio.timeout(self.timeout):
-                    value = await self.text_queue.get()
-            else:
-                value = await asyncio.wait_for(self.text_queue.get(), timeout=self.timeout)
-        except asyncio.TimeoutError:
-            raise TimeoutError()
+        async with asyncio.timeout(self.timeout):
+            value = await self.text_queue.get()
+        if value == self.stop_signal:
+            raise StopAsyncIteration()
         else:
-            if value == self.stop_signal:
-                raise StopAsyncIteration()
-            else:
-                return value
+            return value
+
+
+class TextDiffusionStreamer(TextStreamer):
+    """
+    Streamer that prints text diffusion outputs. Intermediate diffusion steps (drafts) are temporary
+    and overwritten by subsequent drafts, and removed when confirmed text is printed.
+
+    <Tip warning={true}>
+
+    If you're running on an environment like tmux, the draft text may fail to overwrite itself.
+
+    </Tip>
+
+
+    Parameters:
+        tokenizer (`AutoTokenizer`):
+            The tokenized used to decode the tokens.
+        skip_prompt (`bool`, *optional*, defaults to `False`):
+            Whether to skip the prompt to `.generate()` or not. Useful e.g. for chatbots.
+        sleep_time (`float`, *optional*):
+            Time to sleep between diffusion drafts, which may be helpful to visualize intermediate outputs.
+        decode_kwargs (`dict`, *optional*):
+            Additional keyword arguments to pass to the tokenizer's `decode` method.
+
+    Examples:
+
+        ```python
+        >>> from transformers import DiffusionGemmaForBlockDiffusion, AutoProcessor, TextDiffusionStreamer
+
+        >>> model = DiffusionGemmaForBlockDiffusion.from_pretrained(
+        ...     "google/diffusiongemma-26B-A4B-it", device_map="auto",
+        ... )
+        >>> processor = AutoProcessor.from_pretrained("google/diffusiongemma-26B-A4B-it")
+
+        >>> chat = [{"role": "user", "content": "Why is the sky blue?"},]
+        >>> input_ids = processor.apply_chat_template(
+        ...     chat, tokenize=True, return_tensors="pt", add_generation_prompt=True
+        ... )
+        >>> streamer = TextDiffusionStreamer(tokenizer=processor.tokenizer)
+        >>> model.generate(input_ids.to(model.device), max_new_tokens=512, streamer=streamer)
+        ```
+    """
+
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        skip_prompt: bool = False,
+        sleep_time: float | None = None,
+        **decode_kwargs: Any,
+    ):
+        super().__init__(tokenizer, skip_prompt, **decode_kwargs)
+        self._has_draft = False
+        # `_takes_logits`: Overwrite this attribute if you want your new Streamer class to take the draft
+        # logits as an input to `put_draft`. On diffusion models, `logits` can be a very large tensor, so
+        # we recommend setting it to `False` by default.
+        self._takes_logits = False
+        self.sleep_time = sleep_time
+
+    def _clear_draft(self):
+        if self._has_draft:
+            # Restore cursor and clear to end of screen
+            print("\0338\033[J", end="", flush=True)
+            self._has_draft = False
+
+    def put_draft(self, value, **kwargs):
+        """
+        Receives the full sequence of draft tokens, decodes them, and prints them in yellow.
+        Overwrites previous draft.
+        """
+        self._clear_draft()
+
+        if len(value.shape) > 1 and value.shape[0] > 1:
+            raise ValueError("TextDiffusionStreamer only supports batch size 1")
+        elif len(value.shape) > 1:
+            value = value[0]
+
+        text = self.tokenizer.decode(value, **self.decode_kwargs)
+
+        # Save cursor position
+        print("\0337", end="", flush=True)
+        # Print draft in yellow
+        print(f"\033[33m{text}\033[0m", end="", flush=True)
+        self._has_draft = True
+        if self.sleep_time is not None:
+            time.sleep(self.sleep_time)
+
+    def put(self, value):
+        """Receives confirmed tokens, clears draft, and prints them permanently."""
+        self._clear_draft()
+        super().put(value)
+
+    def end(self):
+        """Flushes any remaining cache and prints a newline."""
+        self._clear_draft()
+        super().end()

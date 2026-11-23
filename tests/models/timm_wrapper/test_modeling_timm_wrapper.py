@@ -28,6 +28,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils.import_utils import is_timm_available, is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -49,23 +50,23 @@ if is_vision_available():
     from transformers import TimmWrapperImageProcessor
 
 
-class TimmWrapperModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=32,
-        num_channels=3,
-        is_training=True,
-    ):
-        self.parent = parent
-        self.architecture = "resnet26"
+class TimmWrapperModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "image_size": 32,
+        "num_channels": 3,
+        "is_training": True,
+        "architecture": "resnet26",
         # We need this to make the model smaller
-        self.model_args = {"channels": (16, 16, 16, 16)}
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.is_training = is_training
+        "model_args": {"channels": (16, 16, 16, 16)},
+    }
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -75,6 +76,11 @@ class TimmWrapperModelTester:
 
     def get_config(self):
         return TimmWrapperConfig(architecture=self.architecture, model_args=self.model_args)
+
+    def create_and_check_model_fp16_forward(self, config, pixel_values):
+        model = TimmWrapperModel(config=config).to(torch_device).half().eval()
+        output = model(pixel_values)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -86,6 +92,8 @@ class TimmWrapperModelTester:
 @require_torch
 @require_timm
 class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = TimmWrapperModelTester
+
     all_model_classes = (TimmWrapperModel, TimmWrapperForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": TimmWrapperModel, "image-classification": TimmWrapperForImageClassification}
@@ -135,6 +143,10 @@ class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             expected_shapes = [[2, 2], [1, 1]]
             resulted_shapes = [list(h.shape[2:]) for h in outputs.hidden_states]
             self.assertListEqual(expected_shapes, resulted_shapes)
+
+    def test_model_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
     @unittest.skip(reason="TimmWrapper models doesn't have inputs_embeds")
     def test_inputs_embeds(self):

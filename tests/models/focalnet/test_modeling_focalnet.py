@@ -21,6 +21,7 @@ from transformers import FocalNetConfig
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -44,64 +45,41 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class FocalNetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=32,
-        patch_size=2,
-        num_channels=3,
-        embed_dim=16,
-        hidden_sizes=[32, 64, 128],
-        depths=[1, 2, 1],
-        num_heads=[2, 2, 4],
-        window_size=2,
-        mlp_ratio=2.0,
-        qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        drop_path_rate=0.1,
-        hidden_act="gelu",
-        use_absolute_embeddings=False,
-        patch_norm=True,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        is_training=True,
-        scope=None,
-        use_labels=True,
-        type_sequence_label_size=10,
-        encoder_stride=8,
-        out_features=["stage1", "stage2"],
-        out_indices=[1, 2],
-    ):
+class FocalNetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 32,
+        "patch_size": 2,
+        "num_channels": 3,
+        "embed_dim": 16,
+        "hidden_sizes": [32, 64, 128],
+        "depths": [1, 2, 1],
+        "num_heads": [2, 2, 4],
+        "window_size": 2,
+        "mlp_ratio": 2.0,
+        "qkv_bias": True,
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "drop_path_rate": 0.1,
+        "hidden_act": "gelu",
+        "use_absolute_embeddings": False,
+        "patch_norm": True,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-5,
+        "is_training": True,
+        "scope": None,
+        "use_labels": True,
+        "type_sequence_label_size": 10,
+        "encoder_stride": 8,
+        "out_features": ["stage1", "stage2"],
+        "out_indices": [1, 2],
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.embed_dim = embed_dim
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.num_heads = num_heads
-        self.window_size = window_size
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.drop_path_rate = drop_path_rate
-        self.hidden_act = hidden_act
-        self.use_absolute_embeddings = use_absolute_embeddings
-        self.patch_norm = patch_norm
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.is_training = is_training
-        self.scope = scope
-        self.use_labels = use_labels
-        self.type_sequence_label_size = type_sequence_label_size
-        self.encoder_stride = encoder_stride
-        self.out_features = out_features
-        self.out_indices = out_indices
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -226,6 +204,8 @@ class FocalNetModelTester:
 
 @require_torch
 class FocalNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = FocalNetModelTester
+
     all_model_classes = (
         (
             FocalNetModel,
@@ -413,6 +393,7 @@ class FocalNetModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [0.2166, -0.4368, 0.2191],
                 ("cuda", 8): [0.2180, -0.4355, 0.2198],
+                ("xpu", 5): [0.2179, -0.4357, 0.2200],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -423,6 +404,8 @@ class FocalNetModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class FocalNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
+    model_tester_class = FocalNetModelTester
+
     all_model_classes = (FocalNetBackbone,) if is_torch_available() else ()
     config_class = FocalNetConfig
 

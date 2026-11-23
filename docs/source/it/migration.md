@@ -35,7 +35,7 @@ Ciò introduce due modifiche sostanziali:
 
 ##### Come ottenere lo stesso comportamento di v3.x in v4.x
 
-- Le pipeline ora contengono funzionalità aggiuntive pronte all'uso. Vedi la [pipeline di classificazione dei token con il flag `grouped_entities`](main_classes/pipelines#transformers.TokenClassificationPipeline).
+- Le pipeline ora contengono funzionalità aggiuntive pronte all'uso. Vedi la [pipeline di classificazione dei token con il parametro `aggregation_strategy`](main_classes/pipelines#transformers.TokenClassificationPipeline).
 - Gli auto-tokenizer ora restituiscono tokenizer rust. Per ottenere invece i tokenizer python, l'utente deve usare il flag `use_fast` impostandolo `False`:
 
 Nella versione `v3.x`:
@@ -79,7 +79,7 @@ pip install transformers[sentencepiece]
 ```
 o
 ```bash
-pip install transformers stentencepiece
+pip install transformers sentencepiece
 ```
 #### 3. L'architettura delle repo è stato aggiornata in modo che ogni modello abbia la propria cartella
 
@@ -146,10 +146,10 @@ In diversi modelli, le etichette diventano coerenti con gli altri modelli:
 - `lm_labels` diventa `labels` in `T5ForConditionalGeneration`.
 
 In diversi modelli, il meccanismo di memorizzazione nella cache diventa coerente con gli altri:
-- `decoder_cached_states` diventa `past_key_values` in tutti i modelli BART-like, FSMT e T5.
-- `decoder_past_key_values` diventa `past_key_values` in tutti i modelli BART-like, FSMT e T5.
-- `past` diventa `past_key_values` in tutti i modelli CTRL.
-- `past` diventa `past_key_values` in tutti i modelli GPT-2.
+- `decoder_cached_states` diventa `cache` in tutti i modelli BART-like, FSMT e T5.
+- `decoder_cache` diventa `cache` in tutti i modelli BART-like, FSMT e T5.
+- `past` diventa `cache` in tutti i modelli CTRL.
+- `past` diventa `cache` in tutti i modelli GPT-2.
 
 Per quanto riguarda le classi tokenizer:
 - L'attributo tokenizer `max_len` diventa `model_max_length`.

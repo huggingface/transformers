@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers import Emu3Processor
 
@@ -24,6 +25,12 @@ from ...test_processing_common import ProcessorTesterMixin
 
 class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Emu3Processor
+
+    @unittest.skip(
+        "Processor prepends the BOS token as text, which shifts the offsets the assistant mask is computed from"
+    )
+    def test_apply_chat_template_assistant_mask(self):
+        pass
 
     @classmethod
     def _setup_image_processor(cls):
@@ -45,10 +52,6 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.sep_token_id = 1
         return tokenizer
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     @staticmethod
     def prepare_processor_dict():
         return {
@@ -61,7 +64,7 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # we don't need an image as input because the model will generate one
         input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(text=input_str, return_for_image_generation=True, return_tensors="pt")
         self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "image_sizes"])
         self.assertEqual(inputs[self.text_input_name].shape[-1], 8)
@@ -76,8 +79,8 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
 
-        input_str = "lower newer"
-        orig_image_input = self.prepare_image_inputs()
+        input_str = f"lower newer {self.image_token}"
+        orig_image_input = self.prepare_images_inputs()
         orig_image = np.array(orig_image_input).transpose(2, 0, 1)
 
         inputs = processor(text=input_str, images=orig_image, do_resize=False, return_tensors="pt")
@@ -99,3 +102,12 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
+
+    @unittest.skip("Processor adds BOS manually to the input text")
+    def test_subprocessor_defaults_0_text(self):
+        pass
+
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("Processor adds BOS manually to the input text")
+    def test_apply_chat_template_image(self, batch_size: int, return_tensors: str):
+        pass

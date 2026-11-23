@@ -12,18 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import numpy as np
 import torch
-import torchvision.transforms.v2.functional as tvF
+from torch.nn import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    PILImageResampling,
+    SizeDict,
+)
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -90,9 +98,16 @@ def get_resize_output_image_size(
 
 
 class SmolVLMVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    max_image_size (`dict[str, int]`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the frames accepted by the model. This is a dictionary containing the key
+        "longest_edge".
+    """
+
     max_image_size: dict[str, int]
 
 
+@auto_docstring
 class SmolVLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.LANCZOS
     size = {"longest_edge": 4 * 364}
@@ -124,7 +139,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         self,
         video: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -135,20 +150,11 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Video to resize.
             size (`SizeDict`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output video.
-            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
-                `InterpolationMode` filter to use when resizing the video e.g. `InterpolationMode.BICUBIC`.
+            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+                Resampling filter to use when resizing the video.
         Returns:
             `torch.Tensor`: The resized video.
         """
-        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
-        if interpolation == tvF.InterpolationMode.LANCZOS:
-            logger.warning_once(
-                "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
-                "BICUBIC resample will be used as an alternative. Please fall back to image processor if you "
-                "want full consistency with the original model."
-            )
-            interpolation = tvF.InterpolationMode.BICUBIC
-
         if size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -161,12 +167,14 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         else:
             raise ValueError(f"Size must contain 'height' and 'width' keys, or 'longest_edge' key. Got {size}.")
 
-        video = tvF.resize(video, new_size, interpolation=interpolation, antialias=antialias)
+        video = super().resize(
+            video, SizeDict(height=new_size[0], width=new_size[1]), resample=resample, antialias=antialias
+        )
 
         # Resize again to match image processor when `do_image_splitting=False`. Frames have to be squared to `max_image_size`
-        # NOTE: videos are always processoed without image splitting
-        max_size = self.max_image_size["longest_edge"], self.max_image_size["longest_edge"]
-        video = tvF.resize(video, max_size, interpolation=interpolation, antialias=antialias)
+        # NOTE: videos are always processed without image splitting
+        max_size = SizeDict(height=self.max_image_size["longest_edge"], width=self.max_image_size["longest_edge"])
+        video = super().resize(video, max_size, resample=resample, antialias=antialias)
         return video
 
     def pad(
@@ -180,7 +188,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         """Pads the sample with empty video to the padded_size
         Args:
             video (`torch.Tensor`):
-                Video to pad.
+                Batched video to pad.
             padded_size (`tuple[int, int]`):
                 Height and width to pad.
             max_num_frames (`int`):
@@ -191,17 +199,19 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Whether to return a pixel mask.
         """
         original_size = video.size()[-2:]
+        num_frames = video.shape[1] if video.ndim == 5 else video.shape[0]
         padding_height = padded_size[0] - original_size[0]
         padding_width = padded_size[1] - original_size[1]
-        padding_frame = max_num_frames - video.shape[0]
-        if padding_width < 0 or padding_height < 0:
+        padding_frame = max_num_frames - num_frames
+        if padding_width < 0 or padding_height < 0 or padding_frame < 0:
             raise ValueError(
                 f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
-                f"original size. Got padded size: {padded_size}, original size: {original_size}."
+                f"original size. Got padded max number of frames {max_num_frames} and padded size: {padded_size}, "
+                f"original number of frames {num_frames} and size: {original_size}."
             )
-        if original_size != padded_size:
+        if original_size != padded_size or padding_frame > 0:
             padding = [0, padding_width, 0, padding_height, 0, 0, 0, padding_frame]
-            video = tvF.pad(video, padding, fill=fill)
+            video = F.pad(video, padding, value=fill)
 
         # Make a pixel mask for the video, where 1 indicates a valid pixel and 0 indicates padding.
         # Mask shape is (num_frames, height, width) so we omit the channel dim
@@ -238,8 +248,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Number of seconds to skip from the start and end if the video is long enough.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
@@ -280,10 +289,9 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -296,10 +304,8 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
+                stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 

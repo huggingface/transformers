@@ -33,15 +33,17 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import is_flash_attention_requested
 from .configuration_gpt_neo import GPTNeoConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -65,7 +67,7 @@ class GPTNeoSelfAttention(nn.Module):
         if attention_type == "local":
             bias = torch.bitwise_xor(bias, torch.tril(bias, -config.window_size))
 
-        self.register_buffer("bias", bias, persistent=False)
+        self.bias = nn.Buffer(bias, persistent=False)
 
         self.attn_dropout = nn.Dropout(float(config.attention_dropout))
         self.resid_dropout = nn.Dropout(float(config.resid_dropout))
@@ -136,7 +138,7 @@ class GPTNeoSelfAttention(nn.Module):
         layer_past=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -147,8 +149,7 @@ class GPTNeoSelfAttention(nn.Module):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if layer_past is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key, value = layer_past.update(key, value, self.layer_id, cache_kwargs)
+            key, value = layer_past.update(key, value, self.layer_id)
 
         attn_output, attn_weights = self._attn(query, key, value, attention_mask)
 
@@ -181,7 +182,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         layer_past=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         bsz, _, _ = hidden_states.size()
 
@@ -194,8 +195,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if layer_past is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key, value = layer_past.update(key, value, self.layer_id, cache_kwargs)
+            key, value = layer_past.update(key, value, self.layer_id)
 
         query_length = query.shape[2]
         tgt_len = key.shape[2]
@@ -214,7 +214,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         # This might slowdown training & inference so it is recommended to not cast the LayerNorms
         # in fp32. (LlamaRMSNorm handles it correctly)
 
-        device_type = query.device.type if query.device.type != "mps" else "cpu"
+        device_type = query.device.type
         if query.dtype == torch.float32:
             if torch.is_autocast_enabled(device_type):
                 target_dtype = torch.get_autocast_dtype(device_type)
@@ -267,9 +267,10 @@ class GPTNeoAttention(nn.Module):
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
-            self.attention = GPT_NEO_ATTENTION_CLASSES[config._attn_implementation](
-                config, self.attention_type, layer_id
+            attn_implementation = (
+                "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
             )
+            self.attention = GPT_NEO_ATTENTION_CLASSES[attn_implementation](config, self.attention_type, layer_id)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
@@ -283,7 +284,7 @@ class GPTNeoAttention(nn.Module):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         return self.attention(
             hidden_states,
@@ -291,7 +292,6 @@ class GPTNeoAttention(nn.Module):
             layer_past=layer_past,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
 
 
@@ -329,7 +329,7 @@ class GPTNeoBlock(GradientCheckpointingLayer):
         attention_mask=None,
         use_cache=False,
         output_attentions=False,
-        cache_position=None,
+        **kwargs,
     ):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -339,7 +339,6 @@ class GPTNeoBlock(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
 
         # residual connection
@@ -360,7 +359,6 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoBlock"]
-    _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _can_compile_fullgraph = False  # TODO: needs a hybrid cache
 
@@ -378,7 +376,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTNeoModel(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -399,10 +397,11 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.wte = new_embeddings
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
@@ -411,16 +410,15 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -433,7 +431,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -448,29 +446,26 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        seq_length = inputs_embeds.shape[1]
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(past_seen_tokens, past_seen_tokens + seq_length, device=inputs_embeds.device)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
         position_embeds = self.wpe(position_ids)
         hidden_states = inputs_embeds + position_embeds
 
+        seq_length = inputs_embeds.shape[1]
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, seq_length)
             token_type_embeds = self.wte(token_type_ids)
@@ -487,11 +482,10 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
             outputs = block(
                 hidden_states,
-                layer_past=past_key_values,
+                layer_past=cache,
                 attention_mask=causal_mask,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
@@ -506,13 +500,11 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions] if v is not None
-            )
+            return tuple(v for v in [hidden_states, cache, all_hidden_states, all_self_attentions] if v is not None)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
@@ -527,7 +519,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.transformer = GPTNeoModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -536,10 +528,11 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         self.post_init()
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
@@ -549,17 +542,16 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -571,11 +563,11 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -584,14 +576,12 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             **kwargs,
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -604,7 +594,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
@@ -625,7 +615,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
     """
 )
 class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTNeoModel(config)
@@ -635,10 +625,11 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
@@ -652,27 +643,23 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
     ) -> tuple[torch.Tensor] | SequenceClassifierOutputWithPast:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -737,7 +724,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
@@ -745,7 +732,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
 @auto_docstring
 class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -757,14 +744,15 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
         self.post_init()
 
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
@@ -774,11 +762,11 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
     ) -> tuple | TokenClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -790,11 +778,11 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -829,7 +817,7 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
 
 @auto_docstring
 class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTNeoModel(config)
@@ -842,10 +830,10 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
@@ -855,11 +843,11 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
     ) -> tuple | QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -867,7 +855,7 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
 
             [What are input IDs?](../glossary#input-ids)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,

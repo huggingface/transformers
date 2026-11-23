@@ -22,6 +22,7 @@ from transformers.models.auto import get_values
 from transformers.models.big_bird.tokenization_big_bird import BigBirdTokenizer
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -43,65 +44,42 @@ if is_torch_available():
     )
 
 
-class BigBirdModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        seq_length=128,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu_new",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=256,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        attention_type="block_sparse",
-        use_bias=True,
-        rescale_embeddings=False,
-        block_size=8,
-        num_rand_blocks=3,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
+class BigBirdModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-        self.attention_type = attention_type
-        self.use_bias = use_bias
-        self.rescale_embeddings = rescale_embeddings
-        self.block_size = block_size
-        self.num_rand_blocks = num_rand_blocks
+    small_config_overrides = {
+        "batch_size": 7,
+        "seq_length": 128,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu_new",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 256,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "attention_type": "block_sparse",
+        "use_bias": True,
+        "rescale_embeddings": False,
+        "block_size": 8,
+        "num_rand_blocks": 3,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -268,7 +246,7 @@ class BigBirdModelTester:
             encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -291,7 +269,7 @@ class BigBirdModelTester:
             attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=True,
             output_hidden_states=True,
         )["hidden_states"][0]
@@ -411,6 +389,8 @@ class BigBirdModelTester:
 
 @require_torch
 class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = BigBirdModelTester
+
     all_model_classes = (
         (
             BigBirdModel,
@@ -431,7 +411,6 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": BigBirdModel,
             "fill-mask": BigBirdForMaskedLM,
-            "question-answering": BigBirdForQuestionAnswering,
             "text-classification": BigBirdForSequenceClassification,
             "text-generation": BigBirdForCausalLM,
             "token-classification": BigBirdForTokenClassification,
@@ -457,7 +436,7 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = BigBirdModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BigBirdConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BigBirdConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -524,6 +503,51 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             encoder_hidden_states,
             encoder_attention_mask,
         )
+
+    def test_decoder_causal_mask(self):
+        # Regression test for #48745
+        config, input_ids = self.model_tester.prepare_config_and_inputs_for_decoder()[:2]
+        config.attention_type = "original_full"
+        model = BigBirdModel(config).to(torch_device).eval()
+
+        input_ids_modified = input_ids.clone()
+        input_ids_modified[:, -1] = (input_ids_modified[:, -1] + 1) % config.vocab_size
+        res_orig = model(input_ids).last_hidden_state
+        res_mod = model(input_ids_modified).last_hidden_state
+        self.assertTrue(
+            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
+            "Decoder model attended to future tokens!",
+        )
+
+    def test_generate_block_sparse_with_cache(self):
+        # Block-sparse attention used to run the prompt without writing it to the cache, so decoding ignored the
+        # prompt (and a static cache crashed). Cached generation must match recomputing the sequence without a cache.
+        config, input_ids = self.model_tester.prepare_config_and_inputs_for_decoder()[:2]
+        config.attention_type = "block_sparse"
+        model = BigBirdForCausalLM(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "pad_token_id": None,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+
+        # Without a cache (training, scoring) block-sparse attention is kept
+        with torch.no_grad():
+            model(input_ids, use_cache=False)
+        self.assertEqual(model.bert.attention_type, "block_sparse")
+
+        for cache_implementation in ("dynamic", "static"):
+            # The fallback to full attention sticks to the model, so block-sparse is restored before each call
+            model.bert.set_attention_type("block_sparse")
+            output = model.generate(input_ids, cache_implementation=cache_implementation, **generation_kwargs)
+            self.assertEqual(model.bert.attention_type, "original_full")
+            for step, logits in enumerate(output.logits):
+                with torch.no_grad():
+                    sequence = output.sequences[:, : input_ids.shape[1] + step]
+                    expected = model(sequence, use_cache=False).logits[:, -1]
+                torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
 
     def test_retain_grad_hidden_states_attentions(self):
         # bigbird cannot keep gradients in attentions when `attention_type=block_sparse`

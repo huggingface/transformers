@@ -18,6 +18,7 @@ import unittest
 from transformers import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -33,7 +34,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GLPNImageProcessor
+    from transformers import GLPNImageProcessorPil
 
 
 class GLPNConfigTester(ConfigTester):
@@ -44,48 +45,33 @@ class GLPNConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
 
 
-class GLPNModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=64,
-        num_channels=3,
-        num_encoder_blocks=4,
-        depths=[2, 2, 2, 2],
-        sr_ratios=[8, 4, 2, 1],
-        hidden_sizes=[16, 32, 64, 128],
-        downsampling_rates=[1, 4, 8, 16],
-        num_attention_heads=[1, 2, 4, 8],
-        is_training=True,
-        use_labels=True,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        decoder_hidden_size=16,
-        num_labels=3,
-        scope=None,
-    ):
+class GLPNModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 64,
+        "num_channels": 3,
+        "num_encoder_blocks": 4,
+        "depths": [2, 2, 2, 2],
+        "sr_ratios": [8, 4, 2, 1],
+        "hidden_sizes": [16, 32, 64, 128],
+        "downsampling_rates": [1, 4, 8, 16],
+        "num_attention_heads": [1, 2, 4, 8],
+        "is_training": True,
+        "use_labels": True,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "initializer_range": 0.02,
+        "decoder_hidden_size": 16,
+        "num_labels": 3,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.num_encoder_blocks = num_encoder_blocks
-        self.sr_ratios = sr_ratios
-        self.depths = depths
-        self.hidden_sizes = hidden_sizes
-        self.downsampling_rates = downsampling_rates
-        self.num_attention_heads = num_attention_heads
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.decoder_hidden_size = decoder_hidden_size
-        self.num_labels = num_labels
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -141,6 +127,7 @@ class GLPNModelTester:
 
 @require_torch
 class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = GLPNModelTester
     all_model_classes = (GLPNModel, GLPNForDepthEstimation) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"depth-estimation": GLPNForDepthEstimation, "image-feature-extraction": GLPNModel}
@@ -325,7 +312,7 @@ def prepare_img():
 class GLPNModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_depth_estimation(self):
-        image_processor = GLPNImageProcessor.from_pretrained("vinvino02/glpn-kitti")
+        image_processor = GLPNImageProcessorPil.from_pretrained("vinvino02/glpn-kitti")
         model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti").to(torch_device)
 
         image = prepare_img()

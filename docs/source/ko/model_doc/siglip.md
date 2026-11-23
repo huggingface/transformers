@@ -219,9 +219,9 @@ PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA
 [[autodoc]] SiglipImageProcessor
     - preprocess
 
-## SiglipImageProcessorFast
+## SiglipImageProcessorPil
 
-[[autodoc]] SiglipImageProcessorFast
+[[autodoc]] SiglipImageProcessorPil
     - preprocess
 
 ## SiglipProcessor
@@ -249,4 +249,4 @@ PyTorch는 `torch.nn.functional`의 일부로 스케일된 점곱 어텐션(SDPA
 ## SiglipForImageClassification
 
 [[autodoc]] SiglipForImageClassification
-    - forward 
+    - forward

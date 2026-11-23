@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -47,74 +48,46 @@ if is_torch_available():
     )
 
 
-class ChameleonModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=35,
-        is_training=False,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        image_token_id=4,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        vq_num_embeds=5,
-        vq_embed_dim=5,
-        vq_resolution=512,
-        vq_channel_multiplier=[1, 2],
-        vq_num_res_blocks=2,
-        vq_attn_resolutions=None,
-        vq_attn_type="vanilla",
-        vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
-        scope=None,
-    ):
+class ChameleonModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 35,
+        "is_training": False,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "image_token_id": 4,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 0,
+        "scope": None,
+        "vq_num_embeds": 5,
+        "vq_embed_dim": 5,
+        "vq_resolution": 512,
+        "vq_channel_multiplier": [1, 2],
+        "vq_num_res_blocks": 2,
+        "vq_attn_resolutions": None,
+        "vq_attn_type": "vanilla",
+        "vq_img_token_start_id": 10,  # has to be less than vocab size when added with vq_num_embeds
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.image_token_id = image_token_id
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.vq_num_embeds = vq_num_embeds
-        self.vq_embed_dim = vq_embed_dim
-        self.vq_resolution = vq_resolution
-        self.vq_channel_multiplier = vq_channel_multiplier
-        self.vq_num_res_blocks = vq_num_res_blocks
-        self.vq_attn_resolutions = vq_attn_resolutions
-        self.vq_attn_type = vq_attn_type
-        self.vq_img_token_start_id = vq_img_token_start_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -207,6 +180,8 @@ class ChameleonModelTester:
 
 @require_torch
 class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = ChameleonModelTester
+
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -219,7 +194,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = ChameleonModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -228,13 +203,25 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
+
+    @unittest.skip("Test expects an error raised when pixels are passed but this class has no images")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
         pass
 
-    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
     @parameterized.expand([True, False, None])
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
     def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_pooler_output(self):
         pass
 
     @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
@@ -247,10 +234,12 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
 
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
-    def __init__(self, parent, image_size=10, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.image_size = image_size
-        self.image_seq_length = 25
+    # `small_config_overrides` does not inherit, so the parent's values are this tester's defaults
+    defaults = {**ChameleonModelTester.defaults, **ChameleonModelTester.small_config_overrides}
+    small_config_overrides = {
+        "image_size": 10,
+        "image_seq_length": 25,
+    }
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -272,6 +261,8 @@ class ChameleonVision2SeqModelTester(ChameleonModelTester):
 
 @require_torch
 class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = ChameleonVision2SeqModelTester
+
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -284,7 +275,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 
     def setUp(self):
         self.model_tester = ChameleonVision2SeqModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ChameleonConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -378,7 +369,10 @@ class ChameleonIntegrationTest(unittest.TestCase):
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
@@ -387,9 +381,8 @@ class ChameleonIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("xpu", 3): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Altair. The star map is set against a black background, with the constellations visible in the night'],
-                ("cuda", 7): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in'],
-                ("cuda", 8): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located'],
+                (None, None): ['Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch'],
+                ("cuda", (8, 6)): ["Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch"],
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -407,10 +400,16 @@ class ChameleonIntegrationTest(unittest.TestCase):
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompts = [
             "<image>Describe what do you see here and tell me about the history behind it?",
@@ -424,17 +423,13 @@ class ChameleonIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("xpu", 3): [
-                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in',
-                    'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
+                (None, None): [
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some clusters more densely packed than others. The sky is pitch',
+                    "What constellation is this image showing?srem291ve&07lld'83456[t](…—.\\$     ve",
                 ],
-                ("cuda", 7): [
-                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located',
-                    'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
-                ],
-                ("cuda", 8): [
-                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located',
-                    'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
+                ("cuda", (8, 6)): [
+                    "Describe what do you see here and tell me about the history behind it?The image depicts a night sky filled with a multitude of twinkling stars. The stars are arranged in a seemingly random pattern, with some appearing brighter than others. The background of the image is pitch",
+                    "What constellation is this image showing?srem1&92llve0d347586['](\\’ vet—…@",
                 ],
             }
         )  # fmt: skip
@@ -453,17 +448,28 @@ class ChameleonIntegrationTest(unittest.TestCase):
         processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "What do these two images have in common?<image><image>"
 
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between the night sky and the internet. The first image shows a starry night sky, with the stars arranged in a pattern that resembles the structure of the internet. The']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): ["What do these two images have in common?The two images show a night sky with a large number of stars and a small, bright object in the center of each image. The first image shows a close-up view of the object, which"],
+                ("cuda", (8, 6)): ["What do these two images have in common?The two images show a night sky with a large number of stars and a bright, full moon."],
+            }
+        ).get_expectation()  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

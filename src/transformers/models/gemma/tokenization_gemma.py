@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tokenizers import Tokenizer, decoders, normalizers
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -88,6 +88,9 @@ class GemmaTokenizer(TokenizersBackend):
                 byte_fallback=True,
             )
         )
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Split(
+            pattern=" ", behavior="merged_with_previous", invert=False
+        )
 
         self._tokenizer.decoder = decoders.Sequence(
             [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
@@ -101,10 +104,6 @@ class GemmaTokenizer(TokenizersBackend):
             mask_token=mask_token,
             **kwargs,
         )
-
-    def _unk_id(self) -> int:
-        # Align with historical Gemma convention: pad, eos, bos, unk
-        return 3
 
 
 __all__ = ["GemmaTokenizer"]

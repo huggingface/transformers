@@ -19,7 +19,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -30,9 +29,10 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bert.modeling_bert import (
@@ -76,8 +76,8 @@ class ErnieEmbeddings(BertEmbeddings):
         token_type_ids: torch.LongTensor | None = None,
         task_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        past_key_values_length: int = 0,
+        inputs_embeds: torch.Tensor | None = None,
+        cache_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -87,7 +87,7 @@ class ErnieEmbeddings(BertEmbeddings):
         batch_size, seq_length = input_shape
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = self.position_ids[:, cache_length : seq_length + cache_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -150,7 +150,7 @@ class ErnieEncoder(BertEncoder):
 
 @auto_docstring
 class ErniePreTrainedModel(PreTrainedModel):
-    config_class = ErnieConfig
+    config: ErnieConfig
     base_model_prefix = "ernie"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -163,7 +163,6 @@ class ErniePreTrainedModel(PreTrainedModel):
         "cross_attentions": ErnieCrossAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -177,7 +176,7 @@ class ErniePreTrainedModel(PreTrainedModel):
 class ErnieModel(BertModel):
     _no_split_modules = ["ErnieLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ErnieConfig, add_pooling_layer=True):
         super().__init__(self, config)
         self.config = config
         self.gradient_checkpointing = False
@@ -193,6 +192,7 @@ class ErnieModel(BertModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -203,9 +203,8 @@ class ErnieModel(BertModel):
         inputs_embeds: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
@@ -215,42 +214,22 @@ class ErnieModel(BertModel):
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
         """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
             use_cache = False
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        if use_cache and past_key_values is None:
-            past_key_values = (
+        if use_cache and cache is None:
+            cache = (
                 EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 if encoder_hidden_states is not None or self.config.is_encoder_decoder
                 else DynamicCache(config=self.config)
             )
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
-
+        cache_length = cache.get_seq_length() if cache is not None else 0
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -258,7 +237,7 @@ class ErnieModel(BertModel):
             # specific to ernie
             task_type_ids=task_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
+            cache_length=cache_length,
         )
 
         attention_mask, encoder_attention_mask = self._create_attention_masks(
@@ -266,8 +245,7 @@ class ErnieModel(BertModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
         encoder_outputs = self.encoder(
@@ -275,9 +253,8 @@ class ErnieModel(BertModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
         )
@@ -287,43 +264,8 @@ class ErnieModel(BertModel):
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            past_key_values=encoder_outputs.past_key_values,
+            cache=encoder_outputs.cache,
         )
-
-    # Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
-    def _create_attention_masks(
-        self,
-        attention_mask,
-        encoder_attention_mask,
-        embedding_output,
-        encoder_hidden_states,
-        cache_position,
-        past_key_values,
-    ):
-        if self.config.is_decoder:
-            attention_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-            )
-        else:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-            )
-
-        if encoder_attention_mask is not None:
-            encoder_attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-            )
-
-        return attention_mask, encoder_attention_mask
 
 
 class ErnieForPreTrainingOutput(BertForPreTrainingOutput):
@@ -416,6 +358,7 @@ class ErnieForPreTraining(BertForPreTraining):
 class ErnieForCausalLM(BertLMHeadModel):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -427,9 +370,8 @@ class ErnieForCausalLM(BertLMHeadModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        past_key_values: list[torch.Tensor] | None = None,
+        cache: list[torch.Tensor] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
@@ -442,7 +384,7 @@ class ErnieForCausalLM(BertLMHeadModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         if labels is not None:
             use_cache = False
@@ -456,17 +398,15 @@ class ErnieForCausalLM(BertLMHeadModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -475,7 +415,7 @@ class ErnieForCausalLM(BertLMHeadModel):
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
@@ -509,10 +449,6 @@ class ErnieForMaskedLM(BertForMaskedLM):
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         outputs = self.ernie(
             input_ids,
@@ -637,10 +573,6 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         outputs = self.ernie(
             input_ids,
@@ -729,14 +661,10 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -800,8 +728,6 @@ class ErnieForTokenClassification(BertForTokenClassification):
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         outputs = self.ernie(
             input_ids,

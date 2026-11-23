@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -43,38 +44,38 @@ from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecode
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3Tracker model's output.")
+@dataclass
 class Sam3TrackerImageSegmentationOutput(ModelOutput):
     r"""
-    iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
+    iou_scores (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks)`):
         The Intersection over Union (IoU) scores of the predicted masks.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
         The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
         by the processor to be brought to the original image size.
-    object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
+    object_score_logits (`torch.Tensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
-    image_embeddings (`tuple(torch.FloatTensor)`):
-        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.FloatTensor` where each
+    image_embeddings (`tuple(torch.Tensor)`):
+        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.Tensor` where each
         tensor has shape `(batch_size, channels, height, width)`.
-    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
+    vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
         Hidden-states of the vision model at the output of each stage.
-    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+    vision_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
         Attentions weights of the vision model.
-    mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+    mask_decoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: torch.FloatTensor | None = None
-    pred_masks: torch.FloatTensor | None = None
-    object_score_logits: torch.FloatTensor | None = None
-    image_embeddings: tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    vision_attentions: tuple[torch.FloatTensor, ...] | None = None
-    mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
+    iou_scores: torch.Tensor | None = None
+    pred_masks: torch.Tensor | None = None
+    object_score_logits: torch.Tensor | None = None
+    image_embeddings: tuple[torch.Tensor, ...] = None
+    vision_hidden_states: tuple[torch.Tensor, ...] | None = None
+    vision_attentions: tuple[torch.Tensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class Sam3TrackerFeedForward(nn.Module):
@@ -114,7 +115,7 @@ class Sam3TrackerFeedForward(nn.Module):
     """
 )
 class Sam3TrackerPreTrainedModel(PreTrainedModel):
-    config_class = Sam3TrackerConfig
+    config: Sam3TrackerConfig
     base_model_prefix = "sam3_tracker"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -131,7 +132,6 @@ class Sam3TrackerPreTrainedModel(PreTrainedModel):
         "occlusion_spatial_embedding_parameter",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Sam3TrackerModel):
@@ -146,7 +146,7 @@ class Sam3TrackerPositionalEmbedding(nn.Module):
         super().__init__()
         self.scale = config.scale
         positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
+        self.positional_embedding = nn.Buffer(positional_embedding)
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -391,7 +391,7 @@ class Sam3TrackerTwoWayAttentionBlock(GradientCheckpointingLayer):
         Arguments:
             config (`Sam3TrackerMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -484,8 +484,8 @@ class Sam3TrackerTwoWayTransformer(nn.Module):
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
+        image_embeddings = image_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
 
         # Prepare queries
         queries = point_embeddings
@@ -744,30 +744,22 @@ class Sam3TrackerMaskDecoder(nn.Module):
         return mask_logits_out, iou_scores_out
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
+@dataclass
 class Sam3TrackerVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
-    fpn_hidden_states (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+    fpn_hidden_states (`tuple(torch.Tensor)`):
+        Tuple of `torch.Tensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+    fpn_position_encoding (`tuple(torch.Tensor)`):
+        Tuple of `torch.Tensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     """
 
-    fpn_hidden_states: torch.FloatTensor | None = None
-    fpn_position_encoding: torch.FloatTensor | None = None
+    fpn_hidden_states: torch.Tensor | None = None
+    fpn_position_encoding: torch.Tensor | None = None
 
 
 @auto_docstring(
@@ -780,11 +772,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerTwoWayAttentionBlock, index=2)}
     _tied_weights_keys = {}
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
+    _base_model_prefix = "tracker_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^detector_model.",
         r"^memory_.*",
@@ -836,14 +824,14 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     @torch.no_grad()
     def get_image_embeddings(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.Tensor]:
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
@@ -864,23 +852,23 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     @torch.no_grad()
     def get_prompt_embeddings(
         self,
-        input_points: torch.FloatTensor | None = None,
+        input_points: torch.Tensor | None = None,
         input_labels: torch.LongTensor | None = None,
-        input_boxes: torch.FloatTensor | None = None,
+        input_boxes: torch.Tensor | None = None,
         input_masks: torch.LongTensor | None = None,
     ):
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
 
         Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
+            input_points (`torch.Tensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
                 Optional input points for the prompt encoder. The padding of the point is automatically done by the
                 processor. `point_batch_size` refers to the number of masks that we want the model to predict per
                 point. The model will output `point_batch_size` times 3 masks in total.
             input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
                 Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
                 processor, or can be fed by the user.
-            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
+            input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes_per_image, 4)`):
                 Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
                 processor. users can also pass manually the input boxes.
             input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
@@ -899,19 +887,19 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
-        input_points: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        input_points: torch.Tensor | None = None,
         input_labels: torch.LongTensor | None = None,
-        input_boxes: torch.FloatTensor | None = None,
+        input_boxes: torch.Tensor | None = None,
         input_masks: torch.LongTensor | None = None,
-        image_embeddings: torch.FloatTensor | None = None,
+        image_embeddings: torch.Tensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: torch.FloatTensor | None = None,
-        target_embedding: torch.FloatTensor | None = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3TrackerImageSegmentationOutput:
         r"""
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+        input_points (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
             better results. The points can be obtained by passing a list of list of list to the processor that will
             create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
@@ -934,7 +922,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
             - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
 
             The padding labels should be automatically done by the processor.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+        input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
@@ -945,11 +933,11 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
             - `y1`: the y coordinate of the top left point of the input box
             - `x2`: the x coordinate of the bottom right point of the input box
             - `y2`: the y coordinate of the bottom right point of the input box
-        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+        input_masks (`torch.Tensor` of shape `(batch_size, image_size, image_size)`):
             SAM model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
             generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
             manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+        image_embeddings (`torch.Tensor` of shape `(batch_size, output_channels, window_size, window_size)`):
             Image embeddings, this is used by the mask decoder to generate masks and iou scores. For more memory
             efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
             method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
@@ -957,10 +945,10 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
             In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
             bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
             "best" mask, by specifying `multimask_output=False`.
-        attention_similarity (`torch.FloatTensor`, *optional*):
+        attention_similarity (`torch.Tensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
             model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-        target_embedding (`torch.FloatTensor`, *optional*):
+        target_embedding (`torch.Tensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
             the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
 
@@ -968,7 +956,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
@@ -1076,11 +1064,11 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam3TrackerVisionEncoderOutput:
         r"""
-        pixel_values (`torch.FloatTensor`):
+        pixel_values (`torch.Tensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
         vision_outputs: Sam3TrackerVisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
@@ -1097,8 +1085,8 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         # flatten NxCxHxW to HWxNxC
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
-            feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in feature_maps_position_embeddings
+            feature_maps_position_embeddings.flatten(2).permute(2, 0, 1)
+            for feature_maps_position_embeddings in feature_maps_position_embeddings
         ]
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings

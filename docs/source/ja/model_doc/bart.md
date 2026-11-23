@@ -61,8 +61,6 @@ Bart モデルは、[BART: Denoising Sequence-to-Sequence Pre-training for Natur
 
 ### Examples
 
-- シーケンス間タスク用の BART およびその他のモデルを微調整するための例とスクリプトは、次の場所にあります。
-  [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md)。
 - Hugging Face `datasets` を使用して [`BartForConditionalGeneration`] をトレーニングする方法の例
   オブジェクトは、この [フォーラム ディスカッション](https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904) で見つけることができます。
 - [抽出されたチェックポイント](https://huggingface.co/models?search=distilbart) は、この [論文](https://huggingface.co/papers/2010.13002) で説明されています。
@@ -107,25 +105,24 @@ BART を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 - に関するブログ投稿 [分散トレーニング: 🤗 Transformers と Amazon SageMaker を使用した要約のための BART/T5 のトレーニング](https://huggingface.co/blog/sagemaker-distributed-training-seq2seq)。
 - 方法に関するノートブック [blurr を使用して fastai で要約するために BART を微調整する](https://colab.research.google.com/github/ohmeow/ohmeow_website/blob/master/posts/2021-05-25-mbart-sequence-classification-with-blurr.ipynb). 🌎 🌎
 - 方法に関するノートブック [トレーナー クラスを使用して 2 つの言語で要約するために BART を微調整する](https://colab.research.google.com/github/elsanns/xai-nlp-notebooks/blob/master/fine_tune_bart_summarization_two_langs.ipynb)。 🌎
-- [`BartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)。
-- [`TFBartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)。
-- [`FlaxBartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization) でサポートされています。
+- [`BartForConditionalGeneration`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)。
+- [`TFBartForConditionalGeneration`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)。
 - [要約](https://huggingface.co/course/chapter7/5?fw=pt#summarization) 🤗 ハグフェイスコースの章。
 - [要約タスクガイド](../tasks/summarization)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`BartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) でサポートされており、 [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)。
-- [`TFBartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)。
-- [`FlaxBartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) および [ノートブック]( https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)。
+- [`BartForConditionalGeneration`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb) でサポートされています。
+- [`TFBartForConditionalGeneration`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)。
+- [`FlaxBartForConditionalGeneration`] は、この [ノートブック]( https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)。
 - [マスクされた言語モデリング](https://huggingface.co/course/chapter7/3?fw=pt) 🤗 顔ハグ コースの章。
 - [マスクされた言語モデリング タスク ガイド](../tasks/masked_lang_modeling)
 
 <PipelineTag pipeline="translation"/>
 
 - [ヒンディー語から英語への翻訳に Seq2SeqTrainer を使用して mBART を微調整する方法に関するノート](https://colab.research.google.com/github/vasudevgupta7/huggingface-tutorials/blob/main/translation_training.ipynb)。 🌎
-- [`BartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)。
-- [`TFBartForConditionalGeneration`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)。
+- [`BartForConditionalGeneration`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb)。
+- [`TFBartForConditionalGeneration`] は、この [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)。
 - [翻訳タスクガイド](../tasks/translation)
 
 以下も参照してください。

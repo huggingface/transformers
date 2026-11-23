@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -203,7 +203,7 @@ Common real-world applications of semantic segmentation include training self-dr
 
 We will now:
 
-1. Finetune [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/scene_parse_150) dataset.
+1. Finetune [SegFormer](../model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/merve/scene_parse_150) dataset.
 2. Use your fine-tuned model for inference.
 
 <Tip>
@@ -260,58 +260,6 @@ You'll also want to create a dictionary that maps a label id to a label class wh
 >>> label2id = {v: k for k, v in id2label.items()}
 >>> num_labels = len(id2label)
 ```
-
-#### Custom dataset
-
-You could also create and use your own dataset if you prefer to train with the [run_semantic_segmentation.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py) script instead of a notebook instance. The script requires:
-
-1. a [`~datasets.DatasetDict`] with two [`~datasets.Image`] columns, "image" and "label"
-
-     ```py
-     from datasets import Dataset, DatasetDict, Image
-
-     image_paths_train = ["path/to/image_1.jpg/jpg", "path/to/image_2.jpg/jpg", ..., "path/to/image_n.jpg/jpg"]
-     label_paths_train = ["path/to/annotation_1.png", "path/to/annotation_2.png", ..., "path/to/annotation_n.png"]
-
-     image_paths_validation = [...]
-     label_paths_validation = [...]
-
-     def create_dataset(image_paths, label_paths):
-         dataset = Dataset.from_dict({"image": sorted(image_paths),
-                                     "label": sorted(label_paths)})
-         dataset = dataset.cast_column("image", Image())
-         dataset = dataset.cast_column("label", Image())
-         return dataset
-
-     # step 1: create Dataset objects
-     train_dataset = create_dataset(image_paths_train, label_paths_train)
-     validation_dataset = create_dataset(image_paths_validation, label_paths_validation)
-
-     # step 2: create DatasetDict
-     dataset = DatasetDict({
-          "train": train_dataset,
-          "validation": validation_dataset,
-          }
-     )
-
-     # step 3: push to Hub (assumes you have ran the hf auth login command in a terminal/notebook)
-     dataset.push_to_hub("your-name/dataset-repo")
-
-     # optionally, you can push to a private repo on the Hub
-     # dataset.push_to_hub("name of repo on the hub", private=True)
-     ```
-
-2. an id2label dictionary mapping the class integers to their class names
-
-     ```py
-     import json
-     # simple example
-     id2label = {0: 'cat', 1: 'dog'}
-     with open('id2label.json', 'w') as fp:
-         json.dump(id2label, fp)
-     ```
-
-As an example, take a look at this [example dataset](https://huggingface.co/datasets/nielsr/ade20k-demo) which was created with the steps shown above.
 
 ### Preprocess
 
@@ -405,7 +353,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#finetune-with-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 
@@ -469,7 +417,7 @@ Reload the dataset and load an image for inference.
 ```py
 >>> from datasets import load_dataset
 
->>> ds = load_dataset("scene_parse_150", split="train[:50]")
+>>> ds = load_dataset("merve/scene_parse_150", split="train[:50]")
 >>> ds = ds.train_test_split(test_size=0.2)
 >>> test_ds = ds["test"]
 >>> image = ds["test"][0]["image"]

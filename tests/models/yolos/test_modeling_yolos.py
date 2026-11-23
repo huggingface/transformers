@@ -20,6 +20,7 @@ from transformers import YolosConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -38,56 +39,46 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class YolosModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=[30, 30],
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        num_labels=3,
-        scope=None,
-        n_targets=8,
-        num_detection_tokens=10,
-        attn_implementation="eager",
-    ):
+class YolosModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": [30, 30],
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "scope": None,
+        "n_targets": 8,
+        "num_detection_tokens": 10,
+        "attn_implementation": "eager",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.scope = scope
-        self.n_targets = n_targets
-        self.num_detection_tokens = num_detection_tokens
-        self.attn_implementation = attn_implementation
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # we set the expected sequence length (which is used in several tests)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token) + num_detection_tokens
+        image_size, patch_size = values["image_size"], values["patch_size"]
         num_patches = (image_size[1] // patch_size) * (image_size[0] // patch_size)
-        self.expected_seq_len = num_patches + 1 + self.num_detection_tokens
+        values["expected_seq_len"] = num_patches + 1 + values["num_detection_tokens"]
+        return values
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
@@ -167,6 +158,8 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = YolosModelTester
+
     all_model_classes = (YolosModel, YolosForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": YolosModel, "object-detection": YolosForObjectDetection}
@@ -198,7 +191,7 @@ class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = YolosModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=YolosConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=YolosConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

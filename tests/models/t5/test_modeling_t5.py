@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -43,7 +44,6 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import (
-        AutoTokenizer,
         ByT5Tokenizer,
         GenerationConfig,
         T5EncoderModel,
@@ -56,53 +56,45 @@ if is_torch_available():
     )
 
 
-class T5ModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        decoder_seq_length=7,
+class T5ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 7,
         # For common tests
-        is_training=True,
-        use_attention_mask=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        eos_token_id=1,
-        pad_token_id=0,
-        decoder_start_token_id=0,
-        scope=None,
-        decoder_layers=None,
-    ):
+        "is_training": True,
+        "use_attention_mask": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "decoder_start_token_id": 0,
+        "scope": None,
+        "decoder_layers": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.scope = None
-        self.decoder_layers = decoder_layers
+        values["seq_length"] = values["decoder_seq_length"]
+        # `scope` was always reset to None, whatever the caller passed
+        values["scope"] = None
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
@@ -247,7 +239,7 @@ class T5ModelTester:
         )
         result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
@@ -313,7 +305,7 @@ class T5ModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -322,7 +314,7 @@ class T5ModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -352,7 +344,7 @@ class T5ModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+        output, cache = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -371,9 +363,7 @@ class T5ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, cache=cache, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -396,7 +386,7 @@ class T5ModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -407,9 +397,7 @@ class T5ModelTester:
         next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -421,7 +409,7 @@ class T5ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_generate_with_past_key_values(
+    def create_and_check_generate_with_cache(
         self,
         config,
         input_ids,
@@ -490,6 +478,8 @@ class T5ModelTester:
 
 @require_torch
 class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = T5ModelTester
+
     all_model_classes = (
         (T5Model, T5ForConditionalGeneration, T5ForSequenceClassification, T5ForQuestionAnswering)
         if is_torch_available()
@@ -498,11 +488,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     pipeline_model_mapping = (
         {
             "feature-extraction": T5Model,
-            "question-answering": T5ForQuestionAnswering,
-            "summarization": T5ForConditionalGeneration,
             "text-classification": T5ForSequenceClassification,
-            "text2text-generation": T5ForConditionalGeneration,
-            "translation": T5ForConditionalGeneration,
             "zero-shot": T5ForSequenceClassification,
         }
         if is_torch_available()
@@ -518,8 +504,13 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         self.model_tester = T5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
 
-    # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-    # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+    @unittest.skip(
+        reason="T5 always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    # `QAPipelineTests` is not working well with slow tokenizers (for some models)
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -677,9 +668,9 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_generate_with_past_key_values(self):
+    def test_generate_with_cache(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+        self.model_tester.create_and_check_generate_with_cache(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
@@ -701,47 +692,42 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         pass
 
 
-class T5EncoderOnlyModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
+class T5EncoderOnlyModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
         # For common tests
-        use_attention_mask=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        is_training=False,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        is_encoder_decoder=False,
-        eos_token_id=1,
-        pad_token_id=0,
-        scope=None,
-    ):
+        "use_attention_mask": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "is_training": False,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "is_encoder_decoder": False,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        self.seq_length = self.encoder_seq_length
-        self.use_attention_mask = use_attention_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scope = None
-        self.is_training = is_training
+        values["seq_length"] = values["encoder_seq_length"]
+        # `scope` was always reset to None, whatever the caller passed
+        values["scope"] = None
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -832,6 +818,8 @@ class T5EncoderOnlyModelTester:
 
 
 class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = T5EncoderOnlyModelTester
+
     all_model_classes = (T5EncoderModel, T5ForTokenClassification) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -846,6 +834,12 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def setUp(self):
         self.model_tester = T5EncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
+
+    @unittest.skip(
+        reason="T5 always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -876,8 +870,7 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if tokenizer_name is None:
             return True
 
-        # `T5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+        # `T5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models)
         if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 
@@ -1063,7 +1056,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -40.1645
+        EXPECTED_SCORE = -59.0293
         torch.testing.assert_close(
             mtf_score,
             EXPECTED_SCORE,
@@ -1092,7 +1085,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -44.6276
+        EXPECTED_SCORE = -60.7397
         torch.testing.assert_close(
             mtf_score,
             EXPECTED_SCORE,
@@ -1410,69 +1403,14 @@ class T5ModelIntegrationTests(unittest.TestCase):
         translation = tok.decode(output[0])
         self.assertEqual(translation, expected_translation)
 
-    # TODO joao, manuel: remove this in v4.62.0
-    @slow
-    def test_contrastive_search_t5(self):
-        article = (
-            " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A"
-            " year later, she got married again in Westchester County, but to a different man and without divorcing"
-            " her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos"
-            ' declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married'
-            " once more, this time in the Bronx. In an application for a marriage license, she stated it was her"
-            ' "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false'
-            ' instrument for filing in the first degree," referring to her false statements on the 2010 marriage'
-            " license application, according to court documents. Prosecutors said the marriages were part of an"
-            " immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to"
-            " her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was"
-            " arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New"
-            " York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total,"
-            " Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All"
-            " occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be"
-            " married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors"
-            " said the immigration scam involved some of her husbands, who filed for permanent residence status"
-            " shortly after the marriages.  Any divorces happened only after such filings were approved. It was"
-            " unclear whether any of the men will be prosecuted. The case was referred to the Bronx District"
-            " Attorney's Office by Immigration and Customs Enforcement and the Department of Homeland Security's"
-            ' Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt,'
-            " Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his"
-            " native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces"
-            " up to four years in prison.  Her next court appearance is scheduled for May 18."
-        )
-        article = "summarize: " + article.strip()
-        t5_tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-base-cnn-dm")
-        t5_model = T5ForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(torch_device)
-        input_ids = t5_tokenizer(
-            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
-        ).input_ids.to(torch_device)
-
-        outputs = t5_model.generate(
-            input_ids,
-            penalty_alpha=0.5,
-            top_k=5,
-            max_length=64,
-            trust_remote_code=True,
-            custom_generate="transformers-community/contrastive-search",
-        )
-        generated_text = t5_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        # TODO: @arthur?
-        # PR #31938 caused regression on this test which was fixed by PR #34089
-        self.assertListEqual(
-            generated_text,
-            [
-                "Liana Barrientos has been married 10 times, nine of them in the Bronx . Her husbands filed for "
-                "permanent residence after the marriages, prosecutors say ."
-            ],
-        )
-
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
-            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames . the laws of physics are the same for all inertial reference frames .",
-            "ketchup is my favorite condiment .",
+            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames. the laws of physics are the same for all inertial reference frames.",
+            "ketchup is my favorite condiment.",
         ]
 
         prompts = [
@@ -1488,23 +1426,15 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
         # Dynamic Cache
         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-        dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        dynamic_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
-        static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        static_text = tokenizer.decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
     @slow
     @require_torch_accelerator

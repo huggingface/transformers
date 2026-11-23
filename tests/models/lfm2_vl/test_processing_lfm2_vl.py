@@ -35,9 +35,14 @@ if is_vision_available():
 @require_vision
 class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Lfm2VlProcessor
+    # Tiny processor created with make_tiny_processor.py from "LiquidAI/LFM2-VL-1.6B"
+    tiny_model_id = "hf-internal-testing/tiny-processor-lfm2_vl"
+    model_id = "LiquidAI/LFM2-VL-1.6B"
 
     @classmethod
     def _setup_image_processor(cls):
+        # Small tile_size and token limits keep tensor allocations minimal.
+        # do_image_splitting=False prevents splitting images into many tiles.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(
             tile_size=14,
@@ -46,12 +51,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             encoder_patch_size=2,
             do_image_splitting=False,
         )
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        processor_kwargs = cls.prepare_processor_dict()
-        return tokenizer_class.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -93,14 +92,10 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         return {"chat_template": chat_template}
 
-    @unittest.skip("Lfm2VlProcessor adds special tokens to the text")
-    def test_tokenizer_defaults(self):
-        pass
-
     # Override as Lfm2VL needs images/video to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size=None):
+    def prepare_images_inputs(self, batch_size=None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -428,34 +423,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             expected_attention_2 = [0] * pad_len + [1] * len(expected_2)
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
-
-    def test_missing_images_error(self):
-        """Test that appropriate error is raised when images are referenced but not provided."""
-        processor = self.get_processor()
-
-        # Test single text with image token but no image
-        text = "Let me show you this image: <image> What do you think?"
-        with self.assertRaises(ValueError) as context:
-            processor(text=text)
-        self.assertTrue("We detected 1 tokens in the text but no images were passed" in str(context.exception))
-
-        # Test batch with image tokens but no images
-        texts = [
-            "First text with <image> token.",
-            "Second text <image> with token.",
-        ]
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts)
-        self.assertTrue("We detected 2 tokens in the text but no images were passed" in str(context.exception))
-
-        # Test with None as Images
-        with self.assertRaises(ValueError) as context:
-            processor(text=text, images=None)
-        self.assertTrue("We detected 1 tokens in the text but no images were passed" in str(context.exception))
-
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts, images=None)
-        self.assertTrue("We detected 2 tokens in the text but no images were passed" in str(context.exception))
 
     def test_single_tile_image_with_thumbnail_disabled(self):
         """Test that single-tile images work correctly when use_thumbnail=False."""

@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-02-05 and added to Hugging Face Transformers on 2022-01-19.*
+*This model was published in HF papers on 2021-02-05 and contributed to Hugging Face Transformers on 2022-01-19.*
 
 # ViLT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -51,7 +48,7 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 - The quickest way to get started with ViLT is by checking the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ViLT)
   (which showcase both inference and fine-tuning on custom data).
 - ViLT is a model that takes both `pixel_values` and `input_ids` as input. One can use [`ViltProcessor`] to prepare data for the model.
-  This processor wraps a image processor (for the image modality) and a tokenizer (for the language modality) into one.
+  This processor wraps an image processor (for the image modality) and a tokenizer (for the language modality) into one.
 - ViLT is trained with images of various sizes: the authors resize the shorter edge of input images to 384 and limit the longer edge to
   under 640 while preserving the aspect ratio. To make batching of images possible, the authors use a `pixel_mask` that indicates
   which pixel values are real and which are padding. [`ViltProcessor`] automatically creates this for you.
@@ -67,9 +64,9 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The origi
 [[autodoc]] ViltImageProcessor
     - preprocess
 
-## ViltImageProcessorFast
+## ViltImageProcessorPil
 
-[[autodoc]] ViltImageProcessorFast
+[[autodoc]] ViltImageProcessorPil
     - preprocess
 
 ## ViltProcessor

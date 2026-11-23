@@ -19,9 +19,11 @@ from functools import cached_property
 from transformers import ConvNextV2Config
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -39,42 +41,30 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class ConvNextV2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=32,
-        num_channels=3,
-        num_stages=4,
-        hidden_sizes=[10, 20, 30, 40],
-        depths=[2, 2, 3, 2],
-        is_training=True,
-        use_labels=True,
-        intermediate_size=37,
-        hidden_act="gelu",
-        num_labels=10,
-        initializer_range=0.02,
-        out_features=["stage2", "stage3", "stage4"],
-        out_indices=[2, 3, 4],
-        scope=None,
-    ):
+class ConvNextV2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 32,
+        "num_channels": 3,
+        "num_stages": 4,
+        "hidden_sizes": [10, 20, 30, 40],
+        "depths": [2, 2, 3, 2],
+        "is_training": True,
+        "use_labels": True,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "num_labels": 10,
+        "initializer_range": 0.02,
+        "out_features": ["stage2", "stage3", "stage4"],
+        "out_indices": [2, 3, 4],
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.num_stages = num_stages
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.out_features = out_features
-        self.out_indices = out_indices
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -139,6 +129,8 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     attention_mask and seq_length.
     """
 
+    model_tester_class = ConvNextV2ModelTester
+
     all_model_classes = (
         (
             ConvNextV2Model,
@@ -163,7 +155,7 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self,
             config_class=ConvNextV2Config,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["hidden_sizes", "num_channels"],
         )
 
@@ -221,7 +213,7 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
@@ -303,5 +295,26 @@ class ConvNextV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.9989, 0.1953, -0.4382]).to(torch_device)
+        # fmt: off
+        expected_slice = Expectations(
+            {
+                (None, None): torch.tensor([0.9989, 0.1953, -0.4382]),
+                ("cuda", 8): torch.tensor([0.9987, 0.1953, -0.4381]),
+                ("xpu", 5): torch.tensor([0.9986, 0.1953, -0.4381]),
+            }
+        ).get_expectation().to(torch_device)
+        # fmt: on
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+
+
+@require_torch
+class ConvNextV2BackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = ConvNextV2ModelTester
+
+    all_model_classes = (ConvNextV2Backbone,) if is_torch_available() else ()
+    config_class = ConvNextV2Config
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = ConvNextV2ModelTester(self)

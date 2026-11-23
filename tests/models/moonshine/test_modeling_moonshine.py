@@ -16,9 +16,12 @@
 import copy
 import unittest
 
+from parameterized import parameterized
+
 from transformers import MoonshineConfig, is_torch_available
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -30,54 +33,43 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch.nn import CrossEntropyLoss
 
     from transformers import (
         AutoProcessor,
         MoonshineForConditionalGeneration,
         MoonshineModel,
     )
+    from transformers.models.moonshine.modeling_moonshine import MoonshineEncoderModelOutput
 
 from datasets import load_dataset
 
 
-class MoonshineModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden_layers
-        seq_length=1000,
-        is_training=False,
-        use_labels=False,
-        vocab_size=147,
-        hidden_size=8,
-        intermediate_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        encoder_hidden_act="gelu",
-        decoder_hidden_act="silu",
-        decoder_start_token_id=85,
-        bos_token_id=98,
-        eos_token_id=98,
-        pad_token_id=0,
-    ):
+class MoonshineModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden_layers
+        "seq_length": 1000,
+        "is_training": False,
+        "use_labels": False,
+        "vocab_size": 147,
+        "hidden_size": 8,
+        "intermediate_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "encoder_hidden_act": "gelu",
+        "decoder_hidden_act": "silu",
+        "decoder_start_token_id": 85,
+        "bos_token_id": 98,
+        "eos_token_id": 98,
+        "pad_token_id": 0,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.encoder_hidden_act = encoder_hidden_act
-        self.decoder_hidden_act = decoder_hidden_act
-        self.decoder_start_token_id = decoder_start_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
@@ -132,6 +124,8 @@ class MoonshineModelTester:
 
 @require_torch
 class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = MoonshineModelTester
+
     all_model_classes = (MoonshineModel, MoonshineForConditionalGeneration) if is_torch_available() else ()
     # Doesn't run generation tests. TODO (eustache): remove this line and then make CI green
     all_generative_model_classes = ()
@@ -150,6 +144,54 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_training_loss_no_double_shift(self):
+        # forward shifts labels into decoder_input_ids, so loss must be plain CE against the labels (no second shift)
+        config = self.model_tester.get_config()
+        config.pad_token_id = self.model_tester.pad_token_id
+        model = MoonshineForConditionalGeneration(config).to(torch_device).eval()
+        vocab_size = config.vocab_size
+
+        torch.manual_seed(0)
+        bsz, enc_len, dec_len = 2, 10, 6
+        enc_hidden = torch.randn(bsz, enc_len, config.hidden_size, device=torch_device)
+        encoder_outputs = MoonshineEncoderModelOutput(last_hidden_state=enc_hidden, attention_mask=None)
+        labels = torch.randint(3, vocab_size, (bsz, dec_len), device=torch_device)
+        padded = labels.clone()
+        padded[0, -1] = -100
+        padded[1, -2:] = -100
+
+        def aligned_ce(logits, lbl):
+            return CrossEntropyLoss()(logits.reshape(-1, vocab_size), lbl.reshape(-1))
+
+        def double_shift_ce(logits, lbl):
+            return CrossEntropyLoss()(logits[..., :-1, :].reshape(-1, vocab_size), lbl[..., 1:].reshape(-1))
+
+        for lbl in (labels, padded):
+            # Moonshine is the only model here that moves off a plain `CrossEntropyLoss` onto the shared
+            # `self.loss_function`, so it also needs to start honoring `num_items_in_batch`: the loss is a
+            # summed cross-entropy divided by that count, so passing the true count reproduces the aligned
+            # mean cross-entropy, and doubling the count must halve the loss. A plain `CrossEntropyLoss`
+            # (mean over tokens) would ignore the count and leave both losses unchanged.
+            n = int((lbl != -100).sum())
+            with torch.no_grad():
+                out = model(encoder_outputs=encoder_outputs, labels=lbl, num_items_in_batch=n, use_cache=False)
+                loss_2n = model(
+                    encoder_outputs=encoder_outputs, labels=lbl, num_items_in_batch=2 * n, use_cache=False
+                ).loss
+            self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, lbl)))
+            self.assertFalse(torch.allclose(out.loss, double_shift_ce(out.logits, lbl)))
+            self.assertTrue(torch.allclose(out.loss, 2 * loss_2n))
+
+        # A caller supplied `shift_labels` is popped out of `kwargs` and used verbatim, rather than colliding
+        # with the one `forward` derives from `labels`.
+        caller_shift_labels = labels.roll(shifts=1, dims=1)
+        with torch.no_grad():
+            out = model(
+                encoder_outputs=encoder_outputs, labels=labels, shift_labels=caller_shift_labels, use_cache=False
+            )
+        self.assertTrue(torch.allclose(out.loss, aligned_ce(out.logits, caller_shift_labels)))
+        self.assertFalse(torch.allclose(out.loss, aligned_ce(out.logits, labels)))
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -200,8 +242,8 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            if "past_key_values" in outputs:
-                correct_outlen += 1  # past_key_values have been returned
+            if "cache" in outputs:
+                correct_outlen += 1  # cache have been returned
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -420,6 +462,13 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "Model expects decoder inputs to be of certain shape and thus we cannot test scaling with long inputs"
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch

@@ -60,6 +60,17 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         shutil.rmtree(old_tmpdirname, ignore_errors=True)
 
+    def test_popped_marker_tokens_are_consistent(self):
+        # Regression test: __init__ pops the space/line marker tokens from `_added_tokens_decoder` but used to
+        # leave them in the `_added_tokens_encoder` cache, so `convert_tokens_to_ids` returned ids that no longer
+        # existed in the decoder.
+        tokenizer = CpmAntTokenizer(self.vocab_file)
+        decoder_contents = [token.content for token in tokenizer._added_tokens_decoder.values()]
+        for marker in ["</_>", "</n>"]:
+            self.assertNotIn(marker, tokenizer._added_tokens_encoder)
+            self.assertNotIn(marker, decoder_contents)
+        self.assertEqual(tokenizer._added_tokens_encoder, tokenizer.added_tokens_encoder)
+
     @tooslow
     def test_pre_tokenization(self):
         tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")

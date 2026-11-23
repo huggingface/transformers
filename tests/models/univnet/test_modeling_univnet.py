@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -41,28 +42,23 @@ if is_torch_available():
     from transformers import UnivNetModel
 
 
-class UnivNetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=7,
-        in_channels=8,
-        hidden_channels=8,
-        num_mel_bins=20,
-        kernel_predictor_hidden_channels=8,
-        seed=0,
-        is_training=False,
-    ):
+class UnivNetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 7,
+        "in_channels": 8,
+        "hidden_channels": 8,
+        "num_mel_bins": 20,
+        "kernel_predictor_hidden_channels": 8,
+        "seed": 0,
+        "is_training": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.in_channels = in_channels
-        self.hidden_channels = hidden_channels
-        self.num_mel_bins = num_mel_bins
-        self.kernel_predictor_hidden_channels = kernel_predictor_hidden_channels
-        self.seed = seed
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_noise_sequence(self):
         generator = torch.manual_seed(self.seed)
@@ -99,6 +95,8 @@ class UnivNetModelTester:
 
 @require_torch
 class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = UnivNetModelTester
+
     all_model_classes = (UnivNetModel,) if is_torch_available() else ()
     # UnivNetModel currently cannot be traced with torch.jit.trace.
     # The UnivNetModel is not a transformer and does not use any attention mechanisms, so skip transformer/attention
@@ -118,10 +116,6 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(
             self, config_class=UnivNetConfig, has_text_modality=False, common_properties=["num_mel_bins"]
         )
-
-    @unittest.skip(reason="fix this once it gets more usage")
-    def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
 
     def test_config(self):
         self.config_tester.run_common_tests()

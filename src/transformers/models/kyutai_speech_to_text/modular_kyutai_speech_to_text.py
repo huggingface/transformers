@@ -24,11 +24,13 @@ from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import PaddingStrategy, TensorType, logging
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel
 from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
+from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -239,7 +241,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
         audio_tokens_offsets = nn.functional.pad(
             audio_tokens_offsets, (1, 0)
         )  # pad one 0 to the left for the text token
-        self.register_buffer("audio_tokens_offsets", audio_tokens_offsets, persistent=False)
+        self.audio_tokens_offsets = nn.Buffer(audio_tokens_offsets, persistent=False)
 
     def forward(self, input_ids):
         input_ids = torch.where(
@@ -251,7 +253,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
 
 
 class KyutaiSpeechToTextModel(MoshiModel):
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
@@ -261,9 +263,9 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
-        self.codec_model = AutoModel.from_config(config.codec_config)
+        self.codec_model = AutoModel.from_config(config.codec_config).to(dtype=torch.float32)
 
         # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
         # yet the codec_model needs a generation config to initialize it's cache for streaming inference
@@ -272,11 +274,6 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def forward(self, **super_kwargs):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -369,23 +366,23 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
             max_cache_length=self.config.codec_config.sliding_window,
         )
 
-        if "past_key_values" in temporary_model_kwargs:
-            model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
+        if "cache" in temporary_model_kwargs:
+            model_kwargs["encoder_cache"] = temporary_model_kwargs["cache"]
 
         # initialize the padding cache for the codec model
         per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
-        for layer_name in self.codec_model.encoder._mimiconv1d_layer_names:
-            per_layer_padding.append(self.codec_model.encoder.get_submodule(layer_name).padding_total)
-            per_layer_padding_mode.append(self.codec_model.encoder.get_submodule(layer_name).pad_mode)
-            per_layer_in_channels.append(self.codec_model.encoder.get_submodule(layer_name).in_channels)
+        for layer_name in self.codec_model.encoder.encoder_seanet._conv1d_layer_names:
+            per_layer_padding.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).padding_total)
+            per_layer_padding_mode.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).pad_mode)
+            per_layer_in_channels.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).in_channels)
 
         # downsample layer
-        per_layer_padding.append(self.codec_model.downsample.padding_total)
-        per_layer_padding_mode.append(self.codec_model.downsample.pad_mode)
-        per_layer_in_channels.append(self.codec_model.downsample.in_channels)
+        per_layer_padding.append(self.codec_model.encoder.downsample.padding_total)
+        per_layer_padding_mode.append(self.codec_model.encoder.downsample.pad_mode)
+        per_layer_in_channels.append(self.codec_model.encoder.downsample.in_channels)
 
         model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache(
-            num_layers=len(self.codec_model.encoder._mimiconv1d_layer_names) + 1,
+            num_layers=len(self.codec_model.encoder.encoder_seanet._conv1d_layer_names) + 1,
             per_layer_padding=per_layer_padding,
             per_layer_padding_mode=per_layer_padding_mode,
             per_layer_in_channels=per_layer_in_channels,
@@ -393,26 +390,30 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         return inputs, input_name, model_kwargs
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def prepare_inputs_for_generation(
         self,
         *args,
         audio_tokens: torch.LongTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.Tensor | None = None,
         audio_window_size: int | None = None,
         current_window: tuple[int, int] | None = None,
-        encoder_past_key_values: Cache | None = None,
+        encoder_cache: Cache | None = None,
         padding_cache: KyutaiSpeechToTextConv1dPaddingCache | None = None,
         **kwargs,
     ):
         model_inputs = GenerationMixin.prepare_inputs_for_generation(self, *args, **kwargs)
 
         if input_values is not None:
-            cache_position = model_inputs["cache_position"]
+            seqlen, device = model_inputs["position_ids"].shape[-1], model_inputs["position_ids"].device
+            cache = model_inputs.get("cache")
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            positions = torch.arange(seqlen, device=device) + past_seen_tokens
             start, end = current_window[0]
 
             # first cache position is for bos token, so we need to offset by -1
-            if cache_position[-1] - 1 >= end:
+            if positions[-1] - 1 >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():
                     input_values_start_idx = start * self.config.frame_size
@@ -420,12 +421,14 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                     current_input_values = input_values[..., input_values_start_idx:input_values_end_idx]
                     codec_model_output = self.codec_model.encode(
                         current_input_values,
-                        encoder_past_key_values=encoder_past_key_values,
+                        encoder_cache=encoder_cache,
                         padding_cache=padding_cache,
                     )
                     new_audio_tokens = codec_model_output.audio_codes.transpose(1, 2)
 
-                audio_tokens.copy_(new_audio_tokens)
+                # last window can be shorter than audio_window_size, copy only the overlap
+                n = min(audio_tokens.shape[1], new_audio_tokens.shape[1])
+                audio_tokens[:, :n].copy_(new_audio_tokens[:, :n])
 
                 start = end.clone()
                 end = end + audio_window_size
@@ -434,10 +437,10 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                 )
 
             # first cache position is for bos token, so we need to offset by -1
-            current_audio_tokens_idxs = (cache_position - start - 1).clamp(min=0)
+            current_audio_tokens_idxs = (positions - start - 1).clamp(min=0)
             current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
 
-            current_audio_tokens[:, cache_position == 0, :] = self.config.audio_bos_token_id
+            current_audio_tokens[:, positions == 0, :] = self.config.audio_bos_token_id
 
             input_ids = model_inputs.pop("input_ids")
             input_ids = torch.cat(

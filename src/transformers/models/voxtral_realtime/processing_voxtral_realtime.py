@@ -12,21 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
+
 from ...tokenization_mistral_common import MistralCommonBackend
-from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
+from ...utils import auto_docstring, is_mistral_common_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
-if is_torch_available():
-    pass
-
-if is_soundfile_available():
-    pass
-
 if is_mistral_common_available():
-    from mistral_common.audio import Audio
-    from mistral_common.protocol.instruct.chunk import RawAudio
     from mistral_common.protocol.transcription.request import StreamingMode, TranscriptionRequest
+    from mistral_common.tokens.tokenizers.audio import Audio
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -36,23 +32,18 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 logger = logging.get_logger(__name__)
 
 
-class VoxtralRealtimeProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "add_special_tokens": False,
-        },
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-            "padding": True,
-            "truncation": False,
-        },
-    }
-
-
 @auto_docstring
 @requires(backends=("mistral-common",))
 class VoxtralRealtimeProcessor(ProcessorMixin):
+    text_kwargs = {
+        "padding": True,
+        "add_special_tokens": False,
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "padding": True,
+    }
+
     def __init__(self, feature_extractor, tokenizer):
         if not isinstance(tokenizer, MistralCommonBackend):
             raise ValueError("`tokenizer` must be a `MistralCommonBackend` tokenizer.")
@@ -88,16 +79,20 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
             )
 
     @property
+    def model_input_names(self):
+        return super().model_input_names + ["num_delay_tokens"]
+
+    @property
     def mistral_common_audio_config(self):
         return self.tokenizer.tokenizer.instruct_tokenizer.audio_encoder.audio_config
 
     @property
     def num_delay_tokens(self):
-        return self.mistral_common_audio_config.num_delay_tokens
+        return self.mistral_common_audio_config.get_num_delay_tokens()
 
     @property
     def num_right_pad_tokens(self):
-        return self.mistral_common_audio_config.n_right_pad_tokens
+        return self.mistral_common_audio_config.n_right_pad_tokens()
 
     @property
     def audio_length_per_tok(self):
@@ -133,7 +128,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         audio: AudioInput | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
-        **kwargs: Unpack[VoxtralRealtimeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         Main method to prepare audio input for the Voxtral Realtime model. This method encodes the audio into
@@ -160,31 +155,44 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
             - **input_features** -- Mel spectrogram features extracted from the audio input.
             - **num_delay_tokens** -- The number of delay tokens used for streaming.
         """
-        output_kwargs = self._merge_kwargs(VoxtralRealtimeProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
 
         if not is_streaming and not is_first_audio_chunk:
             raise ValueError("In non-streaming mode (`is_streaming=False`), `is_first_audio_chunk` must be `True`.")
 
         audio = make_list_of_audio(audio)
-        input_ids, texts, audio_arrays = [], [], []
+        input_ids, audio_arrays = [], []
         if is_first_audio_chunk:
+            instruct_tokenizer = self.tokenizer.tokenizer.instruct_tokenizer
+            audio_encoder = instruct_tokenizer.audio_encoder
             for audio_el in audio:
-                # NOTE: format here is used only for serialization and therefore we can use wav for any audio array
-                audio = Audio(
-                    audio_array=audio_el, sampling_rate=output_kwargs["audio_kwargs"]["sampling_rate"], format="wav"
-                )
-                transcription_request = TranscriptionRequest(
-                    audio=RawAudio.from_audio(audio),
-                    streaming=StreamingMode.ONLINE if is_streaming else StreamingMode.OFFLINE,
-                    language=None,
-                )
-                tokenized_transcription_request = self.tokenizer.tokenizer.encode_transcription(transcription_request)
+                if is_streaming:
+                    # Online streaming: build the prefill prompt and left padding from the audio encoder
+                    # primitives instead of an audio-carrying `TranscriptionRequest`.
+                    left_pad, _ = audio_encoder.get_padding_audio()
+                    tokens = instruct_tokenizer.start() + audio_encoder.encode_streaming_tokens()
+                    audio_arrays.append(np.concatenate((left_pad.audio_array, audio_el)))
+                else:
+                    # NOTE: format here is used only for serialization and therefore we can use wav for any audio array
+                    audio_obj = Audio(
+                        audio_array=audio_el,
+                        sampling_rate=output_kwargs["audio_kwargs"]["sampling_rate"],
+                        format="wav",
+                    )
+                    transcription_request = TranscriptionRequest(
+                        audio=audio_obj.to_base64(audio_obj.format),
+                        streaming=StreamingMode.OFFLINE,
+                        language=None,
+                    )
+                    tokenized_transcription_request = self.tokenizer.tokenizer.encode_transcription(
+                        transcription_request
+                    )
+                    tokens = tokenized_transcription_request.tokens
+                    audio_arrays.extend([el.audio_array for el in tokenized_transcription_request.audios])
 
-                input_ids.append(tokenized_transcription_request.tokens)
-                texts.append(tokenized_transcription_request.text)
-                audio_arrays.extend([el.audio_array for el in tokenized_transcription_request.audios])
+                input_ids.append(tokens)
 
-                text_encoding = self.tokenizer(input_ids, **output_kwargs["text_kwargs"])
+            text_encoding = self.tokenizer(input_ids, **output_kwargs["text_kwargs"])
         else:
             # when not the first audio chunk, we only encode audio
             audio_arrays = audio
@@ -201,5 +209,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return BatchFeature(data=encoding, tensor_type=return_tensors)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VoxtralRealtimeProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VoxtralRealtimeProcessor"]

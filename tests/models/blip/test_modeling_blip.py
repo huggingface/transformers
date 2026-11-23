@@ -31,6 +31,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -61,44 +62,37 @@ if is_vision_available():
     from transformers import BlipProcessor
 
 
-class BlipVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=1e-10,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class BlipVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 1e-10,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -148,13 +142,15 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = BlipVisionModelTester
+
     all_model_classes = (BlipVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = BlipVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlipVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BlipVisionConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -211,46 +207,33 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class BlipTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        bos_token_id=0,
-        scope=None,
-    ):
+class BlipTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "bos_token_id": 0,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.bos_token_id = bos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -304,11 +287,13 @@ class BlipTextModelTester:
 
 @require_torch
 class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = BlipTextModelTester
+
     all_model_classes = (BlipTextModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = BlipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BlipTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -332,18 +317,31 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class BlipModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class BlipModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_values = BlipTextModelTester.get_small_config_defaults(**(text_kwargs or {}))
+        values["batch_size"] = text_values["batch_size"]  # need bs for batching_equivalence test
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
             vision_kwargs = {}
 
         self.parent = parent
+        for key, value in self.get_small_config_defaults(text_kwargs=text_kwargs, **kwargs).items():
+            setattr(self, key, value)
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -385,12 +383,12 @@ class BlipModelTester:
 
 @require_torch
 class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = BlipModelTester
+
     all_model_classes = (BlipModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BlipModel,
-            "image-to-text": BlipForConditionalGeneration,
-            "visual-question-answering": BlipForQuestionAnswering,
             "image-text-to-text": BlipForConditionalGeneration,
         }
         if is_torch_available()
@@ -509,18 +507,31 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         )
 
 
-class BlipTextRetrievalModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class BlipTextRetrievalModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_values = BlipTextModelTester.get_small_config_defaults(**(text_kwargs or {}))
+        values["batch_size"] = text_values["batch_size"]  # need bs for batching_equivalence test
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
             vision_kwargs = {}
 
         self.parent = parent
+        for key, value in self.get_small_config_defaults(text_kwargs=text_kwargs, **kwargs).items():
+            setattr(self, key, value)
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -559,19 +570,32 @@ class BlipTextRetrievalModelTester:
         return config, inputs_dict
 
 
-class BlipTextImageModelsModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class BlipTextImageModelsModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_values = BlipTextModelTester.get_small_config_defaults(**(text_kwargs or {}))
+        values["batch_size"] = text_values["batch_size"]  # need bs for batching_equivalence test
+        values["seq_length"] = text_values["seq_length"]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
             vision_kwargs = {}
 
         self.parent = parent
+        for key, value in self.get_small_config_defaults(text_kwargs=text_kwargs, **kwargs).items():
+            setattr(self, key, value)
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length
-        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -610,18 +634,31 @@ class BlipTextImageModelsModelTester:
         return config, inputs_dict
 
 
-class BlipVQAModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class BlipVQAModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_values = BlipTextModelTester.get_small_config_defaults(**(text_kwargs or {}))
+        values["batch_size"] = text_values["batch_size"]  # need bs for batching_equivalence test
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
             vision_kwargs = {}
 
         self.parent = parent
+        for key, value in self.get_small_config_defaults(text_kwargs=text_kwargs, **kwargs).items():
+            setattr(self, key, value)
         self.text_model_tester = BlipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BlipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -654,10 +691,10 @@ class BlipVQAModelTester:
         config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "decoder_input_ids": input_ids,
+            "decoder_input_ids": input_ids.clone(),
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "labels": input_ids,
+            "labels": input_ids.clone(),
         }
         return config, inputs_dict
 
@@ -665,6 +702,8 @@ class BlipVQAModelTester:
 @require_torch
 @require_vision
 class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = BlipVQAModelTester
+
     all_model_classes = (BlipForQuestionAnswering,) if is_torch_available() else ()
     # Doesn't run generation tests due to custom generation logic -- won't fix
     all_generative_model_classes = ()
@@ -743,6 +782,8 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = BlipTextRetrievalModelTester
+
     all_model_classes = (BlipForImageTextRetrieval,) if is_torch_available() else ()
 
     test_resize_embeddings = True
@@ -823,7 +864,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
@@ -857,6 +898,8 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = BlipTextImageModelsModelTester
+
     all_model_classes = (BlipForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests due to custom generation logic -- wont fix
     all_generative_model_classes = ()
@@ -939,7 +982,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 

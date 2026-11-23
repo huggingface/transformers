@@ -208,7 +208,7 @@ def load_model_state_dict(input_path: str) -> dict:
     if os.path.exists(index_path):
         print("Loading sharded model...")
         state_dict = {}
-        with open(index_path, "r") as f:
+        with open(index_path, "r", encoding="utf-8") as f:
             index = json.load(f)
 
         # Get unique shard files and load each one only once

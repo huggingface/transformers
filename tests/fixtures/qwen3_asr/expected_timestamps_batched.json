@@ -1,0 +1,194 @@
+[
+  {
+    "language": "English",
+    "text": "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+    "time_stamps": [
+      {
+        "text": "Mr",
+        "start_time": 0.56,
+        "end_time": 0.8
+      },
+      {
+        "text": "Quilter",
+        "start_time": 0.8,
+        "end_time": 1.28
+      },
+      {
+        "text": "is",
+        "start_time": 1.28,
+        "end_time": 1.44
+      },
+      {
+        "text": "the",
+        "start_time": 1.44,
+        "end_time": 1.52
+      },
+      {
+        "text": "apostle",
+        "start_time": 1.52,
+        "end_time": 2.08
+      },
+      {
+        "text": "of",
+        "start_time": 2.08,
+        "end_time": 2.32
+      },
+      {
+        "text": "the",
+        "start_time": 2.32,
+        "end_time": 2.32
+      },
+      {
+        "text": "middle",
+        "start_time": 2.32,
+        "end_time": 2.56
+      },
+      {
+        "text": "classes",
+        "start_time": 2.56,
+        "end_time": 3.28
+      },
+      {
+        "text": "and",
+        "start_time": 3.36,
+        "end_time": 3.52
+      },
+      {
+        "text": "we",
+        "start_time": 3.52,
+        "end_time": 3.6
+      },
+      {
+        "text": "are",
+        "start_time": 3.6,
+        "end_time": 3.68
+      },
+      {
+        "text": "glad",
+        "start_time": 3.68,
+        "end_time": 4.08
+      },
+      {
+        "text": "to",
+        "start_time": 4.16,
+        "end_time": 4.16
+      },
+      {
+        "text": "welcome",
+        "start_time": 4.16,
+        "end_time": 4.64
+      },
+      {
+        "text": "his",
+        "start_time": 4.64,
+        "end_time": 4.8
+      },
+      {
+        "text": "gospel",
+        "start_time": 4.8,
+        "end_time": 5.44
+      }
+    ]
+  },
+  {
+    "language": "Chinese",
+    "text": "你好，世界！人工智能正在改变我们的生活方式。",
+    "time_stamps": [
+      {
+        "text": "你",
+        "start_time": 0.0,
+        "end_time": 0.08
+      },
+      {
+        "text": "好",
+        "start_time": 0.08,
+        "end_time": 0.24
+      },
+      {
+        "text": "世",
+        "start_time": 0.24,
+        "end_time": 0.48
+      },
+      {
+        "text": "界",
+        "start_time": 0.48,
+        "end_time": 0.72
+      },
+      {
+        "text": "人",
+        "start_time": 1.04,
+        "end_time": 1.28
+      },
+      {
+        "text": "工",
+        "start_time": 1.28,
+        "end_time": 1.44
+      },
+      {
+        "text": "智",
+        "start_time": 1.44,
+        "end_time": 1.68
+      },
+      {
+        "text": "能",
+        "start_time": 1.68,
+        "end_time": 1.92
+      },
+      {
+        "text": "正",
+        "start_time": 1.92,
+        "end_time": 2.08
+      },
+      {
+        "text": "在",
+        "start_time": 2.08,
+        "end_time": 2.24
+      },
+      {
+        "text": "改",
+        "start_time": 2.24,
+        "end_time": 2.48
+      },
+      {
+        "text": "变",
+        "start_time": 2.48,
+        "end_time": 2.64
+      },
+      {
+        "text": "我",
+        "start_time": 2.64,
+        "end_time": 2.64
+      },
+      {
+        "text": "们",
+        "start_time": 2.8,
+        "end_time": 2.88
+      },
+      {
+        "text": "的",
+        "start_time": 2.88,
+        "end_time": 3.04
+      },
+      {
+        "text": "生",
+        "start_time": 3.04,
+        "end_time": 3.2
+      },
+      {
+        "text": "活",
+        "start_time": 3.2,
+        "end_time": 3.36
+      },
+      {
+        "text": "方",
+        "start_time": 3.36,
+        "end_time": 3.6
+      },
+      {
+        "text": "式",
+        "start_time": 3.6,
+        "end_time": 3.92
+      }
+    ]
+  }
+]

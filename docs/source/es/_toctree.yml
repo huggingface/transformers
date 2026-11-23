@@ -7,6 +7,8 @@
     title: Instalación
   title: Empezar
 - sections:
+  - local: conversations
+    title: Conceptos básicos de chat
   - local: pipeline_tutorial
     title: Pipelines para inferencia
   - local: autoclass_tutorial
@@ -56,8 +58,6 @@
     title: Crea una arquitectura personalizada
   - local: custom_models
     title: Compartir modelos personalizados
-  - local: run_scripts
-    title: Entrenamiento con scripts
   - local: chat_templating
     title: Plantillas para Modelos de Chat
   - local: trainer
@@ -72,6 +72,8 @@
     title: Descripción general
   - local: debugging
     title: Debugging
+  - local: torch_compile
+    title: torch.compile
   title: Rendimiento y escalabilidad
 - sections:
   - local: add_new_pipeline

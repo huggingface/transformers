@@ -170,7 +170,7 @@ class NllbMoeModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -181,9 +181,7 @@ class NllbMoeModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -234,9 +232,6 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "feature-extraction": NllbMoeModel,
-            "summarization": NllbMoeForConditionalGeneration,
-            "text2text-generation": NllbMoeForConditionalGeneration,
-            "translation": NllbMoeForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -341,7 +336,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         pass
 
     @unittest.skip(reason="This is broken now, no idea why")
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         pass
 
 
@@ -372,7 +367,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
 
     @cached_property
     def big_model(self):
-        return NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe-54b")
+        return NllbMoeForConditionalGeneration.from_pretrained("hf-internal-testing/nllb-moe-54b-safetensors")
 
     def inference_no_head(self):
         model = NllbMoeModel.from_pretrained("hf-internal-testing/random-nllb-moe-2-experts").eval()
@@ -422,7 +417,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
     @unittest.skip(reason="This requires 300GB of RAM")
     def test_seq_to_seq_generation(self):
         model = self.big_model
-        tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe-54b")
+        tokenizer = NllbTokenizer.from_pretrained("hf-internal-testing/nllb-moe-54b-safetensors")
 
         # first 6 samples of load_dataset("facebook/flores", "eng_Latn-fra_Latn"), devtest. Truth are very similar to the fairseq translation files
         FIRST_6_FLORES_200 = [

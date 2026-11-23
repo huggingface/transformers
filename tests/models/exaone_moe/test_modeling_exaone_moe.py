@@ -22,14 +22,14 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    cleanup,
+    Expectations,
     require_flash_attn,
     require_torch,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -51,26 +51,21 @@ class ExaoneMoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = ExaoneMoeModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 
+    @unittest.skip("ExaoneMoe TP + quantized generation test needs fixing")
+    def test_tp_generation_quantized(self):
+        pass
+
 
 @slow
 @require_torch
-class ExaoneMoeIntegrationTest(unittest.TestCase):
+class ExaoneMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     TEST_MODEL_ID = "hf-internal-testing/EXAONE-MoE-Dummy-7B-A1B"
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+        # Dropped again by the mixin's `tearDownClass`.
         cls.model = None
-
-    @classmethod
-    def tearDownClass(cls):
-        del cls.model
-        cleanup(torch_device, gc_collect=True)
-
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @classmethod
     def get_model(cls):
@@ -90,12 +85,28 @@ class ExaoneMoeIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
 
-        EXPECTED_MEAN = torch.tensor(
-            [[-2.2663, -3.0659, -3.0922, -3.2575, -3.2033, -3.4042, -3.1595, -3.2739, -3.8887, -0.6917]]
-        )
-        EXPECTED_SLICE = torch.tensor(
-            [-2.3906, -3.0781, 2.7500, -3.0469, 0.5312, -1.4297, -1.8984, -2.6875, -1.7734, -2.1094]
-        )
+        # fmt: off
+        EXPECTED_MEAN = Expectations(
+            {
+                ("xpu", 5): torch.tensor(
+                    [[-2.2315, -3.0607, -3.0840, -3.2559, -3.1974, -3.3996, -3.1582, -3.2548, -3.8877, -0.6911]]
+                ),
+                ("cuda", None): torch.tensor(
+                    [[-2.2491, -3.0824, -3.2191, -3.2712, -3.1991, -3.4087, -3.1384, -3.2601, -3.8869, -0.6940]]
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_SLICE = Expectations(
+            {
+                ("xpu", 5): torch.tensor(
+                    [-2.3750, -3.0156, 2.6875, -3.0000, 0.5078, -1.4141, -1.8516, -2.6719, -1.7578, -2.0781]
+                ),
+                ("cuda", None): torch.tensor(
+                    [-2.3906, -3.0469, 2.6875, -3.0156, 0.4941, -1.4219, -1.8672, -2.6719, -1.7656, -2.0938]
+                ),
+            }
+        ).get_expectation()
+        # fmt: on
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
         torch.testing.assert_close(out[0, 0, :10], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
 

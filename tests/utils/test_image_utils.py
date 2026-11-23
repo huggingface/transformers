@@ -11,16 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import base64
 import codecs
 import unittest
 
-import httpx
 import numpy as np
 import pytest
 from huggingface_hub.file_download import hf_hub_download
+from huggingface_hub.utils import httpx
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
-from transformers import is_torch_available, is_vision_available
+from transformers import is_torch_available, is_torchvision_available, is_vision_available
 from transformers.image_utils import (
     ChannelDimension,
     get_channel_dimension_axis,
@@ -28,7 +29,7 @@ from transformers.image_utils import (
     make_list_of_images,
     make_nested_list_of_images,
 )
-from transformers.testing_utils import is_flaky, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
 
 if is_torch_available():
@@ -39,6 +40,9 @@ if is_vision_available():
 
     from transformers import ImageFeatureExtractionMixin
     from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
+
+if is_torchvision_available():
+    from transformers.image_utils import load_image_as_tensor
 
 
 def get_image_from_hub_dataset(dataset_id: str, filename: str, revision: str | None = None) -> "PIL.Image.Image":
@@ -717,11 +721,11 @@ class LoadImageTester(unittest.TestCase):
         img = load_image(INVOICE_URL)
         img_arr = np.array(img)
 
-        self.assertEqual(img_arr.shape, (1061, 750, 3))
+        self.assertEqual(img_arr.shape, (1200, 900, 3))
 
-    @is_flaky()
     def test_load_img_url_timeout(self):
-        with self.assertRaises(httpx.ConnectTimeout):
+        # The connection may complete within the timeout (e.g. through a local proxy), giving a `ReadTimeout`
+        with self.assertRaises(httpx.TimeoutException):
             load_image(INVOICE_URL, timeout=0.001)
 
     def test_load_img_local(self):
@@ -823,6 +827,25 @@ class LoadImageTester(unittest.TestCase):
             (500, 333, 3),
         )
 
+    @require_torchvision
+    def test_load_image_as_tensor_exif_transpose(self):
+        path = hf_hub_download("hf-internal-testing/fixtures_image_utils", "cat-rotated.jpg", repo_type="dataset")
+        with open(path, "rb") as f:
+            raw = f.read()
+        sources = {
+            "path": path,
+            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/cat-rotated.jpg",
+            "base64": base64.b64encode(raw).decode(),
+            "pil": PIL.Image.open(path),
+        }
+        for name, source in sources.items():
+            with self.subTest(source=name):
+                pil_tensor = torch.from_numpy(np.array(load_image(source))).permute(2, 0, 1)
+                tensor = load_image_as_tensor(source)
+                self.assertEqual(tuple(tensor.shape), (3, 500, 333))
+                self.assertEqual(tuple(pil_tensor.shape), (3, 500, 333))
+                self.assertLess((tensor.int() - pil_tensor.int()).abs().float().mean().item(), 2)
+
 
 class UtilFunctionTester(unittest.TestCase):
     def test_get_image_size(self):
@@ -836,6 +859,14 @@ class UtilFunctionTester(unittest.TestCase):
         # Test the channel dimension can be overridden
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
+
+    @require_vision
+    def test_get_image_size_pil(self):
+        # Test we can infer the size and channel dimension of a PIL image.
+        image = get_random_image(32, 64)
+        self.assertEqual(get_image_size(image), (32, 64))
+        # Channel dimension is ignored for PIL images
+        self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (32, 64))
 
     def test_infer_channel_dimension(self):
         # Test we fail with invalid input

@@ -26,9 +26,10 @@ from transformers import (
     VibeVoiceAcousticTokenizerConfig,
     VibeVoiceAcousticTokenizerModel,
 )
-from transformers.audio_utils import load_audio_librosa
+from transformers.audio_utils import load_audio
 from transformers.testing_utils import cleanup, is_torch_available, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
@@ -38,28 +39,24 @@ if is_torch_available():
 
 
 @require_torch
-class VibeVoiceAcousticTokenizerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        channels=1,
-        hidden_size=32,
-        kernel_size=3,
-        n_filters=4,
-        downsampling_ratios=[2],
-        depths=[1, 1],
-        is_training=False,
-    ):
+class VibeVoiceAcousticTokenizerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "channels": 1,
+        "hidden_size": 32,
+        "kernel_size": 3,
+        "n_filters": 4,
+        "downsampling_ratios": [2],
+        "depths": [1, 1],
+        "is_training": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.channels = channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.kernel_size = kernel_size
-        self.n_filters = n_filters
-        self.downsampling_ratios = downsampling_ratios
-        self.depths = depths
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.channels, self.hidden_size], scale=1.0)
@@ -104,14 +101,16 @@ class VibeVoiceAcousticTokenizerModelTester:
 
 @require_torch
 class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = VibeVoiceAcousticTokenizerModelTester
+
     all_model_classes = (VibeVoiceAcousticTokenizerModel,) if is_torch_available() else ()
     is_encoder_decoder = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_pruning = False
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
+    has_attentions = False
+    _is_composite = True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -168,7 +167,11 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip("VibeVoiceAcousticTokenizerModel does not has no attribute `hf_device_map`")
+    @unittest.skip("VibeVoiceAcousticTokenizerModel has no attention mechanisms")
+    def test_can_set_attention_dynamically_composite_model(self):
+        pass
+
+    @unittest.skip("VibeVoiceAcousticTokenizerModel has composite structure with encoder/decoder")
     def test_model_parallelism(self):
         pass
 
@@ -288,7 +291,7 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
 class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "bezzam/VibeVoice-AcousticTokenizer"
+        self.model_checkpoint = "microsoft/VibeVoice-AcousticTokenizer"
         self.sampling_rate = 24000
 
     def tearDown(self):
@@ -306,27 +309,31 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
 
         # Load expected outputs
         RESULTS_PATH = (
-            Path(__file__).parent.parent.parent / "fixtures/vibevoice/expected_acoustic_tokenizer_results.json"
+            Path(__file__).parent.parent.parent / "fixtures/vibevoice_acoustic_tokenizer/expected_results.json"
         )
-        with open(RESULTS_PATH, "r") as f:
+        with open(RESULTS_PATH, "r", encoding="utf-8") as f:
             expected_results = json.load(f)
-        expected_encoder = torch.tensor(expected_results["encoder"]).to(dtype)
-        expected_decoder = torch.tensor(expected_results["decoder"]).to(dtype)
+
+        # Get device-specific expected results
+        device_key = torch_device if torch_device in expected_results else "cuda"
+        device_results = expected_results[device_key]
+        expected_encoder = torch.tensor(device_results["encoder"]).to(dtype)
+        expected_decoder = torch.tensor(device_results["decoder"]).to(dtype)
 
         # Prepare inputs
         audio_paths = [
-            "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
-            "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Carter_man.wav",
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Frank_man.wav",
         ]
-        audio_arrays = [load_audio_librosa(path, sampling_rate=self.sampling_rate) for path in audio_paths]
+        audio_arrays = [load_audio(path, sampling_rate=self.sampling_rate) for path in audio_paths]
         feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_checkpoint)
 
         # apply model and compare
         model = AutoModel.from_pretrained(
             self.model_checkpoint,
             dtype=dtype,
-            device_map=torch_device,
-        ).eval()
+            device_map="auto",
+        )
         processed_audio = feature_extractor(audio_arrays, sampling_rate=self.sampling_rate).to(
             torch_device, dtype=dtype
         )

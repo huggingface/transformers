@@ -27,6 +27,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -46,54 +47,45 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class Dinov2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        scope=None,
-        attn_implementation="eager",
-        mask_ratio=0.5,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.attn_implementation = attn_implementation
-        self.mask_ratio = mask_ratio
+class Dinov2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "scope": None,
+        "attn_implementation": "eager",
+        "mask_ratio": 0.5,
+        "use_swiglu_ffn": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in Dinov2, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-        self.num_masks = int(self.mask_ratio * self.seq_length)
-        self.mask_length = num_patches
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        values["num_masks"] = int(values["mask_ratio"] * values["seq_length"])
+        values["mask_length"] = num_patches
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -121,6 +113,7 @@ class Dinov2ModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             attn_implementation=self.attn_implementation,
+            use_swiglu_ffn=self.use_swiglu_ffn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -213,6 +206,8 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = Dinov2ModelTester
+
     all_model_classes = (
         (
             Dinov2Model,
@@ -230,9 +225,15 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
 
+    def test_reverse_loading_mapping(self):
+        # Force the SwiGLU MLP: weights_in/weights_out -> gate/up/down is the only MLP path with a converter rule.
+        # Plain fc1/fc2 needs no rule and round-trips via test_save_load on the default config.
+        self.model_tester.use_swiglu_ffn = True
+        super().test_reverse_loading_mapping()
+
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -327,6 +328,8 @@ class Dinov2ModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = Dinov2ModelTester
+
     all_model_classes = (Dinov2Backbone,) if is_torch_available() else ()
     config_class = Dinov2Config
 

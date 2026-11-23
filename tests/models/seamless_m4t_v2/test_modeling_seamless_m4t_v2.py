@@ -17,16 +17,21 @@ import copy
 import tempfile
 import unittest
 from functools import cached_property
+from unittest.mock import patch
 
 import pytest
+from parameterized import parameterized
 
 from transformers import SeamlessM4Tv2Config, is_speech_available, is_torch_available
 from transformers.testing_utils import require_speech, require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -48,119 +53,74 @@ if is_speech_available():
     from transformers import SeamlessM4TProcessor
 
 
-class SeamlessM4Tv2ModelTester:
-    def __init__(
-        self,
-        parent,
-        input_modality="speech",
-        batch_size=2,
-        seq_length=4,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        max_new_tokens=None,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-        vocab_size=20,
-        t2u_vocab_size=20,
-        hidden_size=6,
-        num_hidden_layers=2,
-        intermediate_size=6,
-        max_position_embeddings=256,
-        encoder_layers=2,
-        decoder_layers=2,
-        encoder_ffn_dim=6,
-        decoder_ffn_dim=6,
-        encoder_layerdrop=0.0,
-        speech_encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
-        t2u_encoder_layers=2,
-        t2u_decoder_layers=2,
-        t2u_encoder_ffn_dim=6,
-        t2u_decoder_ffn_dim=6,
-        num_heads=2,
-        vocoder_num_spkrs=5,
-        vocoder_num_langs=5,
-        upsample_initial_channel=32,
-        unit_embed_dim=25,
-        spkr_embed_dim=6,
-        lang_embed_dim=6,
-        num_conv_pos_embeddings=8,
-        unit_hifi_gan_vocab_size=20,
-        t2u_num_langs=0,
-        t2u_offset_tgt_lang=0,
-        vocoder_offset=0,
-        t2u_variance_predictor_hidden_dim=4,
-        char_vocab_size=4,
-        left_max_position_embeddings=2,
-        right_max_position_embeddings=1,
-        speech_encoder_chunk_size=2,
-        speech_encoder_left_chunk_num=1,
-    ):
+class SeamlessM4Tv2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "input_modality": "speech",
+        "batch_size": 2,
+        "seq_length": 4,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": True,
+        "use_labels": True,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "initializer_range": 0.02,
+        "max_new_tokens": None,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+        "vocab_size": 20,
+        "t2u_vocab_size": 20,
+        "hidden_size": 6,
+        "num_hidden_layers": 2,
+        "intermediate_size": 6,
+        "max_position_embeddings": 256,
+        "encoder_layers": 2,
+        "decoder_layers": 2,
+        "encoder_ffn_dim": 6,
+        "decoder_ffn_dim": 6,
+        "encoder_layerdrop": 0.0,
+        "speech_encoder_layerdrop": 0.0,
+        "decoder_layerdrop": 0.0,
+        "t2u_encoder_layers": 2,
+        "t2u_decoder_layers": 2,
+        "t2u_encoder_ffn_dim": 6,
+        "t2u_decoder_ffn_dim": 6,
+        "num_heads": 2,
+        "vocoder_num_spkrs": 5,
+        "vocoder_num_langs": 5,
+        "upsample_initial_channel": 32,
+        "unit_embed_dim": 25,
+        "spkr_embed_dim": 6,
+        "lang_embed_dim": 6,
+        "num_conv_pos_embeddings": 8,
+        "unit_hifi_gan_vocab_size": 20,
+        "t2u_num_langs": 0,
+        "t2u_offset_tgt_lang": 0,
+        "vocoder_offset": 0,
+        "t2u_variance_predictor_hidden_dim": 4,
+        "char_vocab_size": 4,
+        "left_max_position_embeddings": 2,
+        "right_max_position_embeddings": 1,
+        "speech_encoder_chunk_size": 2,
+        "speech_encoder_left_chunk_num": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_attention_heads"] = values["num_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.input_modality = input_modality
-
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-
-        self.vocab_size = vocab_size
-        self.t2u_vocab_size = t2u_vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.encoder_layers = encoder_layers
-        self.decoder_layers = decoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.t2u_encoder_layers = t2u_encoder_layers
-        self.t2u_decoder_layers = t2u_decoder_layers
-        self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
-        self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
-        self.num_heads = num_heads
-        self.num_attention_heads = num_heads
-
-        self.vocoder_num_spkrs = vocoder_num_spkrs
-        self.vocoder_num_langs = vocoder_num_langs
-        self.upsample_initial_channel = upsample_initial_channel
-        self.unit_embed_dim = unit_embed_dim
-        self.spkr_embed_dim = spkr_embed_dim
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.lang_embed_dim = lang_embed_dim
-
-        self.max_new_tokens = max_new_tokens
-
-        self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
-        self.t2u_num_langs = t2u_num_langs
-        self.t2u_offset_tgt_lang = t2u_offset_tgt_lang
-        self.vocoder_offset = vocoder_offset
-
-        self.t2u_variance_predictor_hidden_dim = t2u_variance_predictor_hidden_dim
-        self.char_vocab_size = char_vocab_size
-        self.left_max_position_embeddings = left_max_position_embeddings
-        self.right_max_position_embeddings = right_max_position_embeddings
-        self.speech_encoder_chunk_size = speech_encoder_chunk_size
-        self.speech_encoder_left_chunk_num = speech_encoder_left_chunk_num
-
-        self.encoder_layerdrop = encoder_layerdrop
-        self.speech_encoder_layerdrop = speech_encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
+        values = self.get_small_config_defaults(**kwargs)
+        values.pop("use_labels")  # accepted but never used by this tester
+        for key, value in values.items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         if self.input_modality == "text":
@@ -269,7 +229,7 @@ class SeamlessM4Tv2ModelTester:
             self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
         decoder_output = result.logits
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         if self.input_modality == "text":
@@ -305,7 +265,7 @@ class SeamlessM4Tv2ModelTester:
         outputs = model(
             input_ids, decoder_input_ids=decoder_input_ids, decoder_attention_mask=input_mask, use_cache=True
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -326,7 +286,7 @@ class SeamlessM4Tv2ModelTester:
             input_ids,
             decoder_input_ids=next_tokens,
             decoder_attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["decoder_hidden_states"][0]
 
@@ -356,6 +316,7 @@ class SeamlessM4Tv2ModelTester:
             input_name: input_ids,
             "attention_mask": input_mask,
             "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": input_mask,
             "labels": lm_labels,
         }
         return config, inputs_dict
@@ -363,6 +324,8 @@ class SeamlessM4Tv2ModelTester:
 
 @require_torch
 class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = SeamlessM4Tv2ModelTester
+
     is_encoder_decoder = True
     test_missing_keys = False
 
@@ -390,6 +353,27 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        # `SeamlessM4Tv2Model` defaults to text and switches its `main_input_name` to `input_features` only at
+        # generation. Pin it to speech so the generic helper feeds the speech encoder for every model class here.
+        with patch.object(SeamlessM4Tv2Model, "main_input_name", "input_features"):
+            _test_eager_matches_sdpa_inference(
+                self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+            )
+
+    def test_flex_attention_with_grads(self):
+        with patch.object(SeamlessM4Tv2Model, "main_input_name", "input_features"):
+            super().test_flex_attention_with_grads()
+
+    @unittest.skip(
+        reason="Conformer speech encoder uses relative positional embeddings producing dense attention biases incompatible with flash attention"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -484,8 +468,8 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -917,11 +901,12 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         set_seed(42)
         seq_len = 20000
         sampling_rate = 16000
-        input_features = torch.rand((2, seq_len))
+        audio_array = torch.rand((2, seq_len))
 
-        return self.processor(audio=[input_features.tolist()], sampling_rate=sampling_rate, return_tensors="pt").to(
-            torch_device
-        )
+        # A single 2-channel sample -- the expected values below were computed with this input. It has to be passed
+        # as a tensor (and not as a nested list) because `make_list_of_audio` only accepts arrays, tensors, or lists
+        # of floats.
+        return self.processor(audio=[audio_array], sampling_rate=sampling_rate, return_tensors="pt").to(torch_device)
 
     def factory_test_task(self, class1, class2, inputs, class1_kwargs, class2_kwargs):
         # half-precision loading to limit GPU usage
@@ -938,7 +923,9 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
                 if len(output_1[key].shape) == 0:
                     self.assertEqual(output_1[key].item(), output_2[key].item())
                 else:
-                    self.assertListAlmostEqual(output_1[key].squeeze().tolist(), output_2[key].squeeze().tolist())
+                    self.assertListAlmostEqual(
+                        output_1[key].flatten().tolist(), output_2[key].flatten().tolist(), tol=2e-3
+                    )
 
     @slow
     def test_to_eng_text(self):

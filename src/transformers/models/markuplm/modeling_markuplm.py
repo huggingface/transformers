@@ -34,6 +34,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_markuplm import MarkupLMConfig
 
 
@@ -108,9 +110,7 @@ class MarkupLMEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -138,7 +138,7 @@ class MarkupLMEmbeddings(nn.Module):
 
     @staticmethod
     # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings.create_position_ids_from_input_ids
-    def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+    def create_position_ids_from_input_ids(input_ids, padding_idx, cache_length=0):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
         are ignored. This is modified from fairseq's `utils.make_positions`.
@@ -150,7 +150,7 @@ class MarkupLMEmbeddings(nn.Module):
         """
         # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
         mask = input_ids.ne(padding_idx).int()
-        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + cache_length) * mask
         return incremental_indices.long() + padding_idx
 
     def forward(
@@ -362,10 +362,9 @@ class MarkupLMSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.attention_head_size)
 
@@ -389,8 +388,7 @@ class MarkupLMSelfAttention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
-        return outputs
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextAttention with AlignText->MarkupLM
@@ -403,19 +401,17 @@ class MarkupLMAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        self_outputs = self.self(
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states, _ = self.self(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        hidden_states = self.output(hidden_states, residual)
+        return hidden_states
 
 
 # Copied from transformers.models.align.modeling_align.AlignTextLayer with AlignText->MarkupLM
@@ -431,25 +427,20 @@ class MarkupLMLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor]:
-        self_attention_outputs = self.attention(
+    ) -> torch.Tensor:
+        hidden_states = self.attention(
             hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
             **kwargs,
         )
-        attention_output = self_attention_outputs[0]
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+        hidden_states = apply_chunking_to_forward(
+            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, hidden_states
         )
-        outputs = (layer_output,) + outputs
 
-        return outputs
+        return hidden_states
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
@@ -465,41 +456,21 @@ class MarkupLMEncoder(nn.Module):
         self.layer = nn.ModuleList([MarkupLMLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    @can_return_tuple
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        return_dict: bool | None = True,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
-                output_attentions,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         return BaseModelOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
         )
 
 
@@ -507,8 +478,11 @@ class MarkupLMEncoder(nn.Module):
 class MarkupLMPreTrainedModel(PreTrainedModel):
     config: MarkupLMConfig
     base_model_prefix = "markuplm"
+    _can_record_outputs = {
+        "hidden_states": MarkupLMLayer,
+        "attentions": MarkupLMSelfAttention,
+    }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -521,7 +495,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class MarkupLMModel(MarkupLMPreTrainedModel):
     # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->MarkupLM
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MarkupLMConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -543,21 +517,19 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         xpath_tags_seq: torch.LongTensor | None = None,
         xpath_subs_seq: torch.LongTensor | None = None,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         token_type_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        inputs_embeds: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         xpath_tags_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
@@ -582,12 +554,6 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 4, 768]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -621,9 +587,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -631,15 +595,13 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
 @auto_docstring
 class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -662,10 +624,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         start_positions: torch.Tensor | None = None,
         end_positions: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
         r"""
         xpath_tags_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
@@ -697,8 +656,6 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         >>> processor.decode(predict_answer_tokens).strip()
         'Niels'
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.markuplm(
             input_ids,
             xpath_tags_seq=xpath_tags_seq,
@@ -707,9 +664,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -752,7 +707,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
 )
 class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -778,18 +733,13 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
         r"""
         xpath_tags_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
         xpath_subs_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Subscript IDs for each token in the input sequence, padded up to config.max_depth.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Examples:
 
@@ -812,8 +762,6 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.markuplm(
             input_ids,
             xpath_tags_seq=xpath_tags_seq,
@@ -822,9 +770,7 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -854,7 +800,7 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
 )
 class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with bert->markuplm, Bert->MarkupLM
-    def __init__(self, config):
+    def __init__(self, config: MarkupLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -881,20 +827,13 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
         xpath_tags_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
         xpath_subs_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Subscript IDs for each token in the input sequence, padded up to config.max_depth.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -914,8 +853,6 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.markuplm(
             input_ids,
             xpath_tags_seq=xpath_tags_seq,
@@ -924,9 +861,7 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
+            **kwargs,
         )
 
         pooled_output = outputs[1]

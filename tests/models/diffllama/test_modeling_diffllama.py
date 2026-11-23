@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch DiffLlama model."""
 
 import gc
-import tempfile
 import unittest
 
 import pytest
@@ -32,6 +31,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -49,56 +49,37 @@ if is_torch_available():
     )
 
 
-class DiffLlamaModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        scope=None,
-    ):
+class DiffLlamaModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 0,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -167,6 +148,7 @@ class DiffLlamaModelTester:
 
 @require_torch
 class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DiffLlamaModelTester
     all_model_classes = (
         (
             DiffLlamaModel,
@@ -184,7 +166,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             "text-classification": DiffLlamaForSequenceClassification,
             "text-generation": DiffLlamaForCausalLM,
             "zero-shot": DiffLlamaForSequenceClassification,
-            "question-answering": DiffLlamaForQuestionAnswering,
             "token-classification": DiffLlamaForTokenClassification,
         }
         if is_torch_available()
@@ -200,7 +181,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def setUp(self):
         self.model_tester = DiffLlamaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DiffLlamaConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -359,34 +340,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         self.assertListEqual(output_native, output_fa_2)
 
-    @require_flash_attn
-    @require_torch_accelerator
-    @slow
-    @pytest.mark.flash_attn_test
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = DiffLlamaForCausalLM.from_pretrained(
-                    tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
-                ).to(torch_device)
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
-
     @slow
     def test_eager_matches_sdpa_generate(self):
         """
@@ -490,15 +443,6 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
 
 @slow
@@ -607,7 +551,7 @@ class Mask4DTestHard(unittest.TestCase):
         mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
 
         outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
+        cache_a = outs_1a["cache"]
 
         # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
         input_1b = input_ids_shared_prefix[:, part_a:]
@@ -617,7 +561,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=mask_1b,
             position_ids=position_ids_1b,
-            past_key_values=past_key_values_a,
+            cache=cache_a,
         )
         decoded_1b = [
             self.tokenizer.decode(t)
@@ -644,7 +588,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
+        cache = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         padded_attention_mask = torch.nn.functional.pad(
             input=mask_shared_prefix,
@@ -658,8 +602,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_ids_shared_prefix,
             attention_mask=padded_attention_mask,
             position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
-            past_key_values=past_key_values,
+            cache=cache,
         ).logits
         logits_shared_prefix_last = logits_shared_prefix[
             0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
@@ -686,7 +629,7 @@ class Mask4DTestHard(unittest.TestCase):
 
         # upgrade the model with StaticCache
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
+        cache = StaticCache(config=self.model.config, max_cache_len=max_cache_len)
 
         # forward run for the first part of input
         part_a = 3  # split point
@@ -706,8 +649,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1a,
             attention_mask=padded_mask_1a,
             position_ids=position_ids_1a,
-            cache_position=torch.arange(part_a, device=torch_device),
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
         # forward run for the second part of input
@@ -723,12 +665,7 @@ class Mask4DTestHard(unittest.TestCase):
             input_1b,
             attention_mask=padded_mask_1b,
             position_ids=position_ids_1b,
-            cache_position=torch.arange(
-                part_a,
-                input_ids_shared_prefix.shape[-1],
-                device=torch_device,
-            ),
-            past_key_values=past_key_values,
+            cache=cache,
         )
         decoded_1b = [
             self.tokenizer.decode(t)

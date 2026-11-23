@@ -48,7 +48,7 @@ class BertTokenizer(TokenizersBackend):
     Args:
         vocab (`str` or `dict[str, int]`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
-        do_lower_case (`bool`, *optional*, defaults to `False`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -79,7 +79,7 @@ class BertTokenizer(TokenizersBackend):
     def __init__(
         self,
         vocab: str | dict[str, int] | None = None,
-        do_lower_case: bool = False,
+        do_lower_case: bool = True,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
         pad_token: str = "[PAD]",

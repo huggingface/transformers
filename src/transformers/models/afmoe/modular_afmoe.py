@@ -23,12 +23,13 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -37,7 +38,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_afmoe import AfmoeConfig
 
 
@@ -75,79 +76,22 @@ class AfmoeTokenChoiceRouter(nn.Module):
         _, _, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        scores = torch.sigmoid(self.gate(hidden_states).to(torch.float32))
+        router_logits = self.gate(hidden_states).to(torch.float32)
+        scores = torch.sigmoid(router_logits)
 
         _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
         top_scores = scores.gather(dim=1, index=selected_experts)
         denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
         top_scores = top_scores / denominator
         top_scores = top_scores * self.route_scale
-        return top_scores, selected_experts
+        return router_logits, top_scores, selected_experts
 
 
-class AfmoeExperts(nn.ModuleList):
-    """
-    Container holding the routed experts.
-
-    This mirrors the Experts pattern used across other MoE models to ease checkpoint conversion.
-    """
-
-    def __init__(self, config: AfmoeConfig):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        for _ in range(self.num_experts):
-            self.append(AfmoeMLP(config, intermediate_size=config.moe_intermediate_size))
-
-    def forward(
-        self, hidden_states: torch.Tensor, selected_experts: torch.Tensor, routing_weights: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (batch, seq, hidden)
-            selected_experts: (batch, seq, top_k)
-            routing_weights: (batch, seq, top_k)
-        """
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        if seq_len == 0:
-            return hidden_states.new_zeros(batch_size, 0, hidden_dim)
-        hidden_states_flat = hidden_states.view(-1, hidden_dim)
-        top_k = selected_experts.shape[-1]
-
-        # Map every token routing decision to a unique position so we can process expert by expert.
-        token_indices = torch.arange(
-            hidden_states_flat.shape[0], device=hidden_states.device, dtype=torch.long
-        ).repeat_interleave(top_k)
-        expert_indices = selected_experts.reshape(-1)
-        routing_weights = routing_weights.reshape(-1)
-
-        sorting = torch.argsort(expert_indices, stable=True)
-        token_indices = token_indices[sorting]
-        expert_indices = expert_indices[sorting]
-        routing_weights = routing_weights[sorting]
-
-        dispatched_tokens = hidden_states_flat.index_select(0, token_indices)
-        expert_outputs = torch.zeros_like(dispatched_tokens)
-
-        unique_experts, counts = torch.unique_consecutive(expert_indices, return_counts=True)
-        start = 0
-        for expert_id, count in zip(unique_experts.tolist(), counts.tolist()):
-            if count == 0:
-                continue
-            end = start + count
-            expert_input = dispatched_tokens[start:end]
-            expert_output = self[expert_id](expert_input)
-            expert_outputs[start:end] = expert_output
-            start = end
-
-        weighted_outputs = (expert_outputs.to(torch.float32) * routing_weights.unsqueeze(-1)).to(hidden_states.dtype)
-        aggregated = torch.zeros_like(hidden_states_flat)
-        scatter_indices = token_indices.unsqueeze(-1).expand_as(weighted_outputs)
-        aggregated.scatter_add_(0, scatter_indices, weighted_outputs)
-        return aggregated.view(batch_size, seq_len, hidden_dim)
+class AfmoeExperts(Qwen2MoeExperts):
+    pass
 
 
-class AfmoeMoE(nn.Module):
+class AfmoeSparseMoeBlock(nn.Module):
     """
     Mixture of Experts (MoE) module for AFMoE.
 
@@ -161,20 +105,20 @@ class AfmoeMoE(nn.Module):
         self.router = AfmoeTokenChoiceRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
 
-        # Get routing decisions
-        top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
-        top_scores = top_scores.view(batch_size, seq_len, self.config.num_experts_per_tok)
-        selected_experts = selected_experts.view(batch_size, seq_len, self.config.num_experts_per_tok)
+        # Get routing decisions (returns flattened top-k)
+        _, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
 
         # Process through shared experts
         shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
-        routed_output = self.experts(hidden_states, selected_experts, top_scores)
+        routed_output = self.experts(hidden_states_flat, selected_experts, top_scores).view(
+            batch_size, seq_len, hidden_dim
+        )
         return shared_output + routed_output
 
 
@@ -198,13 +142,13 @@ class AfmoeAttention(LlamaAttention):
         self.k_norm = AfmoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.gate_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_value: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -223,9 +167,8 @@ class AfmoeAttention(LlamaAttention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_value is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -263,7 +206,6 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
 
         self.self_attn = AfmoeAttention(config=config, layer_idx=layer_idx)
-        self.attention_type = config.layer_types[layer_idx]
 
         # Dual normalization for attention
         self.input_layernorm = AfmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -276,21 +218,21 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
         # MoE or dense FFN
         self.moe_enabled = layer_idx >= config.num_dense_layers
         if self.moe_enabled:
-            self.mlp = AfmoeMoE(config)
+            self.mlp = AfmoeSparseMoeBlock(config)
         else:
             self.mlp = AfmoeMLP(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_value: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         # Self Attention with dual normalization
@@ -299,9 +241,8 @@ class AfmoeDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            cache=cache,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -327,8 +268,8 @@ class AfmoePreTrainedModel(PreTrainedModel):
     config: AfmoeConfig
     base_model_prefix = "model"
     _no_split_modules = ["AfmoeDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
+        "router_logits": OutputRecorder(AfmoeTokenChoiceRouter, index=0),
         "hidden_states": AfmoeDecoderLayer,
         "attentions": AfmoeAttention,
     }
@@ -340,20 +281,25 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "q_norm",
         "k_norm",
         "norm",
-        "expert_bias",
     ]
+    _keep_in_fp32_modules_strict = ["expert_bias"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
-        if isinstance(module, AfmoeTokenChoiceRouter):
+        std = self.config.initializer_range
+        if isinstance(module, AfmoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=std)
+            init.normal_(module.down_proj, mean=0.0, std=std)
+        elif isinstance(module, AfmoeTokenChoiceRouter):
             init.zeros_(module.gate.weight)
-        elif isinstance(module, AfmoeMoE):
+        elif isinstance(module, AfmoeSparseMoeBlock):
             init.zeros_(module.expert_bias)
 
 
@@ -384,35 +330,30 @@ class AfmoeModel(AfmoePreTrainedModel):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + inputs_embeds.shape[1],
-                device=inputs_embeds.device,
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
@@ -420,8 +361,7 @@ class AfmoeModel(AfmoePreTrainedModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
+                "cache": cache,
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
@@ -436,14 +376,13 @@ class AfmoeModel(AfmoePreTrainedModel):
 
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -451,17 +390,71 @@ class AfmoeModel(AfmoePreTrainedModel):
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 
 class AfmoeForCausalLM(LlamaForCausalLM, AfmoePreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
+    def __init__(self, config: AfmoeConfig):
         AfmoePreTrainedModel.__init__(self, config)
         self.model = AfmoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeCausalLMOutputWithPast:
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            cache=cache,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_router_logits=output_router_logits,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            cache=outputs.cache,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
 
 
 __all__ = [

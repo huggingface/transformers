@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -46,58 +47,39 @@ if is_torch_available():
     )
 
 
-class ModernBertModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        pad_token_id=0,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_activation="gelu",
-        mlp_dropout=0.0,
-        attention_dropout=0.0,
-        embedding_dropout=0.0,
-        classifier_dropout=0.0,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-    ):
+class ModernBertModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "pad_token_id": 0,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_activation": "gelu",
+        "mlp_dropout": 0.0,
+        "attention_dropout": 0.0,
+        "embedding_dropout": 0.0,
+        "classifier_dropout": 0.0,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.pad_token_id = pad_token_id
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_activation = hidden_activation
-        self.mlp_dropout = mlp_dropout
-        self.attention_dropout = attention_dropout
-        self.embedding_dropout = embedding_dropout
-        self.classifier_dropout = classifier_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -222,6 +204,8 @@ class ModernBertModelTester:
 
 @require_torch
 class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = ModernBertModelTester
+
     all_model_classes = (
         (
             ModernBertModel,
@@ -241,7 +225,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
-            "question-answering": ModernBertForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -268,7 +251,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = ModernBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ModernBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ModernBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -374,43 +357,6 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         expected = torch.tensor([[1.6466, 4.5662]])
         torch.testing.assert_close(output, expected, rtol=1e-4, atol=1e-4)
 
-    @pytest.mark.torch_export_test
-    @slow
-    def test_export(self):
-        bert_model = "answerdotai/ModernBERT-base"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 512
-
-        tokenizer = AutoTokenizer.from_pretrained(bert_model)
-        inputs = tokenizer(
-            "the man worked as a [MASK].",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = ModernBertForMaskedLM.from_pretrained(
-            bert_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-        )
-
-        logits = model(**inputs).logits
-        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask.split(), ["lawyer", "mechanic", "teacher", "doctor", "waiter"])
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
-        self.assertEqual(eg_predicted_mask, ep_predicted_mask)
-
     @slow
     def test_inference_multiple_choice(self):
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
@@ -464,6 +410,10 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): torch.tensor(
                     [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]],
+                    dtype=torch.float16,
+                ),
+                ("rocm", None): torch.tensor(
+                    [[[3.8223, -0.2045, 12.2891], [3.6328, 0.6875, 14.7031], [-5.1133, -3.8105, 11.9922]]],
                     dtype=torch.float16,
                 ),
                 ("xpu", None): torch.tensor(

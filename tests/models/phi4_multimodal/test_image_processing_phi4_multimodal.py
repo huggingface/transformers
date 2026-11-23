@@ -22,9 +22,9 @@ import numpy as np
 import pytest
 
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -33,56 +33,18 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    if is_torchvision_available():
-        from transformers import Phi4MultimodalImageProcessorFast
 
+class Phi4MultimodalImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("image_size", 100)
 
-class Phi4MultimodalImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=100,
-        min_resolution=30,
-        max_resolution=400,
-        dynamic_hd=36,
-        do_resize=True,
-        size=None,
-        patch_size=14,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-    ):
-        super().__init__()
-        size = size if size is not None else {"height": 100, "width": 100}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.dynamic_hd = dynamic_hd
-        self.do_resize = do_resize
-        self.size = size
-        self.patch_size = patch_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+        # Image processor init kwargs
+        kwargs.setdefault("dynamic_hd", 36)
+        kwargs.setdefault("do_resize", True)
+        kwargs.setdefault("size", {"height": 100, "width": 100})
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "patch_size": self.patch_size,
-            "dynamic_hd": self.dynamic_hd,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         max_num_patches = 0
@@ -100,58 +62,18 @@ class Phi4MultimodalImageProcessingTester:
         num_patches = max_num_patches
         return num_patches, self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    fast_image_processing_class = Phi4MultimodalImageProcessorFast if is_torchvision_available() else None
-    test_slow_image_processor = False
+    image_processor_tester_class = Phi4MultimodalImageProcessingTester
 
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Phi4MultimodalImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_center_crop"))
-            self.assertTrue(hasattr(image_processing, "center_crop"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 100, "width": 100})
-
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-
-    @unittest.skip(reason="Phi4MultimodalImageProcessorFast doesn't treat 4 channel PIL and numpy consistently yet")
+    @unittest.skip(reason="Phi4MultimodalImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")
     def test_call_numpy_4_channels(self):
         pass
 
     def test_cast_dtype_device(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             if self.test_cast_dtype is not None:
                 # Initialize image_processor
                 image_processor = image_processing_class(**self.image_processor_dict)
@@ -185,7 +107,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
                 self.assertEqual(encoding.input_ids.dtype, torch.long)
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -206,7 +128,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             )
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -227,7 +149,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             )
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -252,7 +174,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
     def test_image_processor_preprocess_arguments(self):
         is_tested = False
 
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
 
             # validation done by _valid_processor_keys attribute
@@ -288,13 +210,13 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
 
     @slow
     @pytest.mark.torch_compile_test
-    def test_can_compile_fast_image_processor(self):
-        if self.fast_image_processing_class is None:
-            self.skipTest("Skipping compilation test as fast image processor is not defined")
+    def test_can_compile_torchvision_backend(self):
+        if "torchvision" not in self.image_processing_classes:
+            self.skipTest("Skipping compilation test as torchvision image processor is not defined")
 
         torch.compiler.reset()
         input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
-        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        image_processor = self.image_processing_classes["torchvision"](**self.image_processor_dict)
         output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")

@@ -13,82 +13,35 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
 
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import MllamaImageProcessor
-
-    if is_torchvision_available():
-        from transformers import MllamaImageProcessorFast
 
 
 if is_torch_available():
     import torch
 
 
-class MllamaImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        num_images=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_resize=True,
-        size=None,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_convert_rgb=True,
-        do_pad=True,
-        max_image_tiles=4,
-    ):
-        size = size if size is not None else {"height": 224, "width": 224}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.max_image_tiles = max_image_tiles
-        self.image_size = image_size
-        self.num_images = num_images
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_convert_rgb = do_convert_rgb
-        self.do_pad = do_pad
+class MllamaImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("num_images", 18)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_convert_rgb": self.do_convert_rgb,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_rescale": self.do_rescale,
-            "rescale_factor": self.rescale_factor,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_pad": self.do_pad,
-            "max_image_tiles": self.max_image_tiles,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 224, "width": 224})
+        kwargs.setdefault("max_image_tiles", 4)
+
+        super().__init__(**kwargs)
 
     def prepare_image_inputs(
         self,
@@ -153,33 +106,10 @@ class MllamaImageProcessingTester:
 @require_torch
 @require_vision
 class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = MllamaImageProcessor if is_vision_available() else None
-    fast_image_processing_class = MllamaImageProcessorFast if is_torchvision_available() else None
-
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = MllamaImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processor_list:
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_rescale"))
-            self.assertTrue(hasattr(image_processing, "rescale_factor"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_pad"))
-            self.assertTrue(hasattr(image_processing, "max_image_tiles"))
+    image_processor_tester_class = MllamaImageProcessingTester
 
     def test_call_numpy(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random numpy tensors
@@ -209,7 +139,7 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_pil(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PIL images
@@ -231,7 +161,7 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
 
     def test_call_channels_last(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
 
@@ -244,7 +174,7 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     def test_ambiguous_channel_pil_image(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
 
@@ -254,7 +184,7 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (2, *expected_output_image_shape))
 
     def test_resize_impractical_aspect_ratio(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # Ensure that no error is raised even if the aspect ratio is impractical
@@ -264,7 +194,7 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     def test_call_pytorch(self):
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             # Initialize image_processing
             image_processing = image_processing_class(**self.image_processor_dict)
             # create random PyTorch tensors
@@ -297,7 +227,7 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             # of empty tiles, i.e. tiles that are completely zero
             return torch.all(pixel_values == 0, dim=(3, 4, 5))
 
-        for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processing_classes.values():
             image_processor_dict = {
                 **self.image_processor_dict,
                 "size": {"height": 50, "width": 50},
@@ -397,3 +327,28 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ],
             ]
             self.assertEqual(aspect_ratio_mask, expected_aspect_ratio_mask)
+
+    def test_fast_image_processor_explicit_none_preserved(self):
+        """Test that explicitly setting an attribute to None is preserved through save/load."""
+        # Test with torchvision backend (equivalent to fast processor)
+        if "torchvision" not in self.image_processing_classes:
+            self.skipTest("Skipping test as torchvision backend is not available")
+
+        # Find an attribute with a non-None class default to test explicit None override
+        test_attr = "do_normalize"
+
+        # Create processor with explicit None (override the attribute)
+        kwargs = self.image_processor_dict.copy()
+        kwargs[test_attr] = None
+        image_processor = self.image_processing_classes["torchvision"](**kwargs)
+
+        # Verify it's in to_dict() as None (not filtered out)
+        self.assertIn(test_attr, image_processor.to_dict())
+        self.assertIsNone(image_processor.to_dict()[test_attr])
+
+        # Verify explicit None survives save/load cycle
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_processor.save_pretrained(tmpdirname)
+            reloaded = self.image_processing_classes["torchvision"].from_pretrained(tmpdirname)
+
+        self.assertIsNone(getattr(reloaded, test_attr), f"Explicit None for {test_attr} was lost after reload")

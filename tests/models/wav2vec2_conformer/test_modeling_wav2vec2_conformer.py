@@ -409,10 +409,11 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         if is_torch_available()
         else {}
     )
+    test_can_init_all_missing_weights_before_2023 = True
 
     def setUp(self):
         self.model_tester = Wav2Vec2ConformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2ConformerConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2ConformerConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -489,6 +490,12 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
     @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(
+        reason="Wav2Vec2Conformer uses relative position embeddings that produce a dense attention bias incompatible with Flash Attention"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @unittest.skip(reason="Wav2Vec2Conformer has input_values instead of input_ids")

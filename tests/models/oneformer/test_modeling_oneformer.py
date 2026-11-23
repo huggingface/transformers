@@ -29,12 +29,12 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -52,36 +52,27 @@ if is_vision_available():
     from PIL import Image
 
 
-class OneFormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        is_training=True,
-        vocab_size=99,
-        use_auxiliary_loss=False,
-        num_queries=10,
-        num_channels=3,
-        min_size=32 * 8,
-        max_size=32 * 8,
-        num_labels=4,
-        hidden_dim=64,
-        sequence_length=77,
-        n_ctx=4,
-    ):
+class OneFormerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "is_training": True,
+        "vocab_size": 99,
+        "use_auxiliary_loss": False,
+        "num_queries": 10,
+        "num_channels": 3,
+        "min_size": 256,  # 32 * 8
+        "max_size": 256,  # 32 * 8
+        "num_labels": 4,
+        "hidden_dim": 64,
+        "sequence_length": 77,
+        "n_ctx": 4,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.vocab_size = vocab_size
-        self.use_auxiliary_loss = use_auxiliary_loss
-        self.num_queries = num_queries
-        self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
-        self.num_labels = num_labels
-        self.hidden_dim = hidden_dim
-        self.sequence_length = sequence_length
-        self.n_ctx = n_ctx
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -230,13 +221,14 @@ class OneFormerModelTester:
 
 @require_torch
 class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = OneFormerModelTester
+
     all_model_classes = (OneFormerModel, OneFormerForUniversalSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": OneFormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
 
     test_missing_keys = False
-    test_torch_exportable = False
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -298,13 +290,6 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_resize_tokens_embeddings(self):
         pass
 
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason="OneFormer has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -341,6 +326,27 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model = OneFormerForUniversalSegmentation(config).to(torch_device)
         outputs = model(**inputs)
         self.assertTrue(outputs.loss is not None)
+
+    def test_model_with_labels_not_training(self):
+        config, pixel_values, task_inputs, _, pixel_mask, mask_labels, class_labels = (
+            self.model_tester.prepare_config_and_inputs()
+        )
+        config.is_training = False
+        self.assertIsNotNone(config.contrastive_temperature)
+
+        model = OneFormerForUniversalSegmentation(config).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model(
+                pixel_values=pixel_values,
+                task_inputs=task_inputs,
+                pixel_mask=pixel_mask,
+                mask_labels=mask_labels,
+                class_labels=class_labels,
+            )
+
+        self.assertIsNone(outputs.text_queries)
+        self.assertIsNotNone(outputs.loss)
+        self.assertTrue(torch.isfinite(outputs.loss).all())
 
     def test_hidden_states_output(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

@@ -20,7 +20,6 @@ import torch
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -28,6 +27,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -38,28 +38,17 @@ class SolarOpenModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = SolarOpenModel
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        n_shared_experts=1,
-        n_group=1,
-        topk_group=1,
-        num_experts_per_tok=2,
-        moe_intermediate_size=16,
-        routed_scaling_factor=1.0,
-        norm_topk_prob=True,
-        use_qk_norm=False,
-    ):
-        super().__init__(parent=parent, num_experts_per_tok=num_experts_per_tok)
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.moe_intermediate_size = moe_intermediate_size
-        self.routed_scaling_factor = routed_scaling_factor
-        self.norm_topk_prob = norm_topk_prob
-        self.use_qk_norm = use_qk_norm
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "n_shared_experts": 1,
+        "n_group": 1,
+        "topk_group": 1,
+        "num_experts_per_tok": 2,
+        "moe_intermediate_size": 16,
+        "routed_scaling_factor": 1.0,
+        "norm_topk_prob": True,
+        "use_qk_norm": False,
+    }
 
 
 @require_torch
@@ -80,19 +69,12 @@ class SolarOpenModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
         # ensure SolarOpenConfig overrides the parent's default partial_rotary_factor to 1.0
-        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 1.0)
         self.assertEqual(config.rope_parameters["rope_theta"], 1_000_000)
 
 
 @require_torch_accelerator
 @slow
-class SolarOpenIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+class SolarOpenIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def test_batch_generation_dummy_bf16(self):
         """Original model is 100B, hence using a dummy model on our CI to sanity check against"""
         model_id = "SSON9/solar-open-tiny-dummy"

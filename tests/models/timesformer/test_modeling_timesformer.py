@@ -25,6 +25,7 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -42,55 +43,45 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from transformers import VideoMAEImageProcessor
+    from transformers import VideoMAEImageProcessorPil
 
 
-class TimesformerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=10,
-        num_channels=3,
-        patch_size=2,
-        num_frames=2,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        num_labels=10,
-        initializer_range=0.02,
-        attention_type="divided_space_time",
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.num_frames = num_frames
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.attention_type = attention_type
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.num_labels = num_labels
+class TimesformerModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 10,
+        "num_channels": 3,
+        "patch_size": 2,
+        "num_frames": 2,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "attention_type": "divided_space_time",
+        "initializer_range": 0.02,
+        "scope": None,
+        "num_labels": 10,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in TimeSformer, the number of spatial tokens equals num_frames * num_patches per frame + 1 CLS token
-        self.num_patches_per_frame = (image_size // patch_size) ** 2
-        self.seq_length = (num_frames) * self.num_patches_per_frame + 1
+        values["num_patches_per_frame"] = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = values["num_frames"] * values["num_patches_per_frame"] + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -156,6 +147,8 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     attention_mask and seq_length.
     """
 
+    model_tester_class = TimesformerModelTester
+
     all_model_classes = (TimesformerModel, TimesformerForVideoClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": TimesformerModel, "video-classification": TimesformerForVideoClassification}
@@ -168,7 +161,7 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def setUp(self):
         self.model_tester = TimesformerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=37
+            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=32
         )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -324,7 +317,7 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
-            VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            VideoMAEImageProcessorPil(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
             if is_vision_available()
             else None
         )

@@ -23,7 +23,7 @@ from torch import nn
 from ... import initialization as init
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -49,7 +49,7 @@ def load_wkv_cuda_kernel(context_length):
 
     from ...integrations.hub_kernels import get_kernel
 
-    rwkv_cuda_kernel = get_kernel("kernels-community/rwkv")
+    rwkv_cuda_kernel = get_kernel("kernels-community/rwkv", version=1)
     rwkv_cuda_kernel.max_seq_length = context_length
 
 
@@ -365,9 +365,9 @@ class RwkvPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
+        super()._init_weights(module)
         if isinstance(module, RwkvSelfAttention):
             layer_id = module.layer_id
             num_hidden_layers = module.config.num_hidden_layers
@@ -437,57 +437,54 @@ class RwkvPreTrainedModel(PreTrainedModel):
             shape = module.weight.shape
             gain = 1e-4 * math.sqrt(max(shape[0], shape[1]))
             init.orthogonal_(module.weight, gain=gain)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for the RWKV model outputs.
     """
 )
+@dataclass
 class RwkvOutput(ModelOutput):
     r"""
-    state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
+    state (list of five `torch.Tensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    state: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    state: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class RwkvCausalLMOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
+    state (list of five `torch.Tensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    state: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    state: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 class RwkvModel(RwkvPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: RwkvConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -512,8 +509,8 @@ class RwkvModel(RwkvPreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        state: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        state: list[torch.Tensor] | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
@@ -522,18 +519,18 @@ class RwkvModel(RwkvPreTrainedModel):
     ) -> tuple | RwkvOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        state (tuple of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`, *optional*):
+        state (tuple of five `torch.Tensor` of shape `(batch_size, hidden_size, num_hidden_layers)`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         use_cache (`bool`, *optional*):
@@ -544,7 +541,7 @@ class RwkvModel(RwkvPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if attention_mask is not None:
             logger.warning_once("`attention_mask` was passed, but it is unused in this model.")
@@ -669,7 +666,7 @@ class RwkvModel(RwkvPreTrainedModel):
 class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"head.weight": "rwkv.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: RwkvConfig):
         super().__init__(config)
         self.rwkv = RwkvModel(config)
         self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -688,8 +685,8 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        state: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        state: list[torch.Tensor] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
@@ -700,18 +697,18 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
     ) -> tuple | RwkvCausalLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
+            `input_ids_length` = `sequence_length` if `cache` is `None` else
+            `cache.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
-            If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
+            If `cache` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        state (tuple of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`, *optional*):
+        state (tuple of five `torch.Tensor` of shape `(batch_size, hidden_size, num_hidden_layers)`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
             `input_ids` provided as if the model add `state_input_ids + input_ids` as context).
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -721,7 +718,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         use_cache (`bool`, *optional*):
             If set to `True`, the last state is returned and can be used to quickly generate the next logits.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         rwkv_outputs = self.rwkv(
             input_ids,
@@ -734,9 +731,8 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = rwkv_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -753,6 +749,18 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
             hidden_states=rwkv_outputs.hidden_states,
             attentions=rwkv_outputs.attentions,
         )
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict,
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict:
+        # Non standard cache name, so need to override here
+        if "state" in outputs:
+            model_kwargs["state"] = outputs.state
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
 
 
 __all__ = ["RwkvForCausalLM", "RwkvModel", "RwkvPreTrainedModel"]

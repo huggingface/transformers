@@ -24,6 +24,7 @@ from transformers import (
     AutoTokenizer,
     BambaConfig,
     DataCollatorWithFlattening,
+    DynamicCache,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -32,6 +33,7 @@ from transformers.testing_utils import (
     get_device_properties,
     require_deterministic_for_xpu,
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -39,6 +41,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -47,78 +50,50 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        BambaForCausalLM,
-        BambaModel,
-    )
-    from transformers.models.bamba.modeling_bamba import HybridMambaAttentionDynamicCache
+    from transformers import BambaForCausalLM, BambaModel
 
 
-class BambaModelTester:
+class BambaModelTester(ModelTesterConfigMixin):
     config_class = BambaConfig
     if is_torch_available():
         model_class = BambaModel
         for_causal_lm_class = BambaForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=64,
-        hidden_act="silu",
-        attention_dropout=0.0,
-        attn_layer_indices=None,
-        attn_rotary_emb=8,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        initializer_range=0.02,
-        num_labels=3,
-        pad_token_id=0,
-        mamba_n_groups=1,
-        mamba_n_heads=16,
-        mamba_d_state=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=16,
-        scope=None,
-    ):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "intermediate_size": 64,
+        "hidden_act": "silu",
+        "attention_dropout": 0.0,
+        "attn_layer_indices": None,
+        "attn_rotary_emb": 8,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "pad_token_id": 0,
+        "scope": None,
+        "mamba_n_groups": 1,
+        "mamba_n_heads": 16,
+        "mamba_d_state": 16,
+        "mamba_d_conv": 4,
+        "mamba_expand": 2,
+        "mamba_chunk_size": 16,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.attention_dropout = attention_dropout
-        self.attn_layer_indices = attn_layer_indices
-        self.attn_rotary_emb = attn_rotary_emb
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.mamba_n_groups = mamba_n_groups
-        self.mamba_n_heads = mamba_n_heads
-        self.mamba_d_state = mamba_d_state
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_chunk_size = mamba_chunk_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -228,17 +203,12 @@ class BambaModelTester:
         model.eval()
 
         # first forward pass
-        # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = HybridMambaAttentionDynamicCache(
-            config, input_ids.shape[0], model.dtype, device=model.device
-        )
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            past_key_values=past_key_values,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -256,11 +226,8 @@ class BambaModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
-            cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
-            ),
         )["hidden_states"][0]
 
         # select random slice
@@ -272,6 +239,41 @@ class BambaModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_mamba_chunked_prefill(self, config, input_ids, *args, device="cpu"):
+        """
+        Adapted from `test_linear_attention_multi_token_cached_forward_matches_single_token`
+        to check whether multi-token cached input is properly handled.
+
+        Can either be run on GPU (fast path) or CPU (slow path), see `test_mamba_chunked_prefill_*`
+        """
+        model = self.model_class(config=config)
+        model.to(device)
+        model.eval()
+
+        input_ids = input_ids[:1].to(device)
+        prefill_len = input_ids.shape[1] // 2 + 1
+        prompt = input_ids[:, :prefill_len]
+        next_token = input_ids[:, prefill_len : prefill_len + 1]
+        distractors = input_ids[:, prefill_len + 1 :]
+        multi_input = torch.cat([next_token, distractors], dim=1)
+
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        self.parent.assertTrue(
+            torch.allclose(ref_first, under_test_first, atol=1e-4, rtol=1e-4),
+            msg=f"Max diff: {(ref_first - under_test_first).abs().max().item():.6f}",
+        )
 
 
 @require_torch
@@ -291,48 +293,16 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
-
+    def _get_conv_state_shape(self, batch_size: int, config):
         conv_shape = (
             batch_size,
             config.mamba_expand * config.hidden_size + 2 * config.mamba_n_groups * config.mamba_d_state,
             config.mamba_d_conv,
         )
-        ssm_shape = (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
+        return conv_shape
 
-        self.assertTrue(config.num_hidden_layers, len(past_key_values))
-
-        for idx in range(len(past_key_values)):
-            if config.layers_block_type[idx] == "mamba":
-                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
-            else:
-                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
-
-    def _check_caches_are_equal(
-        self, cache1: HybridMambaAttentionDynamicCache, cache2: HybridMambaAttentionDynamicCache
-    ):
-        if not isinstance(cache1, HybridMambaAttentionDynamicCache) or not isinstance(
-            cache2, HybridMambaAttentionDynamicCache
-        ):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        return (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = self.model_tester_class(self)
@@ -352,6 +322,16 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_attention_outputs(self):
         r"""
@@ -545,7 +525,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         model_id = "ibm-fms/Bamba-9B"
-        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16)
+        cls.model = BambaForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=torch_device)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # feels a bit forced to have to do this for the generation test
@@ -565,12 +545,8 @@ class BambaModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.model.to(torch_device)
-
-        input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
-            "input_ids"
-        ].to(torch_device)
-        out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
+        inputs = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt").to(torch_device)
+        out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
         expected = expectations.get_expectation()
         self.assertEqual(output_sentence, expected)
@@ -578,7 +554,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
-                logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
+                logits = self.model(**inputs, logits_to_keep=40).logits
 
             EXPECTED_LOGITS_NO_GRAD = torch.tensor(
                 [
@@ -617,8 +593,6 @@ class BambaModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-
-        self.model.to(torch_device)
 
         inputs = self.tokenizer(
             ["Hey how are you doing on this lovely evening?", "I am late! I need to"],

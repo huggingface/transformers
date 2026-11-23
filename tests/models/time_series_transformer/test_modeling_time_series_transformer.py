@@ -247,21 +247,17 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
                     "future_observed_mask",
                     "decoder_attention_mask",
                     "encoder_outputs",
-                    "past_key_values",
-                    "output_hidden_states",
-                    "output_attentions",
+                    "cache",
                     "use_cache",
-                    "return_dict",
+                    "kwargs",
                 ]
                 if "future_observed_mask" in arg_names
                 else [
                     "decoder_attention_mask",
                     "encoder_outputs",
-                    "past_key_values",
-                    "output_hidden_states",
-                    "output_attentions",
+                    "cache",
                     "use_cache",
-                    "return_dict",
+                    "kwargs",
                 ]
             )
 
@@ -310,8 +306,8 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
             if "last_hidden_state" in outputs:
                 correct_outlen += 1
 
-            if "past_key_values" in outputs:
-                correct_outlen += 1  # past_key_values have been returned
+            if "cache" in outputs:
+                correct_outlen += 1  # cache have been returned
 
             if "loss" in outputs:
                 correct_outlen += 1

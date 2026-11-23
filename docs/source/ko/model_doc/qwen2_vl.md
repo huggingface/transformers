@@ -58,7 +58,7 @@ conversation = [
         "content":[
             {
                 "type":"image",
-                "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg"
+                "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen_vl_demo.jpeg"
             },
             {
                 "type":"text",
@@ -283,9 +283,9 @@ model = Qwen2VLForConditionalGeneration.from_pretrained(
 [[autodoc]] Qwen2VLImageProcessor
     - preprocess
 
-## Qwen2VLImageProcessorFast
+## Qwen2VLImageProcessorPil
 
-[[autodoc]] Qwen2VLImageProcessorFast
+[[autodoc]] Qwen2VLImageProcessorPil
     - preprocess
 
 ## Qwen2VLProcessor

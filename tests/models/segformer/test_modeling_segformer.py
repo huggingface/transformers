@@ -18,6 +18,7 @@ import unittest
 from transformers import SegformerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -37,7 +38,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import SegformerImageProcessor
+    from transformers import SegformerImageProcessorPil
 
 
 class SegformerConfigTester(ConfigTester):
@@ -48,46 +49,33 @@ class SegformerConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
 
 
-class SegformerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=64,
-        num_channels=3,
-        num_encoder_blocks=4,
-        depths=[1, 1, 1, 1],
-        sr_ratios=[8, 4, 2, 1],
-        hidden_sizes=[8, 8, 16, 16],
-        downsampling_rates=[1, 4, 8, 16],
-        num_attention_heads=[1, 1, 2, 2],
-        is_training=True,
-        use_labels=True,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        num_labels=3,
-        scope=None,
-    ):
+class SegformerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 64,
+        "num_channels": 3,
+        "num_encoder_blocks": 4,
+        "decoder_hidden_size": 32,
+        "depths": [1, 1, 1, 1],
+        "sr_ratios": [8, 4, 2, 1],
+        "hidden_sizes": [8, 8, 16, 16],
+        "downsampling_rates": [1, 4, 8, 16],
+        "num_attention_heads": [1, 1, 2, 2],
+        "is_training": True,
+        "use_labels": True,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.num_encoder_blocks = num_encoder_blocks
-        self.sr_ratios = sr_ratios
-        self.depths = depths
-        self.hidden_sizes = hidden_sizes
-        self.downsampling_rates = downsampling_rates
-        self.num_attention_heads = num_attention_heads
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -111,6 +99,7 @@ class SegformerModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
+            decoder_hidden_size=self.decoder_hidden_size,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -156,6 +145,8 @@ class SegformerModelTester:
 
 @require_torch
 class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = SegformerModelTester
+
     all_model_classes = (
         (
             SegformerModel,
@@ -201,6 +192,12 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @unittest.skip(reason="SegFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(
+        reason="SegFormer test config uses head_dim=8 which is below the minimum of 16 required by Flex attention"
+    )
+    def test_flex_attention_with_grads(self):
         pass
 
     @unittest.skip(reason="SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
@@ -349,7 +346,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_segmentation_ade(self):
         # only resize + normalize
-        image_processor = SegformerImageProcessor(
+        image_processor = SegformerImageProcessorPil(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
         model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512").to(
@@ -386,7 +383,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_segmentation_city(self):
         # only resize + normalize
-        image_processor = SegformerImageProcessor(
+        image_processor = SegformerImageProcessorPil(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
         model = SegformerForSemanticSegmentation.from_pretrained(
@@ -426,7 +423,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_post_processing_semantic_segmentation(self):
         # only resize + normalize
-        image_processor = SegformerImageProcessor(
+        image_processor = SegformerImageProcessorPil(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
         model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512").to(

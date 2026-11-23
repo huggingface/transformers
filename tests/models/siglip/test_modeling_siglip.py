@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
@@ -34,7 +33,9 @@ from transformers.utils import (
     is_vision_available,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -50,7 +51,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
-    from transformers.models.siglip.modeling_siglip import SiglipVisionTransformer
 
 if is_vision_available():
     from PIL import Image
@@ -88,42 +88,37 @@ class SiglipModelTesterMixin(ModelTesterMixin):
             self.assertTrue(model_eager.config._attn_implementation == "eager")
 
 
-class SiglipVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=4,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class SiglipVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 4,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in ViT, the seq length equals the number of patches
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPVisionModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -174,6 +169,8 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = SiglipVisionModelTester
+
     all_model_classes = (SiglipVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -187,7 +184,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -208,7 +205,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     def test_vision_transformer_get_set_input_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        transformer = SiglipVisionTransformer(config)
+        transformer = SiglipVisionModel(config)
 
         self.assertIsInstance(transformer.get_input_embeddings(), nn.Conv2d)
 
@@ -254,42 +251,31 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
         return getattr(ModelTesterMixin, self._testMethodName)(self)
 
 
-class SiglipTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class SiglipTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -343,6 +329,8 @@ class SiglipTextModelTester:
 
 @require_torch
 class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
+    model_tester_class = SiglipTextModelTester
+
     all_model_classes = (SiglipTextModel,) if is_torch_available() else ()
 
     model_split_percents = [0.5, 0.8, 0.9]
@@ -350,11 +338,11 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=32)
 
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_model
     def test_model(self):
@@ -389,8 +377,20 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class SiglipModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class SiglipModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # need bs for batching_equivalence test
+        values["batch_size"] = SiglipTextModelTester.get_small_config_defaults(**(text_kwargs or {}))["batch_size"]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -399,8 +399,8 @@ class SiglipModelTester:
         self.parent = parent
         self.text_model_tester = SiglipTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = SiglipVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -442,6 +442,8 @@ class SiglipModelTester:
 
 @require_torch
 class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = SiglipModelTester
+
     additional_model_inputs = ["pixel_values"]
     all_model_classes = (SiglipModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": SiglipModel} if is_torch_available() else {}
@@ -461,7 +463,8 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
         self.config_tester = ConfigTester(self, config_class=SiglipConfig, has_text_modality=False)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model
     def test_model(self):
@@ -532,12 +535,13 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
 
 
 class SiglipForImageClassificationModelTester(SiglipModelTester):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.batch_size = self.vision_model_tester.batch_size
-        self.num_hidden_layers = self.vision_model_tester.num_hidden_layers
-        self.hidden_size = self.vision_model_tester.hidden_size
-        self.seq_length = self.vision_model_tester.seq_length
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs)
+        vision_values = SiglipVisionModelTester.get_small_config_defaults(**(vision_kwargs or {}))
+        for key in ("batch_size", "num_hidden_layers", "hidden_size", "seq_length"):
+            values[key] = vision_values[key]
+        return values
 
     def prepare_config_and_inputs(self):
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
@@ -554,6 +558,8 @@ class SiglipForImageClassificationModelTester(SiglipModelTester):
 
 @require_torch
 class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = SiglipForImageClassificationModelTester
+
     all_model_classes = (SiglipForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": SiglipForImageClassification} if is_torch_available() else {}
 
@@ -593,8 +599,8 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    image = load_test_image(url)
     return image
 
 

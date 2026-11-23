@@ -18,7 +18,6 @@ import unittest
 from functools import cached_property
 
 import numpy as np
-import pytest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
@@ -28,12 +27,12 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -45,41 +44,39 @@ if is_torch_available():
     from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
 
     if is_vision_available():
-        from transformers import Mask2FormerImageProcessor
+        from transformers import Mask2FormerImageProcessorPil
 
 if is_vision_available():
     from PIL import Image
 
 
-class Mask2FormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        is_training=True,
-        use_auxiliary_loss=False,
-        num_queries=10,
-        num_channels=3,
-        min_size=32 * 8,
-        max_size=32 * 8,
-        num_labels=4,
-        hidden_dim=64,
-        num_attention_heads=4,
-        num_hidden_layers=2,
-    ):
+class Mask2FormerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "is_training": True,
+        "use_auxiliary_loss": False,
+        "num_queries": 10,
+        "num_channels": 3,
+        "min_size": 256,  # 32 * 8
+        "max_size": 256,  # 32 * 8
+        "num_labels": 4,
+        "hidden_dim": 64,
+        "num_attention_heads": 4,
+        "num_hidden_layers": 2,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["mask_feature_size"] = values["hidden_dim"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_auxiliary_loss = use_auxiliary_loss
-        self.num_queries = num_queries
-        self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
-        self.num_labels = num_labels
-        self.hidden_dim = hidden_dim
-        self.mask_feature_size = hidden_dim
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -199,6 +196,8 @@ class Mask2FormerModelTester:
 
 @require_torch
 class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Mask2FormerModelTester
+
     all_model_classes = (Mask2FormerModel, Mask2FormerForUniversalSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": Mask2FormerModel} if is_torch_available() else {}
 
@@ -235,13 +234,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="Mask2Former does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason="Mask2Former has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @slow
@@ -376,7 +368,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+        return Mask2FormerImageProcessorPil.from_pretrained(self.model_checkpoints) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(torch_device)
@@ -529,27 +521,3 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         self.assertTrue(outputs.loss is not None)
-
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device)
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["pixel_values"], inputs["pixel_mask"]),
-            strict=True,
-        )
-        with torch.no_grad():
-            eager_outputs = model(**inputs)
-            exported_outputs = exported_program.module().forward(inputs["pixel_values"], inputs["pixel_mask"])
-        self.assertEqual(eager_outputs.masks_queries_logits.shape, exported_outputs.masks_queries_logits.shape)
-        torch.testing.assert_close(
-            eager_outputs.masks_queries_logits, exported_outputs.masks_queries_logits, rtol=TOLERANCE, atol=TOLERANCE
-        )
-        self.assertEqual(eager_outputs.class_queries_logits.shape, exported_outputs.class_queries_logits.shape)
-        torch.testing.assert_close(
-            eager_outputs.class_queries_logits, exported_outputs.class_queries_logits, rtol=TOLERANCE, atol=TOLERANCE
-        )

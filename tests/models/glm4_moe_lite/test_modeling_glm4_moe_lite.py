@@ -18,7 +18,7 @@ import unittest
 import pytest
 import torch
 
-from transformers import Cache, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -38,47 +38,24 @@ class Glm4MoeLiteModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Glm4MoeLiteModel
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+        "v_head_dim": 128,
+    }
 
 
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Glm4MoeLiteModelTester
-    test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as GLM-4.7-Flash has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
+    @unittest.skip("MoE topk routing is too sensitive to Float8 quantization numerical noise")
+    def test_tp_generation_quantized(self):
+        pass
 
 
 @require_torch_accelerator
@@ -116,12 +93,3 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)

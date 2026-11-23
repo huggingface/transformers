@@ -14,15 +14,12 @@
 
 import unittest
 
-import requests
-
 from transformers import (
     AutoProcessor,
     Ovis2Config,
     Ovis2ForConditionalGeneration,
     Ovis2Model,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -32,7 +29,9 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -45,16 +44,10 @@ if is_torch_available():
     import torch
 
 
-if is_vision_available():
-    from PIL import Image
-
-
-class Ovis2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        seq_length=7,
-        text_config={
+class Ovis2VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "text_config": {
             "model_type": "qwen2",
             "seq_length": 7,
             "is_training": True,
@@ -71,8 +64,7 @@ class Ovis2VisionText2TextModelTester:
             "num_labels": 3,
             "pad_token_id": 0,
         },
-        is_training=True,
-        vision_config={
+        "vision_config": {
             "image_size": 32,
             "patch_size": 8,
             "num_channels": 3,
@@ -87,32 +79,35 @@ class Ovis2VisionText2TextModelTester:
             "hidden_stride": 2,
             "tokenize_function": "softmax",
         },
-        image_token_id=1,
-        visual_indicator_token_ids=[],
-        vocab_size=99,
-        hidden_size=64,
-        ignore_id=-100,
-    ):
-        self.parent = parent
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.image_token_id = image_token_id
-        self.visual_indicator_token_ids = visual_indicator_token_ids
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.image_seq_length = (
+        "image_token_id": 1,
+        "visual_indicator_token_ids": [],
+        "vocab_size": 99,
+        "hidden_size": 64,
+        "is_training": True,
+        "ignore_id": -100,
+        "seq_length": 7,
+        "batch_size": 3,
+        "num_channels": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        vision_config = values["vision_config"]
+        text_config = values["text_config"]
+        values["image_seq_length"] = (
             vision_config["image_size"] // (vision_config["patch_size"] * vision_config["hidden_stride"])
         ) ** 2
-        self.seq_length = seq_length + self.image_seq_length
-        self.is_training = is_training
-        self.num_attention_heads = text_config["num_attention_heads"]
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        return values
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.ignore_id = ignore_id
-
-        self.batch_size = 3
-        self.num_channels = 3
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Ovis2Config(
@@ -165,6 +160,8 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     Model tester for `Ovis2ForConditionalGeneration`.
     """
 
+    model_tester_class = Ovis2VisionText2TextModelTester
+
     all_model_classes = (
         (
             Ovis2Model,
@@ -189,48 +186,6 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
 
 @require_torch
 @slow
@@ -239,8 +194,10 @@ class Ovis2IntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained(
             "thisisiron/Ovis2-2B-hf",
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        # left padding is required for batched generation when the samples have different lengths
+        self.processor.tokenizer.padding_side = "left"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        self.image = load_test_image(url)
         self.prompt_image = ""
         self.messages = [
             {
@@ -305,8 +262,8 @@ class Ovis2IntegrationTest(unittest.TestCase):
             device_map=torch_device,
         )
 
-        url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
+        image = load_test_image(url)
         prompt = [
             {
                 "role": "user",
@@ -335,8 +292,8 @@ class Ovis2IntegrationTest(unittest.TestCase):
             "thisisiron/Ovis2-2B-hf", dtype="bfloat16", device_map=torch_device
         )
 
-        lowres_url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw).resize((320, 240))
+        lowres_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2014/COCO_val2014_000000537955.jpg"
+        lowres_img = load_test_image(lowres_url).resize((320, 240))
 
         inputs = self.processor(
             text=[self.text, self.text],
@@ -348,7 +305,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nAnswer: I see a brown dog standing on a wooden floor in what appears to be a kitchen.',
+            'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see a brown dog standing on a wooden floor in what appears to be a kitchen. The dog',
             'system\nYou are a helpful assistant.\nuser\n\nWhat do you see in this image?\nassistant\nI see two cats lying on a pink blanket. There are also two remote controls on the blanket.'
         ]  # fmt: skip
 
@@ -365,7 +322,7 @@ class Ovis2IntegrationTest(unittest.TestCase):
         )
 
         lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
+        lowres_img = load_test_image(lowres_url)
 
         inputs_batched = self.processor(
             text=[self.text, self.text],

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for BERTweet"""
 
-import html
+import html.entities
 import os
 import re
 

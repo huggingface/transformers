@@ -4,7 +4,6 @@ from typing import Any, overload
 
 import numpy as np
 
-from ..models.bert.tokenization_bert_legacy import BasicTokenizer
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
@@ -63,9 +62,6 @@ class AggregationStrategy(ExplicitEnum):
     r"""
         ignore_labels (`list[str]`, defaults to `["O"]`):
             A list of labels to ignore.
-        grouped_entities (`bool`, *optional*, defaults to `False`):
-            DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to the
-            same entity together in the predictions or not.
         stride (`int`, *optional*):
             If stride is provided, the pipeline is applied on all the text. The text is split into chunks of size
             model_max_length. Works only with fast tokenizers and `aggregation_strategy` different from `NONE`. The
@@ -140,6 +136,8 @@ class TokenClassificationPipeline(ChunkPipeline):
         super().__init__(**kwargs)
 
         self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
+
+        from ..models.bert.tokenization_bert_legacy import BasicTokenizer
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser

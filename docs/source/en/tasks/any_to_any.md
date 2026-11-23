@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -31,20 +31,19 @@ pip install -q transformers accelerate flash_attn
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, AutoModelForMultimodalLM, infer_device
+from transformers import AutoProcessor, AutoModelForMultimodalLM
 import torch
 
-device = torch.device(infer_device())
 model = AutoModelForMultimodalLM.from_pretrained(
     "Qwen/Qwen2.5-Omni-3B",
-    dtype=torch.bfloat16,
+    device_map="auto",
     attn_implementation="flash_attention_2",
-).to(device)
+)
 
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-Omni-3B")
 ```
 
-These models typically include a [chat template](./chat_templating) to structure conversations across modalities. Inputs can mix images, text, audio, or other supported formats in a single turn. Outputs may also vary (e.g., text generation or audio generation), depending on the configuration.
+These models typically include a [chat template](../chat_templating) to structure conversations across modalities. Inputs can mix images, text, audio, or other supported formats in a single turn. Outputs may also vary (e.g., text generation or audio generation), depending on the configuration.
 
 Below is an example providing a "text + audio" input and requesting a text response.
 
@@ -69,14 +68,14 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
     add_generation_prompt=True,
-)
+).to(model.device)
 ```
 
 We can now pass the preprocessed inputs to the model.
 
 ```python
 with torch.no_grad():
-    generated_ids = model.generate(**inputs, max_new_tokens=100)
+    generated_ids = model.generate(**inputs, max_new_tokens=100, generation_mode="text")
 generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
 print(generated_texts)
 ```

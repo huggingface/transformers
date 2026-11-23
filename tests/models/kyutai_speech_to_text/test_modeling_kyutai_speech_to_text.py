@@ -16,6 +16,7 @@
 import gc
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import datasets
 import pytest
@@ -30,6 +31,8 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_accelerate,
+    require_bitsandbytes,
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -37,7 +40,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils.generic import is_flash_attention_requested
 
-from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
+from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -261,7 +264,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def setUp(self):
         self.model_tester = KyutaiSpeechToTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=KyutaiSpeechToTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=KyutaiSpeechToTextConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -277,19 +280,13 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         # monkey patch prepare_config_and_inputs_for_common
-
         prepare_config_and_inputs_for_common = self.model_tester.prepare_config_and_inputs_for_common
-        original_batch_size = self.model_tester.batch_size
-
         self.model_tester.prepare_config_and_inputs_for_common = (
             self.model_tester.prepare_config_and_inputs_for_common_generate
         )
-        self.model_tester.batch_size = batch_size
 
-        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate()
+        config, filtered_inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
         self.model_tester.prepare_config_and_inputs_for_common = prepare_config_and_inputs_for_common
-
-        self.model_tester.batch_size = original_batch_size
         return config, filtered_inputs_dict
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
@@ -341,7 +338,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         unpadded_custom_inputs = self.model_tester.prepare_config_and_inputs_for_common()[1]
         super().test_left_padding_compatibility(unpadded_custom_inputs=unpadded_custom_inputs)
 
-    def test_generate_continue_from_past_key_values(self):
+    def test_generate_continue_from_cache(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt", "mllama"]):
@@ -373,10 +370,10 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            # If "cache" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
             outputs = model(**inputs)
-            if "past_key_values" not in outputs:
-                self.skipTest(reason="This model doesn't return `past_key_values`")
+            if "cache" not in outputs:
+                self.skipTest(reason="This model doesn't return `cache`")
 
             generate_kwargs = {
                 "pad_token_id": -1,
@@ -398,7 +395,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=2)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
-            inputs["past_key_values"] = outputs_cached.past_key_values
+            inputs["cache"] = outputs_cached.cache
             new_attention_len = outputs_cached.sequences.shape[-1]
             if config.is_encoder_decoder:
                 inputs["decoder_input_ids"] = outputs_cached.sequences
@@ -424,8 +421,8 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             outputs_cached.scores = full_cached_scores
 
             # The two sets of generated text and past kv should be equal to each other
-            self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+            assert_similar_generate_outputs(outputs, outputs_cached)
+            self._check_caches_are_equal(outputs.cache, outputs_cached.cache)
 
     # skipping for anything FA related that is not FA2 (no attn interface implemented)
     def flash_attn_inference_equivalence(
@@ -521,7 +518,34 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                 del model_attn
                 gc.collect()
 
-                self.assertTrue(has_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3))
+                assert_similar_generate_outputs(res_eager, res_attn, atol=1e-3, rtol=1e-3)
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Model expects inputs to be fixed shape and thus we cannot test scaling with long inputs")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @require_bitsandbytes
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_fp32_ln(self):
+        """Override for the mask edge case which can lead to device assertions worst case"""
+        original_prepare = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_without_padding():
+            config, inputs_dict = original_prepare()
+            # Kyutai has 3D input_ids but requires a 2D attention mask
+            inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
+            return config, inputs_dict
+
+        with patch.object(
+            self.model_tester,
+            "prepare_config_and_inputs_for_common",
+            side_effect=prepare_without_padding,
+        ):
+            super().test_flash_attn_2_fp32_ln()
 
 
 @require_torch
@@ -637,7 +661,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
 
         samples = self._load_datasamples(1)
         inputs = processor(
-            samples,
+            audio=samples,
         ).to(torch_device)
 
         out = model.generate(**inputs)
@@ -667,7 +691,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
 
         samples = self._load_datasamples(4)
         inputs = processor(
-            samples,
+            audio=samples,
         ).to(torch_device)
 
         out = model.generate(**inputs)

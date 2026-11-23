@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -25,7 +26,6 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -34,63 +34,63 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import merge_with_config_defaults
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 class Siglip2VisionOutput(ModelOutput):
     r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    image_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    image_embeds: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class Siglip2TextOutput(ModelOutput):
     r"""
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The text embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    text_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    text_embeds: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Siglip2Output(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+    logits_per_image (`torch.Tensor` of shape `(image_batch_size, text_batch_size)`):
         The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
         similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+    logits_per_text (`torch.Tensor` of shape `(text_batch_size, image_batch_size)`):
         The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
         similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`Siglip2TextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The image embeddings obtained by applying the projection layer to the pooled output of [`Siglip2VisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`Siglip2TextModel`].
@@ -98,19 +98,16 @@ class Siglip2Output(ModelOutput):
         The output of the [`Siglip2VisionModel`].
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_per_image: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_per_image: torch.Tensor | None = None
+    logits_per_text: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 class Siglip2VisionEmbeddings(nn.Module):
@@ -149,52 +146,37 @@ class Siglip2VisionEmbeddings(nn.Module):
         Returns:
             `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
         """
-        batch_size = spatial_shapes.shape[0]
-        embed_dim = positional_embeddings.shape[-1]
-        source_dtype = positional_embeddings.dtype
-
-        resulted_positional_embeddings = torch.empty(
-            (batch_size, max_length, embed_dim),
-            device=positional_embeddings.device,
-            dtype=source_dtype,
+        torch_compilable_check((spatial_shapes > 0).all(), "Resized positional embeddings must have a positive size.")
+        torch_compilable_check(
+            (spatial_shapes.prod(-1) <= max_length).all(), "Resized positional embeddings exceed max_length."
         )
+        grid_size = positional_embeddings.shape[0]
 
-        # (height, width, embed_dim) -> (1, embed_dim, height, width) for interpolation
-        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+        # Each output position's row and column in its image, the padding positions taking the first one
+        sizes = spatial_shapes.float()[:, None]
+        positions = torch.arange(max_length, device=spatial_shapes.device, dtype=torch.float32)[None, :, None]
+        rows = torch.div(positions, sizes[..., 1:], rounding_mode="floor")
+        output_index = torch.cat([rows, positions - rows * sizes[..., 1:]], dim=-1)
+        output_index = output_index * (positions < sizes.prod(-1, keepdim=True))
 
-        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU
-        if positional_embeddings.device.type == "cpu":
-            positional_embeddings = positional_embeddings.to(torch.float32)
+        # The weights of `F.interpolate(mode="bilinear", align_corners=False, antialias=True)` along each axis
+        scale = grid_size / sizes
+        support = scale.clamp(min=1)
+        center = (output_index + 0.5) * scale - 0.5
+        source = torch.arange(grid_size, device=spatial_shapes.device, dtype=torch.float32)
+        weights = (1 - (source - center[..., None]).abs_().div_(support[..., None])).clamp_(min=0)
+        weights = weights / weights.sum(-1, keepdim=True)
 
-        for i in range(batch_size):
-            # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
-            torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
-            torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
-            torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
-            resized_embeddings = F.interpolate(
-                positional_embeddings,
-                size=(height, width),
-                mode="bilinear",
-                align_corners=False,
-                antialias=True,
-            )
+        # Resizing is linear: each output is the grid weighted by its row's and its column's weights
+        weights = (weights[..., 0, :, None] * weights[..., 1, None, :]).flatten(-2)
+        flat_embeddings = positional_embeddings.reshape(-1, positional_embeddings.shape[-1])
+        resized_embeddings = weights.to(flat_embeddings.device) @ flat_embeddings.float()
+        return resized_embeddings.to(positional_embeddings.dtype)
 
-            # (1, dim, target_height, target_width) -> (target_height * target_width, dim)
-            resized_embeddings = resized_embeddings.reshape(embed_dim, height * width).transpose(0, 1)
-
-            # Cast to original dtype
-            resized_embeddings = resized_embeddings.to(source_dtype)
-
-            resulted_positional_embeddings[i, : height * width] = resized_embeddings
-            resulted_positional_embeddings[i, height * width :] = resized_embeddings[0]
-
-        return resulted_positional_embeddings
-
-    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
         """
         Args:
-            pixel_values (`torch.FloatTensor`):
+            pixel_values (`torch.Tensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
             spatial_shapes (`list[tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
@@ -226,15 +208,13 @@ class Siglip2TextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_embedding.weight.shape[0]
@@ -311,15 +291,12 @@ class Siglip2Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -336,7 +313,7 @@ class Siglip2Attention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -372,7 +349,7 @@ class Siglip2EncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -415,9 +392,9 @@ class Siglip2PreTrainedModel(PreTrainedModel):
         "attentions": Siglip2Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, Siglip2VisionEmbeddings):
             width = (
                 self.config.vision_config.hidden_size
@@ -459,9 +436,6 @@ class Siglip2PreTrainedModel(PreTrainedModel):
             init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, Siglip2TextEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
@@ -500,7 +474,16 @@ class Siglip2Encoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class Siglip2VisionTransformer(Siglip2PreTrainedModel):
+@auto_docstring(
+    custom_intro="""
+    The vision model from Siglip2 without any head or projection on top.
+    """
+)
+class Siglip2VisionModel(Siglip2PreTrainedModel):
+    config: Siglip2VisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    base_model_prefix = "vision_model"
     _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: Siglip2VisionConfig):
@@ -511,60 +494,83 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
         self.embeddings = Siglip2VisionEmbeddings(config)
         self.encoder = Siglip2Encoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+        self.use_head = config.vision_use_head
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
-
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        attention_mask: torch.Tensor,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
 
+        Examples:
+
+        ```python
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, Siglip2VisionModel
+
+        >>> model = Siglip2VisionModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```
+        """
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
         encoder_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=pixel_attention_mask,
         )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooler_output = self.head(last_hidden_state, attention_mask) if self.use_head else None
+        pooler_output = self.head(last_hidden_state, pixel_attention_mask) if self.use_head else None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooler_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
-class Siglip2TextTransformer(Siglip2PreTrainedModel):
+@auto_docstring(
+    custom_intro="""
+    The text model from Siglip2 without any head or projection on top.
+    """
+)
+class Siglip2TextModel(Siglip2PreTrainedModel):
+    config: Siglip2TextConfig
+    input_modalities = ("text",)
+    base_model_prefix = "text_model"
     _input_embed_layer = "token_embedding"
 
     def __init__(self, config: Siglip2TextConfig):
@@ -578,7 +584,8 @@ class Siglip2TextTransformer(Siglip2PreTrainedModel):
         self.head = nn.Linear(embed_dim, config.projection_size)
         self.post_init()
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -587,6 +594,22 @@ class Siglip2TextTransformer(Siglip2PreTrainedModel):
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, Siglip2TextModel
+
+        >>> model = Siglip2TextModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> # important: make sure to set padding="max_length" as that's how the model was trained
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        ```"""
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
@@ -618,62 +641,6 @@ class Siglip2TextTransformer(Siglip2PreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The text model from Siglip2 without any head or projection on top.
-    """
-)
-class Siglip2TextModel(Siglip2PreTrainedModel):
-    config: Siglip2TextConfig
-    input_modalities = ("text",)
-
-    def __init__(self, config: Siglip2TextConfig):
-        super().__init__(config)
-        self.text_model = Siglip2TextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
-
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Siglip2TextModel
-
-        >>> model = Siglip2TextModel.from_pretrained("google/siglip2-base-patch16-224")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip2-base-patch16-224")
-
-        >>> # important: make sure to set padding="max_length" as that's how the model was trained
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            **kwargs,
         )
 
 
@@ -711,7 +678,7 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
                 if attention_mask.dtype == torch.bool:
                     attention_mask = torch.where(
                         attention_mask,
-                        torch.tensor(0.0, device=attention_mask.device, dtype=probe.dtype),
+                        torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
                         torch.finfo(probe.dtype).min,
                     )
 
@@ -724,72 +691,6 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
         return hidden_state[:, 0]
 
 
-@auto_docstring(
-    custom_intro="""
-    The vision model from Siglip2 without any head or projection on top.
-    """
-)
-class Siglip2VisionModel(Siglip2PreTrainedModel):
-    config: Siglip2VisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-
-    def __init__(self, config: Siglip2VisionConfig):
-        super().__init__(config)
-
-        self.vision_model = Siglip2VisionTransformer(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        pixel_attention_mask: torch.Tensor,
-        spatial_shapes: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
-            Mask to avoid performing attention on padding pixel indices.
-        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
-            Tensor containing the spatial dimensions (height, width) of the input images.
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import httpx
-        >>> from io import BytesIO
-        >>> from transformers import AutoProcessor, Siglip2VisionModel
-
-        >>> model = Siglip2VisionModel.from_pretrained("google/siglip2-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> with httpx.stream("GET", url) as response:
-        ...     image = Image.open(BytesIO(response.read()))
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled features
-        ```"""
-        return self.vision_model(
-            pixel_values=pixel_values,
-            attention_mask=pixel_attention_mask,
-            spatial_shapes=spatial_shapes,
-            **kwargs,
-        )
-
-
 @auto_docstring
 class Siglip2Model(Siglip2PreTrainedModel):
     config: Siglip2Config
@@ -797,28 +698,12 @@ class Siglip2Model(Siglip2PreTrainedModel):
     def __init__(self, config: Siglip2Config):
         super().__init__(config)
 
-        if not isinstance(config.text_config, Siglip2TextConfig):
-            raise TypeError(
-                "config.text_config is expected to be of type Siglip2TextConfig but is of type"
-                f" {type(config.text_config)}."
-            )
-
-        if not isinstance(config.vision_config, Siglip2VisionConfig):
-            raise TypeError(
-                "config.vision_config is expected to be of type Siglip2VisionConfig but is of type"
-                f" {type(config.vision_config)}."
-            )
-
         text_config = config.text_config
         vision_config = config.vision_config
 
         # First, initialize the text and vision models with proper attention implementation
-        text_model = Siglip2TextModel._from_config(text_config)
-        vision_model = Siglip2VisionModel._from_config(vision_config)
-
-        # Second, get the text and vision submodules (for backward compatibility)
-        self.text_model = text_model.text_model
-        self.vision_model = vision_model.vision_model
+        self.text_model = Siglip2TextModel._from_config(text_config)
+        self.vision_model = Siglip2VisionModel._from_config(vision_config)
 
         self.logit_scale = nn.Parameter(torch.randn(1))
         self.logit_bias = nn.Parameter(torch.randn(1))
@@ -867,7 +752,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -899,7 +784,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
         """
         return self.vision_model(
             pixel_values=pixel_values,
-            attention_mask=pixel_attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
             **kwargs,
         )
@@ -910,15 +795,13 @@ class Siglip2Model(Siglip2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Siglip2Output:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -932,7 +815,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
@@ -957,26 +840,18 @@ class Siglip2Model(Siglip2PreTrainedModel):
         31.9% that image 0 is 'a photo of 2 cats'
         ```
         """
-        # Use Siglip2 model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
-            attention_mask=pixel_attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         image_embeds = vision_outputs.pooler_output
@@ -1028,11 +903,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-
-        # Create the vision model with proper attention
-        # and take only vision_model submodule (for backward compatibility)
-        vision_model = Siglip2VisionModel._from_config(config.vision_config)
-        self.vision_model = vision_model.vision_model
+        self.vision_model = Siglip2VisionModel._from_config(config.vision_config)
 
         # Classifier head
         self.classifier = (
@@ -1048,8 +919,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.vision_model.embeddings.patch_embedding = value
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1057,19 +927,13 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         pixel_attention_mask: torch.Tensor | None = None,
         spatial_shapes: torch.LongTensor | None = None,
         labels: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
             Mask to avoid performing attention on padding pixel indices.
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Examples:
 
@@ -1077,7 +941,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
@@ -1099,17 +963,11 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         Predicted class: LABEL_1
         ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values,
-            attention_mask=pixel_attention_mask,
+            pixel_attention_mask=pixel_attention_mask,
             spatial_shapes=spatial_shapes,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            **kwargs,
         )
 
         sequence_output = outputs.last_hidden_state

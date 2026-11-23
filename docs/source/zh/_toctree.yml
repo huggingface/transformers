@@ -15,8 +15,6 @@
     title: 预处理数据
   - local: training
     title: 微调预训练模型
-  - local: run_scripts
-    title: 通过脚本训练模型
   - local: accelerate
     title: 使用🤗Accelerate进行分布式训练
   - local: peft
@@ -33,6 +31,16 @@
     sections:
     - local: tasks/asr
       title: 自动语音识别
+    - local: tasks/sequence_classification
+      title: 文本分类
+    - local: tasks/token_classification
+      title: 词元分类
+    - local: tasks/question_answering
+      title: 问答
+    - local: tasks/translation
+      title: 翻译
+    - local: tasks/summarization
+      title: 摘要
 - sections:
   - local: fast_tokenizers
     title: 使用 🤗 Tokenizers 中的分词器
@@ -76,6 +84,8 @@
     title: 问题定位及解决
   - local: perf_torch_compile
     title: 使用 `torch.compile()` 优化推理
+  - local: kernels
+    title: Kernels（自定义内核）
   title: 性能和可扩展性
 - sections:
   - local: contributing

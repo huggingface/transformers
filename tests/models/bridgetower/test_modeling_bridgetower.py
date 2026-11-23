@@ -25,6 +25,7 @@ from transformers import (
 )
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -51,34 +52,28 @@ if is_vision_available():
     from transformers import BridgeTowerProcessor
 
 
-class BridgeTowerTextModelTester:
-    def __init__(
-        self,
-        parent,
-        hidden_act="gelu",
-        hidden_size=64,
-        initializer_factor=1,
-        layer_norm_eps=1e-05,
-        num_attention_heads=4,
-        num_hidden_layers=2,
-        intermediate_size=128,
-        tie_word_embeddings=False,
-        output_hidden_states=False,
-    ):
+class BridgeTowerTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "hidden_act": "gelu",
+        "hidden_size": 64,
+        "initializer_factor": 1e-10,
+        "layer_norm_eps": 1e-05,
+        "num_attention_heads": 4,
+        "num_hidden_layers": 2,
+        "intermediate_size": 128,
+        "tie_word_embeddings": False,
+        "vocab_size": 99,
+        "seq_length": 4,
+        "batch_size": 1,
+        "is_training": False,
+        "output_hidden_states": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.initializer_factor = initializer_factor
-        self.layer_norm_eps = layer_norm_eps
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = 99
-        self.seq_length = 4
-        self.batch_size = 1
-        self.is_training = False
-        self.output_hidden_states = output_hidden_states
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -103,30 +98,26 @@ class BridgeTowerTextModelTester:
         )
 
 
-class BridgeTowerImageModelTester:
-    def __init__(
-        self,
-        parent,
-        hidden_size=64,
-        initializer_factor=1,
-        layer_norm_eps=1e-05,
-        num_hidden_layers=2,
-        init_layernorm_from_vision_encoder=False,
-        output_hidden_states=False,
-        image_size=64,
-    ):
+class BridgeTowerImageModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "hidden_size": 64,
+        "initializer_factor": 1e-10,
+        "layer_norm_eps": 1e-05,
+        "num_hidden_layers": 2,
+        "init_layernorm_from_vision_encoder": False,
+        "num_channels": 3,
+        "num_image_features": 17,
+        "batch_size": 1,
+        "image_size": 64,
+        "is_training": False,
+        "output_hidden_states": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.hidden_size = hidden_size
-        self.initializer_factor = initializer_factor
-        self.layer_norm_eps = layer_norm_eps
-        self.num_hidden_layers = num_hidden_layers
-        self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
-        self.num_channels = 3
-        self.num_image_features = 17
-        self.batch_size = 1
-        self.image_size = image_size
-        self.is_training = False
-        self.output_hidden_states = output_hidden_states
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -151,47 +142,34 @@ class BridgeTowerImageModelTester:
         )
 
 
-class BridgeTowerModelTester:
-    def __init__(
-        self,
-        parent,
-        text_kwargs=None,
-        vision_kwargs=None,
-        share_cross_modal_transformer_layers=True,
-        share_link_tower_layers=False,
-        link_tower_type="add",
-        init_layernorm_from_vision_encoder=False,
-        contrastive_hidden_size=512,
-        logit_scale_init_value=2.6592,
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=128,
-    ):
+class BridgeTowerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "share_cross_modal_transformer_layers": True,
+        "share_link_tower_layers": False,
+        "link_tower_type": "add",
+        "init_layernorm_from_vision_encoder": False,
+        "contrastive_hidden_size": 512,
+        "logit_scale_init_value": 2.6592,
+        "batch_size": 1,
+        "expected_num_hidden_layers": 8,
+        "is_training": False,
+        "hidden_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 128,
+    }
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
             vision_kwargs = {}
-
-        self.parent = parent
         self.text_model_tester = BridgeTowerTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = BridgeTowerImageModelTester(parent, **vision_kwargs)
-
-        self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
-        self.share_link_tower_layers = share_link_tower_layers
-        self.link_tower_type = link_tower_type
-        self.init_layernorm_from_vision_encoder = init_layernorm_from_vision_encoder
-        self.contrastive_hidden_size = contrastive_hidden_size
-        self.logit_scale_init_value = logit_scale_init_value
-
-        self.batch_size = 1
-        self.expected_num_hidden_layers = 8
-        self.is_training = False
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -294,6 +272,8 @@ class BridgeTowerModelTester:
 
 @require_torch
 class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = BridgeTowerModelTester
+
     all_model_classes = (
         (
             BridgeTowerModel,
@@ -307,7 +287,6 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
 
     is_training = False
-
     test_resize_embeddings = False
     has_attentions = False
 
@@ -329,7 +308,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     def setUp(self):
         self.model_tester = BridgeTowerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
+        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=32, vocab_size=99)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -447,6 +426,10 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    @unittest.skip(reason="hidden states are concatenated as 3 tuples of text/image/cross")
+    def test_can_capture_specific_layers_hidden_states(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -541,6 +524,8 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
 @slow
 @require_torch
 class BridgeTowerModelTrainingTest(unittest.TestCase):
+    model_tester_class = BridgeTowerModelTester
+
     all_training_supported_model_classes = (
         (BridgeTowerForImageAndTextRetrieval, BridgeTowerForMaskedLM, BridgeTowerForContrastiveLearning)
         if is_torch_available()
@@ -549,7 +534,7 @@ class BridgeTowerModelTrainingTest(unittest.TestCase):
 
     def setUp(self):
         self.model_tester = BridgeTowerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=37, vocab_size=99)
+        self.config_tester = ConfigTester(self, config_class=BridgeTowerConfig, hidden_size=32, vocab_size=99)
 
     def _prepare_inputs_for_training(self, model_class):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

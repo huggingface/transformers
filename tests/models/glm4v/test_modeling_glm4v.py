@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch GLM-4.1V model."""
 
-import copy
 import unittest
 
 from transformers import (
@@ -35,35 +34,36 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
 
 
-class Glm4vVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=112,
-        video_start_token_id=3,
-        video_end_token_id=4,
-        image_start_token_id=5,
-        image_end_token_id=6,
-        image_token_id=7,
-        video_token_id=8,
-        is_training=True,
-        text_config={
+class Glm4vVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_channels": 3,
+        "ignore_index": -100,
+        "image_size": 112,
+        "video_start_token_id": 3,
+        "video_end_token_id": 4,
+        "image_start_token_id": 5,
+        "image_end_token_id": 6,
+        "image_token_id": 7,
+        "video_token_id": 8,
+        "is_training": True,
+        "text_config": {
             "vocab_size": 99,
             "hidden_size": 16,
             "intermediate_size": 22,
@@ -80,7 +80,7 @@ class Glm4vVisionText2TextModelTester:
             "eos_token_id": 0,
             "pad_token_id": 0,
         },
-        vision_config={
+        "vision_config": {
             "depth": 2,
             "hidden_act": "silu",
             "hidden_size": 48,
@@ -90,30 +90,27 @@ class Glm4vVisionText2TextModelTester:
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
         },
-    ):
+        "num_image_tokens": 64,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["bos_token_id"] = text_config["bos_token_id"]
+        values["eos_token_id"] = text_config["eos_token_id"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.video_start_token_id = video_start_token_id
-        self.video_end_token_id = video_end_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.hidden_size = text_config["hidden_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.vocab_size = text_config["vocab_size"]
-        self.num_image_tokens = 64
-        self.seq_length = seq_length + self.num_image_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Glm4vConfig(
@@ -159,6 +156,9 @@ class Glm4vVisionText2TextModelTester:
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
 
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[:, 1 : 1 + self.num_image_tokens] = 1
+
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor(
@@ -166,6 +166,7 @@ class Glm4vVisionText2TextModelTester:
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
         }
         return config, inputs_dict
 
@@ -176,6 +177,7 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     _is_composite = True
+    model_tester_class = Glm4vVisionText2TextModelTester
 
     def setUp(self):
         self.model_tester = Glm4vVisionText2TextModelTester(self)
@@ -184,98 +186,59 @@ class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # GLM4V has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # We don't want a few model inputs in our model input dictionary for generation tests
-        input_keys_to_ignore = [
-            # we don't want to mask attention heads
-            # we don't want encoder-decoder models to start from filled decoder ids
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            # we'll set cache use in each test differently
-            "use_cache",
-            # Ignore labels if it is in the input dict
-            "labels",
-            # model-specific exceptions should overload/overwrite this function
-        ]
-
-        # The diff from the general `prepare_config_and_inputs_for_generate` lies here
-        patch_size = config.vision_config.patch_size
-        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
-        filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
-            for k, v in inputs_dict.items()
-            if k not in input_keys_to_ignore
-        }
-        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-
-        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
-
     @unittest.skip(reason="No available kernels - not supported")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Size mismatch")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @unittest.skip("Error with compilation")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_vision_position_ids(self):
+        """
+        Tests that vision position ids are built correctly for images and for videos.
+        See https://github.com/huggingface/transformers/pull/45400
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Glm4vModel(config).to(torch_device)
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
+        # Each image encodes to more than 1 token (i.e. 4 height and 3 width patches = 12 tokens)
+        image_token_id = config.image_token_id
+        pad_token_id = config.text_config.pad_token_id
+        input_ids = torch.tensor([[pad_token_id] + [image_token_id] * 12 + [pad_token_id]], device=torch_device)
+        mm_token_type_ids = torch.tensor([[0] + [1] * 12 + [0]], device=torch_device)
+        image_grid_thw = torch.tensor([[1, 4, 3]], device=torch_device)
+        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, image_grid_thw)[0]
+        expected_positions = torch.tensor(
+            [
+                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5]],
+                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
+                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
+            ]
+        )
 
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+        self.assertListEqual(list(position_ids.shape), [3, 1, 14])
+        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
 
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["image_grid_thw"]
+        # Check video position ids with 2 frames, and 4 height, 3 width patches (= 12 * 2 tokens)
+        video_token_id = config.video_token_id
+        input_ids = torch.tensor(
+            [[pad_token_id] + [video_token_id] * 12 + [pad_token_id] + [video_token_id] * 12 + [pad_token_id]],
+            device=torch_device,
+        )
+        mm_token_type_ids = torch.tensor([[0] + [2] * 12 + [0] + [2] * 12 + [0]], device=torch_device)
+        video_grid_thw = torch.tensor([[2, 4, 3]], device=torch_device)
+        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, video_grid_thw=video_grid_thw)[0]
+        expected_positions = torch.tensor(
+            [
+                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 10]],
+                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10]],
+                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5, 6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8, 10]],
+            ]
+        )
 
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-            with torch.no_grad():
-                model(**inputs)[0]
-
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["image_grid_thw"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
+        self.assertListEqual(list(position_ids.shape), [3, 1, 27])
+        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
 
 
 @require_torch
@@ -290,7 +253,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -302,7 +267,9 @@ class Glm4vIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -345,13 +312,24 @@ class Glm4vIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically"
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
+                ("cuda", (8, 6)): "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog. Wait, it's a cat,",
+                ("xpu", 5): "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog. Wait, it's a cat,",
+            }
+        )
+        # fmt: on
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
 
     @slow
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_batch(self):
         model = Glm4vForConditionalGeneration.from_pretrained(
             "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
@@ -367,10 +345,20 @@ class Glm4vIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture has a stocky body, thick fur, and a face that's"
-        ]  # fmt: skip
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
+                               "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture has a stocky body, thick fur, and a face that's"
+                              ],
+                ("xpu", 5): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
+                            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog. Wait, it's a cat,"
+                           ],
+            }
+        )
+        # fmt: on
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -471,10 +459,20 @@ class Glm4vIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
-            "\nWho are you?\n<think>Got it, let's look at the user's question: \"Who are you?\" This is a common question when someone is just starting a conversation"
-        ]  # fmt: skip
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
+                               "\nWho are you?\n<think>Got it, let's look at the user's question: \"Who are you?\" This is a common question when someone is just starting a conversation"
+                              ],
+                ("xpu", 5): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's a cat, specifically a",
+                            "\nWho are you?\n<think>Got it, let's look at the question: \"Who are you?\" The user is asking about the identity of the AI. I need to"
+                           ],
+            }
+        )
+        # fmt: on
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -495,16 +493,23 @@ class Glm4vIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(torch_device)
 
-        # This model on the hub has `do_sample=True`.
-        torch.manual_seed(42)
-
         # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's actually a cat. Specifically",
-            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but",
-        ]  # fmt: skip
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture is not a dog; it's a cat. Specifically, it looks",
+                               "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but"
+                              ],
+                ("xpu", 5): ["\nWhat kind of dog is this?\n<think>Got it, let's look at the image. The animal in the picture doesn't look like a dog; it's a cat, specifically a",
+                            "\nWhat kind of dog is this?\n<think>Got it, let's look at the image. Wait, the animals here are cats, not dogs. The question is about a dog, but"
+                           ],
+            }
+        )
+        # fmt: on
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

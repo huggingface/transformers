@@ -42,21 +42,21 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_aimv2 import Aimv2Config, Aimv2TextConfig, Aimv2VisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Aimv2Output(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for image-text similarity.
-    logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
+    logits_per_image (`torch.Tensor` of shape `(image_batch_size, text_batch_size)`):
         The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
         similarity scores.
-    logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
+    logits_per_text (`torch.Tensor` of shape `(text_batch_size, image_batch_size)`):
         The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
         similarity scores.
-    text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    text_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`Aimv2TextModel`].
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim`):
         The image embeddings obtained by applying the projection layer to the pooled output of [`Aimv2VisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`Aimv2TextModel`].
@@ -64,19 +64,16 @@ class Aimv2Output(ModelOutput):
         The output of the [`Aimv2VisionModel`].
     """
 
-    loss: torch.FloatTensor | None = None
-    logits_per_image: torch.FloatTensor | None = None
-    logits_per_text: torch.FloatTensor | None = None
-    text_embeds: torch.FloatTensor | None = None
-    image_embeds: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits_per_image: torch.Tensor | None = None
+    logits_per_text: torch.Tensor | None = None
+    text_embeds: torch.Tensor | None = None
+    image_embeds: torch.Tensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+        return tuple(v.to_tuple() if isinstance(v, ModelOutput) else v for v in self.values())
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -116,6 +113,56 @@ class Aimv2MLP(nn.Module):
         return down_proj
 
 
+def build_2d_sinusoidal_position_embedding(
+    height: int,
+    width: int,
+    embed_dim: int = 256,
+    temperature: float = 10000.0,
+    cls_token: bool = False,
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """2D sinusoidal position embeddings for an image patch grid.
+
+    Each (h, w) position gets an ``embed_dim``-dimensional vector laid out as
+    ``[sin_h | cos_h | sin_w | cos_w]``, with row-major (H-outer) patch ordering.
+
+    Args:
+        height: Grid height in patches.
+        width: Grid width in patches.
+        embed_dim: Total embedding dimension; must be divisible by 4.
+        temperature: Base for the frequency decay.
+        cls_token: If `True`, prepend a zero row for a CLS token.
+        device: Target device; defaults to CPU.
+        dtype: Output dtype; frequency arithmetic uses float64 internally.
+
+    Returns:
+        Tensor of shape ``(height * width [+1], embed_dim)``.
+    """
+    if embed_dim % 4 != 0:
+        raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
+
+    pos_dim = embed_dim // 4
+    # mps doesn't support float64
+    compute_dtype = torch.float64 if device is None or device.type != "mps" else torch.float32
+    omega = torch.arange(pos_dim, dtype=compute_dtype, device=device) / pos_dim
+    omega = 1.0 / temperature**omega  # (D/4,)
+
+    grid_h = torch.arange(height, dtype=compute_dtype, device=device)
+    grid_w = torch.arange(width, dtype=compute_dtype, device=device)
+    grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
+
+    emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
+    emb_w = grid_w.flatten().outer(omega)  # (H*W, D/4)
+
+    pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
+
+    if cls_token:
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=compute_dtype, device=device), pos_embed], dim=0)
+
+    return pos_embed.to(dtype)
+
+
 class Aimv2VisionEmbeddings(nn.Module):
     def __init__(self, config: Aimv2VisionConfig):
         super().__init__()
@@ -129,24 +176,7 @@ class Aimv2VisionEmbeddings(nn.Module):
         num_patches = (config.image_size // config.patch_size) ** 2
         if not self.config.is_native:
             self.position_embedding = nn.Embedding(num_patches, config.hidden_size)
-        self.register_buffer("position_ids", torch.arange(num_patches).expand((1, -1)), persistent=False)
-
-    @staticmethod
-    def build_2d_sincos_position_embedding(
-        height, width, embed_dim=256, temperature=10000.0, device="cpu", dtype=torch.float32
-    ) -> torch.Tensor:
-        grid_w = torch.arange(int(width), dtype=dtype, device=device)
-        grid_h = torch.arange(int(height), dtype=dtype, device=device)
-        grid_h, grid_w = torch.meshgrid(grid_w, grid_h, indexing="xy")
-
-        pos_dim = embed_dim // 4
-        omega = torch.arange(pos_dim, dtype=dtype, device=device) / pos_dim
-        omega = 1.0 / (temperature**omega)
-
-        out_h = grid_h.flatten()[..., None] @ omega[None, :]
-        out_w = grid_w.flatten()[..., None] @ omega[None, :]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        self.position_ids = nn.Buffer(torch.arange(num_patches).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         _, _, height, width = pixel_values.size()
@@ -154,13 +184,18 @@ class Aimv2VisionEmbeddings(nn.Module):
         hidden_states = self.rms_norm(hidden_states)
 
         if self.config.is_native:
-            pos_embed = self.build_2d_sincos_position_embedding(
-                height // self.patch_size,
-                width // self.patch_size,
+            pos_embed = build_2d_sinusoidal_position_embedding(
+                height=height // self.patch_size,
+                width=width // self.patch_size,
                 embed_dim=self.config.hidden_size,
                 device=hidden_states.device,
                 dtype=hidden_states.dtype,
             )
+            # AIMv2 was trained with [sin_w|cos_w|sin_h|cos_h] layout (matching ViT-MAE's
+            # original naming-bug convention); rotate the canonical h-first embedding to match.
+            half = pos_embed.shape[-1] // 2
+            pos_embed = torch.cat([pos_embed[..., half:], pos_embed[..., :half]], dim=-1)
+            pos_embed = pos_embed.unsqueeze(0)
         else:
             pos_embed = self.position_embedding(self.position_ids)
 
@@ -177,15 +212,13 @@ class Aimv2TextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_embedding.weight.shape[0]
@@ -261,15 +294,12 @@ class Aimv2Attention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -286,7 +316,7 @@ class Aimv2Attention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -406,7 +436,6 @@ class Aimv2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "logit_scale"):
@@ -463,7 +492,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Siglip2VisionModel
 
@@ -505,7 +534,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 )
 class Aimv2TextModel(Aimv2PreTrainedModel):
     main_input_name = "input_ids"
-
+    config: Aimv2TextConfig
     _can_record_outputs = {
         "hidden_states": Aimv2EncoderLayer,
         "attentions": Aimv2Attention,
@@ -540,16 +569,15 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
         hidden_states = self.embeddings(input_ids)
         batch_size, seq_len, _ = hidden_states.shape
 
-        cache_position = torch.arange(seq_len, dtype=torch.long, device=hidden_states.device)
-        position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
+        position_ids = torch.arange(seq_len, dtype=torch.long, device=hidden_states.device)
+        position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
         if attention_mask is not None:
             attention_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=hidden_states,
                 position_ids=position_ids,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=None,
+                cache=None,
             )
 
         encoder_outputs = self.encoder(
@@ -586,8 +614,6 @@ def _get_vector_norm(tensor: torch.Tensor) -> torch.Tensor:
 
 @auto_docstring
 class Aimv2Model(Aimv2PreTrainedModel):
-    config: Aimv2Config
-    _no_split_modules = ["Aimv2TextEmbeddings", "Aimv2EncoderLayer", "Aimv2VisionEmbeddings"]
     _supports_flash_attn = True
 
     def __init__(self, config: Aimv2Config):
@@ -648,7 +674,7 @@ class Aimv2Model(Aimv2PreTrainedModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -687,7 +713,7 @@ class Aimv2Model(Aimv2PreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Aimv2Output:
@@ -696,7 +722,7 @@ class Aimv2Model(Aimv2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Aimv2Model
 

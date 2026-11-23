@@ -18,13 +18,16 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_xlstm_available
+from ...processing_utils import Unpack
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_xlstm_available
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_xlstm import xLSTMConfig
 
 
@@ -426,10 +429,10 @@ else:
         scaI_act = torch.exp(igate - scaM_state_new)
 
         vecQ_scaled = query * (dhqk ** (-0.5))
-        matC_state_new = scaF_act[:, :, :, None] * matC_old + scaI_act[:, :, :, None] * (
+        matC_state_new = scaF_act[:, :, :, None] * matC_old.clone() + scaI_act[:, :, :, None] * (
             key[:, :, :, None] @ value[:, :, None, :]
         )
-        vecN_state_new = scaF_act * vecN_old + scaI_act * key
+        vecN_state_new = scaF_act * vecN_old.clone() + scaI_act * key
         h_num = vecQ_scaled[:, :, None, :] @ matC_state_new.to(dtype=dtype_qkv)
         h_num = h_num.squeeze(2).to(dtype=dtype_state)
 
@@ -734,8 +737,6 @@ else:
 
         This module wraps the xLSTM kernels and provides a high-level interface for training and inference.
         """
-
-        config_class = xLSTMConfig
 
         def __init__(self, config: xLSTMConfig):
             super().__init__()
@@ -1232,11 +1233,14 @@ class xLSTMPreTrainedModel(PreTrainedModel):
     An abstract class for an interface to loading a pre-trained xLSTM model.
     """
 
-    config_class = xLSTMConfig
+    config: xLSTMConfig
     base_model_prefix = "backbone"
     _no_split_modules = ["xLSTMBlock"]
     supports_gradient_checkpointing = True
     _is_stateful = True
+    _can_record_outputs = {
+        "hidden_states": xLSTMBlock,
+    }
 
     def _module_name_map(self, module):
         for name, mod in self.named_modules():
@@ -1244,8 +1248,8 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 return name
         return ""
 
-    @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, nn.Embedding):
             small_init_method(self.config.hidden_size)(self.embeddings.weight)
         elif isinstance(module, nn.Linear):
@@ -1296,10 +1300,6 @@ class xLSTMPreTrainedModel(PreTrainedModel):
                 wang_init_method(dim=self.config.hidden_size, n_layers=self.config.num_hidden_layers)(module.weight)
             elif module.weight is not None:
                 small_init_method(self.config.hidden_size)(module.weight)
-        elif isinstance(module, xLSTMRMSNorm) or hasattr(module, "_layer_normalize"):
-            init.ones_(module.weight)
-            if hasattr(module, "bias") and module.bias is not None:
-                init.zeros_(module.bias)
 
 
 class xLSTMCache:
@@ -1317,7 +1317,7 @@ class xLSTMCache:
             The device on which the cache should be initialized. Should be the same as the layer.
 
     Attributes:
-        seqlen_offset: int
+        seqlen_offset: torch.Tensor
         dtype: torch.dtype
 
     Example:
@@ -1331,9 +1331,9 @@ class xLSTMCache:
         >>> inputs = tokenizer(text="I am an xLSTM", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model's forward
-        >>> cache_params = xLSTMCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
-        >>> outputs = model(**inputs, cache_params=cache_params, use_cache=True)
-        >>> outputs.cache_params
+        >>> cache = xLSTMCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
+        >>> outputs = model(**inputs, cache=cache, use_cache=True)
+        >>> outputs.cache
         xLSTMCache()
     """
 
@@ -1345,7 +1345,11 @@ class xLSTMCache:
         device: str | None = None,
         **kwargs,
     ):
-        self.seqlen_offset = 0
+        # Follows the static-cache convention (`StaticLayer.cumulative_length` in cache_utils.py):
+        # compile/export-friendly caches store the position counter as a tensor, not a Python int,
+        # so it stays a tensor leaf in the cache pytree across `+= shape[i]` operations rather
+        # than getting promoted to a SymInt during dynamic-shape tracing.
+        self.seqlen_offset = torch.tensor([0], dtype=int, device=device)
         self.dtype = dtype
         self.config = config
         self.rnn_state = {
@@ -1372,25 +1376,25 @@ class xLSTMCache:
         }
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class xLSTMOutput(ModelOutput):
     r"""
-    cache_params (`xLSTMCache`):
+    cache (`xLSTMCache`):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
 
-    last_hidden_state: torch.FloatTensor | None
-    cache_params: xLSTMCache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None
+    cache: xLSTMCache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 class xLSTMModel(xLSTMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: xLSTMConfig):
         super().__init__(config)
-        # use embbeding_dim and num_blocks once here to make use of them
+        # use embedding_dim and num_blocks once here to make use of them
         self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
         self.blocks = nn.ModuleList([xLSTMBlock(config) for _ in range(config.num_blocks)])
         self.out_norm = xLSTMRMSNorm(config.hidden_size, eps=config.norm_eps)
@@ -1404,27 +1408,27 @@ class xLSTMModel(xLSTMPreTrainedModel):
     def set_input_embeddings(self, new_embedding):
         self.embeddings = new_embedding
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.LongTensor | None = None,
-        cache_params: xLSTMCache | None = None,
+        cache: xLSTMCache | None = None,
         use_cache: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | xLSTMOutput:
         r"""
-        cache_params (`xLSTMCache`, *optional*):
+        cache (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
-        if self.gradient_checkpointing and self.training and use_cache:
-            use_cache = False
+        # Resolved here (not just by @capture_outputs) because the chunked inference path below
+        # is incompatible with hidden state collection and we need the value to pick the right branch.
+        output_hidden_states = kwargs.get("output_hidden_states")
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1432,8 +1436,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
 
-        if use_cache and cache_params is None:
-            cache_params = xLSTMCache(
+        if use_cache and cache is None:
+            cache = xLSTMCache(
                 self.config, inputs_embeds.size(0), device=inputs_embeds.device, dtype=inputs_embeds.dtype
             )
 
@@ -1446,8 +1450,8 @@ class xLSTMModel(xLSTMPreTrainedModel):
         ):
             offset = 0
             with torch.no_grad():
-                if cache_params is None:
-                    cache_params = xLSTMCache(config=self.config, max_batch_size=hidden_states.shape[0])
+                if cache is None:
+                    cache = xLSTMCache(config=self.config, max_batch_size=hidden_states.shape[0])
                 final_state = torch.zeros_like(hidden_states)
                 while offset < hidden_states.shape[1]:
                     hidden_states_chunk = hidden_states[
@@ -1456,71 +1460,63 @@ class xLSTMModel(xLSTMPreTrainedModel):
                     for layer_idx, xlstm_block in enumerate(self.blocks):
                         hidden_states_chunk, rnn_state = xlstm_block(
                             hidden_states_chunk,
-                            state=cache_params.rnn_state[layer_idx],
+                            state=cache.rnn_state[layer_idx],
                         )
-                        for state_idx in range(len(cache_params.rnn_state[layer_idx])):
+                        for state_idx in range(len(cache.rnn_state[layer_idx])):
                             local_rnn_state = rnn_state[state_idx]
-                            cache_params.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
-                        cache_params.rnn_state_initial = False
+                            cache.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
+                        cache.rnn_state_initial = False
                     final_state[
                         :, offset : min(offset + self.config.max_inference_chunksize, hidden_states.shape[1])
                     ] = hidden_states_chunk
                     offset += self.config.max_inference_chunksize
                 hidden_states = final_state
         else:
-            all_hidden_states = () if output_hidden_states else None
             for layer_idx, xlstm_block in enumerate(self.blocks):
                 hidden_states, rnn_state = xlstm_block(
                     hidden_states,
-                    cache_params.rnn_state[layer_idx] if cache_params is not None else None,
+                    cache.rnn_state[layer_idx] if cache is not None else None,
                 )
 
-                if cache_params:
-                    for state_idx in range(len(cache_params.rnn_state[layer_idx])):
+                if cache:
+                    for state_idx in range(len(cache.rnn_state[layer_idx])):
                         local_rnn_state = rnn_state[state_idx]
-                        cache_params.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
-                    cache_params.rnn_state_initial = False
-
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (hidden_states,)
+                        cache.rnn_state[layer_idx][state_idx].copy_(local_rnn_state)
+                    cache.rnn_state_initial = False
 
         if use_cache:
-            cache_params.seqlen_offset += inputs_embeds.shape[1]
+            cache.seqlen_offset += inputs_embeds.shape[1]
 
         hidden_states = self.out_norm(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
         return xLSTMOutput(
             last_hidden_state=hidden_states,
-            cache_params=cache_params,
-            hidden_states=all_hidden_states,
+            cache=cache,
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class xLSTMCausalLMOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache_params (`xLSTMCache`, *optional*, carrying the RNN states):
+    cache (`xLSTMCache`, *optional*, carrying the RNN states):
         The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
         avoid providing the old `input_ids`.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    cache_params: xLSTMCache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    cache: xLSTMCache | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
 class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: xLSTMConfig):
         super().__init__(config)
         self.backbone = xLSTMModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -1541,26 +1537,25 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        cache_params: xLSTMCache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        cache: xLSTMCache | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | xLSTMCausalLMOutput:
         r"""
-        cache_params (`xLSTMCache`, *optional*):
+        cache (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
         """
         xlstm_outputs = self.backbone(
             input_ids,
-            cache_params=cache_params,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_hidden_states=output_hidden_states,
             **kwargs,
         )
         hidden_states = xlstm_outputs[0]
@@ -1581,19 +1576,12 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device
-            labels = labels.to(logits.device)
-            # Shift so that tokens < nstate predict nstate
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return xLSTMCausalLMOutput(
             loss=loss,
             logits=logits,
-            cache_params=xlstm_outputs.cache_params,
+            cache=xlstm_outputs.cache,
             hidden_states=xlstm_outputs.hidden_states,
         )
 

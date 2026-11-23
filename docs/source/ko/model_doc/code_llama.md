@@ -91,13 +91,6 @@ print(filled_text)
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "# Function to calculate the factorial of a number\ndef factorial(n):" | transformers run --task text-generation --model meta-llama/CodeLlama-7b-hf --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 양자화는 가중치를 더 낮은 정밀도로 표현하여 대규모 모델의 메모리 부담을 줄입니다. 더 많은 사용 가능한 양자화 백엔드는 [양자화](../quantization/overview) 개요를 참조하세요.

@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     AutoProcessor,
@@ -26,9 +25,8 @@ from transformers import (
     MllamaForConditionalGeneration,
     MllamaModel,
     is_torch_available,
-    is_vision_available,
 )
-from transformers.cache_utils import Cache
+from transformers.cache_utils import Cache, StaticCache, StaticLayer
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
     Expectations,
@@ -42,26 +40,24 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from PIL import Image
 
+class MllamaText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-class MllamaText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        seq_length=7,
-        is_training=True,
-        text_config={
-            "model_type": "mllama",
+    small_config_overrides = {
+        "ignore_index": -100,
+        "seq_length": 7,
+        "is_training": True,
+        "text_config": {
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -76,19 +72,24 @@ class MllamaText2TextModelTester:
             "bos_token_id": 1,
             "eos_token_id": 2,
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.text_config = text_config
-        self.seq_length = seq_length
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-        self.pad_token_id = self.text_config["pad_token_id"]
-        self.batch_size = 3
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["batch_size"] = 3
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return MllamaTextConfig(**self.text_config)
@@ -123,6 +124,8 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     Model tester for `MllamaForConditionalGeneration`.
     """
 
+    model_tester_class = MllamaText2TextModelTester
+
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
@@ -134,16 +137,15 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         pass
 
 
-class MllamaVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=4,
-        seq_length=7,
-        is_training=True,
-        text_config={
-            "model_type": "mllama",
+class MllamaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_id": 4,
+        "seq_length": 7,
+        "is_training": True,
+        "text_config": {
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -159,7 +161,7 @@ class MllamaVisionText2TextModelTester:
             "eos_token_id": 2,
             "cross_attention_layers": [1],
         },
-        vision_config={
+        "vision_config": {
             "image_size": 30,
             "patch_size": 2,
             "num_channels": 3,
@@ -175,33 +177,35 @@ class MllamaVisionText2TextModelTester:
             "initializer_range": 0.02,
             "supported_aspect_ratios": [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]],
         },
-    ):
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["batch_size"] = 3
+        values["num_channels"] = 3
+        values["image_size"] = 224
+        values["max_num_images"] = 1
+        values["max_image_tiles"] = 4
+        values["image_length"] = 904
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.is_training = is_training
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.pad_token_id = self.text_config["pad_token_id"]
-
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 224
-        self.max_num_images = 1
-        self.max_image_tiles = 4
-        self.image_length = 904
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return MllamaConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            image_token_index=self.image_token_index,
+            image_token_id=self.image_token_id,
         )
 
     def prepare_config_and_inputs(self):
@@ -231,8 +235,8 @@ class MllamaVisionText2TextModelTester:
             (self.batch_size, self.seq_length, self.max_num_images, self.max_image_tiles), device=torch_device
         )
 
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, 1] = config.image_token_index
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+        input_ids[:, 1] = config.image_token_id
         inputs_dict = {
             "pixel_values": pixel_values,
             "aspect_ratio_ids": aspect_ratio_ids,
@@ -272,6 +276,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     Model tester for `MllamaForConditionalGeneration`.
     """
 
+    model_tester_class = MllamaVisionText2TextModelTester
+
     all_model_classes = (
         (
             MllamaModel,
@@ -287,7 +293,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_index"]
+            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_id"]
         )
 
     def test_config(self):
@@ -311,7 +317,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         self.assertTrue("loss" in output)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # Mllama has cross attention layers and those have a different shape than normal attention layers
         self.assertIsInstance(attentions, tuple)
@@ -321,7 +327,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         self.assertEqual(len(attentions), (output_length - prompt_length))
 
         cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
-        use_cache = decoder_past_key_values is not None
+        use_cache = decoder_cache is not None
+        has_static_cache = isinstance(decoder_cache, StaticCache)
 
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
@@ -329,26 +336,18 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-            query_length = prompt_length + generated_length
 
-            expected_shape = (
-                batch_size,
-                config.num_attention_heads,
-                model_input_length,
-                query_length,
-            )
-
-            expected_shape_cross = (
-                batch_size,
-                config.num_attention_heads,
-                model_input_length,
-                self.model_tester.image_length,
-            )
-
-            expected_shapes = [
-                expected_shape if layer_idx not in cross_attention_layers else expected_shape_cross
-                for layer_idx in range(len(iter_attentions))
-            ]
+            expected_shapes = []
+            for layer_idx in range(len(iter_attentions)):
+                if layer_idx in cross_attention_layers:
+                    # cross-attention always attends to all the vision states
+                    key_length = self.model_tester.image_length
+                elif has_static_cache:
+                    # a static cache is preallocated, so attention spans the whole cache
+                    key_length = decoder_cache.get_max_length(layer_idx)
+                else:
+                    key_length = prompt_length + generated_length
+                expected_shapes.append((batch_size, config.num_attention_heads, model_input_length, key_length))
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
 
@@ -400,20 +399,20 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         pass
 
     # overridden because mllama has special cache for self and cross attentions
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, Cache)
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        self.assertIsInstance(cache, Cache)
 
         num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
 
-        for layer_idx in range(len(past_key_values)):
+        for layer_idx in range(len(cache)):
             if layer_idx in self.model_tester.text_config["cross_attention_layers"]:
                 expected_shape = (batch_size, num_heads, self.model_tester.image_length, head_dim)
             else:
                 expected_shape = (batch_size, num_heads, seq_length, head_dim)
             # check shape key, value
-            self.assertEqual(past_key_values.layers[layer_idx].keys.shape, expected_shape)
-            self.assertEqual(past_key_values.layers[layer_idx].values.shape, expected_shape)
+            self.assertEqual(cache.layers[layer_idx].keys.shape, expected_shape)
+            self.assertEqual(cache.layers[layer_idx].values.shape, expected_shape)
 
     def test_generate_text_only_with_cache(self):
         """
@@ -434,6 +433,59 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             del inputs["pixel_values"]
 
             model.generate(input_ids, use_cache=True)
+
+    def test_generate_with_static_cache_and_images(self):
+        """
+        Tests that generation with a `StaticCache` works. The cross-attention layers cache the vision encoder states,
+        so they must be preallocated from the image length rather than from `max_cache_len` like the self-attention
+        layers: sizing them from `max_cache_len` used to write out of bounds and crash generation.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            output = model.generate(
+                **inputs,
+                do_sample=False,
+                max_new_tokens=4,
+                cache_implementation="static",
+                return_dict_in_generate=True,
+            )
+
+            cache = output.cache
+            self.assertIsInstance(cache, StaticCache)
+            self.assertTrue(cache.is_compileable)
+            # `generate` sizes the static cache to `max_length - 1`
+            max_cache_len = inputs["input_ids"].shape[1] + 4 - 1
+            for layer_idx, layer in enumerate(cache.layers):
+                self.assertIsInstance(layer, StaticLayer)
+                expected_length = (
+                    self.model_tester.image_length if layer_idx in cross_attention_layers else max_cache_len
+                )
+                self.assertEqual(layer.keys.shape[-2], expected_length)
+
+    @require_torch_accelerator  # `generate` only auto-compiles on an accelerator
+    def test_generate_compile_matches_eager(self):
+        """Generating with a static cache traces a single graph, without breaks, and matches eager."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            generate_kwargs = {"do_sample": False, "max_new_tokens": 5, "min_new_tokens": 5}
+
+            eager_output = model.generate(**inputs, **generate_kwargs, disable_compile=True)
+
+            torch._dynamo.reset()
+            torch._dynamo.utils.counters.clear()
+            compiled_output = model.generate(**inputs, **generate_kwargs, cache_implementation="static")
+
+            self.assertEqual(torch._dynamo.utils.counters["stats"]["unique_graphs"], 1)
+            self.assertEqual(sum(torch._dynamo.utils.counters["graph_break"].values()), 0)
+            torch.testing.assert_close(eager_output, compiled_output)
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
@@ -472,8 +524,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         prompt = "<|image|>If I had to write a haiku for this one"
-        url = "https://llava-vl.github.io/static/images/view.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
 
@@ -502,9 +554,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
                 {
-                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
+                    (None, None): 'If I had to write a haiku for this one, it would be: "I\'m not a fan of the dock, but I\'m a fan of the lake".\\',
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -568,8 +618,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.base_model_checkpoint)
 
         prompt = "<|image|>If I had to write a haiku for this one"
-        url = "https://llava-vl.github.io/static/images/view.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        image = load_test_image(url)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device)
 
@@ -586,9 +636,10 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324], dtype=actual_logits.dtype),
-                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207], dtype=actual_logits.dtype),
-                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207], dtype=actual_logits.dtype),
+                (None, None): torch.tensor([6.9375, 4.4688, 3.4531, 0.1973, 1.9766], dtype=actual_logits.dtype),
+                ("cuda", (8, 6)): torch.tensor(
+                    [6.78125, 4.4375, 3.34375, 0.1298828125, 1.9140625], dtype=actual_logits.dtype
+                ),
             }
         )
 
@@ -611,12 +662,11 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
             "<|image|>If I had to write a haiku for this one",
             "<|image|>This image shows",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                stream=True,
-            ).raw
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
@@ -635,10 +685,8 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
                 {
-                    ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
-                 }
+                    (None, None): 'If I had to write a haiku for this one, it would be: "I\'m not a fan of the dock, but I\'m a fan of the lake".\\',
+                }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
@@ -672,12 +720,11 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(self.instruct_model_checkpoint)
 
         # Prepare inputs
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                stream=True,
-            ).raw
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
 
         conversation = [

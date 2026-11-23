@@ -13,13 +13,16 @@
 # limitations under the License.
 
 import numpy as np
-import torch
 
 from ...audio_utils import hertz_to_mel
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_torch_available, logging
 from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -149,7 +152,6 @@ class LasrFeatureExtractor(SequenceFeatureExtractor):
         do_normalize: bool | None = None,
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
-        center: bool = True,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -204,8 +206,6 @@ class LasrFeatureExtractor(SequenceFeatureExtractor):
 
                 Whether or not to return the number of frames of the input raw_speech.
                 These num_frames can be used by the model to compute word level timestamps.
-            center (`bool`, *optional*, defaults to `True`):
-                Whether to use centering for the STFT computation.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -263,7 +263,7 @@ class LasrFeatureExtractor(SequenceFeatureExtractor):
             return_tensors="pt",
         )
         input_features = padded_inputs.input_features.squeeze(-1)
-        input_features = self._torch_extract_fbank_features(input_features, device, center)
+        input_features = self._torch_extract_fbank_features(input_features, device)
         data = {
             "input_features": input_features.to(torch.float32),
         }

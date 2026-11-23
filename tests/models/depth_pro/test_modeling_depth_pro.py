@@ -66,14 +66,14 @@ class DepthProModelTester:
             "patch_size": 4,
         },
         patch_model_config={
-            "model_type": "vit",
+            "model_type": "dinov2",
             "num_hidden_layers": 2,
             "hidden_size": 24,
             "num_attention_heads": 2,
             "patch_size": 6,
         },
         fov_model_config={
-            "model_type": "vit",
+            "model_type": "dinov2",
             "num_hidden_layers": 2,
             "hidden_size": 32,
             "num_attention_heads": 4,
@@ -214,7 +214,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = DepthProModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DepthProConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DepthProConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -280,7 +280,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 continue
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
@@ -311,7 +311,7 @@ class DepthProModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
         model_path = "apple/DepthPro-hf"
         image_processor = DepthProImageProcessor.from_pretrained(model_path)
-        model = DepthProForDepthEstimation.from_pretrained(model_path).to(torch_device)
+        model = DepthProForDepthEstimation.from_pretrained(model_path, dtype=torch.float32).to(torch_device)
         config = model.config
 
         image = prepare_img()

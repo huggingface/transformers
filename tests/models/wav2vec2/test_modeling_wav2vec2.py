@@ -14,10 +14,8 @@
 """Testing suite for the PyTorch Wav2Vec2 model."""
 
 import math
-import multiprocessing
 import os
 import tempfile
-import traceback
 import unittest
 
 import numpy as np
@@ -26,22 +24,19 @@ from pytest import mark
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
-    CaptureLogger,
     cleanup,
     is_flaky,
-    is_pyctcdecode_available,
     is_torchaudio_available,
     require_flash_attn,
-    require_pyctcdecode,
     require_torch,
     require_torch_accelerator,
     require_torchaudio,
     require_torchcodec,
-    run_test_in_subprocess,
     slow,
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -79,134 +74,58 @@ if is_torchaudio_available():
     import torchaudio
 
 
-if is_pyctcdecode_available():
-    import pyctcdecode.decoder
+class Wav2Vec2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-    from transformers import Wav2Vec2ProcessorWithLM
-    from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 1024,  # speech is longer
+        "is_training": False,
+        "hidden_size": 16,
+        "feat_extract_norm": "group",
+        "feat_extract_dropout": 0.0,
+        "feat_extract_activation": "gelu",
+        "conv_dim": (32, 32, 32),
+        "conv_stride": (4, 4, 4),
+        "conv_kernel": (8, 8, 8),
+        "conv_bias": False,
+        "num_conv_pos_embeddings": 16,
+        "num_conv_pos_embedding_groups": 2,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "hidden_dropout_prob": 0.1,  # this is most likely not correctly set yet
+        "intermediate_size": 20,
+        "layer_norm_eps": 1e-5,
+        "hidden_act": "gelu",
+        "initializer_range": 0.02,
+        "mask_time_prob": 0.5,
+        "mask_time_length": 2,
+        "vocab_size": 32,
+        "do_stable_layer_norm": False,
+        "num_adapter_layers": 1,
+        "adapter_stride": 2,
+        "tdnn_dim": (32, 32),
+        "tdnn_kernel": (5, 3),
+        "tdnn_dilation": (1, 2),
+        "xvector_output_dim": 32,
+        "scope": None,
+    }
 
-
-def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-    error = None
-    try:
-        _ = in_queue.get(timeout=timeout)
-
-        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
-        sample = next(iter(ds))
-
-        resampled_audio = torchaudio.functional.resample(
-            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
-        ).numpy()
-
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
-        )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-
-        input_values = processor(resampled_audio, return_tensors="pt").input_values
-
-        with torch.no_grad():
-            logits = model(input_values.to(torch_device)).logits
-
-        # use a spawn pool, which should trigger a warning if different than fork
-        with CaptureLogger(pyctcdecode.decoder.logger) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
-            transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
-
-        expected_transcription = "el resto de los equipos se mantienen en su sede"
-        unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], expected_transcription)
-
-        # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
-        multiprocessing.set_start_method("spawn", force=True)
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl:
-            transcription = processor.batch_decode(logits.cpu().numpy()).text
-
-        unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
-        unittest.TestCase().assertEqual(transcription[0], expected_transcription)
-    except Exception:
-        error = f"{traceback.format_exc()}"
-
-    results = {"error": error}
-    out_queue.put(results, timeout=timeout)
-    out_queue.join()
-
-
-class Wav2Vec2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=1024,  # speech is longer
-        is_training=False,
-        hidden_size=16,
-        feat_extract_norm="group",
-        feat_extract_dropout=0.0,
-        feat_extract_activation="gelu",
-        conv_dim=(32, 32, 32),
-        conv_stride=(4, 4, 4),
-        conv_kernel=(8, 8, 8),
-        conv_bias=False,
-        num_conv_pos_embeddings=16,
-        num_conv_pos_embedding_groups=2,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
-        intermediate_size=20,
-        layer_norm_eps=1e-5,
-        hidden_act="gelu",
-        initializer_range=0.02,
-        mask_time_prob=0.5,
-        mask_time_length=2,
-        vocab_size=32,
-        do_stable_layer_norm=False,
-        num_adapter_layers=1,
-        adapter_stride=2,
-        tdnn_dim=(32, 32),
-        tdnn_kernel=(5, 3),
-        tdnn_dilation=(1, 2),
-        xvector_output_dim=32,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.feat_extract_norm = feat_extract_norm
-        self.feat_extract_dropout = feat_extract_dropout
-        self.feat_extract_activation = feat_extract_activation
-        self.conv_dim = conv_dim
-        self.conv_stride = conv_stride
-        self.conv_kernel = conv_kernel
-        self.conv_bias = conv_bias
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.intermediate_size = intermediate_size
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.vocab_size = vocab_size
-        self.do_stable_layer_norm = do_stable_layer_norm
-        self.num_adapter_layers = num_adapter_layers
-        self.adapter_stride = adapter_stride
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_length = mask_time_length
-        self.scope = scope
-        self.tdnn_dim = tdnn_dim
-        self.tdnn_kernel = tdnn_kernel
-        self.tdnn_dilation = tdnn_dilation
-        self.xvector_output_dim = xvector_output_dim
-
-        output_seq_length = self.seq_length
-        for kernel, stride in zip(self.conv_kernel, self.conv_stride):
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        output_seq_length = values["seq_length"]
+        for kernel, stride in zip(values["conv_kernel"], values["conv_stride"]):
             output_seq_length = (output_seq_length - (kernel - 1)) / stride
-        self.output_seq_length = int(math.ceil(output_seq_length))
-        self.encoder_seq_length = self.output_seq_length
+        values["output_seq_length"] = int(math.ceil(output_seq_length))
+        values["encoder_seq_length"] = values["output_seq_length"]
+        values["adapter_output_seq_length"] = (values["output_seq_length"] - 1) // values["adapter_stride"] + 1
+        return values
 
-        self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
@@ -476,6 +395,8 @@ class Wav2Vec2ModelTester:
 
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Wav2Vec2ModelTester
+
     all_model_classes = (
         (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
         if is_torch_available()
@@ -490,10 +411,11 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
+    test_can_init_all_missing_weights_before_2023 = True
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -668,8 +590,20 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.assertIsNotNone(model)
 
 
+class Wav2Vec2RobustModelTester(Wav2Vec2ModelTester):
+    # `small_config_overrides` does not inherit, so the parent's values are this tester's defaults
+    defaults = {**Wav2Vec2ModelTester.defaults, **Wav2Vec2ModelTester.small_config_overrides}
+    small_config_overrides = {
+        "conv_stride": (3, 3, 3),
+        "feat_extract_norm": "layer",
+        "do_stable_layer_norm": True,
+    }
+
+
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Wav2Vec2RobustModelTester
+
     all_model_classes = (
         (
             Wav2Vec2ForCTC,
@@ -682,12 +616,11 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    test_can_init_all_missing_weights_before_2023 = True
 
     def setUp(self):
-        self.model_tester = Wav2Vec2ModelTester(
-            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
-        )
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+        self.model_tester = Wav2Vec2RobustModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1641,75 +1574,6 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         # "his instant panic was followed by a small sharp blow high on his chest",
         # ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
-
-    @require_pyctcdecode
-    @require_torchaudio
-    def test_wav2vec2_with_lm(self):
-        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
-        sample = next(iter(ds))
-
-        resampled_audio = torchaudio.functional.resample(
-            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
-        ).numpy()
-
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
-        )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-
-        input_values = processor(resampled_audio, return_tensors="pt").input_values
-
-        with torch.no_grad():
-            logits = model(input_values.to(torch_device)).logits
-
-        transcription = processor.batch_decode(logits.cpu().numpy()).text
-
-        expected_transcription = "el resto de los equipos se mantienen en su sede"
-        self.assertEqual(transcription[0], expected_transcription)
-
-    @require_pyctcdecode
-    @require_torchaudio
-    def test_wav2vec2_with_lm_pool(self):
-        ds = load_dataset("fixie-ai/common_voice_17_0", "es", split="test", streaming=True)
-        sample = next(iter(ds))
-
-        resampled_audio = torchaudio.functional.resample(
-            torch.tensor(sample["audio"]["array"]), 48_000, 16_000
-        ).numpy()
-
-        model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm").to(
-            torch_device
-        )
-        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
-
-        input_values = processor(resampled_audio, return_tensors="pt").input_values
-
-        with torch.no_grad():
-            logits = model(input_values.to(torch_device)).logits
-
-        # test user-managed pool
-        with multiprocessing.get_context("fork").Pool(2) as pool:
-            transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
-
-        expected_transcription = "el resto de los equipos se mantienen en su sede"
-        self.assertEqual(transcription[0], expected_transcription)
-
-        # user-managed pool + num_processes should trigger a warning
-        with (
-            CaptureLogger(processing_wav2vec2_with_lm.logger) as cl,
-            multiprocessing.get_context("fork").Pool(2) as pool,
-        ):
-            transcription = processor.batch_decode(logits.cpu().numpy(), pool, num_processes=2).text
-
-        self.assertIn("num_process", cl.out)
-        self.assertIn("it will be ignored", cl.out)
-
-        self.assertEqual(transcription[0], expected_transcription)
-
-    @require_pyctcdecode
-    @require_torchaudio
-    def test_wav2vec2_with_lm_invalid_pool(self):
-        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)
 
     def test_inference_diarization(self):
         model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)

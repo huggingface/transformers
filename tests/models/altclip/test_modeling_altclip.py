@@ -17,14 +17,17 @@ import inspect
 import unittest
 
 import numpy as np
-import requests
+from parameterized import parameterized
 
 from transformers import AltCLIPConfig, AltCLIPProcessor, AltCLIPTextConfig, AltCLIPVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -43,44 +46,38 @@ if is_vision_available():
     from PIL import Image
 
 
-class AltCLIPVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class AltCLIPVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -130,6 +127,8 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = AltCLIPVisionModelTester
+
     all_model_classes = (AltCLIPVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -137,7 +136,7 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AltCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=AltCLIPVisionConfig, has_text_modality=False, hidden_size=36
         )
 
     def test_config(self):
@@ -193,46 +192,33 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-class AltCLIPTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        projection_dim=32,
-        project_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class AltCLIPTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "project_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.project_dim = project_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -287,16 +273,15 @@ class AltCLIPTextModelTester:
 
 @require_torch
 class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (AltCLIPTextModel,) if is_torch_available() else ()
+    model_tester_class = AltCLIPTextModelTester
 
-    # TODO (@SunMarc): Fix me
-    @unittest.skip(reason="It's broken.")
-    def test_resize_tokens_embeddings(self):
-        super().test_resize_tokens_embeddings()
+    all_model_classes = (AltCLIPTextModel,) if is_torch_available() else ()
+    # AltCLIPTextModel has large embeddings relative to model size, so we need higher split percentages
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = AltCLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=AltCLIPTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -339,8 +324,20 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class AltCLIPModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class AltCLIPModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # need bs for batching_equivalence test
+        values["batch_size"] = AltCLIPTextModelTester.get_small_config_defaults(**(text_kwargs or {}))["batch_size"]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -349,8 +346,8 @@ class AltCLIPModelTester:
         self.parent = parent
         self.text_model_tester = AltCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = AltCLIPVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -388,18 +385,21 @@ class AltCLIPModelTester:
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 
 @require_torch
 class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = AltCLIPModelTester
+
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -432,6 +432,13 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-12-11 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-12-11 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # FlauBERT
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -41,7 +38,7 @@ time they outperform other pretraining approaches. Different versions of FlauBER
 protocol for the downstream tasks, called FLUE (French Language Understanding Evaluation), are shared to the research
 community for further reproducible experiments in French NLP.*
 
-This model was contributed by [formiel](https://huggingface.co/formiel). The original code can be found [here](https://github.com/getalp/Flaubert).
+This model was contributed by formiel. The original code can be found [here](https://github.com/getalp/Flaubert).
 
 Tips:
 

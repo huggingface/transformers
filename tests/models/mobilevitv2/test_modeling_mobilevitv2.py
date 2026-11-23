@@ -20,13 +20,13 @@ from transformers import MobileViTV2Config
 from transformers.testing_utils import (
     Expectations,
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -44,7 +44,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileViTImageProcessor
+    from transformers import MobileViTImageProcessorPil
 
 
 class MobileViTV2ConfigTester(ConfigTester):
@@ -53,45 +53,37 @@ class MobileViTV2ConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "width_multiplier"))
 
 
-class MobileViTV2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=64,
-        patch_size=2,
-        num_channels=3,
-        hidden_act="swish",
-        conv_kernel_size=3,
-        output_stride=32,
-        classifier_dropout_prob=0.1,
-        initializer_range=0.02,
-        is_training=True,
-        use_labels=True,
-        num_labels=10,
-        scope=None,
-        width_multiplier=0.25,
-        ffn_dropout=0.0,
-        attn_dropout=0.0,
-    ):
+class MobileViTV2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 64,
+        "patch_size": 2,
+        "num_channels": 3,
+        "hidden_act": "swish",
+        "conv_kernel_size": 3,
+        "output_stride": 32,
+        "classifier_dropout_prob": 0.1,
+        "use_labels": True,
+        "is_training": True,
+        "num_labels": 10,
+        "initializer_range": 0.02,
+        "scope": None,
+        "width_multiplier": 0.25,
+        "ffn_dropout_prob": 0.0,
+        "attn_dropout_prob": 0.0,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["last_hidden_size"] = make_divisible(512 * values["width_multiplier"], divisor=8)
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.last_hidden_size = make_divisible(512 * width_multiplier, divisor=8)
-        self.hidden_act = hidden_act
-        self.conv_kernel_size = conv_kernel_size
-        self.output_stride = output_stride
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.use_labels = use_labels
-        self.is_training = is_training
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.width_multiplier = width_multiplier
-        self.ffn_dropout_prob = ffn_dropout
-        self.attn_dropout_prob = attn_dropout
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -187,6 +179,8 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     attention_mask and seq_length.
     """
 
+    model_tester_class = MobileViTV2ModelTester
+
     all_model_classes = (
         (MobileViTV2Model, MobileViTV2ForImageClassification, MobileViTV2ForSemanticSegmentation)
         if is_torch_available()
@@ -223,11 +217,6 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @unittest.skip(reason="MobileViTV2 does not output attentions")
     def test_attention_outputs(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(reason="Got `CUDA error: misaligned address` for tests after this one being run.")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_model(self):
@@ -299,7 +288,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MobileViTImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
+            MobileViTImageProcessorPil.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
             if is_vision_available()
             else None
         )
@@ -337,7 +326,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
         model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTImageProcessorPil.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -374,7 +363,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
         model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTImageProcessorPil.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)

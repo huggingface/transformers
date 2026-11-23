@@ -26,7 +26,6 @@ from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
-from ...backbone_utils import load_backbone
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -39,124 +38,124 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ..auto import AutoModel
+from ..auto import AutoBackbone, AutoModel
 from .configuration_omdet_turbo import OmDetTurboConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the OmDetTurboHybridEncoder.
     """
 )
+@dataclass
 class OmDetTurboEncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor`):
+    last_hidden_state (`torch.Tensor`):
         Last hidden states of the encoder.
-    extracted_states (`tuple[torch.FloatTensor]`):
+    extracted_states (`tuple[torch.Tensor]`):
         The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    extracted_states: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
+    extracted_states: tuple[torch.Tensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the OmDetTurboDecoder.
     """
 )
+@dataclass
 class OmDetTurboDecoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder.
-    decoder_coords (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    decoder_coords (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         The predicted coordinates of the objects.
-    decoder_classes (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
+    decoder_classes (`torch.Tensor` of shape `(batch_size, num_queries, num_classes)`):
         The predicted classes of the objects.
-    encoder_coord_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    encoder_coord_logits (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         The predicted coordinates of the objects from the encoder.
-    encoder_class_logits (`tuple[torch.FloatTensor]` of shape `(batch_size, num_queries, num_classes)`):
+    encoder_class_logits (`tuple[torch.Tensor]` of shape `(batch_size, num_queries, num_classes)`):
         The predicted class of the objects from the encoder.
-    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         The initial reference points.
-    intermediate_reference_points (`tuple[tuple[torch.FloatTensor]]`):
+    intermediate_reference_points (`tuple[tuple[torch.Tensor]]`):
         The intermediate reference points.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    decoder_coords: torch.FloatTensor | None = None
-    decoder_classes: torch.FloatTensor | None = None
-    encoder_coord_logits: torch.FloatTensor | None = None
-    encoder_class_logits: tuple[torch.FloatTensor] | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[tuple[torch.Tensor]] | None = None
+    decoder_coords: torch.Tensor | None = None
+    decoder_classes: torch.Tensor | None = None
+    encoder_coord_logits: torch.Tensor | None = None
+    encoder_class_logits: tuple[torch.Tensor] | None = None
+    init_reference_points: torch.Tensor | None = None
+    intermediate_reference_points: tuple[tuple[torch.Tensor]] = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`OmDetTurboObjectDetectionOutput`].
     """
 )
+@dataclass
 class OmDetTurboObjectDetectionOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor`):
+    loss (`torch.Tensor`):
         The loss value.
-    decoder_coord_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    decoder_coord_logits (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         The predicted coordinates logits of the objects.
-    decoder_class_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes)`):
+    decoder_class_logits (`torch.Tensor` of shape `(batch_size, num_queries, num_classes)`):
         The predicted class of the objects.
-    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         The initial reference points.
-    intermediate_reference_points (`tuple[tuple[torch.FloatTensor]]`):
+    intermediate_reference_points (`tuple[tuple[torch.Tensor]]`):
         The intermediate reference points.
-    encoder_coord_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    encoder_coord_logits (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         The predicted coordinates of the objects from the encoder.
-    encoder_class_logits (`tuple[torch.FloatTensor]`):
+    encoder_class_logits (`tuple[torch.Tensor]`):
         The predicted class of the objects from the encoder.
-    encoder_extracted_states (`torch.FloatTensor`):
+    encoder_extracted_states (`torch.Tensor`):
         The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
-    decoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
+    decoder_hidden_states (`tuple[torch.Tensor]`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
         `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
         plus the initial embedding outputs.
-    decoder_attentions (`tuple[tuple[torch.FloatTensor]]`, *optional*):
-        Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+    decoder_attentions (`tuple[tuple[torch.Tensor]]`, *optional*):
+        Tuple of tuples of `torch.Tensor` (one for attention for each layer) of shape `(batch_size, num_heads,
         sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
         weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
-    encoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
+    encoder_hidden_states (`tuple[torch.Tensor]`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of shape
         `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
         plus the initial embedding outputs.
-    encoder_attentions (`tuple[tuple[torch.FloatTensor]]`, *optional*):
-        Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
+    encoder_attentions (`tuple[tuple[torch.Tensor]]`, *optional*):
+        Tuple of tuples of `torch.Tensor` (one for attention for each layer) of shape `(batch_size, num_heads,
         sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
         weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
     classes_structure (`torch.LongTensor`, *optional*):
         The number of queried classes for each image.
     """
 
-    loss: torch.FloatTensor | None = None
-    decoder_coord_logits: torch.FloatTensor | None = None
-    decoder_class_logits: torch.FloatTensor | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    intermediate_reference_points: tuple[tuple[torch.FloatTensor]] | None = None
-    encoder_coord_logits: torch.FloatTensor | None = None
-    encoder_class_logits: tuple[torch.FloatTensor] | None = None
-    encoder_extracted_states: torch.FloatTensor | None = None
-    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    decoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
-    encoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    loss: torch.Tensor | None = None
+    decoder_coord_logits: torch.Tensor | None = None
+    decoder_class_logits: torch.Tensor | None = None
+    init_reference_points: torch.Tensor | None = None
+    intermediate_reference_points: tuple[tuple[torch.Tensor]] | None = None
+    encoder_coord_logits: torch.Tensor | None = None
+    encoder_class_logits: tuple[torch.Tensor] | None = None
+    encoder_extracted_states: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_attentions: tuple[tuple[torch.Tensor]] | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    encoder_attentions: tuple[tuple[torch.Tensor]] | None = None
     classes_structure: torch.LongTensor | None = None
 
 
@@ -279,7 +278,7 @@ class OmDetTurboVisionBackbone(nn.Module):
     def __init__(self, config: OmDetTurboConfig):
         super().__init__()
         self.apply_layernorm_after_vision_backbone = config.apply_layernorm_after_vision_backbone
-        self.vision_backbone = load_backbone(config)
+        self.vision_backbone = AutoBackbone.from_config(config.backbone_config, **getattr(config, "timm_kwargs", {}))
         self.layer_norms = nn.ModuleList(
             [nn.LayerNorm(in_channel_dim, eps=config.layer_norm_eps) for in_channel_dim in config.encoder_in_channels]
         )
@@ -500,7 +499,7 @@ class OmDetTurboMultiheadAttention(nn.Module):
         queries: torch.Tensor,
         keys: torch.Tensor,
         values: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = queries.shape
@@ -573,11 +572,11 @@ class OmDetTurboEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
+            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.Tensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            position_embeddings (`torch.FloatTensor`, *optional*):
+            position_embeddings (`torch.Tensor`, *optional*):
                 Object queries (also called content embeddings), to be added to the hidden states.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -605,7 +604,7 @@ class OmDetTurboEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -729,7 +728,7 @@ class OmDetTurboHybridEncoder(nn.Module):
     ):
         r"""
         Args:
-            inputs_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            inputs_embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layers) that is passed to the encoder.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -744,7 +743,7 @@ class OmDetTurboHybridEncoder(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeddings
 
@@ -988,8 +987,9 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
+
         def linear_init_(module_to_init):
             bound = 1 / math.sqrt(module_to_init.weight.shape[0])
             init.uniform_(module_to_init.weight, -bound, bound)
@@ -1015,17 +1015,6 @@ class OmDetTurboPreTrainedModel(PreTrainedModel):
                 init.xavier_uniform_(layer[0].weight)
         elif isinstance(module, OmDetTurboLanguageBackbone):
             init.normal_(module.text_projection, std=self.config.text_projection_in_dim**-0.5)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, OmDetTurboDecoder):
@@ -1268,7 +1257,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             torch.where(
                 valid_mask,
                 vision_features,
-                torch.tensor(0.0, dtype=vision_features.dtype, device=vision_features.device),
+                torch.full((), 0.0, dtype=vision_features.dtype, device=vision_features.device),
             )
         )
 
@@ -1324,11 +1313,11 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
     ):
         """
         Args:
-            vision_features (`torch.FloatTensor`): The sequence of vision features. shape depends on the vision
+            vision_features (`torch.Tensor`): The sequence of vision features. shape depends on the vision
                 backbone.
-            class_features (`torch.FloatTensor`): The sequence of class features of shape
+            class_features (`torch.Tensor`): The sequence of class features of shape
                 `(class_sequence_length, batch_size, class_embed_dim)`.
-            task_features (`torch.FloatTensor`): The sequence of task features of shape
+            task_features (`torch.Tensor`): The sequence of task features of shape
                 `(task_sequence_length, batch_size, decoder_hidden_dim)`.
             task_mask (`torch.LongTensor`): The mask for the task features of shape `(batch_size, task_sequence_length)`.
             output_attentions (`bool`, *optional*): Whether or not to return the attentions tensors of all attention
@@ -1342,7 +1331,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         vision_features, vision_shapes, vision_shapes_list, level_start_index = self._get_encoder_input(
             vision_features
@@ -1504,7 +1493,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         classes_input_ids: torch.LongTensor,
         classes_attention_mask: torch.LongTensor,
         tasks_input_ids: torch.LongTensor,
@@ -1515,7 +1504,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor] | OmDetTurboObjectDetectionOutput:
+    ) -> tuple[torch.Tensor] | OmDetTurboObjectDetectionOutput:
         r"""
         classes_input_ids (`torch.LongTensor` of shape `(total_classes (>= batch_size), sequence_length)`):
             Indices of input classes sequence tokens in the vocabulary of the language model.
@@ -1545,7 +1534,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -1589,7 +1578,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         loss = None
         image_features = self.vision_backbone(pixel_values)

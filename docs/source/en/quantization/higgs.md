@@ -9,72 +9,87 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
 # HIGGS
 
-[HIGGS](https://huggingface.co/papers/2411.17525) is a zero-shot quantization algorithm that combines Hadamard preprocessing with MSE-Optimal quantization grids to achieve lower quantization error and state-of-the-art performance.
+[HIGGS](https://huggingface.co/papers/2411.17525) applies a Hadamard transform to each weight matrix and then rounds groups of weights to a grid that minimizes the mean squared error, without calibration data. Use it for 2- to 4-bit weights on NVIDIA GPUs, with the [FLUTE](https://github.com/HanGuo97/flute) kernels running the matmuls.
 
-Runtime support for HIGGS is implemented through the [FLUTE](https://github.com/HanGuo97/flute) library. Only the 70B and 405B variants of Llama 3 and Llama 3.0, and the 8B and 27B variants of Gemma 2 are currently supported. HIGGS also doesn't support quantized training and backward passes in general at the moment.
+The table below summarizes what HIGGS supports in Transformers.
 
-Run the command below to install FLUTE.
+| | |
+|---|---|
+| Config | [`HiggsConfig`] |
+| `quant_method` | `higgs` |
+| Workflow | Quantize while loading |
+| Bits | 2, 3, 4 |
+| Hardware | CUDA |
+| Save | ✅ |
+| Fine-tune | ❌ |
+| Auto-compile | ❌ |
 
-<hfoptions id="install">
-<hfoption id="CUDA 12.1">
+## Install HIGGS
+
+Install FLUTE 0.3.0 or later, fast-hadamard-transform, and [Accelerate](https://huggingface.co/docs/accelerate/index).
 
 ```bash
-pip install flute-kernel
+pip install -U "flute-kernel>=0.3.0" fast_hadamard_transform accelerate
 ```
 
-</hfoption>
-<hfoption id="CUDA 11.8">
+## Quantize a model with HIGGS
 
-```bash
-pip install flute-kernel -i https://flute-ai.github.io/whl/cu12.4
-```
+Create a [`HiggsConfig`] and pass it to [`~PreTrainedModel.from_pretrained`]. Set `device_map` to your CUDA devices, and load the model in fp16 or bf16.
 
-</hfoption>
-</hfoptions>
-
-Create a [`HiggsConfig`] with the number of bits to quantize a model to.
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer, HiggsConfig
+```py
+from transformers import AutoModelForCausalLM, HiggsConfig
 
 model = AutoModelForCausalLM.from_pretrained(
-    "google/gemma-2-9b-it",
+    "Qwen/Qwen3-8B",
     quantization_config=HiggsConfig(bits=4),
-    device_map="auto",
+    device_map="cuda",
 )
 ```
 
-> [!TIP]
-> Find models pre-quantized with HIGGS in the official ISTA-DASLab [collection](https://huggingface.co/collections/ISTA-DASLab/higgs-675308e432fd56b7f6dab94e).
+After the weights load, FLUTE tunes its kernels for each layer on your GPU and repacks the weights. The tuning results are stored in the config's `tune_metadata`, so a saved model doesn't need to tune again.
 
-## torch.compile
+## Configure HIGGS
 
-HIGGS is fully compatible with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html).
+These [`HiggsConfig`] parameters change how the weights are quantized.
 
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, HiggsConfig
+| Parameter | Default | Effect |
+|---|---|---|
+| `bits` | `4` | Number of bits per weight. Supports 2, 3, and 4. |
+| `p` | `2` | Dimension of the quantization grid, either 1 or 2. A grid with `p=2` rounds pairs of weights together and is more accurate. |
+| `group_size` | `256` | Number of weights that share a scale. Supports 64, 128, and 256. Must divide `hadamard_size`. |
+| `hadamard_size` | `512` | Size of the Hadamard transform. Each layer's input dimension is padded to a multiple of this size. Smaller values reduce accuracy. |
 
-model = AutoModelForCausalLM.from_pretrained(
-    "google/gemma-2-9b-it",
-    quantization_config=HiggsConfig(bits=4),
-    device_map="auto",
-)
+## Speed up inference with torch.compile
 
+Without compilation, HIGGS runs slower than bf16. [`~GenerationMixin.generate`] doesn't compile HIGGS models automatically, so compile the model yourself with [torch.compile](../perf_torch_compile).
+
+```py
 model = torch.compile(model)
 ```
 
-Refer to the table below for a benchmark of forward passes/sec for Llama-3.1-8B-Instruct on a RTX4090.
+The table below shows forward passes per second for Llama-3.1-8B-Instruct on an RTX 4090.
 
-| Batch Size | BF16 (with `torch.compile`) | HIGGS 4bit (without `torch.compile`) | HIGGS 4bit (with `torch.compile`) |
-|------------|-----------------------------|----------------------------------|-----------------------------------|
-| 1          | 59                          | 41                               | 124                               |
-| 4          | 57                          | 42                               | 123                               |
-| 16         | 56                          | 41                               | 120                               |
+| Batch size | bf16 (compiled) | HIGGS 4-bit | HIGGS 4-bit (compiled) |
+|---|---|---|---|
+| 1 | 59 | 41 | 124 |
+| 4 | 57 | 42 | 123 |
+| 16 | 56 | 41 | 120 |
+
+## Limitations
+
+- HIGGS needs a CUDA GPU. Loading without one raises a `NotImplementedError`.
+- Loading without a `device_map`, or with one that includes `"cpu"` or `"disk"`, raises a `ValueError`.
+- Loading in a dtype other than fp16 or bf16 raises a `ValueError`.
+
+## Resources
+
+- [Pushing the Limits of Large Language Model Quantization via the Linearity Theorem](https://huggingface.co/papers/2411.17525) paper
+- [FLUTE](https://github.com/HanGuo97/flute) repository
+- [HIGGS models](https://huggingface.co/collections/ISTA-DASLab/higgs-675308e432fd56b7f6dab94e) collection from ISTA-DASLab

@@ -183,7 +183,7 @@ class BertGenerationEncoderTester:
             encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -205,7 +205,7 @@ class BertGenerationEncoderTester:
             attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -256,7 +256,7 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 
     def setUp(self):
         self.model_tester = BertGenerationEncoderTester(self)
-        self.config_tester = ConfigTester(self, config_class=BertGenerationConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BertGenerationConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

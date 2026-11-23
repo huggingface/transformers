@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch ViTMAE model."""
 
+import copy
 import math
 import tempfile
 import unittest
@@ -33,6 +34,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -42,66 +44,53 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import ViTMAEForPreTraining, ViTMAEModel
+    from transformers import PreTrainedModel, ViTMAEForPreTraining, ViTMAEModel, set_seed
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
-class ViTMAEModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        num_labels=3,
-        scope=None,
-        mask_ratio=0.5,
-        attn_implementation="eager",
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.mask_ratio = mask_ratio
-        self.scope = scope
-        self.attn_implementation = attn_implementation
+class ViTMAEModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "mask_ratio": 0.5,
+        "scope": None,
+        "attn_implementation": "eager",
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in ViTMAE, the expected sequence length = (num_patches + 1) * (1 - config.mask_ratio), rounded above
         # (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = int(math.ceil((1 - mask_ratio) * (num_patches + 1)))
-        self.mask_ratio = mask_ratio
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.mask_length = num_patches
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = int(math.ceil((1 - values["mask_ratio"]) * (num_patches + 1)))
+        values["num_masks"] = int(values["mask_ratio"] * values["seq_length"])
+        values["mask_length"] = num_patches
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -168,6 +157,17 @@ class ViTMAEModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_model_class(self, model_class):
+        config, inputs_dict = self.prepare_config_and_inputs_for_common()
+        # `random_masking` draws its own `noise` when none is passed, so anything comparing two runs
+        # of this model (eager against exported, batched against unbatched) would be comparing two
+        # different random subsets of patches. `forward` takes `noise` precisely so a caller can pin
+        # it; the integration tests above do the same.
+        generator = torch.Generator().manual_seed(0)
+        noise = torch.rand(self.batch_size, self.mask_length, generator=generator)
+        inputs_dict["noise"] = noise.to(torch_device)
+        return config, inputs_dict
+
 
 @require_torch
 class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -176,6 +176,8 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = ViTMAEModelTester
+
     all_model_classes = (ViTMAEModel, ViTMAEForPreTraining) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": ViTMAEModel} if is_torch_available() else {}
 
@@ -183,7 +185,143 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ViTMAEModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTMAEConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViTMAEConfig, has_text_modality=False, hidden_size=32)
+
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ) -> None:
+        r"""
+        Same as `ModelTesterMixin.flash_attn_inference_equivalence`, but resets RNG before each loaded
+        model's eager/kernel forward pair so random masking in ViTMAE matches between backends.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        _has_run_at_least_one_model = False
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_attention_backend and not attn_implementation.startswith("flash_attention"):
+                continue
+
+            set_seed(42)
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            config = self._prepare_config_headdim(config, 16)
+
+            if getattr(config, "sliding_window", None):
+                config.sliding_window = 2
+
+            model = model_class(config)
+            if not all(
+                submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                continue
+
+            _has_run_at_least_one_model = True
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                main_input = inputs_dict[model.main_input_name]
+                if isinstance(main_input, torch.Tensor):
+                    main_input = main_input[:1]
+                    if torch.is_floating_point(main_input):
+                        main_input = main_input.to(torch.bfloat16)
+                first_inputs = {model.main_input_name: main_input, "output_hidden_states": True}
+                if model.main_input_name != "input_ids" and "input_ids" in inputs_dict:
+                    first_inputs["input_ids"] = inputs_dict["input_ids"][:1]
+                if model.main_input_name != "pixel_values" and "pixel_values" in inputs_dict:
+                    if "image_grid_thw" in inputs_dict:
+                        continue
+                    first_inputs["pixel_values"] = inputs_dict["pixel_values"][:1].to(torch.bfloat16)
+                if "image_sizes" in inputs_dict:
+                    first_inputs["image_sizes"] = inputs_dict["image_sizes"][:1]
+                if model.config.is_encoder_decoder:
+                    decoder_input_ids = inputs_dict.get("decoder_input_ids", first_inputs.get("input_ids"))
+                    if decoder_input_ids is not None:
+                        first_inputs["decoder_input_ids"] = decoder_input_ids[:1]
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", None)
+                if dummy_attention_mask is not None:
+                    dummy_attention_mask = dummy_attention_mask[:1]
+                    if padding_side == "left":
+                        dummy_attention_mask[:, 1:] = 1
+                        dummy_attention_mask[:, 0] = 0
+                    else:
+                        dummy_attention_mask[:, :-1] = 1
+                        dummy_attention_mask[:, -1] = 0
+
+                second_inputs = copy.deepcopy(first_inputs)
+                if dummy_attention_mask is not None:
+                    second_inputs["attention_mask"] = dummy_attention_mask
+                    if model.config.is_encoder_decoder:
+                        second_inputs["decoder_attention_mask"] = dummy_attention_mask
+
+                first_inputs = self._prepare_for_class(first_inputs, model_class)
+                first_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in first_inputs.items()
+                }
+                second_inputs = self._prepare_for_class(second_inputs, model_class)
+                second_inputs = {
+                    k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in second_inputs.items()
+                }
+
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
+                )
+
+                set_seed(12345)
+
+                outputs = model(**first_inputs)
+                logits_1_eager = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                outputs = model(**second_inputs)
+                logits_2_eager = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+
+                del model
+                model = model_class.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
+                )
+
+                set_seed(12345)
+
+                outputs = model(**first_inputs)
+                logits_1_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+                outputs = model(**second_inputs)
+                logits_2_fa = (
+                    outputs.hidden_states[-1]
+                    if "hidden_states" in outputs
+                    else outputs.logits_per_image
+                    if not model.config.is_encoder_decoder
+                    else outputs.decoder_hidden_states[-1]
+                )
+
+                torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
+                if padding_side == "left":
+                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
+                else:
+                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
+
+        if not _has_run_at_least_one_model:
+            self.skipTest(
+                f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
+            )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -329,7 +467,7 @@ def prepare_img():
 class ViTMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
+        return ViTImageProcessorPil.from_pretrained("facebook/vit-mae-base")
 
     @cached_property
     def default_model(self):

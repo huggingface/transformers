@@ -28,11 +28,11 @@ if is_torch_available():
 
 if is_vision_available():
     if is_torchvision_available():
-        from transformers import Ernie4_5_VL_MoeVideoProcessor
+        from transformers import Ernie4_5_VLMoeVideoProcessor
         from transformers.models.ernie4_5_vl_moe.video_processing_ernie4_5_vl_moe import smart_resize
 
 
-class Ernie4_5_VL_MoeVideoProcessingTester:
+class Ernie4_5_VLMoeVideoProcessingTester:
     def __init__(
         self,
         parent,
@@ -151,13 +151,13 @@ class Ernie4_5_VL_MoeVideoProcessingTester:
 
 @require_torch
 @require_vision
-class Ernie4_5_VL_MoeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
-    fast_video_processing_class = Ernie4_5_VL_MoeVideoProcessor if is_torchvision_available() else None
+class Ernie4_5_VLMoeVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = Ernie4_5_VLMoeVideoProcessor if is_torchvision_available() else None
     input_name = "pixel_values_videos"
 
     def setUp(self):
         super().setUp()
-        self.video_processor_tester = Ernie4_5_VL_MoeVideoProcessingTester(self)
+        self.video_processor_tester = Ernie4_5_VLMoeVideoProcessingTester(self)
 
     @property
     def video_processor_dict(self):
@@ -171,6 +171,25 @@ class Ernie4_5_VL_MoeVideoProcessingTest(VideoProcessingTestMixin, unittest.Test
             self.video_processor_dict, size={"longest_edge": 42, "shortest_edge": 42}
         )
         self.assertEqual(video_processor.size, {"longest_edge": 42, "shortest_edge": 42})
+
+    def test_get_num_patches_without_videos(self):
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
+        num_patches = video_processing.get_num_of_video_patches(num_frames=8, height=100, width=100, videos_kwargs={})
+        self.assertEqual(num_patches, 32)
+
+        num_patches = video_processing.get_num_of_video_patches(num_frames=7, height=200, width=50, videos_kwargs={})
+        self.assertEqual(num_patches, 32)
+
+        size = {"shortest_edge": 12544, "longest_edge": 47040000}
+        num_patches = video_processing.get_num_of_video_patches(
+            num_frames=8, height=480, width=640, videos_kwargs={"size": size}
+        )
+        self.assertEqual(num_patches, 12512)
+
+        num_patches = video_processing.get_num_of_video_patches(
+            num_frames=5, height=200, width=50, videos_kwargs={"temporal_patch_size": 4}
+        )
+        self.assertEqual(num_patches, 24)
 
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:

@@ -18,6 +18,7 @@ from functools import cached_property
 
 from transformers import SwiftFormerConfig
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_vision,
     slow,
@@ -25,6 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -40,35 +42,28 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
-class SwiftFormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        image_size=224,
-        num_labels=3,
-        layer_depths=[1, 1, 1, 1],
-        embed_dims=[16, 16, 32, 32],
-    ):
+class SwiftFormerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "num_labels": 3,
+        "image_size": 224,
+        "layer_depths": [1, 1, 1, 1],
+        "embed_dims": [16, 16, 32, 32],
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_labels = num_labels
-        self.image_size = image_size
-        self.layer_depths = layer_depths
-        self.embed_dims = embed_dims
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -134,6 +129,8 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     attention_mask and seq_length.
     """
 
+    model_tester_class = SwiftFormerModelTester
+
     all_model_classes = (SwiftFormerModel, SwiftFormerForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": SwiftFormerModel, "image-classification": SwiftFormerForImageClassification}
@@ -150,7 +147,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
             self,
             config_class=SwiftFormerConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             num_attention_heads=12,
             num_hidden_layers=12,
         )
@@ -241,7 +238,7 @@ def prepare_img():
 class SwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
+        return ViTImageProcessorPil.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
@@ -259,5 +256,12 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-2.1726, 2.1093, -2.0801]]).to(torch_device)
+        expected_slice = Expectations(
+            {
+                (None, None): [[-2.1726, 2.1093, -2.0801]],
+                ("cuda", 8): [[-2.1703, 2.1107, -2.0811]],
+                ("xpu",5): [[-2.1703,  2.1107, -2.0811]]
+            }
+        ).get_expectation()  # fmt: skip
+        expected_slice = torch.tensor(expected_slice).to(torch_device)
         torch.testing.assert_close(outputs.logits[:, :3], expected_slice, rtol=1e-4, atol=1e-4)

@@ -15,9 +15,6 @@
 
 import unittest
 
-import requests
-from PIL import Image
-
 from transformers import (
     AutoProcessor,
     MLCDVisionConfig,
@@ -30,7 +27,9 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
@@ -38,42 +37,36 @@ if is_torch_available():
     import torch
 
 
-class MLCDVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class MLCDVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in MLCD, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -121,6 +114,8 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
     Model tester for `MLCDVisionModel`.
     """
 
+    model_tester_class = MLCDVisionModelTester
+
     all_model_classes = (MLCDVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -154,8 +149,8 @@ class MLCDVisionModelIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_name)
 
         # process single image
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        image = load_test_image(url)
         inputs = processor(images=image, return_tensors="pt")
 
         # move inputs to the same device as the model
