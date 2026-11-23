@@ -58,6 +58,7 @@ class DonutImageProcessorPil(PilBackend):
     do_thumbnail = True
     do_align_long_axis = False
     do_pad = True
+    do_convert_rgb = True
 
     def __init__(self, **kwargs: Unpack[DonutImageProcessorKwargs]):
         size = kwargs.pop("size", None)
