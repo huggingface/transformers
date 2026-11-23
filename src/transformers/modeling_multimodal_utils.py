@@ -35,7 +35,7 @@ def flatten_items(features: torch.Tensor) -> tuple[torch.Tensor, torch.LongTenso
 def split_modality_outputs(outputs):
     """Splits flat `get_*_embeddings` outputs per item by their `split_sizes`."""
     split_sizes = outputs.split_sizes.tolist()
-    # Granite 4 Vision has only deepstack features
+    # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
     if outputs.pooler_output is not None:
         outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
     if getattr(outputs, "deepstack_features", None) is not None:
@@ -59,9 +59,9 @@ def merge_modality_outputs(outputs):
 
 class MultimodalMixin:
     """
-    `get_image_features` and `get_video_features` from a model's flat `get_image_embeddings` and `get_video_embeddings`,
-    split per image or video by the `split_sizes` they return. A model with a head reaches its base model's getters and
-    `get_data_dependent_inputs`.
+    `get_image_features`, `get_video_features` and `get_audio_features` from a model's flat `get_image_embeddings`,
+    `get_video_embeddings` and `get_audio_embeddings`, split per item by the `split_sizes` they return. A model with a
+    head reaches its base model's getters and `get_data_dependent_inputs`.
     """
 
     model: "MultimodalMixin"
@@ -73,6 +73,9 @@ class MultimodalMixin:
     def get_video_embeddings(self, *args, **kwargs):
         return self.model.get_video_embeddings(*args, **kwargs)
 
+    def get_audio_embeddings(self, *args, **kwargs):
+        return self.model.get_audio_embeddings(*args, **kwargs)
+
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
         """Each image's features, from `get_image_embeddings`."""
@@ -82,6 +85,11 @@ class MultimodalMixin:
     def get_video_features(self, *args, **kwargs):
         """Each video's features, from `get_video_embeddings`."""
         return split_modality_outputs(self.get_video_embeddings(*args, return_dict=True, **kwargs))
+
+    @can_return_tuple
+    def get_audio_features(self, *args, **kwargs):
+        """Each audio's features, from `get_audio_embeddings`."""
+        return split_modality_outputs(self.get_audio_embeddings(*args, return_dict=True, **kwargs))
 
     def get_data_dependent_inputs(self, **kwargs) -> dict[str, Any]:
         """The inputs the forward computes with data-dependent ops (host syncs, loops over images). Passed back to it,
@@ -97,7 +105,8 @@ def merge_mm_encoder_outputs(forward):
 
     @functools.wraps(forward)
     def wrapper(self, *args, mm_encoder_outputs=None, **kwargs):
-        if mm_encoder_outputs:
+        # Idefics' deprecated `mm_encoder_outputs` can be a bare tensor: only a dict of outputs is merged
+        if isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs:
             merged = {modality: merge_modality_outputs(outputs) for modality, outputs in mm_encoder_outputs.items()}
             is_per_item = any(merged[modality] is not outputs for modality, outputs in mm_encoder_outputs.items())
             if is_per_item and not is_torchdynamo_compiling():

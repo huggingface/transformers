@@ -1803,7 +1803,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
     @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         feature_attention_mask: torch.LongTensor | None = None,
@@ -1836,6 +1836,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
             audio_outputs.last_hidden_state.shape[0] == audio_output_lengths.sum(),
             "length of audio_features should match audio_output_lengths",
         )
+        audio_outputs.split_sizes = audio_output_lengths
 
         return audio_outputs
 
@@ -1982,9 +1983,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
 
         # 2. Merge text , audios , image and video
         if input_features is not None:
-            audio_features = self.get_audio_features(
+            audio_features = self.get_audio_embeddings(
                 input_features, feature_attention_mask, audio_feature_lengths, return_dict=True, **kwargs
-            ).last_hidden_state
+            ).pooler_output
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
@@ -2062,24 +2063,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.post_init()
-
-    @auto_docstring
-    def get_audio_features(
-        self,
-        input_features: torch.Tensor,
-        feature_attention_mask: torch.LongTensor | None = None,
-        audio_feature_lengths: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        input_features (`torch.Tensor`):
-            The tensors corresponding to the input audios.
-        feature_attention_mask (`torch.LongTensor`, *optional*):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-            The length of feature shape of each audio in LLM.
-        """
-        return self.model.get_audio_features(input_features, feature_attention_mask, audio_feature_lengths, **kwargs)
 
     @can_return_tuple
     @auto_docstring

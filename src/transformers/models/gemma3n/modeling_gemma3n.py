@@ -1945,7 +1945,6 @@ class Gemma3nModel(Gemma3nPreTrainedModel, MultimodalMixin):
         # Normalize and embed the soft tokens into language model space.
         last_hidden_state *= self.config.vision_config.hidden_size**0.5
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-
         vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 

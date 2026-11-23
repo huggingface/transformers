@@ -1399,7 +1399,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
         video_features = video_features.reshape(batch_size, self.config.num_query_tokens * frames, -1)
         vision_outputs.pooler_output = video_features
-
         vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 

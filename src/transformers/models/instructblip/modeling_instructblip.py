@@ -1153,7 +1153,6 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Multimod
         # step 3: use the language model, conditioned on the query outputs and the prompt
         image_features = self.language_projection(query_output)
         vision_outputs.pooler_output = image_features
-
         vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 

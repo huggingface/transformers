@@ -4573,9 +4573,10 @@ class ModelTesterMixin(ExportTesterMixin):
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            inputs |= {
-                name: value for name, value in model.get_data_dependent_inputs(**inputs).items() if name not in inputs
-            }
+            data_dependent_inputs = model.get_data_dependent_inputs(**inputs)
+            if not data_dependent_inputs:
+                continue
+            inputs |= {name: value for name, value in data_dependent_inputs.items() if name not in inputs}
             torch.compiler.reset()
             with torch.no_grad():
                 expected = model(**copy.deepcopy(inputs))
@@ -5835,7 +5836,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5918,7 +5919,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5960,7 +5961,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()

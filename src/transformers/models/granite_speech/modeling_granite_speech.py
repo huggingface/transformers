@@ -22,6 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -348,7 +349,7 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
     without a language modeling head.
     """
 )
-class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
+class GraniteSpeechModel(GraniteSpeechPreTrainedModel, MultimodalMixin):
     def __init__(self, config: GraniteSpeechConfig):
         super().__init__(config)
         self.encoder = GraniteSpeechCTCEncoder(config.encoder_config)
@@ -358,13 +359,24 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
-        self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    def get_audio_embeddings(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features_mask (`torch.Tensor`, *optional*):
+            Mask of the projected audio features that fill the prompt's audio tokens.
+        """
         audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
         projected_embeds = self.projector(audio_outputs.last_hidden_state)
-        audio_outputs.pooler_output = projected_embeds
-
+        if input_features_mask is not None:
+            input_features_mask = input_features_mask.to(projected_embeds.device)
+            audio_outputs.pooler_output = projected_embeds[input_features_mask]
+            audio_outputs.split_sizes = input_features_mask.sum(-1)
+        else:
+            audio_outputs.pooler_output, audio_outputs.split_sizes = flatten_items(projected_embeds)
         return audio_outputs
 
     def get_placeholder_mask(
@@ -462,14 +474,12 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
             if input_features.dtype != self.dtype:
                 input_features = input_features.to(self.dtype)
             # Get the audio features from the encoder / projector
-            audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
+            audio_embeds = self.get_audio_embeddings(
+                input_features, input_features_mask, return_dict=True
+            ).pooler_output
 
             # Merge the audio features into the LLM embeddings
-            inputs_embeds = self.get_merged_audio_embeddings(
-                input_ids=input_ids,
-                audio_features=audio_embeds,
-                input_features_mask=input_features_mask,
-            )
+            inputs_embeds = self.get_merged_audio_embeddings(input_ids=input_ids, audio_features=audio_embeds)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -494,7 +504,7 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
     The Granite Speech model, which consists of an audio encoder, projector, and language model.
     """
 )
-class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
+class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -512,9 +522,6 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             )
 
         self.post_init()
-
-    def get_audio_features(self, *args, **kwargs):
-        return self.model.get_audio_features(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

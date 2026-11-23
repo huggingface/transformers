@@ -206,7 +206,7 @@ class VibeVoiceModel(VoxtralModel):
         custom_intro="This method is used to get the audio embeddings (that replace placeholder audio tokens in the "
         "input sequence) and the acoustic features (used as diffusion target) from the input audio waveform."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_values: torch.Tensor,
         padding_mask: torch.Tensor,
@@ -241,6 +241,7 @@ class VibeVoiceModel(VoxtralModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=acoustic_features[padding_mask],
             pooler_output=pooler_output[padding_mask],
+            split_sizes=num_audio_tokens,
         )
 
     def forward(
@@ -265,7 +266,7 @@ class VibeVoiceModel(VoxtralModel):
 
         audio_features = None
         if input_values is not None:
-            audio_outputs = self.get_audio_features(input_values, padding_mask, sample=sample)
+            audio_outputs = self.get_audio_embeddings(input_values, padding_mask, sample=sample)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
 

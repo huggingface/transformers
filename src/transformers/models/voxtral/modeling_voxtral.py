@@ -30,6 +30,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -376,7 +377,7 @@ class VoxtralModelOutputWithPast(BaseModelOutputWithPast):
     without a language modeling head.
     """
 )
-class VoxtralModel(VoxtralPreTrainedModel):
+class VoxtralModel(VoxtralPreTrainedModel, MultimodalMixin):
     def __init__(self, config: VoxtralConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)
@@ -388,7 +389,7 @@ class VoxtralModel(VoxtralPreTrainedModel):
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -404,7 +405,10 @@ class VoxtralModel(VoxtralPreTrainedModel):
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         audio_outputs.pooler_output = audio_embeds
-
+        # Each 30-second chunk of `input_features` gives the same number of rows
+        audio_outputs.split_sizes = audio_embeds.new_full(
+            input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
+        )
         return audio_outputs
 
     def get_placeholder_mask(
@@ -450,7 +454,7 @@ class VoxtralModel(VoxtralPreTrainedModel):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, return_dict=True).pooler_output
+            audio_embeds = self.get_audio_embeddings(input_features, return_dict=True).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             special_audio_mask = self.get_placeholder_mask(
@@ -483,7 +487,7 @@ class VoxtralModel(VoxtralPreTrainedModel):
     The Voxtral model, which consists of Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
+class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, MultimodalMixin, GenerationMixin):
     _keep_in_fp32_modules_strict = ["embed_positions"]
 
     def __init__(self, config: VoxtralConfig):
@@ -491,9 +495,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         self.model = VoxtralModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_audio_features(self, *args, **kwargs):
-        return self.model.get_audio_features(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

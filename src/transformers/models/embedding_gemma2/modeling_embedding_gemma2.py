@@ -826,13 +826,9 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            audio_output = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
             mm_encoder_outputs["audio"] = audio_output
             audio_features = audio_output.pooler_output
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
-
-            # Keep only real audio soft tokens, mirroring the vision encoder's padding stripping.
-            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -857,31 +853,6 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
         return EmbeddingGemma2ModelOutput(
             **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=mm_encoder_outputs.get("audio")
         )
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
-    def get_audio_features(
-        self,
-        input_features: torch.Tensor,
-        input_features_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | EmbeddingGemma2AudioModelOutput:
-        r"""
-        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
-            The tensors corresponding to the input audio.
-        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
-            The attention mask for the input audio.
-        """
-        if self.audio_tower is None:
-            raise ValueError(
-                "Audio features were requested, but the model was initialized without an audio_config. "
-                "Cannot process audio without an audio tower and audio embedder."
-            )
-
-        audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
-        audio_outputs.pooler_output = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-
-        return audio_outputs
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
@@ -932,6 +903,34 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
             0, video_index, tokens_per_frame
         )
         return vision_outputs
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
+    def get_audio_embeddings(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | EmbeddingGemma2AudioModelOutput:
+        r"""
+        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
+            The tensors corresponding to the input audio.
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
+            The attention mask for the input audio.
+        """
+        if self.audio_tower is None:
+            raise ValueError(
+                "Audio features were requested, but the model was initialized without an audio_config. "
+                "Cannot process audio without an audio tower and audio embedder."
+            )
+
+        audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        # Only the real audio soft tokens, as the vision encoder strips its padding (`attention_mask` is True on them)
+        valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
+        audio_outputs.pooler_output = audio_embeds[valid_mask]
+        audio_outputs.split_sizes = valid_mask.sum(-1)
+        return audio_outputs
 
 
 __all__ = ["EmbeddingGemma2Model", "EmbeddingGemma2PreTrainedModel", "EmbeddingGemma2TextModel"]
