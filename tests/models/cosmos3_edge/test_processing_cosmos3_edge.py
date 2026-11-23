@@ -99,6 +99,7 @@ class Cosmos3EdgeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 do_normalize=False,
                 patch_size=2,
                 merge_size=2,
+                input_data_format="channels_last",
             )
             processed = processor(image, return_tensors="pt")
             self.assertEqual(processed["pixel_values"].tolist(), expected_patches)

@@ -13,18 +13,21 @@
 # limitations under the License.
 
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ...utils.deprecation import deprecate_kwarg
+from ..auto import AutoConfig
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -63,6 +66,8 @@ class GotOcr2VisionConfig(PreTrainedConfig):
     """
 
     base_config_key = "vision_config"
+    model_type = "got_ocr2_vision"
+
     hidden_size: int = 768
     output_channels: int = 256
     num_hidden_layers: int = 12
@@ -102,10 +107,34 @@ class GotOcr2Config(PreTrainedConfig):
     ```"""
 
     model_type = "got_ocr2"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen2",
+            init_kwargs={
+                "vocab_size": 151860,
+                "hidden_size": 1024,
+                "intermediate_size": 2816,
+                "num_hidden_layers": 24,
+                "num_attention_heads": 16,
+                "num_key_value_heads": 16,
+                "hidden_act": "silu",
+                "max_position_embeddings": 32768,
+                "initializer_range": 0.02,
+                "rms_norm_eps": 1e-6,
+                "use_cache": True,
+                "tie_word_embeddings": True,
+                "rope_theta": 1000000.0,
+                "rope_parameters": None,
+                "use_sliding_window": False,
+                "sliding_window": 4096,
+                "max_window_layers": 21,
+                "attention_dropout": 0.0,
+            },
+        ),
+        "vision_config": GotOcr2VisionConfig,
     }
-    sub_configs = {"text_config": AutoConfig, "vision_config": GotOcr2VisionConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -113,38 +142,21 @@ class GotOcr2Config(PreTrainedConfig):
     image_seq_length: int = 576
     tie_word_embeddings: bool = True
 
-    def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = GotOcr2VisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = GotOcr2VisionConfig(**self.vision_config)
 
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen2"](
-                vocab_size=151860,
-                hidden_size=1024,
-                intermediate_size=2816,
-                num_hidden_layers=24,
-                num_attention_heads=16,
-                num_key_value_heads=16,
-                hidden_act="silu",
-                max_position_embeddings=32768,
-                initializer_range=0.02,
-                rms_norm_eps=1e-6,
-                use_cache=True,
-                tie_word_embeddings=self.tie_word_embeddings,
-                rope_theta=1000000.0,
-                rope_parameters=None,
-                use_sliding_window=False,
-                sliding_window=4096,
-                max_window_layers=21,
-                attention_dropout=0.0,
-            )
+@auto_docstring(
+    custom_intro="""
+    Base class for got_ocr2 vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+    """
+)
+@dataclass
+class GotOcr2VisionEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
 
-        super().__post_init__(**kwargs)
+    image_embeds: torch.Tensor | None = None
 
 
 class GotOcr2MLPBlock(SamMLPBlock):
@@ -171,6 +183,7 @@ class GotOcr2PreTrainedModel(SamPreTrainedModel):
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
     input_modalities = ("image",)
+    config: GotOcr2VisionConfig
 
 
 class GotOcr2MultiModalProjector(nn.Module):
@@ -207,7 +220,6 @@ class GotOcr2PreTrainedModel(LlavaPreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GotOcr2VisionAttention):
@@ -230,7 +242,7 @@ class GotOcr2Model(LlavaModel):
     )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
@@ -241,28 +253,36 @@ class GotOcr2Model(LlavaModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GotOcr2ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values.to(inputs_embeds.dtype), return_dict=True
-            ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -271,36 +291,32 @@ class GotOcr2Model(LlavaModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
             **kwargs,
         )
 
-        return GotOcr2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-        )
+        return GotOcr2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | GotOcr2CausalLMOutputWithPast:
         r"""
@@ -339,18 +355,18 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
             logits_to_keep=logits_to_keep,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -361,15 +377,15 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         return GotOcr2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
 

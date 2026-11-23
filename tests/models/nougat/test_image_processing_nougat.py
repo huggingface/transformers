@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from transformers.image_utils import SizeDict, load_image
+from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, SizeDict, load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -34,55 +34,15 @@ if is_vision_available():
 
 
 class NougatImageProcessingTester(ImageProcessingTester):
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        do_crop_margin=True,
-        do_resize=True,
-        size=None,
-        do_thumbnail=True,
-        do_align_long_axis: bool = False,
-        do_pad=True,
-        do_normalize: bool = True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-    ):
-        size = size if size is not None else {"height": 20, "width": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_crop_margin = do_crop_margin
-        self.do_resize = do_resize
-        self.size = size
-        self.do_thumbnail = do_thumbnail
-        self.do_align_long_axis = do_align_long_axis
-        self.do_pad = do_pad
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.data_format = "channels_first"
-        self.input_data_format = "channels_first"
+    def __init__(self, **kwargs):
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 20, "width": 20})
+        # test_expected_output pins the pixel mean with this normalization.
+        kwargs.setdefault("image_mean", IMAGENET_STANDARD_MEAN.copy())
+        kwargs.setdefault("image_std", IMAGENET_STANDARD_STD.copy())
+        kwargs.setdefault("data_format", "channels_first")
 
-    def prepare_image_processor_dict(self):
-        return {
-            "do_crop_margin": self.do_crop_margin,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "do_thumbnail": self.do_thumbnail,
-            "do_align_long_axis": self.do_align_long_axis,
-            "do_pad": self.do_pad,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-        }
+        super().__init__(**kwargs)
 
     def prepare_dummy_image(self):
         revision = "ec57bf8c8b1653a209c13f6e9ee66b12df0fc2db"
@@ -99,32 +59,7 @@ class NougatImageProcessingTester(ImageProcessingTester):
 @require_torch
 @require_vision
 class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = NougatImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"height": 20, "width": 20})
-
-            kwargs = dict(self.image_processor_dict)
-            kwargs.pop("size", None)
-            image_processor = image_processing_class(**kwargs, size=42)
-            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+    image_processor_tester_class = NougatImageProcessingTester
 
     def test_expected_output(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
@@ -260,7 +195,8 @@ class NougatImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ).pixel_values
                 expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
                 self.assertEqual(
-                    tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+                    tuple(encoded_images.shape),
+                    (self.image_processor_tester.batch_size, *expected_output_image_shape),
                 )
 
     def test_backends_equivalence(self):

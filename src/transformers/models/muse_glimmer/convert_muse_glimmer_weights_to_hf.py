@@ -378,7 +378,7 @@ def write_generation_config(output_dir: Path) -> None:
         "max_length": 131072,
         "do_sample": False,
     }
-    with open(output_dir / "generation_config.json", "w") as f:
+    with open(output_dir / "generation_config.json", "w", encoding="utf-8") as f:
         json.dump(gen_config, f, indent=2)
 
 

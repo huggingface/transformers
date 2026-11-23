@@ -51,15 +51,10 @@ class GPT2ModelTester(CausalLMModelTester):
         base_model_class = GPT2Model
         causal_lm_class = GPT2LMHeadModel
 
-    def __init__(
-        self,
-        parent,
-        use_token_type_ids=True,
-        num_choices=4,
-        **kwargs,
-    ):
-        super().__init__(parent, use_token_type_ids=use_token_type_ids, **kwargs)
-        self.num_choices = num_choices
+    small_config_overrides = {
+        "use_token_type_ids": True,
+        "num_choices": 4,
+    }
 
     def prepare_config_and_inputs(
         self, extra_inputs=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -390,9 +385,9 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             scale_attn_by_inverse_layer_idx=scale_attn_by_inverse_layer_idx,
         )
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
         else:
-            model.gradient_checkpointing_disable()
+            model.activation_checkpointing_disable()
         model.to(torch_device)
 
         # The dog
@@ -446,6 +441,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
                 ("rocm", (9, 5)): "Today is a nice day and if you don't know anything about the state of play during your holiday",
                 ("cuda", None): "Today is a nice day and if you don't know anything about the state of play during your holiday",
                 ("xpu", 3): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+                ("tpu", None): 'Today is a nice day and I think everyone gets on well with the sun. No need to be',
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = expected_outputs.get_expectation()
@@ -490,7 +486,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
                     "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
                 ],
                 ("rocm", (9, 4)): [
-                    '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was also a member of the group, said: "We are very happy to have been',
+                    "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
                     "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
                 ],
             }

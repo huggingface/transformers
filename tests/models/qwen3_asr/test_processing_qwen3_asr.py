@@ -15,6 +15,7 @@
 import tempfile
 import unittest
 
+import numpy as np
 from parameterized import parameterized
 
 from transformers import (
@@ -22,6 +23,7 @@ from transformers import (
     AutoTokenizer,
     Qwen2TokenizerFast,
     Qwen3ASRFeatureExtractor,
+    WhisperFeatureExtractor,
 )
 from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
 from transformers.testing_utils import require_torch
@@ -138,6 +140,18 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # transcription_only
         transcription = processor.extract_transcription(raw_text)
         self.assertEqual(transcription, "Mr. Quilter is the apostle of the middle classes.")
+
+    @require_torch
+    def test_audio_longer_than_chunk_length_is_not_truncated(self):
+        # Original checkpoints use `WhisperFeatureExtractor`, which truncates by default
+        tokenizer = AutoTokenizer.from_pretrained(self.tmpdirname)
+        feature_extractor = WhisperFeatureExtractor(feature_size=128, chunk_length=1)
+        processor = Qwen3ASRProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        audio = np.zeros(2 * feature_extractor.n_samples, dtype=np.float32)
+
+        inputs = processor(text="<|audio_start|><|audio_pad|><|audio_end|>", audio=audio, return_tensors="pt")
+
+        self.assertEqual(inputs["input_features"].shape[-1], 2 * feature_extractor.nb_max_frames)
 
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
     def test_apply_chat_template_audio(self, batch_size: int, return_tensors: str):

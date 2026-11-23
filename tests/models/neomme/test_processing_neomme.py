@@ -112,7 +112,7 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         backend = Tokenizer(models.WordLevel(vocabulary, unk_token="<unk>"))
         backend.pre_tokenizer = pre_tokenizers.Whitespace()
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as handle:
             backend.save(handle.name)
             return PreTrainedTokenizerFast(
                 tokenizer_file=handle.name,
@@ -405,7 +405,10 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.chat_template = (
             "{% if task == 'document' %}{{ document_token }}{% else %}{{ query_token }}{% endif %}"
         )
-        with self.assertRaisesRegex(ValueError, "image prompts"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "The total number of <img> tokens in the prompts should be the same as the number of images passed",
+        ):
             processor.apply_chat_template(messages, task="document", tokenize=True)
 
         processor.chat_template = "{% if task %}{{ document_token + image_token + row_token }}{% endif %}"

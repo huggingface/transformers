@@ -25,7 +25,7 @@ from tokenizers import AddedToken
 from transformers import (
     AutoTokenizer,
     Ernie4_5_VLMoeConfig,
-    Ernie4_5_VLMoeImageProcessorFast,
+    Ernie4_5_VLMoeImageProcessor,
     Ernie4_5_VLMoeProcessor,
     Ernie4_5_VLMoeVideoProcessor,
     LlamaTokenizer,
@@ -155,12 +155,12 @@ FONT_NAME = "Roboto-Regular.ttf"
 
 
 def load_json(save_dir, filename):
-    with open(os.path.join(save_dir, filename), "r") as f:
+    with open(os.path.join(save_dir, filename), "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(json_object, save_dir, filename):
-    with open(os.path.join(save_dir, filename), "w") as f:
+    with open(os.path.join(save_dir, filename), "w", encoding="utf-8") as f:
         json.dump(json_object, f, indent=2, sort_keys=True, ensure_ascii=False)
 
 
@@ -314,7 +314,7 @@ def convert_processor(model_path, save_dir):
     copyfile(hf_hub_download(FONT_REPO, FONT_NAME), Path(save_dir, FONT_NAME))
 
     processor = Ernie4_5_VLMoeProcessor(
-        image_processor=Ernie4_5_VLMoeImageProcessorFast(),
+        image_processor=Ernie4_5_VLMoeImageProcessor(),
         tokenizer=tokenizer,
         video_processor=Ernie4_5_VLMoeVideoProcessor(font=str(Path(save_dir, FONT_NAME))),
         chat_template=tokenizer.chat_template,

@@ -78,7 +78,7 @@ def image_size_validator(value: int | Sequence[int] | dict[str, int] | None = No
 
 
 def device_validator(value: str | int | None = None):
-    possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta"]
+    possible_names = ["cpu", "cuda", "xla", "xpu", "mps", "meta", "supa"]
     if value is None:
         pass
     elif is_torch_available() and isinstance(value, torch.device):
@@ -194,8 +194,8 @@ def interval(
             error_message += f" smaller or equal to {max}"
     error_message += ", got {value}."
 
-    min = min or float("-inf")
-    max = max or float("inf")
+    min = min if min is not None else float("-inf")
+    max = max if max is not None else float("inf")
 
     @as_validated_field
     def _inner(value: int | float):

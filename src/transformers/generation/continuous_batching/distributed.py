@@ -19,7 +19,7 @@ import torch
 import torch.distributed as _dist
 
 from ...distributed.utils import _is_torch_distributed_initialized
-from .requests import logger
+from .utils import logger
 
 
 # torch marks `torch.distributed` members as possibly-missing, which leads to type check errors. To avoid them, we mark
@@ -39,9 +39,13 @@ T = TypeVar("T")
 class DistributedHelper:
     """A helper class to handle distributed-related operations. Notably, it does not crash when distributed is off."""
 
-    def __init__(self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None) -> None:
+    def __init__(
+        self, device_mesh: DeviceMesh | None, cpu_group_timeout: float | None, tp_plan: dict[str, str] | None = None
+    ) -> None:
         self.dist_on = _is_torch_distributed_initialized()
         self.device_mesh = device_mesh
+        # The model's TP plan, used to check whether the KV heads are sharded (see `are_kv_heads_tp_ed`)
+        self.tp_plan = tp_plan if tp_plan is not None else {}
 
         # Check validity of the device mesh
         self.check_device_mesh_for_cb(self.device_mesh)
@@ -191,3 +195,11 @@ class DistributedHelper:
             logger.info(f"Found no user-specified seed in the config. Setting the config seed to: {tp_seed}.")
         # Set the seed while accounting for DP replicas
         torch.manual_seed(tp_seed + self.dp_rank)
+
+    def are_kv_heads_tp_ed(self) -> bool:
+        """Checks if the KV heads are part of the TP plan. If they are not, the cache does not need plan for TP."""
+        # TODO: this is fragile. If your model fails to TP properly because of this, please open an issue.
+        for name in ("k_proj", "v_proj"):
+            if not any(plan_key.endswith(f"layers.*.self_attn.{name}") for plan_key in self.tp_plan):
+                return False
+        return True

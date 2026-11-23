@@ -39,7 +39,6 @@ from transformers.testing_utils import (
     backend_device_count,
     require_accelerate,
     require_torch,
-    require_torch_greater_or_equal,
     torch_device,
 )
 from transformers.tokenization_utils_base import BatchEncoding
@@ -267,7 +266,6 @@ class TrainerDataloaderTest(TestCasePlus):
         # DataLoader turns the string into a multiprocessing context object.
         self.assertEqual(dataloader.multiprocessing_context._name, "spawn")
 
-    @require_torch_greater_or_equal("2.6")
     def test_in_order_is_forwarded(self):
         trainer = self._build_iterable_trainer(dataloader_num_workers=2, dataloader_in_order=False)
         dataloader = trainer.get_train_dataloader()

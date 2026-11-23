@@ -44,17 +44,16 @@ class FlexOlmoModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = FlexOlmoModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
+        "attention_probs_dropout_prob": 0.0,
+    }
 
 
 @require_torch
 class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = FlexOlmoModelTester
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
@@ -77,17 +76,10 @@ class FlexOlmoIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @classmethod
     def get_model(cls):
         if cls.model is None:
-            # Originally (when loading in fp32) device_map="auto" filled all GPUs to ~100%, leaving no
-            # room for the ~344 MiB MergeModulelist temporary buffer that fuses per-expert weight shards
-            # into a single gate_up_proj tensor during from_pretrained — causing CUDA OOM on multi-GPU.
-            # A 70% per-GPU max_memory cap was the fix.
-            #
-            # We later switched to bfloat16 to fix a separate OOM that occurred during model.generate()
-            # after the logits forward pass. With bfloat16 the model footprint is halved (~28 GiB vs
-            # ~56 GiB for fp32), so there is naturally enough headroom and the cap is no longer strictly
-            # necessary. We keep it here as a marker: the MergeModulelist OOM is a real problem for large
-            # MoE models loaded with device_map="auto", and a better automatic solution (e.g. reserving
-            # headroom inside the loader itself) would be welcome.
+            # In fp32, device_map="auto" filled GPU memory and left no room for the ~344 MiB
+            # MergeModulelist buffer used while fusing expert shards, causing OOM. A 70% max_memory
+            # cap fixed it. bfloat16 now provides enough headroom, but keep the cap as a reminder that
+            # large MoE loads need reserved temporary memory; ideally the loader would handle this.
             n = backend_device_count(torch_device)
             if n > 0 and torch_device != "cpu":
                 torch_accel = getattr(torch, torch_device)

@@ -46,13 +46,14 @@ def flash_attention_forward(
     # This is before the transpose
     seq_len = query.shape[2]
 
-    if any(dim == 0 for dim in query.shape):
+    if any(dim == 0 for dim in query.shape):  # TODO (remi-or) remove this check, it was added because of a TP error
         raise ValueError(
             "Tensor query has shape  with a zero dimension.\n"
             "FlashAttention does not support inputs with dim=0.\n"
             "Please check your input shapes or use SDPA instead."
         )
-    # FA2 uses non-transposed inputs
+
+    # FA uses non-transposed inputs. After this, shape is [batch_size, seq_len, num_heads, head_dim]
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
@@ -86,13 +87,9 @@ def flash_attention_forward(
         softcap=softcap,
         use_top_left_mask=_use_top_left_mask,
         target_dtype=target_dtype,
-        attn_implementation=module.config._attn_implementation,
+        attn_implementation=module.config._attn_implementation,  # type: ignore <- the config is cached on the module
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
-        s_aux=(
-            s_aux.to(query.dtype)  # FA only accepts half precision
-            if s_aux is not None
-            else None
-        ),
+        s_aux=(s_aux.to(query.dtype) if s_aux is not None else None),  # FA only accepts half precision
         **kwargs,
     )
 

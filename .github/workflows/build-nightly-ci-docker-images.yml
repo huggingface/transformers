@@ -14,11 +14,13 @@ concurrency:
   group: docker-images-builds
   cancel-in-progress: false
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   latest-with-torch-nightly-docker:
+    permissions:
+      contents: read
     name: "Nightly PyTorch"
     if: inputs.job == 'latest-with-torch-nightly-docker' || inputs.job == ''
     runs-on:
@@ -39,17 +41,25 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
+        name: Read Python version
+        id: python
+        run: echo "version=$(cat .python-version)" >> "$GITHUB_OUTPUT"
+      -
         name: Build and push
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: ./docker/transformers-all-latest-gpu
+          build-contexts: gpu-common=./docker/gpu-common
           build-args: |
             REF=main
+            PYTHON_VERSION=${{ steps.python.outputs.version }}
             PYTORCH=pre
           push: true
           tags: huggingface/transformers-all-latest-torch-nightly-gpu
 
   nightly-torch-deepspeed-docker:
+    permissions:
+      contents: read
     name: "Nightly PyTorch + DeepSpeed"
     if: inputs.job == 'nightly-torch-deepspeed-docker' || inputs.job == ''
     runs-on:

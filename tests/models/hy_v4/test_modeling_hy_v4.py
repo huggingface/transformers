@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch HYV4 model."""
 
-import re
 import unittest
 
 import torch
@@ -33,40 +32,23 @@ class HYV4ModelTester(CausalLMModelTester):
         base_model_class = HYV4Model
         causal_lm_class = HYV4ForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        moe_intermediate_size=16,
-        num_experts_per_tok=2,
-        kv_lora_rank=8,
-        q_lora_rank=16,
-        qk_nope_head_dim=4,
-        qk_rope_head_dim=4,
-        v_head_dim=8,
-        num_hidden_layers=2,
-        mlp_layer_types=["dense", "sparse"],
-        indexer_types=["full", "shared"],
-        index_topk=8,
-        index_head_dim=8,
-        index_n_heads=4,
-        hc_mult=4,
-    ):
-        super().__init__(parent=parent, num_hidden_layers=num_hidden_layers)
-        self.n_routed_experts = n_routed_experts
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.mlp_layer_types = mlp_layer_types
-        self.indexer_types = indexer_types
-        self.index_topk = index_topk
-        self.index_head_dim = index_head_dim
-        self.index_n_heads = index_n_heads
-        self.hc_mult = hc_mult
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "moe_intermediate_size": 16,
+        "num_experts_per_tok": 2,
+        "kv_lora_rank": 8,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 4,
+        "qk_rope_head_dim": 4,
+        "v_head_dim": 8,
+        "num_hidden_layers": 2,
+        "mlp_layer_types": ["dense", "sparse"],
+        "indexer_types": ["full", "shared"],
+        "index_topk": 8,
+        "index_head_dim": 8,
+        "index_n_heads": 4,
+        "hc_mult": 4,
+    }
 
 
 @require_torch
@@ -75,19 +57,6 @@ class HYV4ModelTest(CausalLMModelTest, unittest.TestCase):
     # HYV4 routes each token to a subset of experts, so not every expert receives a gradient.
     test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.8, 0.9]
-
-    def _check_outputs_close(self, actual, expected, atol, rtol, check_device=True):
-        """Assert outputs are close, allowing up to 5% element-level mismatch."""
-        try:
-            # FIXME: We have some device mismatch under static export, let's just avoid checking for now
-            torch.testing.assert_close(actual, expected, atol=atol, rtol=rtol, check_device=False)
-        except AssertionError as e:
-            mismatched_percentage = re.findall(r"Mismatched elements: (\d+) / (\d+)", str(e))
-            if mismatched_percentage:
-                mismatched, total = map(int, mismatched_percentage[0])
-                if mismatched / total < 0.05:
-                    return  # allow up to 5%
-            raise e
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False

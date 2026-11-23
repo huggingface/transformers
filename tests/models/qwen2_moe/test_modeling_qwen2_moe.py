@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2MoE model."""
 
+import copy
 import unittest
 
 import pytest
@@ -43,6 +44,7 @@ if is_torch_available():
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 class Qwen2MoeModelTester(CausalLMModelTester):
@@ -52,7 +54,6 @@ class Qwen2MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = Qwen2MoeModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -114,8 +115,11 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class Qwen2MoeIntegrationTest(unittest.TestCase):
-    model = None
+class Qwen2MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.model = None
 
     @classmethod
     def get_model(cls):
@@ -124,15 +128,6 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
                 "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16, experts_implementation="eager"
             )
         return cls.model
-
-    @classmethod
-    def tearDownClass(cls):
-        if cls.model is not None:
-            del cls.model
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_deterministic_for_xpu
@@ -155,6 +150,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [2.3008, -0.6777, -0.1287, -1.4043, -1.7393, -1.7627, -2.0547, -2.4414, -3.0332, -2.1406],
+                ("cuda", (8, 6)): [2.3066, -0.6699, -0.1287, -1.4004, -1.7354, -1.7568, -2.0469, -2.4316, -3.0215, -2.1328],
                 ("xpu", 5): [2.4336,  0.1547,  0.6660, -0.9512, -1.3652, -1.4072, -1.5908, -1.7041, -2.8848, -1.5176],
             }
         )  # fmt: skip
@@ -216,6 +212,8 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
 
         # Assisted generation
         assistant_model = model
+        # `model` is shared by the class: restore its generation config afterwards, even if the test fails
+        self.addCleanup(setattr, model, "generation_config", copy.deepcopy(model.generation_config))
         assistant_model.generation_config.num_assistant_tokens = 2
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
@@ -238,14 +236,14 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
     def test_speculative_generation(self):
         expectations = Expectations(
             {
-                (None, None): "To be or not to be, that is the question: Whether 'tis nobler in the mind to suffer The sl",
+                (None, None): "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the sl",
                 ("xpu", 5): "To be or not to be, that is the question. The answer is to be, but not to be in the way",
             }
         )  # fmt: skip
         EXPECTED_TEXT_COMPLETION = expectations.get_expectation()
         prompt = "To be or not to"
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", use_fast=False)
-        model = Qwen2MoeForCausalLM.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16)
+        model = self.get_model()
         assistant_model = model
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 

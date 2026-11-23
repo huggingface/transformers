@@ -21,6 +21,7 @@ from transformers import CvtConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -45,46 +46,32 @@ class CvtConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_heads"))
 
 
-class CvtModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=64,
-        num_channels=3,
-        embed_dim=[16, 32, 48],
-        num_heads=[1, 2, 3],
-        depth=[1, 2, 10],
-        patch_sizes=[7, 3, 3],
-        patch_stride=[4, 2, 2],
-        patch_padding=[2, 1, 1],
-        stride_kv=[2, 2, 2],
-        cls_token=[False, False, True],
-        attention_drop_rate=[0.0, 0.0, 0.0],
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        is_training=True,
-        use_labels=True,
-        num_labels=2,  # Check
-    ):
+class CvtModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 64,
+        "patch_sizes": [7, 3, 3],
+        "patch_stride": [4, 2, 2],
+        "patch_padding": [2, 1, 1],
+        "is_training": True,
+        "use_labels": True,
+        "num_labels": 2,  # Check
+        "num_channels": 3,
+        "embed_dim": [16, 32, 48],
+        "num_heads": [1, 2, 3],
+        "stride_kv": [2, 2, 2],
+        "depth": [1, 2, 10],
+        "cls_token": [False, False, True],
+        "attention_drop_rate": [0.0, 0.0, 0.0],
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-12,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_sizes = patch_sizes
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.num_labels = num_labels
-        self.num_channels = num_channels
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.stride_kv = stride_kv
-        self.depth = depth
-        self.cls_token = cls_token
-        self.attention_drop_rate = attention_drop_rate
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -146,6 +133,8 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as Cvt does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = CvtModelTester
 
     all_model_classes = (CvtModel, CvtForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -270,6 +259,7 @@ class CvtModelIntegrationTest(unittest.TestCase):
         expected_slice = Expectations(
             {
                 (None, None): torch.tensor([0.9282, 0.9025, -0.3145]),
+                ("cuda", 8): torch.tensor([0.9280, 0.9023, -0.3142]),
                 ("xpu", 5): torch.tensor([0.92800, 0.9023, -0.3142]),
             }
         ).get_expectation().to(torch_device)

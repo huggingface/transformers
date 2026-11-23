@@ -88,7 +88,7 @@ dataset in memory.
 ```python
 from datasets import load_dataset
 
-test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+test = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="test")
 encodings = tokenizer("\n\n".join(test["text"]), return_tensors="pt")
 ```
 

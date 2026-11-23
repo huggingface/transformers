@@ -25,7 +25,7 @@ from transformers import (
     Ministral3ForCausalLM,
     Mistral3Config,
     Mistral3ForConditionalGeneration,
-    PixtralImageProcessorFast,
+    PixtralImageProcessor,
     PixtralProcessor,
     PixtralVisionConfig,
 )
@@ -86,7 +86,7 @@ def map_old_key_to_new(old_key, mapping):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -284,7 +284,7 @@ def convert_and_write_processor_and_tokenizer(
     patch_size = config["vision_encoder"]["patch_size"]
     spatial_merge_size = config["vision_encoder"]["spatial_merge_size"]
     max_image_size = config["vision_encoder"]["max_image_size"]
-    image_processor = PixtralImageProcessorFast(patch_size=patch_size, size={"longest_edge": max_image_size})
+    image_processor = PixtralImageProcessor(patch_size=patch_size, size={"longest_edge": max_image_size})
 
     processor = PixtralProcessor(
         tokenizer=tokenizer,

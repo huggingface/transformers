@@ -485,9 +485,12 @@ def get_cached_module_file(
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
             if not ((submodule_path / module_file).parent / f"{module_needed}.py").exists():
+                # `module_file` is a Hub-relative path, which always uses forward slashes; `Path(...)`
+                # would produce backslashes on Windows, and the Hub lookup would fail to find the file.
+                module_needed_path = (Path(module_file).parent / module_needed).as_posix() + ".py"
                 get_cached_module_file(
                     pretrained_model_name_or_path,
-                    f"{Path(module_file).parent / module_needed}.py",
+                    module_needed_path,
                     cache_dir=cache_dir,
                     force_download=force_download,
                     proxies=proxies,
@@ -809,7 +812,7 @@ def check_python_requirements(path_or_repo_id, requirements_file="requirements.t
     failed = []  # error messages regarding requirements
     try:
         requirements = cached_file(path_or_repo_id=path_or_repo_id, filename=requirements_file, **kwargs)
-        with open(requirements, "r") as f:
+        with open(requirements, "r", encoding="utf-8") as f:
             requirements = f.readlines()
 
         for requirement in requirements:

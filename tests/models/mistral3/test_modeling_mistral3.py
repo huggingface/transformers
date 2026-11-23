@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -49,21 +50,21 @@ if is_torch_available():
     )
 
 
-class Mistral3VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        image_seq_length=4,
-        vision_feature_layer=-1,
-        ignore_index=-100,
-        image_token_index=1,
-        num_channels=3,
-        image_size=30,
-        model_type="mistral3",
-        is_training=True,
-        text_config={
+class Mistral3VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "image_seq_length": 4,
+        "vision_feature_layer": -1,
+        "ignore_index": -100,
+        "image_token_index": 1,
+        "num_channels": 3,
+        "image_size": 30,
+        "model_type": "mistral3",
+        "is_training": True,
+        "text_config": {
             "model_type": "mistral",
             "vocab_size": 99,
             "attention_dropout": 0.0,
@@ -82,7 +83,7 @@ class Mistral3VisionText2TextModelTester:
             "eos_token_id": 3,
             "pad_token_id": 4,
         },
-        vision_config={
+        "vision_config": {
             "model_type": "pixtral",
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -93,28 +94,25 @@ class Mistral3VisionText2TextModelTester:
             "num_channels": 3,
             "hidden_act": "gelu",
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_index = image_token_index
-        self.model_type = model_type
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.vision_feature_layer = vision_feature_layer
-        self.is_training = is_training
-        self.image_seq_length = image_seq_length
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.seq_length = seq_length + self.image_seq_length
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["bos_token_id"] = values["text_config"]["bos_token_id"]
+        values["eos_token_id"] = values["text_config"]["eos_token_id"]
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Mistral3Config(
@@ -159,6 +157,8 @@ class Mistral3VisionText2TextModelTester:
 
 @require_torch
 class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Mistral3VisionText2TextModelTester
+
     all_model_classes = (
         (
             Mistral3Model,
@@ -178,7 +178,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     # Mistral3 merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
     skip_test_image_features_output_shape = True
     _is_composite = True
-    test_torch_exportable = False  # data-dependent multimodal placeholder mask
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)
@@ -274,6 +273,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
                 ("cuda", 8): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
+                ("tpu", None): "Sure, here is a haiku for you:\n\nWhispers of the breeze,\nCherry blossoms softly fall,\nSpring's gentle embrace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -310,9 +310,10 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
-                ("cuda", 8): 'The image features two tabby cats lying on a pink surface, which appears to be a couch or',
-                ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or a bed",
-                ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"
+                ("cuda", (8, 6)): "The image features two cats lying on a pink surface, which appears to be a couch or cushion.",
+                ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or cushion.",
+                ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
+                ("tpu", None): 'The image features two tabby cats lying on a pink surface, which appears to be a cushion or',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -381,6 +382,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The image depicts a vibrant urban scene in what appears to be Chinatown. The focal point is a traditional Chinese archway",
                 ("cuda", 8): 'The image depicts a street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese arch',
+                ("tpu", None): 'The image depicts a street scene in what appears to be a Chinatown district. The focal point is a traditional Chinese arch',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -442,7 +444,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe',
-                ("rocm", (9, 4)): "Dock in still waters,\nMountains reflect in peace,\nNature's calm embrace",
+                ("rocm", (9, 4)): "Sure, here is a haiku inspired by the image:\n\nSilent waters stretch,\nMountains stand in quiet grace,\nPe",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -457,7 +459,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the Statue of Liberty, located in New York',
-                ("rocm", (9, 4)): "Yes.\n\n1. The first image is of the Statue of Liberty. It is a symbol of the United States, and was",
+                ("rocm", (9, 4)): "Certainly! The images depict the following landmarks:\n\n1. The first image shows the **Statue of Liberty** in New",
+                ("xpu", 5): 'Certainly! The images depict the following landmarks:\n\n1. The first image shows the **Statue of Liberty** in New',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

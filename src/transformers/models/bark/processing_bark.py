@@ -106,7 +106,7 @@ class BarkProcessor(ProcessorMixin):
                 )
                 speaker_embeddings = None
             else:
-                with open(speaker_embeddings_path) as speaker_embeddings_json:
+                with open(speaker_embeddings_path, encoding="utf-8") as speaker_embeddings_json:
                     speaker_embeddings = json.load(speaker_embeddings_json)
         else:
             speaker_embeddings = None
@@ -166,7 +166,7 @@ class BarkProcessor(ProcessorMixin):
 
                 embeddings_dict[prompt_key] = tmp_dict
 
-            with open(os.path.join(save_directory, speaker_embeddings_dict_path), "w") as fp:
+            with open(os.path.join(save_directory, speaker_embeddings_dict_path), "w", encoding="utf-8") as fp:
                 json.dump(embeddings_dict, fp)
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)

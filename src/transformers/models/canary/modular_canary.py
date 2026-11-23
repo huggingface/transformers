@@ -22,15 +22,16 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..cohere_asr.modeling_cohere_asr import (
     CohereAsrDecoder,
     CohereAsrForConditionalGeneration,
@@ -101,8 +102,19 @@ class CanaryConfig(PreTrainedConfig):
     """
 
     model_type = "canary"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"encoder_config": AutoConfig, "decoder_config": CanaryDecoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="parakeet_encoder",
+            init_kwargs={
+                "num_hidden_layers": 32,
+                "num_mel_bins": 128,
+                "scale_input": False,
+                "layerdrop": 0.0,
+            },
+        ),
+        "decoder_config": CanaryDecoderConfig,
+    }
 
     encoder_config: dict | PreTrainedConfig | None = None
     decoder_config: dict | PreTrainedConfig | None = None
@@ -115,25 +127,6 @@ class CanaryConfig(PreTrainedConfig):
     decoder_start_token_id: int | None = 7
     initializer_range: float = 0.02
     vocab_size: int = 16384
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config["model_type"] = self.encoder_config.get("model_type", "parakeet_encoder")
-            self.encoder_config = CONFIG_MAPPING[self.encoder_config["model_type"]](**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = CONFIG_MAPPING["parakeet_encoder"](
-                num_hidden_layers=32,
-                num_mel_bins=128,
-                scale_input=False,
-                layerdrop=0.0,
-            )
-
-        if isinstance(self.decoder_config, dict):
-            self.decoder_config = CanaryDecoderConfig(**self.decoder_config)
-        elif self.decoder_config is None:
-            self.decoder_config = CanaryDecoderConfig()
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         if self.decoder_config.vocab_size != self.vocab_size:
@@ -174,7 +167,6 @@ class CanaryPreTrainedModel(CohereAsrPreTrainedModel):
     def _get_feat_extract_output_lengths(self):
         raise AttributeError("Not needed for Canary")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, CanaryPositionalEmbedding):
@@ -192,20 +184,21 @@ class CanaryDecoder(CohereAsrDecoder):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
-        encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             of the decoder.
         encoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -220,11 +213,11 @@ class CanaryDecoder(CohereAsrDecoder):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
+        if use_cache and cache is None:
+            cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -237,7 +230,7 @@ class CanaryDecoder(CohereAsrDecoder):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
         encoder_attention_mask = create_bidirectional_mask(
@@ -255,7 +248,7 @@ class CanaryDecoder(CohereAsrDecoder):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
@@ -263,7 +256,7 @@ class CanaryDecoder(CohereAsrDecoder):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            cache=cache if use_cache else None,
         )
 
 

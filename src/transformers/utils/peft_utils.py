@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
 import importlib.metadata
 import os
 
@@ -76,9 +75,8 @@ def find_adapter_config_file(
     if model_id is None:
         return None
     elif os.path.isdir(model_id):
-        list_remote_files = os.listdir(model_id)
-        if ADAPTER_CONFIG_NAME in list_remote_files:
-            adapter_cached_filename = os.path.join(model_id, ADAPTER_CONFIG_NAME)
+        if os.path.isfile(path := os.path.join(model_id, subfolder, ADAPTER_CONFIG_NAME)):
+            adapter_cached_filename = path
     else:
         adapter_cached_filename = cached_file(
             model_id,

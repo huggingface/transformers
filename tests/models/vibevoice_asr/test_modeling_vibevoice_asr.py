@@ -33,7 +33,9 @@ from transformers.testing_utils import (
 )
 from transformers.trainer_utils import set_seed
 
+from ...alm_tester import ALMModelTest
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -45,18 +47,20 @@ if is_torch_available():
     import torch
 
 
-class VibeVoiceAsrModelTester:
+class VibeVoiceAsrModelTester(ModelTesterConfigMixin):
     """
     Builds a tiny VibeVoice ASR config and synthetic inputs for testing.
     """
 
-    def __init__(
-        self,
-        parent,
-        audio_token_id=0,
-        seq_length=25,
-        audio_samples=24000,  # 1 second at 24kHz
-        text_config={
+    conditional_generation_class = VibeVoiceAsrForConditionalGeneration if is_torch_available() else None
+
+    defaults = {}
+    small_config_overrides = {
+        "audio_token_id": 0,
+        "seq_length": 25,
+        "audio_samples": 24000,  # 1 second at 24kHz
+        "is_training": True,
+        "text_config": {
             "model_type": "qwen2",
             "intermediate_size": 36,
             "initializer_range": 0.02,
@@ -68,7 +72,7 @@ class VibeVoiceAsrModelTester:
             "vocab_size": 99,
             "pad_token_id": 1,  # Ensure pad token != audio token
         },
-        acoustic_tokenizer_encoder_config={
+        "acoustic_tokenizer_encoder_config": {
             "model_type": "vibevoice_acoustic_tokenizer_encoder",
             "hidden_size": 16,
             "kernel_size": 3,
@@ -76,7 +80,7 @@ class VibeVoiceAsrModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        semantic_tokenizer_encoder_config={
+        "semantic_tokenizer_encoder_config": {
             "model_type": "vibevoice_acoustic_tokenizer_encoder",
             "channels": 1,
             "hidden_size": 32,  # 2x acoustic hidden size
@@ -85,22 +89,24 @@ class VibeVoiceAsrModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        is_training=True,
-    ):
+        "batch_size": 2,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.audio_token_id = audio_token_id
-        self.seq_length = seq_length
-        self.audio_samples = audio_samples
-        self.is_training = is_training
-        self.text_config = text_config
-        self.acoustic_tokenizer_encoder_config = acoustic_tokenizer_encoder_config
-        self.semantic_tokenizer_encoder_config = semantic_tokenizer_encoder_config
-        self.batch_size = 2
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.encoder_seq_length = seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return VibeVoiceAsrConfig(
@@ -127,6 +133,7 @@ class VibeVoiceAsrModelTester:
             "attention_mask": attention_mask,
             "input_values": input_values,
             "padding_mask": padding_mask,
+            "sample": False,
         }
 
         return config, inputs_dict
@@ -134,6 +141,8 @@ class VibeVoiceAsrModelTester:
 
 @require_torch
 class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = VibeVoiceAsrModelTester
+
     all_model_classes = (VibeVoiceAsrModel, VibeVoiceAsrForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"audio-text-to-text": VibeVoiceAsrForConditionalGeneration} if is_torch_available() else {}
@@ -153,6 +162,8 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
+    test_save_pretrained_matches_hub_checkpoint = ALMModelTest.test_save_pretrained_matches_hub_checkpoint
+
     @unittest.skip(reason="VibeVoiceAsr has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
@@ -163,45 +174,6 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     @unittest.skip(reason="VibeVoiceAsr has unique audio processing with acoustic and semantic tokenizers.")
     def test_get_audio_features_hidden_states(self):
-        pass
-
-    @unittest.skip(
-        reason="The acoustic tokenizer samples VAE noise on every forward (`vae_std * randn`), so two "
-        "`generate` calls see different audio embeddings — measured, the prefill alone differs by up to 0.4."
-    )
-    def test_cached_decode_matches_cacheless(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_batching_equivalence(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_save_load(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_left_padding_compatibility(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_forward_with_logits_to_keep(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr has slight randomness due to VAE sampling.")
-    def test_generate_methods_with_logits_to_keep(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):
@@ -232,6 +204,15 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+    def test_get_audio_features_sample(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VibeVoiceAsrForConditionalGeneration(config).to(torch_device).eval()
+        inputs = {k: inputs_dict[k] for k in ("input_values", "padding_mask")}
+
+        mean = model.get_audio_features(**inputs, sample=False).pooler_output
+        torch.testing.assert_close(model.get_audio_features(**inputs, sample=False).pooler_output, mean)
+        self.assertFalse(torch.allclose(model.get_audio_features(**inputs).pooler_output, mean))
 
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):

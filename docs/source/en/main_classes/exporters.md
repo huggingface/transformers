@@ -16,7 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Exporters
 
-New export backends can be added to Transformers by subclassing [`HfExporter`].
+New export backends can be added to Transformers by subclassing [`HfExporter`] and registering it with
+[`~exporters.register_backend`].
 
 <Tip>
 
@@ -32,9 +33,34 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.auto.AutoExportConfig
 
+## register_backend
+
+[[autodoc]] exporters.auto.register_backend
+
 ## HfExporter
 
 [[autodoc]] exporters.base.HfExporter
+
+## ExportedModel
+
+[[autodoc]] exporters.base.ExportedModel
+    - __call__
+    - program
+    - to
+    - save_pretrained
+    - from_pretrained
+
+## ExportedComponent
+
+[[autodoc]] exporters.base.ExportedComponent
+
+## ExportMetadata
+
+[[autodoc]] exporters.metadata.ExportMetadata
+
+## ModelRunner
+
+[[autodoc]] exporters.runners.base.ModelRunner
 
 ## DynamoExporter
 
@@ -62,6 +88,34 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 ## ExecutorchConfig
 
 [[autodoc]] exporters.configs.ExecutorchConfig
+
+## OpenVINOConfig
+
+[[autodoc]] exporters.configs.OpenVINOConfig
+
+## Quantizers
+
+[[autodoc]] exporters.quantizers.ExportQuantizer
+
+[[autodoc]] exporters.quantizers.CalibrationSet
+
+[[autodoc]] exporters.quantizers.PT2EQuantizer
+
+[[autodoc]] exporters.quantizers.OnnxRuntimeQuantizer
+
+[[autodoc]] exporters.quantizers.OnnxRuntimeStaticConfig
+
+[[autodoc]] exporters.quantizers.OnnxRuntimeDynamicConfig
+
+[[autodoc]] exporters.quantizers.NNCFOpenVINOQuantizer
+
+[[autodoc]] exporters.quantizers.NNCFOnnxQuantizer
+
+[[autodoc]] exporters.quantizers.NNCFTorchFXQuantizer
+
+[[autodoc]] exporters.quantizers.NNCFQuantizationConfig
+
+[[autodoc]] exporters.quantizers.NNCFWeightCompressionConfig
 
 ## Utilities
 

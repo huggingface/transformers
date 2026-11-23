@@ -20,7 +20,7 @@ import torch
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...utils import TensorType, logging, requires_backends
+from ...utils import TensorType, logging
 from ...utils.import_utils import is_timm_available, is_torch_available, requires
 
 
@@ -55,13 +55,12 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         architecture: str | None = None,
         **kwargs,
     ):
-        requires_backends(self, "timm")
         super().__init__(architecture=architecture)
 
         self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
         self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
 
-        # useful for training, see examples/pytorch/image-classification/run_image_classification.py
+        # useful for training
         self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True)
 
         # If `ToTensor` is in the transforms, then the input should be numpy array or PIL image.

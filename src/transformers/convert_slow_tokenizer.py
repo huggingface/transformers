@@ -19,14 +19,15 @@ allow to make our dependency on SentencePiece optional.
 """
 
 import os
+import re
 import warnings
-from collections.abc import Collection
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
 from .integrations.mistral.constants import is_tekken_vocab_filename
+from .tokenization_utils_base import _get_prepend_scheme, generate_merges
 from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
@@ -109,40 +110,6 @@ def import_protobuf(error_message=""):
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
 
 
-def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
-    if add_prefix_space:
-        prepend_scheme = "always"
-        if not getattr(original_tokenizer, "legacy", True):
-            prepend_scheme = "first"
-    else:
-        prepend_scheme = "never"
-    return prepend_scheme
-
-
-def generate_merges(vocab, vocab_scores, skip_tokens: Collection[str] | None = None):
-    skip_tokens = set(skip_tokens) if skip_tokens is not None else set()
-    reverse = vocab_scores is not None
-    vocab_scores = dict(vocab_scores) if reverse else vocab
-
-    merges = []
-    for merge, piece_score in vocab_scores.items():
-        if merge in skip_tokens:
-            continue
-        local = []
-        for index in range(1, len(merge)):
-            piece_l, piece_r = merge[:index], merge[index:]
-            if piece_l in skip_tokens or piece_r in skip_tokens:
-                continue
-            if piece_l in vocab and piece_r in vocab:
-                local.append((piece_l, piece_r, piece_score))
-        local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
-        merges.extend(local)
-
-    merges = sorted(merges, key=lambda val: (val[2], len(val[0]), len(val[1])), reverse=reverse)
-    merges = [(val[0], val[1]) for val in merges]
-    return merges
-
-
 class SentencePieceExtractor:
     """
     Extractor implementation for SentencePiece trained models. https://github.com/google/sentencepiece
@@ -176,11 +143,9 @@ class SentencePieceExtractor:
             kwargs["unk_id"] = self.proto.trainer_spec.unk_id
             kwargs["vocab"] = vocab
         else:
-            from .tokenization_utils_base import generate_merges
-
             vocab = {word: i for i, (word, score) in enumerate(vocab)}
-            merges = generate_merges(vocab)
             kwargs["vocab"] = vocab
+            merges = generate_merges(vocab)
             kwargs["merges"] = merges
 
         # control tokens are special
@@ -192,7 +157,7 @@ class SentencePieceExtractor:
             AddedToken(token, normalized=False, special=special)
             for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
         ]
-        kwargs["_spm_precompiled_charsmap"] = getattr(self.proto.normalizer_spec, "precompiled_charsmap", None)
+        kwargs["_spm_precompiled_charsmap"] = getattr(self.proto.normalizer_spec, "precompiled_charsmap", None) or None
         return kwargs
 
 
@@ -637,24 +602,53 @@ class SpmConverter(Converter):
     special_tokens = {}
 
     @staticmethod
-    def build_tokenizer_from_spm_proto(proto, vocab, merges=None):
+    def build_tokenizer_from_spm_proto(proto, vocab, merges=None, legacy=True):
         """
-        Similar to convert_from_spm method, but used only when there is no `model_type` class, i.e. there is no matching class in `TOKENIZERS_MAPPING` and we just create a tokenizer instead of extracting stuff from the sentencepiece file
+        Similar to convert_from_spm method, but used only when there is no `model_type` class, i.e. there is no matching
+        class in `TOKENIZERS_MAPPING` and we just create a tokenizer instead of extracting stuff from the sentencepiece
+        file.
+
+        Follows the SentencePiece model's own settings, so the result encodes like `SentencePieceProcessor.encode`:
+        the normalizer spec (extra whitespace removal, dummy prefix, whitespace escaping), BPE merges ranked by piece
+        score, and user-defined pieces, which SentencePiece always emits whole and never merges. When `merges` is
+        `None`, they are generated from `vocab` and the piece scores.
         """
         byte_fallback = proto.trainer_spec.byte_fallback
         unk_piece = proto.trainer_spec.unk_piece
-        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        normalizer_spec = proto.normalizer_spec
+        precompiled_charsmap = normalizer_spec.precompiled_charsmap
+        # `vocab` may rename pieces (from `added_tokens_decoder`), so look pieces up by id
+        if isinstance(vocab, dict):
+            id_to_token = {token_id: token for token, token_id in vocab.items()}
+        else:
+            id_to_token = {token_id: item[0] for token_id, item in enumerate(vocab or [])}
+        user_defined = [id_to_token[i] for i, piece in enumerate(proto.pieces) if piece.type == 4 and i in id_to_token]
 
         # model
         if isinstance(vocab, dict):
+            if merges is None:
+                # Only normal pieces (type 1) are merged
+                normal = {
+                    id_to_token[i]: (piece.score, i)
+                    for i, piece in enumerate(proto.pieces)
+                    if piece.type == 1 and i in id_to_token
+                }
+                ranked = []
+                for token, rank in normal.items():
+                    for split in range(1, len(token)):
+                        left, right = token[:split], token[split:]
+                        if left in normal and right in normal:
+                            ranked.append((-rank[0], rank[1], left, right))
+                merges = [(left, right) for _, _, left, right in sorted(ranked)]
             tokenizer = Tokenizer(
                 BPE(
                     vocab=vocab,
-                    merges=merges or [],
+                    merges=merges,
                     unk_token=unk_piece,
                     fuse_unk=True,
                     byte_fallback=byte_fallback,
                     dropout=None,
+                    ignore_merges=bool(user_defined),
                 )
             )
         elif isinstance(vocab, list) and vocab and isinstance(vocab[0], tuple | list):
@@ -668,19 +662,43 @@ class SpmConverter(Converter):
         else:
             return None
 
-        # normalizer
-        _normalizers = [normalizers.Replace(" ", "▁")]
+        # normalizer, in SentencePiece's order
+        _normalizers = []
         if precompiled_charsmap:
-            _normalizers.insert(0, normalizers.Precompiled(precompiled_charsmap))
+            _normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+        if normalizer_spec.remove_extra_whitespaces:
+            # Only spaces count: SentencePiece leaves other whitespace, such as newlines, alone
+            _normalizers += [normalizers.Replace(Regex(r"\A +| +\z"), ""), normalizers.Replace(Regex(" {2,}"), " ")]
+        if normalizer_spec.escape_whitespaces:
+            _normalizers.append(normalizers.Replace(" ", "▁"))
+        # Same as `_get_prepend_scheme`: legacy prefixes every chunk between added tokens, otherwise only the first
+        prepend_scheme = "always" if legacy else "first"
+        if normalizer_spec.add_dummy_prefix and legacy:
+            # Metaspace skips the dummy prefix when the text already starts with "▁", SentencePiece doesn't
+            _normalizers.append(normalizers.Replace(Regex(r"\A▁"), "▁▁"))
         tokenizer.normalizer = normalizers.Sequence(_normalizers)
+        # SentencePiece emits user-defined pieces whole and never merges them: isolate them after the dummy prefix
+        _pre_tokenizers = []
+        if normalizer_spec.add_dummy_prefix:
+            _pre_tokenizers.append(
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme, split=False)
+            )
+        if user_defined:
+            pattern = "|".join(re.escape(piece) for piece in sorted(user_defined, key=len, reverse=True))
+            _pre_tokenizers.append(pre_tokenizers.Split(Regex(pattern), behavior="isolated"))
+        if _pre_tokenizers:
+            tokenizer.pre_tokenizer = pre_tokenizers.Sequence(_pre_tokenizers)
 
         # decoder
+        _decoders = [decoders.Replace("▁", " ")]
         if byte_fallback:
-            tokenizer.decoder = decoders.Sequence(
-                [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
-            )
-        else:
-            tokenizer.decoder = decoders.Sequence([decoders.Replace("▁", " ")])
+            _decoders.append(decoders.ByteFallback())
+        if normalizer_spec.add_dummy_prefix:
+            # `Strip` applies to each token, so fuse them first to strip only the start of the text
+            _decoders += [decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+        elif byte_fallback:
+            _decoders.append(decoders.Fuse())
+        tokenizer.decoder = decoders.Sequence(_decoders)
 
         return tokenizer
 
@@ -1887,6 +1905,26 @@ class CanaryConverter(ParakeetConverter):
         }
 
 
+class OmniASRConverter(SpmConverter):
+    def __init__(self, vocab_file):
+        requires_backends(self, "protobuf")
+
+        self.original_tokenizer = None
+        self.proto = import_protobuf().ModelProto()
+        with open(vocab_file, "rb") as f:
+            self.proto.ParseFromString(f.read())
+
+    def normalizer(self, proto):
+        return normalizers.Sequence([normalizers.Strip(), normalizers.Replace(Regex(" {2,}"), " ")])
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        # `split_by_whitespace`: pieces never cross a whitespace, which starts the piece that follows it.
+        return pre_tokenizers.Split(" ", behavior="merged_with_next")
+
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Fuse()
+
+
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -2087,9 +2125,9 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
                 vocab_file=transformer_tokenizer.vocab_file,
                 extra_special_tokens=transformer_tokenizer.extra_special_tokens,
             ).converted()
-        except Exception:
+        except Exception as e:
             raise ValueError(
-                f"Converting from SentencePiece and Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
-                f"with a SentencePiece tokenizer.model file."
+                f"No slow->fast converter found for {tokenizer_class_name} and converting from Tiktoken failed. "
+                f"If a SentencePiece converter is available, provide a model path with a SentencePiece tokenizer.model file. "
                 f"Currently available slow->fast converters: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
-            )
+            ) from e

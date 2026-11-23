@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   get_modified_models:
+    permissions:
+      contents: read
     name: "Get all modified files"
     runs-on: ubuntu-latest
     outputs:

@@ -434,6 +434,11 @@ model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen3OmniMoeThinkerTextModel
 
+## Qwen3OmniMoeThinkerModel
+
+[[autodoc]] Qwen3OmniMoeThinkerModel
+    - forward
+
 ## Qwen3OmniMoeThinkerForConditionalGeneration
 
 [[autodoc]] Qwen3OmniMoeThinkerForConditionalGeneration

@@ -19,11 +19,9 @@ from pathlib import Path
 from transformers import (
     AutoProcessor,
     Qwen3ASRConfig,
-    Qwen3ASREncoderConfig,
     Qwen3ASRForConditionalGeneration,
     Qwen3ASRForTokenClassification,
     Qwen3ASRModel,
-    Qwen3Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -43,27 +41,26 @@ if is_torch_available():
 class Qwen3ASRModelTester(ALMModelTester):
     config_class = Qwen3ASRConfig
     conditional_generation_class = Qwen3ASRForConditionalGeneration
-    text_config_class = Qwen3Config
-    audio_config_class = Qwen3ASREncoderConfig
+
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("num_mel_bins", 20)
-        kwargs.setdefault("feat_seq_length", 100)
-        kwargs.setdefault("d_model", 16)
-        kwargs.setdefault("hidden_size", 16)
-        kwargs.setdefault("encoder_layers", 1)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("encoder_ffn_dim", 16)
-        kwargs.setdefault("output_dim", 16)
-        kwargs.setdefault("downsample_hidden_size", 4)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("n_window", 50)
-        kwargs.setdefault("max_position_embeddings", 13)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "num_mel_bins": 20,
+        "feat_seq_length": 100,
+        "d_model": 16,
+        "hidden_size": 16,
+        "encoder_layers": 1,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "encoder_ffn_dim": 16,
+        "output_dim": 16,
+        "downsample_hidden_size": 4,
+        "head_dim": 8,
+        "n_window": 50,
+        "max_position_embeddings": 13,
+    }
 
-    def create_audio_mask(self):
+    def create_audio_mask(self, batch_size: int | None = None):
         return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.long).to(torch_device)
 
     def get_audio_embeds_mask(self, audio_mask):

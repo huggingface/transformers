@@ -294,7 +294,7 @@ class TikTokenAddedTokensTest(unittest.TestCase):
     ADDED_TOKENS = {16: "[BOS]", 17: "[EOS]", 18: "<|im_end|>", 20: "<|start_header_id|>", 30: "[UNK]", 31: "[PAD]"}
 
     def _write_tiktoken_repo(self, directory, base_tokens, added_tokens):
-        with open(os.path.join(directory, "tiktoken.model"), "w") as vocab_file:
+        with open(os.path.join(directory, "tiktoken.model"), "w", encoding="utf-8") as vocab_file:
             vocab_file.writelines(
                 f"{base64.b64encode(token.encode()).decode()} {rank}\n" for rank, token in enumerate(base_tokens)
             )
@@ -312,7 +312,7 @@ class TikTokenAddedTokensTest(unittest.TestCase):
                 for token_id, content in added_tokens.items()
             },
         }
-        with open(os.path.join(directory, "tokenizer_config.json"), "w") as config_file:
+        with open(os.path.join(directory, "tokenizer_config.json"), "w", encoding="utf-8") as config_file:
             json.dump(config, config_file)
 
     def test_added_tokens_keep_their_declared_ids(self):
@@ -351,7 +351,7 @@ class TokenizerVersioningTest(unittest.TestCase):
             # Hack to save this in the tokenizer_config.json
             tokenizer.init_kwargs["fast_tokenizer_files"] = ["tokenizer.4.0.0.json"]
             tokenizer.save_pretrained(tmp_dir)
-            json.dump(json_tokenizer, open(os.path.join(tmp_dir, "tokenizer.4.0.0.json"), "w"))
+            json.dump(json_tokenizer, open(os.path.join(tmp_dir, "tokenizer.4.0.0.json"), "w", encoding="utf-8"))
 
             # This should pick the new tokenizer file as the version of Transformers is > 4.0.0
             new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
@@ -453,3 +453,20 @@ class PatchMistralRegexHubCallTests(unittest.TestCase):
                 "not-a-real/hub-id",
             )
         self.assertIsNotNone(result)
+
+    def test_missing_transformers_version_non_mistral_not_patched(self):
+        # https://github.com/huggingface/transformers/issues/49623: old configs (e.g. deberta-v3) have no
+        # `transformers_version` and were treated as Mistral.
+        for transformers_version in [None, ""]:
+            with self.subTest(transformers_version=transformers_version), tempfile.TemporaryDirectory() as tmp_dir:
+                config = {"model_type": "deberta-v2"}
+                if transformers_version is not None:
+                    config["transformers_version"] = transformers_version
+                with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
+                    json.dump(config, f)
+
+                tok = self._dummy_backend_tokenizer()
+                result = PreTrainedTokenizerFast._patch_mistral_regex(
+                    tok, tmp_dir, local_files_only=True, fix_mistral_regex=True
+                )
+                self.assertIsInstance(result.pre_tokenizer, pre_tokenizers.Whitespace)

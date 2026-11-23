@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections.abc import Iterable
 
 import numpy as np
@@ -129,7 +130,13 @@ class GlmImageImageProcessorPil(PilBackend):
         **kwargs,
     ) -> dict:
         if min_pixels is not None or max_pixels is not None:
-            size_dict = dict(size) if isinstance(size, dict) else {}
+            warnings.warn(
+                "Passing `min_pixels` and `max_pixels` to a processor call is deprecated and will be removed in v5.23. "
+                "Pass in `size={'longest_edge': xxx, 'shortest_edge': xxx} to override the target size.`",
+                FutureWarning,
+            )
+
+            size_dict = dict(size) if isinstance(size, (dict, SizeDict)) else {}
             if min_pixels is not None:
                 size_dict["shortest_edge"] = min_pixels
             if max_pixels is not None:

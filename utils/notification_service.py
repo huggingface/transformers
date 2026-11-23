@@ -37,7 +37,6 @@ job_to_test_map = {
     "run_models_gpu": "Models",
     "run_trainer_and_fsdp_gpu": "Trainer & DDP & FSDP",
     "run_pipelines_torch_gpu": "PyTorch pipelines",
-    "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
     "run_kernels_gpu": "Kernels",
@@ -48,7 +47,6 @@ test_to_result_name = {
     "Models": "model",
     "Trainer & DDP & FSDP": "trainer_and_fsdp",
     "PyTorch pipelines": "torch_pipeline",
-    "Examples directory": "example",
     "DeepSpeed": "deepspeed",
     "Quantization": "quantization",
     "Kernels": "kernels",
@@ -940,7 +938,7 @@ def retrieve_artifact(artifact_path: str, gpu: str | None):
         files = os.listdir(artifact_path)
         for file in files:
             try:
-                with open(os.path.join(artifact_path, file)) as f:
+                with open(os.path.join(artifact_path, file), encoding="utf-8") as f:
                     _artifact[file.split(".")[0]] = f.read()
             except UnicodeDecodeError as e:
                 raise ValueError(f"Could not open {os.path.join(artifact_path, file)}.") from e
@@ -1158,6 +1156,31 @@ if __name__ == "__main__":
                 artifact_name_to_job_map[artifact_name] = job
                 break
 
+    # Maps runner group name → GPU slot name used in job_link / model_results.json.
+    # Mirrors the "Set machine_type" step in transformers-ci daily-ci_reusable_model_job.yml.
+    MACHINE_TYPE_TO_GPU = {
+        "aws-g5-4xlarge-cache": "single",
+        "aws-g5-12xlarge-cache": "multi",
+    }
+
+    # Fallback map for container-init failures where the "Test suite reports artifacts" step
+    # never ran (so artifact_name_to_job_map has no entry).  Built by parsing the matrix folder
+    # out of the GitHub Actions job name, e.g.:
+    # "Model CI / run_models_gpu (aws-g5-12xlarge-cache, 0) / run_models_gpu (models/mistral4)"
+    matrix_name_to_github_jobs: dict = {}
+    for job in github_actions_jobs:
+        runner_group = job.get("runner_group_name", "")
+        gpu = MACHINE_TYPE_TO_GPU.get(runner_group)
+        if gpu is None:
+            continue
+        # Job name format: "... / run_models_gpu (models/mistral4)" — folder is in the last (...).
+        m = re.search(r"\(([^)]+)\)\s*$", job["name"])
+        if not m:
+            continue
+        folder = m.group(1).strip()
+        matrix_name = folder.replace("models/", "models_").replace("quantization/", "quantization_")
+        matrix_name_to_github_jobs.setdefault(matrix_name, {})[gpu] = job
+
     available_artifacts = retrieve_available_artifacts()
 
     test_categories = [
@@ -1187,12 +1210,12 @@ if __name__ == "__main__":
             "skipped": 0,
             "time_spent": [],
             "error": False,
+            "error_type": {},
             "failures": {},
             "job_link": {},
             "captured_info": {},
         }
         for matrix_name in job_matrix
-        if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
     }
 
     matrix_job_results_extra = {
@@ -1200,13 +1223,36 @@ if __name__ == "__main__":
             "captured_info": {},
         }
         for matrix_name in job_matrix
-        if f"{report_name_prefix}_{matrix_name}_test_reports" in available_artifacts
     }
 
     unclassified_model_failures = []
 
     for matrix_name in matrix_job_results:
-        for artifact_path_dict in available_artifacts[f"{report_name_prefix}_{matrix_name}_test_reports"].paths:
+        artifact_key = f"{report_name_prefix}_{matrix_name}_test_reports"
+        if artifact_key not in available_artifacts:
+            # The job produced no artifact at all (e.g. OOM-killed, silent exit, container
+            # init failure). Mark it as errored so it appears in the report.
+            matrix_job_results[matrix_name]["error"] = True
+            # Populate job_link using whichever source is available:
+            #   1. artifact_name_to_job_map: covers OOM kills where step "Test suite reports
+            #      artifacts" still appeared in the API (conclusion=failure/skipped).
+            #   2. matrix_name_to_github_jobs: fallback for container-init failures where
+            #      that step never ran at all.
+            for gpu_label in ("single-gpu", "multi-gpu"):
+                step_artifact_name = f"{gpu_label}_{artifact_key}"
+                if step_artifact_name in artifact_name_to_job_map:
+                    gpu = gpu_label.split("-")[0]  # "single" or "multi"
+                    matrix_job_results[matrix_name]["job_link"][gpu] = artifact_name_to_job_map[step_artifact_name][
+                        "html_url"
+                    ]
+            if not matrix_job_results[matrix_name]["job_link"] and matrix_name in matrix_name_to_github_jobs:
+                for gpu, job in matrix_name_to_github_jobs[matrix_name].items():
+                    matrix_job_results[matrix_name]["job_link"][gpu] = job["html_url"]
+            for gpu in matrix_name_to_github_jobs.get(matrix_name, {}):
+                matrix_job_results[matrix_name]["error_type"][gpu] = "crashed"
+            continue
+        actual_gpus = {p["gpu"] for p in available_artifacts[artifact_key].paths}
+        for artifact_path_dict in available_artifacts[artifact_key].paths:
             path = artifact_path_dict["path"]
             artifact_gpu = artifact_path_dict["gpu"]
 
@@ -1219,6 +1265,7 @@ if __name__ == "__main__":
             if "summary_short" not in artifact:
                 # The process might be killed (for example, CPU OOM), or the job is canceled for some reason), etc.
                 matrix_job_results[matrix_name]["error"] = True
+                matrix_job_results[matrix_name]["error_type"][artifact_gpu] = "incomplete_artifact"
 
             if "stats" in artifact:
                 # Link to the GitHub Action job
@@ -1292,16 +1339,28 @@ if __name__ == "__main__":
                             matrix_job_results[matrix_name]["failed"]["Unclassified"][artifact_gpu] += 1
                             unclassified_model_failures.append(line)
 
+        # One GPU slot was scheduled but uploaded nothing (e.g. OCI exec error on upload step).
+        for gpu in set(matrix_name_to_github_jobs.get(matrix_name, {}).keys()) - actual_gpus:
+            matrix_job_results[matrix_name]["error"] = True
+            matrix_job_results[matrix_name]["error_type"][gpu] = "crashed"
+            step_artifact_name = f"{gpu}-gpu_{artifact_key}"
+            if step_artifact_name in artifact_name_to_job_map:
+                matrix_job_results[matrix_name]["job_link"][gpu] = artifact_name_to_job_map[step_artifact_name][
+                    "html_url"
+                ]
+            elif gpu in matrix_name_to_github_jobs.get(matrix_name, {}):
+                matrix_job_results[matrix_name]["job_link"][gpu] = matrix_name_to_github_jobs[matrix_name][gpu][
+                    "html_url"
+                ]
+
     # Additional runs
     additional_files = {
         "PyTorch pipelines": "run_pipelines_torch_gpu_test_reports",
-        "Examples directory": "run_examples_gpu_test_reports",
         "DeepSpeed": "run_torch_cuda_extensions_gpu_test_reports",
         "Kernels": "run_kernels_gpu_test_reports",
     }
 
     if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
-        del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
     elif ci_event.startswith("Scheduled CI (AMD)"):
         del additional_files["DeepSpeed"]
@@ -1398,7 +1457,7 @@ if __name__ == "__main__":
     if job_name == "run_models_gpu":
         if "warnings_in_ci" in available_artifacts:
             directory = available_artifacts["warnings_in_ci"].paths[0]["path"]
-            with open(os.path.join(directory, "selected_warnings.json")) as fp:
+            with open(os.path.join(directory, "selected_warnings.json"), encoding="utf-8") as fp:
                 selected_warnings = json.load(fp)
 
     if not os.path.isdir(os.path.join(os.getcwd(), f"ci_results_{job_name}")):
@@ -1422,7 +1481,7 @@ if __name__ == "__main__":
         # Get the path to the file on the runner that contains the full event webhook payload.
         event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
         # Load the event payload
-        with open(event_payload_path) as fp:
+        with open(event_payload_path, encoding="utf-8") as fp:
             event_payload = json.load(fp)
             # The event that triggers the original `workflow_run`.
             if "workflow_run" in event_payload:
@@ -1580,7 +1639,7 @@ if __name__ == "__main__":
 
             report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
 
-            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w", encoding="utf-8") as fp:
                 fp.write(report)
 
             # upload

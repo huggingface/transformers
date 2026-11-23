@@ -39,6 +39,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_test_image, url_to_local_path
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -55,21 +56,21 @@ if is_vision_available():
     from PIL import Image
 
 
-class InternVLVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        image_seq_length=64,
-        vision_feature_layer=-1,
-        ignore_index=-100,
-        image_token_id=1,
-        num_channels=3,
-        image_size=64,
-        model_type="internvl",
-        is_training=True,
-        text_config={
+class InternVLVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "image_seq_length": 64,
+        "vision_feature_layer": -1,
+        "ignore_index": -100,
+        "image_token_id": 1,
+        "num_channels": 3,
+        "image_size": 64,
+        "model_type": "internvl",
+        "is_training": True,
+        "text_config": {
             "model_type": "qwen2",
             "vocab_size": 99,
             "hidden_size": 128,
@@ -87,7 +88,7 @@ class InternVLVisionText2TextModelTester:
             "eos_token_id": 4,
             "pad_token_id": 5,
         },
-        vision_config={
+        "vision_config": {
             "hidden_size": 32,
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
@@ -98,28 +99,26 @@ class InternVLVisionText2TextModelTester:
             "hidden_act": "quick_gelu",
             "use_absolute_position_embeddings": True,
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = image_token_id
-        self.model_type = model_type
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.vision_feature_layer = vision_feature_layer
-        self.is_training = is_training
-        self.image_seq_length = image_seq_length
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.seq_length = seq_length + image_seq_length
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config = values["text_config"]
+        values["bos_token_id"] = text_config["bos_token_id"]
+        values["eos_token_id"] = text_config["eos_token_id"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["seq_length"] = values["seq_length"] + values["image_seq_length"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return InternVLConfig(
@@ -183,6 +182,8 @@ class InternVLVisionText2TextModelTester:
 
 @require_torch
 class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = InternVLVisionText2TextModelTester
+
     all_model_classes = (InternVLForConditionalGeneration, InternVLModel) if is_torch_available() else ()
     all_generative_model_classes = (InternVLForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -281,6 +282,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): torch.tensor([11.9922, 14.7188, 14.3125, 10.6719, 6.9297], dtype=torch.float16),
                 ("cuda", 8): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484, 6.9141], dtype=torch.float16),
+                ("tpu", None): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484, 6.9141], dtype=torch.float16),
             }
         )  # fmt: skip
         expected_logits = expected_logits_all.get_expectation()
@@ -310,6 +312,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.",
                 ("cuda", 8): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
+                ("tpu", None): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -438,7 +441,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
-                ("rocm", (9, 4)): "user\n\nWrite a haiku for this image\nassistant\nLakeside mist,  \nPine trees stand tall,  \nPeaceful lake at hand.",
+                ("rocm", (9, 4)): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -503,6 +506,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 ("xpu", 3): "The man is performing a forehand shot.",
                 ("cuda", 8): "The man is performing a forehand shot.",
                 ("rocm", (9, 5)): "The man is performing a volley shot.",
+                ("rocm", (9, 4)): 'The man is performing a forehand shot.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -586,7 +590,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe two images depict different scenes:\n\n1. **Left Image**: This shows the Statue of Liberty in New York City. The',
-                ("rocm", (9, 4)): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe two images depict different scenes:\n\n1. **Left Image**: This shows the Statue of Liberty in New York Harbor. It',
+                ("rocm", (9, 4)): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe two images depict different scenes:\n\n1. **Left Image**: This shows the Statue of Liberty in New York City. The',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -617,7 +621,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 (None, None): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
-                ("rocm", (9, 4)): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm lake,  \nNature's peace.",
+                ("rocm", (9, 4)): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -681,9 +685,10 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_logits_all = Expectations(
             {
                 ("xpu", 3): [-9.8828,  -0.4954,   1.4561, -10.3438, -10.3438],
-                ("cuda", 8): [-9.8750,  -0.4900,   1.4629, -10.3281, -10.3359],
-                ("rocm", (9, 4)): [ -9.8672,  -0.4888,   1.4648, -10.3281, -10.3281],
+                ("cuda", (8, 6)): [-9.8828125, -0.5, 1.4423828125, -10.3359375, -10.34375],
+                ("rocm", (9, 4)): [ -9.8906,  -0.5146,   1.4600, -10.3438, -10.3516],
                 ("rocm", (9, 5)): [ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438],
+                ("tpu", None): [-9.8984,  -0.5151,   1.4463, -10.3359, -10.3438],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
@@ -715,7 +720,10 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
+                ("xpu", 5): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
                 ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
+                ("rocm", (9, 4)): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
+                ("tpu", None): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",
             }
         )
         expected_output = expected_outputs.get_expectation()
@@ -984,6 +992,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their",
                 ("cuda", 8): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
+                ("tpu", None): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

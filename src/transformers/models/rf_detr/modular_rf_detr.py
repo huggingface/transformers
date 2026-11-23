@@ -31,6 +31,8 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     center_to_corners_format,
+    group_images_by_shape,
+    reorder_images,
 )
 from ...image_utils import (
     AnnotationFormat,
@@ -103,6 +105,7 @@ class RfDetrImageProcessor(DetrImageProcessor):
         pad_size: SizeDict | None,
         format: str | AnnotationFormat | None,
         return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -132,13 +135,10 @@ class RfDetrImageProcessor(DetrImageProcessor):
 
         data = {}
 
-        processed_images = []
-        processed_annotations = []
-        pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-            # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
-            if annotations is not None:
-                annotation = self.prepare_annotation(
+        # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
+        if annotations is not None:
+            annotations = [
+                self.prepare_annotation(
                     image,
                     annotation,
                     format,
@@ -146,57 +146,64 @@ class RfDetrImageProcessor(DetrImageProcessor):
                     masks_path=masks_path,
                     input_data_format=ChannelDimension.FIRST,
                 )
-            # Rescale then resize like in the original RF-DETR implementation
-            if do_rescale:
-                image = self.rescale(image, rescale_factor)
-            if do_resize:
-                resized_image = self.resize(image, size=size, resample=resample)
-                if annotations is not None:
-                    annotation = self.resize_annotation(
-                        annotation,
-                        orig_size=image.size()[-2:],
-                        target_size=resized_image.size()[-2:],
-                    )
-                image = resized_image
-            if do_normalize:
-                image = self.normalize(image, image_mean, image_std)
-            if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, image.shape[-2:])
+                for image, annotation in zip(images, annotations)
+            ]
 
-            processed_images.append(image)
-            processed_annotations.append(annotation)
-        images = processed_images
-        annotations = processed_annotations if annotations is not None else None
+        grouped_images, grouped_annotations, grouped_images_index = group_images_by_shape(
+            images, annotations, disable_grouping=disable_grouping
+        )
+
+        for key, stacked_images in grouped_images.items():
+            stacked_annotations = grouped_annotations[key]
+            # Different from DETR: rescale then resize instead of resize then rescale
+            if do_rescale:
+                stacked_images = self.rescale(stacked_images, rescale_factor)
+            if do_resize:
+                orig_size = stacked_images.shape[-2:]
+                stacked_images = self.resize(stacked_images, size=size, resample=resample, antialias=False)
+                if stacked_annotations is not None:
+                    stacked_annotations = [
+                        self.resize_annotation(
+                            annotation,
+                            orig_size=orig_size,
+                            target_size=stacked_images.shape[-2:],
+                        )
+                        for annotation in stacked_annotations
+                    ]
+            if do_normalize:
+                stacked_images = self.normalize(stacked_images, image_mean, image_std)
+            if do_convert_annotations and stacked_annotations is not None:
+                image_size = stacked_images.shape[-2:]
+                stacked_annotations = [
+                    self.normalize_annotation(annotation, image_size) for annotation in stacked_annotations
+                ]
+            grouped_images[key] = stacked_images
+            grouped_annotations[key] = stacked_annotations
+        processed_images = reorder_images(grouped_images, grouped_images_index)
 
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
                 padded_size = (pad_size.height, pad_size.width)
             else:
-                padded_size = get_max_height_width(images)
+                padded_size = get_max_height_width(processed_images)
 
-            padded_images = []
-            padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-                # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-                if padded_size == image.size()[-2:]:
-                    padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
-                    padded_annotations.append(annotation)
-                    continue
-                image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+            grouped_masks = {}
+            for key, stacked_images in grouped_images.items():
+                grouped_images[key], grouped_masks[key], grouped_annotations[key] = self.pad(
+                    stacked_images,
+                    padded_size,
+                    annotation=grouped_annotations[key],
+                    update_bboxes=do_convert_annotations,
                 )
-                padded_images.append(image)
-                padded_annotations.append(annotation)
-                pixel_masks.append(pixel_mask)
-            images = padded_images
-            annotations = padded_annotations if annotations is not None else None
-            data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
 
-        data.update({"pixel_values": torch.stack(images, dim=0)})
+            processed_images = reorder_images(grouped_images, grouped_images_index)
+            data.update({"pixel_mask": torch.stack(reorder_images(grouped_masks, grouped_images_index), dim=0)})
+
+        data.update({"pixel_values": torch.stack(processed_images, dim=0)})
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
+            annotations = reorder_images(grouped_annotations, grouped_images_index)
             encoded_inputs["labels"] = [
                 BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
             ]
@@ -876,7 +883,6 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
     # Roboflow checkpoints use bare keys with no top-level prefix
     _checkpoint_conversion_prefix_free = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if hasattr(module, "segmentation_bias") and isinstance(module.segmentation_bias, nn.Parameter):
@@ -891,31 +897,31 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
 @dataclass
 class RfDetrModelOutput(ModelOutput):
     r"""
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
         picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
         foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
-    backbone_features (list of `torch.FloatTensor` of shape `(batch_size, config.num_channels, config.image_size, config.image_size)`):
+    backbone_features (list of `torch.Tensor` of shape `(batch_size, config.num_channels, config.image_size, config.image_size)`):
         Features from the backbone.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    init_reference_points: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    enc_outputs_class: torch.Tensor | None = None
+    enc_outputs_coord_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    cross_attentions: tuple[torch.Tensor, ...] | None = None
     backbone_features: list[torch.Tensor] = None
 
 
@@ -989,7 +995,7 @@ class RfDetrModel(LwDetrModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pixel_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> RfDetrModelOutput:
@@ -1102,15 +1108,15 @@ class RfDetrModel(LwDetrModel):
 
 class RfDetrObjectDetectionOutput(LwDetrObjectDetectionOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
         Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
         A dictionary containing the individual losses. Useful for logging.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
@@ -1119,19 +1125,19 @@ class RfDetrObjectDetectionOutput(LwDetrObjectDetectionOutput):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
         `pred_boxes`) for each decoder layer.
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_class (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
         picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
         foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+    enc_outputs_coord_logits (`torch.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
-    backbone_features (list of `torch.FloatTensor` of shape `(batch_size, config.num_channels, config.image_size, config.image_size)`):
+    backbone_features (list of `torch.Tensor` of shape `(batch_size, config.num_channels, config.image_size, config.image_size)`):
         Features from the backbone.
     """
 
@@ -1177,7 +1183,7 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: torch.Tensor = None,
         pixel_mask: torch.LongTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1273,52 +1279,52 @@ class RfDetrForObjectDetection(LwDetrForObjectDetection):
 @dataclass
 class RfDetrInstanceSegmentationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
         Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
         A dictionary containing the individual losses. Useful for logging.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_queries, num_classes + 1)`):
         Classification logits (including no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
         possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
         unnormalized bounding boxes.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_queries, height/4, width/4)`):
         Segmentation masks logits for all queries. See also
         [`~RfDetrImageProcessor.post_process_instance_segmentation`] to obtain instance segmentation maps.
     auxiliary_outputs (`list[Dict]`, *optional*):
         Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
         and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
         `pred_boxes`) for each decoder layer.
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.Tensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, d_model)`, *optional*):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_queries, d_model)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, d_model)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+    intermediate_reference_points (`torch.Tensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
-    enc_outputs_mask_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, width, height)`, *optional*):
+    enc_outputs_mask_logits (`torch.Tensor` of shape `(batch_size, num_queries, width, height)`, *optional*):
         Mask logits from the encoder for all queries.
     """
 
-    loss: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
     loss_dict: dict | None = None
-    logits: torch.FloatTensor | None = None
-    pred_boxes: torch.FloatTensor | None = None
-    pred_masks: torch.FloatTensor = None
+    logits: torch.Tensor | None = None
+    pred_boxes: torch.Tensor | None = None
+    pred_masks: torch.Tensor = None
     auxiliary_outputs: list[dict] | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    enc_outputs_mask_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
-    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
+    init_reference_points: torch.Tensor | None = None
+    last_hidden_state: torch.Tensor | None = None
+    intermediate_hidden_states: torch.Tensor | None = None
+    intermediate_reference_points: torch.Tensor | None = None
+    enc_outputs_mask_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    cross_attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class RfDetrSegmentationBlock(ConvNextLayer):
@@ -1469,7 +1475,7 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: torch.Tensor = None,
         pixel_mask: torch.LongTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],

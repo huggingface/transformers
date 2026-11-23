@@ -34,94 +34,72 @@ from transformers.testing_utils import (
 from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel, StaticCache
+    from transformers.cache_utils import DummyLayer
     from transformers.models.nemotron_h.modeling_nemotron_h import NemotronHMamba2Mixer
 
 
-class NemotronHModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        layers_block_type=["linear_attention", "moe", "linear_attention", "full_attention", "moe"],
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        head_dim=32,
-        intermediate_size=40,
-        moe_intermediate_size=40,
-        moe_shared_expert_intermediate_size=40,
-        mlp_hidden_act="relu2",
-        mamba_hidden_act="silu",
-        max_position_embeddings=512,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
+class NemotronHModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "layers_block_type": ["linear_attention", "moe", "linear_attention", "full_attention", "moe"],
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 32,
+        "intermediate_size": 40,
+        "moe_intermediate_size": 40,
+        "moe_shared_expert_intermediate_size": 40,
+        "mlp_hidden_act": "relu2",
+        "mamba_hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
         # Mamba-specific params
-        ssm_state_size=16,
-        mamba_num_heads=8,
-        mamba_n_groups=8,
-        mamba_head_dim=16,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=64,
+        "ssm_state_size": 16,
+        "mamba_num_heads": 8,
+        "mamba_n_groups": 8,
+        "mamba_head_dim": 16,
+        "mamba_d_conv": 4,
+        "mamba_expand": 2,
+        "mamba_chunk_size": 64,
         # MoE params
-        n_routed_experts=8,
-        n_shared_experts=1,
-        num_experts_per_tok=2,
-    ):
+        "n_routed_experts": 8,
+        "n_shared_experts": 1,
+        "num_experts_per_tok": 2,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.layers_block_type = layers_block_type
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # num_hidden_layers is now derived from layers_block_type length
-        self.num_hidden_layers = len(layers_block_type)
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.intermediate_size = intermediate_size
-        self.moe_intermediate_size = moe_intermediate_size
-        self.moe_shared_expert_intermediate_size = moe_shared_expert_intermediate_size
-        self.mlp_hidden_act = mlp_hidden_act
-        self.mamba_hidden_act = mamba_hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-
-        # Mamba params
-        self.ssm_state_size = ssm_state_size
-        self.mamba_num_heads = mamba_num_heads
-        self.mamba_n_groups = mamba_n_groups
-        self.mamba_head_dim = mamba_head_dim
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_chunk_size = mamba_chunk_size
-
-        # MoE params
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.num_experts_per_tok = num_experts_per_tok
+        values["num_hidden_layers"] = len(values["layers_block_type"])
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -158,7 +136,6 @@ class NemotronHModelTester:
             max_position_embeddings=self.max_position_embeddings,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             ssm_state_size=self.ssm_state_size,
             mamba_num_heads=self.mamba_num_heads,
             mamba_n_groups=self.mamba_n_groups,
@@ -239,7 +216,7 @@ class NemotronHModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -257,7 +234,7 @@ class NemotronHModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )["hidden_states"][0]
 
@@ -313,12 +290,12 @@ class NemotronHModelTester:
         self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
 
         # Test with cache
-        cache_params = DynamicCache(config=config)
-        outputs_fast_cached = mamba_mixer.cuda_kernels_forward(token_emb, cache_params=cache_params)
+        cache = DynamicCache(config=config)
+        outputs_fast_cached = mamba_mixer.cuda_kernels_forward(token_emb, cache=cache)
 
         # Reset cache for fair comparison
-        cache_params_slow = DynamicCache(config=config)
-        outputs_slow_cached = mamba_mixer.torch_forward(token_emb, cache_params=cache_params_slow)
+        cache_slow = DynamicCache(config=config)
+        outputs_slow_cached = mamba_mixer.torch_forward(token_emb, cache=cache_slow)
 
         self.parent.assertTrue(torch.allclose(outputs_fast_cached, outputs_slow_cached, atol=1e-3, rtol=1e-3))
 
@@ -345,7 +322,10 @@ class NemotronHModelTester:
         input_ids = input_ids.to(torch_device)
         seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
         with torch.no_grad():
-            model(input_ids, seq_idx=seq_idx)
+            try:
+                model(input_ids, seq_idx=seq_idx)
+            except ValueError as error:  # without the kernels, the reference path refuses packing boundaries
+                self.parent.assertIn("packed sequences", str(error))
 
         self.parent.assertTrue(seen, "the linear-attention mixer was never called")
         self.parent.assertIn("seq_idx", seen[0])
@@ -371,14 +351,14 @@ class NemotronHModelTester:
 
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         self.parent.assertTrue(
@@ -401,7 +381,16 @@ class NemotronHModelTester:
 
 
 @require_torch
-class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class NemotronHModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
+    model_tester_class = NemotronHModelTester
+
     all_model_classes = (
         (
             NemotronHModel,
@@ -431,9 +420,9 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
-        if not isinstance(past_key_values, (DynamicCache, StaticCache)):
+        if not isinstance(cache, (DynamicCache, StaticCache)):
             raise ValueError("The cache does not use the correct Cache")
 
         # Use the correct config
@@ -453,11 +442,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
         # Check each layer has the correct shape
-        for layer, layer_type in zip(past_key_values.layers, config.layer_types):
-            # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
+        for layer, layer_type in zip(cache.layers, config.layer_types):
+            # Moe layers use a DummyLayer
             if layer_type == "moe":
-                self.assertEqual(layer.conv_states[0], None)
-                self.assertEqual(layer.recurrent_states[0], None)
+                self.assertTrue(isinstance(layer, DummyLayer))
             # Attention layer cache
             elif layer_type == "full_attention":
                 self.assertEqual(layer.keys.shape, attention_shape)
@@ -510,10 +498,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip(reason="NemotronH has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip("NemotronH hybrid cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
         pass
 
     def test_reverse_loading_mapping(self):
@@ -879,7 +863,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_path = f"{tmpdir}/config.json"
-            with open(config_path, "w") as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(legacy_config, f)
 
             # Load the config

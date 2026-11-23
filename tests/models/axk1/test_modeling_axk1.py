@@ -34,6 +34,7 @@ if is_torch_available():
     torch.set_float32_matmul_precision("highest")
 
     from transformers import (
+        AXK1Config,
         AXK1Model,
     )
 
@@ -42,49 +43,38 @@ class AXK1ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = AXK1Model
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        num_local_experts=8,
-        n_shared_experts=1,
-        n_group=2,
-        topk_group=1,
-        num_experts_per_tok=2,
-        first_k_dense_replace=1,
-        moe_intermediate_size=16,
-        kv_lora_rank=16,
-        q_lora_rank=32,
-        qk_nope_head_dim=16,
-        qk_rope_head_dim=32,
-        v_head_dim=32,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.num_local_experts = num_local_experts
-        self.n_shared_experts = n_shared_experts
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
-        self.moe_intermediate_size = moe_intermediate_size
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "num_local_experts": 8,
+        "n_shared_experts": 1,
+        "n_group": 2,
+        "topk_group": 1,
+        "num_experts_per_tok": 2,
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 16,
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_nope_head_dim": 16,
+        "qk_rope_head_dim": 32,
+        "v_head_dim": 32,
+    }
 
 
 @require_torch
 class AXK1ModelTest(CausalLMModelTest, unittest.TestCase):
     # Routed experts that receive no token in a step get no gradient.
-    test_all_params_have_gradient = False
     model_tester_class = AXK1ModelTester
     model_split_percents = [0.5, 0.8, 0.9]
 
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims (MLA qk/v dims differ)")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_legacy_mlp_layer_types(self):
+        # Checkpoints describe the MLP layout with `first_k_dense_replace` / `moe_layer_freq`
+        # See https://github.com/huggingface/transformers/pull/49518
+        config = AXK1Config(num_hidden_layers=5, first_k_dense_replace=1, moe_layer_freq=2)
+        self.assertEqual(config.mlp_layer_types, ["dense", "dense", "sparse", "dense", "sparse"])
 
 
 @slow

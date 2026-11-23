@@ -14,8 +14,10 @@
 
 import copy
 import json
+import random
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -23,15 +25,18 @@ from transformers import (
     AutoProcessor,
     VibeVoiceConfig,
     VibeVoiceForConditionalGeneration,
+    VibeVoiceModel,
     is_torch_available,
 )
 from transformers.testing_utils import cleanup, is_diffusers_available, require_diffusers, slow, torch_device
 from transformers.trainer_utils import set_seed
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    floats_tensor,
     ids_tensor,
 )
 from ...test_processing_common import url_to_local_path
@@ -46,14 +51,7 @@ if is_diffusers_available():
 
 
 class DummyNoiseScheduler:
-    """
-    A simple dummy noise scheduler for testing purposes.
-
-    Contrary to real schedulers, `step` returns a *deterministic* output that does not depend on the (randomly
-    sampled) input latent. The denoised latent is fed back into the language model as the next-step embedding, so a
-    random latent would make generated sequences differ between two `generate` calls (the global RNG state advances),
-    breaking tests that compare two runs (e.g. dynamic vs static cache, eager vs compiled).
-    """
+    """A simple dummy noise scheduler for testing purposes."""
 
     def __init__(self):
         self.num_inference_steps = None
@@ -65,9 +63,8 @@ class DummyNoiseScheduler:
             def __init__(self, prev_sample):
                 self.prev_sample = prev_sample
 
-        # Deterministic output: ignore the random input latent and noise estimate (see class docstring)
-        prev_sample = torch.zeros_like(sample) + 0.1 * timestep.to(sample.dtype) / 1000
-        return StepOutput(prev_sample)
+        # Simple update
+        return StepOutput(sample - 0.1 * eps)
 
     def set_timesteps(self, num_inference_steps):
         self.num_inference_steps = num_inference_steps
@@ -75,15 +72,15 @@ class DummyNoiseScheduler:
         self.timesteps = torch.linspace(1000, 1, num_inference_steps).long()
 
 
-class VibeVoiceModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=3,
-        is_training=True,
-        use_cache=True,
-        text_config={
+class VibeVoiceModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 3,
+        "is_training": True,
+        "use_cache": True,
+        "text_config": {
             "model_type": "qwen2",
             "intermediate_size": 36,
             "initializer_range": 0.02,
@@ -99,7 +96,7 @@ class VibeVoiceModelTester:
             "eos_token_id": 0,  # same as pad_token for Vibevoice
             "bos_token_id": None,
         },
-        audio_config={
+        "audio_config": {
             "model_type": "vibevoice_acoustic_tokenizer",
             "hidden_size": 16,
             "kernel_size": 3,
@@ -107,7 +104,7 @@ class VibeVoiceModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        semantic_model_config={
+        "semantic_model_config": {
             "model_type": "vibevoice_acoustic_tokenizer_encoder",
             "channels": 1,
             "hidden_size": 32,
@@ -116,35 +113,36 @@ class VibeVoiceModelTester:
             "downsampling_ratios": [2],
             "depths": [1, 1],
         },
-        diffusion_head_config={
+        "diffusion_head_config": {
             "num_hidden_layers": 2,
             "frequency_embedding_size": 8,
             "intermediate_size": 16,
             "hidden_size": 32,  # Should match text_config hidden_size
             "latent_size": 16,  # Should match audio_config hidden_size
         },
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_cache = use_cache
-        self.text_config = text_config
-        self.audio_config = audio_config
-        self.semantic_model_config = semantic_model_config
-        self.diffusion_head_config = diffusion_head_config
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Extract common attributes for testing
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.pad_token_id = text_config["pad_token_id"]
+        text_config = values["text_config"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        return values
 
-    def get_config(self):
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    def get_config(self, audio_config=None):
         return VibeVoiceConfig(
             text_config=self.text_config,
-            audio_config=self.audio_config,
+            audio_config=audio_config if audio_config is not None else self.audio_config,
             semantic_model_config=self.semantic_model_config,
             diffusion_head_config=self.diffusion_head_config,
             use_cache=self.use_cache,
@@ -155,10 +153,12 @@ class VibeVoiceModelTester:
             audio_token_id=5,  # Instead of default 151654
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
+    def prepare_config_and_inputs(self, batch_size=None, seq_length=None, rng=None, audio_config=None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        seq_length = seq_length if seq_length is not None else self.seq_length
+        config = self.get_config(audio_config=audio_config)
+        input_ids = ids_tensor([batch_size, seq_length], self.vocab_size, rng=rng)
+        attention_mask = torch.ones([batch_size, seq_length], dtype=torch.long, device=torch_device)
         return config, input_ids, attention_mask
 
     def prepare_config_and_inputs_for_common(self):
@@ -178,9 +178,55 @@ class VibeVoiceModelTester:
         self.parent.assertIsNotNone(result.logits)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_batched_matches_single(self, config, input_ids, attention_mask, use_cache=True):
+        # Fixed weights, so that the decoded audio is reproducible across runs.
+        set_seed(7)
+        model = VibeVoiceForConditionalGeneration(config=config).to(torch_device)
+
+        # No `min_new_tokens`: the rows have to be free to stop at different steps.
+        generate_kwargs = {
+            "noise_scheduler": DummyNoiseScheduler(),
+            "max_new_tokens": 20,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "guidance_scale": 1.3,
+            "num_diffusion_steps": 10,
+            "use_cache": use_cache,
+        }
+
+        # Initialize diffusion with same input for comparable outputs
+        def zeros_instead_of_randn(*args, **kwargs):
+            return torch.zeros(*args, **kwargs)
+
+        with patch("torch.randn", zeros_instead_of_randn):
+            batched = model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+            per_sample = [
+                model.generate(
+                    input_ids=input_ids[i : i + 1],
+                    attention_mask=attention_mask[i : i + 1],
+                    **generate_kwargs,
+                )
+                for i in range(input_ids.shape[0])
+            ]
+
+        for i, single in enumerate(per_sample):
+            self.parent.assertEqual(
+                batched.audio[i] is None,
+                single.audio[0] is None,
+                msg=f"Sequence {i}: batched and single-sample generation disagree on whether audio was produced",
+            )
+            if batched.audio[i] is not None:
+                torch.testing.assert_close(
+                    batched.audio[i],
+                    single.audio[0],
+                    msg=lambda m, i=i: f"Sequence {i} differs between batched and single-sample generation:\n{m}",
+                )
+
 
 class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (VibeVoiceForConditionalGeneration,) if is_torch_available() else ()
+    model_tester_class = VibeVoiceModelTester
+
+    all_model_classes = (VibeVoiceForConditionalGeneration, VibeVoiceModel) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-to-audio": VibeVoiceForConditionalGeneration,
@@ -206,7 +252,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             "test_beam",
             "test_sample_generate",
             "test_greedy_generate",
-            "test_generate_continue_from_past_key_values",
+            "test_generate_continue_from_cache",
             "test_generate_from_random_inputs_embeds",
             "test_generate_from_inputs_embeds",
             "test_generate_methods_with_logits_to_keep",
@@ -217,6 +263,16 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             # static-cache compilation. TODO: fix in a follow-up PR.
             "test_generate_with_static_cache",
             "test_static_cache_no_recompile_with_smaller_length",
+            # FIXME @eustlib: dummy inputs dont have audio inputs so we can't run multimodal tests
+            "test_get_audio_features_attentions",
+            "test_get_audio_features_hidden_states",
+            "test_get_audio_features_output",
+            # Base model doesn't appear in AutoModel but rather a generatiev model is there
+            # FIXME eustlib, model with gen head deserves to be in task-specific mapping
+            "test_training",
+            "test_training_gradient_checkpointing",
+            "test_training_gradient_checkpointing_use_reentrant_false",
+            "test_training_gradient_checkpointing_use_reentrant_true",
         ]
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
@@ -237,6 +293,19 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_get_audio_features_sample(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = VibeVoiceForConditionalGeneration(config).to(torch_device).eval()
+        num_samples = 4 * config.audio_config.hop_length
+        input_values = floats_tensor([2, 1, num_samples])
+        padding_mask = torch.ones([2, num_samples], dtype=torch.bool, device=torch_device)
+
+        mean = model.model.get_audio_features(input_values, padding_mask, sample=False).pooler_output
+        repeat = model.model.get_audio_features(input_values, padding_mask, sample=False).pooler_output
+        torch.testing.assert_close(repeat, mean)
+        sampled = model.model.get_audio_features(input_values, padding_mask).pooler_output
+        self.assertFalse(torch.allclose(sampled, mean))
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         """
@@ -301,6 +370,44 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
         )
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
+
+    @pytest.mark.generate
+    def test_batched_equivalence_with_cache(self):
+        """
+        Each decoded audio chunk must be attributed to the sequence that produced it, see
+        https://github.com/huggingface/transformers/pull/48902.
+        """
+        # Use different input settings to trigger different stopping times for each row, so that a wrong row/audio attribution is observable.
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            batch_size=4,
+            seq_length=4,
+            rng=random.Random(7),
+            audio_config={
+                **self.model_tester.audio_config,
+                "layer_scale_init_value": 0.1,
+                "initializer_range": 0.5,
+            },
+        )
+        self.model_tester.create_and_check_batched_matches_single(*config_and_inputs, use_cache=True)
+
+    @pytest.mark.generate
+    def test_batched_equivalence_without_cache(self):
+        """
+        Each decoded audio chunk must be attributed to the sequence that produced it, see
+        https://github.com/huggingface/transformers/pull/48902.
+        """
+        # Use different input settings to trigger different stopping times for each row, so that a wrong row/audio attribution is observable.
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            batch_size=4,
+            seq_length=4,
+            rng=random.Random(7),
+            audio_config={
+                **self.model_tester.audio_config,
+                "layer_scale_init_value": 0.1,
+                "initializer_range": 0.5,
+            },
+        )
+        self.model_tester.create_and_check_batched_matches_single(*config_and_inputs, use_cache=False)
 
     @unittest.skip(reason="Vibevoice has a special cache format so skipping for now")
     def test_cached_decode_matches_cacheless(self):
@@ -375,7 +482,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_speech = generated_speech[0].cpu().float()
 
         # Compare against expected results
-        with open(fixtures_path, "r") as f:
+        with open(fixtures_path, "r", encoding="utf-8") as f:
             expected_results = json.load(f)
         expected_speech = torch.tensor(expected_results["speech_outputs"])
         generated_speech = generated_speech[..., : expected_speech.shape[-1]]
@@ -452,7 +559,7 @@ class VibeVoiceForConditionalGenerationIntegrationTest(unittest.TestCase):
         generated_speech = generated_speech[0].cpu().float()
 
         # Compare against expected results
-        with open(fixtures_path, "r") as f:
+        with open(fixtures_path, "r", encoding="utf-8") as f:
             expected_results = json.load(f)
         expected_speech = torch.tensor(expected_results["speech_outputs"])
         generated_speech = generated_speech[..., : expected_speech.shape[-1]]

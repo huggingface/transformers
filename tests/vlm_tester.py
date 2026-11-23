@@ -14,7 +14,6 @@
 
 import copy
 import unittest
-from inspect import signature
 
 from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
@@ -29,9 +28,6 @@ if is_torch_available():
 
 
 class VLMModelTester(MultiModalModelTester):
-    vision_config_class = None
-    _required_attributes = MultiModalModelTester._required_attributes + ("base_model_class", "vision_config_class")
-
     @property
     def pipeline_model_mapping(self):
         return {
@@ -39,57 +35,60 @@ class VLMModelTester(MultiModalModelTester):
             "image-text-to-text": self.conditional_generation_class,
         }
 
-    def __init__(self, parent, **kwargs):
-        # Overrides of _TEXT_MODEL_TESTER_DEFAULTS
-        kwargs.setdefault(
-            "seq_length",
-            7
-            + kwargs.get(
-                "num_image_tokens",
-                (kwargs.get("image_size", 8) // kwargs.get("patch_size", 4)) ** 2,
-            ),
-        )
-        kwargs.setdefault("pad_token_id", 0)
+    defaults = {
+        **MultiModalModelTester.defaults,
+        "pad_token_id": 0,
+        "use_token_type_ids": False,
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "image_token_id": 3,
+        "is_decoder": False,
+        "image_size": 8,
+        "patch_size": 4,
+        "num_channels": 3,
+        "projection_dim": 32,
+        "projector_hidden_act": "gelu",
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "tie_word_embeddings": False,
+        "vision_rope_parameters": {"rope_type": "axial", "rope_theta": 10000},
+    }
 
-        # VLM-specific defaults
-        kwargs.setdefault("use_token_type_ids", False)
-        kwargs.setdefault("hidden_dropout_prob", 0.1)
-        kwargs.setdefault("attention_probs_dropout_prob", 0.1)
-        kwargs.setdefault("type_vocab_size", 16)
-        kwargs.setdefault("type_sequence_label_size", 2)
-        kwargs.setdefault("initializer_range", 0.02)
-        kwargs.setdefault("num_labels", 3)
-        kwargs.setdefault("num_choices", 4)
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("is_decoder", False)
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("projection_dim", 32)
-        kwargs.setdefault("projector_hidden_act", "gelu")
-        kwargs.setdefault("vision_feature_select_strategy", "default")
-        kwargs.setdefault("vision_feature_layer", -1)
-        kwargs.setdefault("tie_word_embeddings", False)
-        kwargs.setdefault("num_image_tokens", (kwargs["image_size"] // kwargs["patch_size"]) ** 2)
-
-        super().__init__(parent, **kwargs)
-
-        # Computed default depending on base-class defaults for hidden_size / num_attention_heads.
-        if not hasattr(self, "head_dim"):
-            self.head_dim = self.hidden_size // self.num_attention_heads
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        if "num_image_tokens" not in values:
+            values["num_image_tokens"] = (values["image_size"] // values["patch_size"]) ** 2
+        # The shared text sequence length is replaced by the vision default,
+        # unless a model or caller explicitly supplies it.
+        explicit_seq_length = "seq_length" in kwargs or "seq_length" in cls.small_config_overrides
+        if not explicit_seq_length:
+            values["seq_length"] = 7 + values["num_image_tokens"]
+        if "head_dim" not in values:
+            values["head_dim"] = values["hidden_size"] // values["num_attention_heads"]
+        return values
 
     # -- Overridable VLM-specific hooks ------------------------------------------------------
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
-        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0)
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor([batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0)
 
     def place_image_tokens(self, input_ids, config):
+        # Images of single token usually don't stuble upon edge cases like real model
+        # Lets enforce bigger images for better testing
+        if self.num_image_tokens == 1:
+            raise ValueError("You must use a bigger test image to occupy at least `2` tokens.")
+
         # Override if the image tokens shouldn't be placed at the start of the test sequence
         image_token_id = getattr(config, "image_token_id", self.image_token_id)
-        # Clear any accidental image tokens first
         input_ids = input_ids.clone()
-        input_ids[input_ids == image_token_id] = self.bos_token_id
         # Place image tokens at the start
         input_ids[:, : self.num_image_tokens] = image_token_id
         return input_ids
@@ -100,26 +99,11 @@ class VLMModelTester(MultiModalModelTester):
     def _special_token_ids(self):
         return super()._special_token_ids | {self.image_token_id}
 
-    def _build_modality_sub_configs(self):
-        return {"vision_config": self.get_vision_config()}
-
-    def _prepare_modality_inputs(self, input_ids, config):
-        pixel_values = self.create_pixel_values()
+    def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
+        pixel_values = self.create_pixel_values(batch_size=batch_size)
         input_ids = self.place_image_tokens(input_ids, config)
-        return input_ids, {"pixel_values": pixel_values}
-
-    # -- Vision sub-config construction ------------------------------------------------------
-
-    @property
-    def vision_config_args(self):
-        return list(signature(self.vision_config_class.__init__).parameters.keys())
-
-    def get_vision_config(self):
-        kwargs = self._collect_kwargs(self.vision_config_args, self.vision_config_class)
-        # do not use the same rope config as LM backbone, vision will always use axial rope (i hope)
-        if "rope_parameters" in kwargs:
-            kwargs["rope_parameters"] = {"rope_type": "axial", "rope_theta": 10_000}
-        return self.vision_config_class(**kwargs)
+        additional_inputs = self.get_additional_inputs(config, input_ids, pixel_values, batch_size=batch_size)
+        return input_ids, {"pixel_values": pixel_values, **additional_inputs}
 
 
 class VLMModelTest(MultiModalModelTest):
@@ -145,22 +129,32 @@ class VLMModelTest(MultiModalModelTest):
             model = model_class(config).to(torch_device)
             model.eval()
             curr_input_dict = copy.deepcopy(input_dict)
+
+            input_ids = curr_input_dict["input_ids"]
+            batch_size = input_ids.shape[0]
             _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # Test 1: remove one image but leave the image token in text
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
+            smaller_input_ids, smaller_input_dict = self.model_tester._prepare_modality_inputs(
+                input_ids, config, batch_size=batch_size - 1
+            )
+            smaller_input_dict.update({k: v for k, v in curr_input_dict.items() if k not in smaller_input_dict})
+            if "mm_token_type_ids" in curr_input_dict:
+                smaller_input_dict["mm_token_type_ids"] = curr_input_dict["mm_token_type_ids"]
+            elif "token_type_ids" in curr_input_dict:
+                smaller_input_dict["token_type_ids"] = curr_input_dict["token_type_ids"]
             with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
+                _ = model(**smaller_input_dict)
 
             # Test 2: simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            # First, take just the first item from each tensor
-            curr_input_dict = {key: val[:1] for key, val in curr_input_dict.items()}
+            # First, create multimodal inputs with bs=1, i.e. we have only one image in total
+            single_input_ids, single_input_dict = self.model_tester._prepare_modality_inputs(
+                input_ids, config, batch_size=1
+            )
 
-            # Double the batch size for all batch-dimension tensors except pixel_values
+            # Double the batch size for all batch-dimension tensors except `image/videos`
             # This simulates having 2 prompts (each with image tokens) but only 1 image
-            batch_tensors_to_double = ["input_ids", "attention_mask", "token_type_ids"]
+            batch_tensors_to_double = ["input_ids", "attention_mask", "token_type_ids", "mm_token_type_ids"]
             for key in batch_tensors_to_double:
                 if key in curr_input_dict and curr_input_dict[key] is not None:
                     curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
@@ -170,14 +164,15 @@ class VLMModelTest(MultiModalModelTest):
                 _ = model(**curr_input_dict)
 
             # Test 3: two images and two image tokens don't raise an error
-            curr_input_dict["pixel_values"] = torch.cat(
-                [curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0
+            double_input_ids, double_input_dict = self.model_tester._prepare_modality_inputs(
+                input_ids, config, batch_size=batch_size * 2
             )
-            if "image_sizes" in curr_input_dict:
-                curr_input_dict["image_sizes"] = torch.cat(
-                    [curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0
-                )
-            _ = model(**curr_input_dict)
+            double_input_dict.update({k: v for k, v in curr_input_dict.items() if k not in double_input_dict})
+            if "mm_token_type_ids" in curr_input_dict:
+                double_input_dict["mm_token_type_ids"] = curr_input_dict["mm_token_type_ids"]
+            elif "token_type_ids" in curr_input_dict:
+                double_input_dict["token_type_ids"] = curr_input_dict["token_type_ids"]
+            _ = model(**double_input_dict)
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. "
