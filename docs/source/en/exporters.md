@@ -875,18 +875,18 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 ## ONNX Runtime fusions
 
-Set `ort_fusions` to rewrite an ONNX export into ONNX Runtime's fused transformer ops before it's saved. ONNX Runtime
+Set `ort_ep` to rewrite an ONNX export into ONNX Runtime's fused transformer ops before it's saved. ONNX Runtime
 runs the fused graph much faster than the plain one. The fusions cover RMS and layer norms, attention
 (`MultiHeadAttention`, or `GroupQueryAttention` when there's a key-value cache), rotary embeddings, GELU, and
 projections that share an input. Each fusion gives the same result as the ops it replaces.
 
-Set `ort_fusions` to the execution provider the graph will run on. Each provider gets the fused ops it supports.
+Set `ort_ep` to the execution provider the graph will run on. Each provider gets the fused ops it supports.
 
 ```python
-config = OnnxConfig(ort_fusions="cpu")
-config = OnnxConfig(ort_fusions="cuda")
-config = OnnxConfig(ort_fusions="webgpu")
-config = OnnxConfig(ort_fusions="dml")
+config = OnnxConfig(ort_ep="cpu")
+config = OnnxConfig(ort_ep="cuda")
+config = OnnxConfig(ort_ep="webgpu")
+config = OnnxConfig(ort_ep="dml")
 ```
 
 | | `"cpu"` | `"cuda"` | `"webgpu"` | `"dml"` |
@@ -901,8 +901,11 @@ in the browser with onnxruntime-web, or natively with onnxruntime-webgpu. A `"dm
 onnxruntime-directml.
 
 The fused ops aren't standard ONNX, so other ONNX consumers such as TensorRT or OpenVINO can't read them. The default
-is `ort_fusions=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for
+is `ort_ep=None`, which keeps the graph standard. If you need the model on several runtimes, export it once for
 each.
+
+`ort_ep="tensorrt"` targets ONNX Runtime's TensorRT execution provider. It fuses nothing, since TensorRT fuses the graph
+itself, and keeps the attention masks boolean, which TensorRT builds a faster engine from.
 
 The fusions run before [`~exporters.OnnxRuntimeQuantizer`] quantizes the graph, as ONNX Runtime recommends. They're
 skipped when the model is quantized before export, and they require `optimize=True` (the default). The `"cuda"` fusions

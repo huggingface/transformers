@@ -131,7 +131,7 @@ def _export_for_ort(model, ort_fusions, inputs=None, dynamic=True):
     exported = OnnxExporter().export_for_generation(
         model,
         dict(inputs),
-        OnnxConfig(dynamic=dynamic, ort_fusions=ort_fusions),
+        OnnxConfig(dynamic=dynamic, ort_ep=ort_fusions),
         generation_config=GenerationConfig(max_new_tokens=3),
     )
     return {name: component.program for name, component in exported.components.items()}
@@ -172,7 +172,7 @@ def _group_query_attentions(program):
 @require_onnxscript
 @require_onnxruntime
 class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
-    """The ONNX Runtime ops `OnnxConfig(ort_fusions=...)` fuses the graph into, for each provider (building a `"cuda"`
+    """The ONNX Runtime ops `OnnxConfig(ort_ep=...)` fuses the graph into, for each provider (building a `"cuda"`
     or `"webgpu"` graph needs no GPU), and on CPU the fused graph's outputs against the plain export's."""
 
     def assert_fused(self, model, program, fusions, component=None):
@@ -189,7 +189,7 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
     def test_forward_matches_plain_export(self):
         model = _ort_model()
         inputs = _padded_inputs(model)
-        fused = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False, ort_fusions="cpu")).program
+        fused = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False, ort_ep="cpu")).program
         plain = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False)).program
         self.assert_fused(model, fused, ORT_FUSIONS["cpu"])
         ops = {node.op_type for node in fused.graph.all_nodes()}
@@ -198,13 +198,18 @@ class OnnxRuntimeFusionTest(MemoryCleanupMixin, unittest.TestCase):
         feeds = {name: value.numpy() for name, value in inputs.items()}
         np.testing.assert_allclose(_run(fused, feeds)[0], _run(plain, feeds)[0], atol=1e-4, rtol=1e-4)
 
+    def test_ort_fusions_is_the_deprecated_ort_ep(self):
+        self.assertEqual(OnnxConfig(ort_fusions="cpu").ort_ep, "cpu")
+        with self.assertRaises(ValueError):
+            OnnxConfig(ort_fusions="cpu", ort_ep="cuda")
+
     def test_tensorrt_keeps_the_boolean_mask(self):
-        """`for_tensorrt=True` fuses nothing and keeps the attention mask boolean (torchlib guards its softmax
+        """`ort_ep="tensorrt"` fuses nothing and keeps the attention mask boolean (torchlib guards its softmax
         with `IsNaN`), which TensorRT builds a faster engine from; every other export takes it additive, as ONNX
         Runtime runs faster."""
         model = _ort_model()
         inputs = _padded_inputs(model)
-        tensorrt = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False, for_tensorrt=True))
+        tensorrt = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False, ort_ep="tensorrt"))
         plain = OnnxExporter().export(model, dict(inputs), OnnxConfig(dynamic=False))
         tensorrt_ops = collections.Counter(node.op_type for node in tensorrt.program.graph.all_nodes())
         plain_ops = collections.Counter(node.op_type for node in plain.program.graph.all_nodes())

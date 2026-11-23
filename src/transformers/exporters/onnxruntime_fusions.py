@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fuses an exported ONNX graph into ONNX Runtime's own ops for one of its providers (`OnnxConfig(ort_fusions=...)`).
+"""Fuses an exported ONNX graph into ONNX Runtime's own ops for one of its providers (`OnnxConfig(ort_ep=...)`).
 
 onnxscript's ORT fusions (`optimize_for_ort`) do most of it: norms, attention, GELU. `_STEPS` runs them, in order,
 between the rewrites they need: the graph prepared in the forms they match, the fusions ONNX Runtime rejects undone,

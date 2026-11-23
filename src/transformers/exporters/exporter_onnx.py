@@ -53,7 +53,7 @@ import numpy as np
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
-from .configs import ExportFormat, OnnxConfig
+from .configs import ORT_FUSION_EPS, ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .metadata import ExportMetadata, record_output_structure
 from .utils import (
@@ -143,11 +143,12 @@ class OnnxExporter(DynamoExporter):
     ) -> tuple[onnx_ir.Model, ExportMetadata]:
         # A model quantized before export has no ops the fusions match.
         quantizer = config.quantizer
-        ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
+        quantized_before_export = quantizer is not None and quantizer.quantizes_fx_graph
+        ort_fusions = config.ort_ep if config.ort_ep in ORT_FUSION_EPS and not quantized_before_export else None
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
         experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
         # ONNX Runtime's TensorRT execution provider takes patches of its own, every other export the default ones
-        execution_patches = "onnx.tensorrt" if config.for_tensorrt else "onnx.default"
+        execution_patches = "onnx.tensorrt" if config.ort_ep == "tensorrt" else "onnx.default"
 
         with (
             patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
