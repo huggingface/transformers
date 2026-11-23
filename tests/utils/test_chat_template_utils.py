@@ -765,6 +765,31 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(get_json_schema(fn)["function"], expected_schema)
 
+    def test_var_keyword_choices_become_enum(self):
+        def fn(origin: str, **filters: str):
+            """
+            Test function
+
+            Args:
+                origin: The input
+                **filters: The extras (choices: ["a", "b"])
+            """
+            return origin, filters
+
+        # The extras are described by additionalProperties now, so the "(choices: ...)" block has to be
+        # read there too, or it stays in the description as literal text
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {"origin": {"type": "string", "description": "The input"}},
+                "additionalProperties": {"type": "string", "enum": ["a", "b"], "description": "The extras"},
+                "required": ["origin"],
+            },
+        }
+        self.assertEqual(get_json_schema(fn)["function"], expected_schema)
+
     def test_multiline_docstring_with_types(self):
         def fn(x: int, y: int):
             """

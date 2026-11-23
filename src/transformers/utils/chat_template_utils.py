@@ -305,6 +305,15 @@ def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | No
     return description, args_dict, returns
 
 
+def _set_description(schema: dict, desc: str) -> None:
+    """Attach a docstring description to a schema, splitting off a trailing "(choices: ...)" block into an enum."""
+    enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
+    if enum_choices:
+        schema["enum"] = [c.strip() if isinstance(c, str) else c for c in json.loads(enum_choices.group(1))]
+        desc = enum_choices.string[: enum_choices.start()].strip()
+    schema["description"] = desc
+
+
 def get_json_schema(func: Callable) -> dict:
     """
     This function generates a JSON schema for a given function, based on its docstring and type hints. This is
@@ -425,7 +434,7 @@ def get_json_schema(func: Callable) -> dict:
     if (extra_properties := json_schema.get("additionalProperties")) is not None:
         var_keyword_name = _get_var_keyword_name(inspect.signature(func))
         if (var_keyword_doc := param_descriptions.get(var_keyword_name)) is not None:
-            extra_properties["description"] = var_keyword_doc
+            _set_description(extra_properties, var_keyword_doc)
     if (return_dict := json_schema["properties"].pop("return", None)) is not None:
         if return_doc is not None:  # We allow a missing return docstring since most templates ignore it
             return_dict["description"] = return_doc
@@ -434,12 +443,7 @@ def get_json_schema(func: Callable) -> dict:
             raise DocstringParsingException(
                 f"Cannot generate JSON schema for {func_name} because the docstring has no description for the argument '{arg}'"
             )
-        desc = param_descriptions[arg]
-        enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
-        if enum_choices:
-            schema["enum"] = [c.strip() if isinstance(c, str) else c for c in json.loads(enum_choices.group(1))]
-            desc = enum_choices.string[: enum_choices.start()].strip()
-        schema["description"] = desc
+        _set_description(schema, param_descriptions[arg])
 
     output = {"name": func_name, "description": main_doc, "parameters": json_schema}
     if return_dict is not None:
