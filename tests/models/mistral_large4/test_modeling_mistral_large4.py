@@ -37,10 +37,7 @@ if is_torch_available():
     import torch
 
     from transformers import MistralLarge4ForConditionalGeneration, MistralLarge4Model
-    from transformers.models.mistral_large4.modeling_mistral_large4 import (
-        MistralLarge4TextIndexer,
-        MistralLarge4TextNoRopeIndexer,
-    )
+    from transformers.models.mistral_large4.modeling_mistral_large4 import MistralLarge4TextIndexer
 
 
 @contextmanager
@@ -51,7 +48,7 @@ def indexer_leaky_relu():
     on tensor shapes (cache type, padding). A leaky ReLU keeps the scores distinct, so tests comparing such code paths
     select the same tokens. The real ReLU is covered by the integration tests, on trained weights.
     """
-    forwards = [inspect.unwrap(cls.forward) for cls in (MistralLarge4TextIndexer, MistralLarge4TextNoRopeIndexer)]
+    forwards = [inspect.unwrap(cls.forward) for cls in (MistralLarge4TextIndexer,)]
     codes = [forward.__code__ for forward in forwards]
     for forward, code in zip(forwards, codes):
         forward.__code__ = code.replace(co_names=tuple("leaky_relu" if n == "relu" else n for n in code.co_names))
