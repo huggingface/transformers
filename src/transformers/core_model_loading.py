@@ -2021,10 +2021,12 @@ def convert_and_load_state_dict_in_model(
     return loading_info, disk_offload_index
 
 
-def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
+def _reverse_conversion_mapping(
+    model: PreTrainedModel, state_dict: dict[str, torch.Tensor]
+) -> tuple[dict[str, WeightTransform], list[WeightRenaming]] | None:
     """
-    Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
-    if the model was created in another way and is part of the default mappings.
+    Group the tensors of `state_dict` by the reverse transform they go through. Returns `None` if the model has no
+    weight conversions to revert.
     """
     weight_conversions = getattr(model, "_weight_conversions", None)
     # In this case, the model was not created with `from_pretrained` -> let's check if it's in the hardcoded
@@ -2043,7 +2045,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
 
     # We did not find any operations to perform -> quick escape
     if weight_conversions is None:
-        return state_dict
+        return None
 
     # Important: we need to revert the order here, so that potential conversions from submodels are performed first
     weight_conversions = weight_conversions[::-1]
@@ -2072,6 +2074,35 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
             source_pattern = original_key
 
         mapping.add_tensor(renamed_key, original_key, source_pattern, tensor)
+
+    return conversion_mapping, renamings
+
+
+def get_reverse_conversion_groups(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]) -> list[list[str]]:
+    """
+    Split the names of `state_dict` into the groups that `revert_weight_conversion` reverts together: calling it on the
+    tensors of a single group gives the same weights as on the whole state dict.
+    """
+    reverse_mapping = _reverse_conversion_mapping(model, state_dict)
+    if reverse_mapping is None:
+        return [[name] for name in state_dict]
+    conversion_mapping, _ = reverse_mapping
+    return [
+        sorted(set().union(*transform.layer_targets.values()), key=dot_natural_key)
+        for transform in conversion_mapping.values()
+    ]
+
+
+def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch.Tensor]):
+    """
+    Revert the conversion mapping that was used to load the model with `from_pretrained`, or the default one
+    if the model was created in another way and is part of the default mappings.
+    """
+    reverse_mapping = _reverse_conversion_mapping(model, state_dict)
+    # We did not find any operations to perform -> quick escape
+    if reverse_mapping is None:
+        return state_dict
+    conversion_mapping, renamings = reverse_mapping
 
     new_state_dict = {}
     for first_param_name, reversed_converter in conversion_mapping.items():
