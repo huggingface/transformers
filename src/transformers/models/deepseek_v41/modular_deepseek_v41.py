@@ -724,7 +724,7 @@ class DeepseekV41Attention(nn.Module):
             self.num_heads * self.head_dim // config.o_groups, config.o_groups * config.o_lora_rank, config.o_groups
         )
         self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
-        self.sinks = nn.Parameter(torch.empty(self.num_heads))
+        self.sinks = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
         if self.layer_type in ("compressed_attention", "kv_shared_indexed_attention"):
             self.indexer = DeepseekV41Indexer(config, layer_idx)
         if self.layer_type == "compressed_attention":
@@ -889,7 +889,7 @@ class DeepseekV41TopKRouter(DeepseekV4TopKRouter):
 
     def __init__(self, config: DeepseekV41TextConfig):
         super().__init__(config)
-        self.e_score_correction_bias_vl = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias_vl = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(
         self, hidden_states: torch.Tensor, image_mask: torch.Tensor | None = None
@@ -1163,8 +1163,8 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         self.mlp = DeepseekV41SparseMoeBlock(config)
         self.input_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn_hc = DeepseekV41HyperConnection(config)
-        self.ffn_hc = DeepseekV41HyperConnection(config)
+        self.attn_hc = DeepseekV41HyperConnection(config).to(dtype=torch.float32)
+        self.ffn_hc = DeepseekV41HyperConnection(config).to(dtype=torch.float32)
         self.engram = DeepseekV41Engram(config, layer_idx) if layer_idx in config.engram_layer_ids else None
 
     def forward(
@@ -1329,6 +1329,8 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     # ... and they cannot be rolled back either, which rules out assisted generation and friends
     _is_stateful = True
+    # Everything listed here is also created in float32 in its `__init__`. `from_pretrained` enforces this
+    # list, but a model built straight from a config would otherwise get the default dtype
     _keep_in_fp32_modules_strict = [
         "attn_hc",
         "ffn_hc",
