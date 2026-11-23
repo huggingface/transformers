@@ -5802,7 +5802,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5885,7 +5885,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5927,7 +5927,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()

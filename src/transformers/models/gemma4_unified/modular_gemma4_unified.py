@@ -26,6 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
+from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
@@ -522,14 +523,17 @@ class Gemma4UnifiedConfig(Gemma4Config):
 @dataclass
 class Gemma4UnifiedAudioModelOutput(ModelOutput):
     r"""
-    pooler_output (`torch.Tensor` of shape `(batch_size, ..., hidden_size)`):
-        Last hidden state that went through the audio specific multimodal projectors.
+    pooler_output (`torch.Tensor` of shape `(num_audio_tokens, hidden_size)`):
+        The real (non-padding) audio soft tokens of every input audio, concatenated, after the audio projector.
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
+    split_sizes (`torch.LongTensor` of shape `(num_audios,)`, *optional*):
+        The number of `pooler_output` rows of each audio.
     """
 
-    pooler_output: torch.Tensor | None = None
+    pooler_output: torch.Tensor | tuple[torch.Tensor, ...] | None = None
     attention_mask: torch.BoolTensor | None = None
+    split_sizes: torch.LongTensor | None = None
 
 
 class Gemma4UnifiedTextModelOutputWithPast(Gemma4TextModelOutputWithPast):
@@ -1080,7 +1084,7 @@ class Gemma4UnifiedModel(Gemma4Model):
     @auto_docstring(
         custom_intro="Projects raw audio waveform features directly into language model space (no audio tower)."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
@@ -1099,11 +1103,15 @@ class Gemma4UnifiedModel(Gemma4Model):
                 "Cannot process audio without an audio embedder."
             )
 
-        audio_outputs = self.embed_audio(inputs_embeds=input_features)
-
+        audio_embeds = self.embed_audio(inputs_embeds=input_features)
+        # Only the real audio soft tokens, as the vision encoder strips its padding
+        if input_features_mask is not None:
+            input_features_mask = input_features_mask.to(audio_embeds.device)
+            pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
+        else:
+            pooler_output, split_sizes = flatten_items(audio_embeds)
         return Gemma4UnifiedAudioModelOutput(
-            pooler_output=audio_outputs,
-            attention_mask=input_features_mask.to(audio_outputs.device) if input_features_mask is not None else None,
+            pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
         )
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -1204,14 +1212,8 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Merge text and audio
         audio_outputs = None
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            audio_output = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
             audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
-
-            # Strip padding tokens: only keep real (non-padding) audio soft tokens.
-            # audio_mask_from_encoder is True for valid positions, False for padding tokens.
-            # This mirrors the vision encoder's padding stripping (see Gemma4UnifiedVisionEncoder.forward).
-            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)

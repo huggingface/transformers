@@ -32,7 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -1454,7 +1454,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         if input_values is not None:
-            audio_embeds = self.get_audio_features(input_values, input_values_mask).pooler_output
+            audio_embeds = self.get_audio_embeddings(input_values, input_values_mask).pooler_output
             audio_embeds = audio_embeds.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
             audio_mask = self.get_audio_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
@@ -1474,7 +1474,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
 
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_values: torch.Tensor,
         input_values_mask: torch.Tensor | None = None,
@@ -1496,15 +1496,16 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
             num_tokens = (lengths + samples_per_token - 1) // samples_per_token
             positions = torch.arange(audio_features.shape[1], device=audio_features.device)
             token_mask = positions[None, :] < num_tokens[:, None]
-            audio_features = audio_features[token_mask]
+            audio_features, split_sizes = audio_features[token_mask], num_tokens
         else:
-            audio_features = audio_features.reshape(-1, audio_features.shape[-1])
+            audio_features, split_sizes = flatten_items(audio_features)
 
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=audio_features,
             hidden_states=audio_outputs.hidden_states,
+            split_sizes=split_sizes,
         )
 
     def get_audio_placeholder_mask(self, input_ids, inputs_embeds, audio_features):

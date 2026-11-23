@@ -58,8 +58,9 @@ def merge_modality_outputs(outputs):
 
 class MultimodalMixin:
     """
-    `get_image_features` and `get_video_features` from a model's flat `get_image_embeddings` and `get_video_embeddings`,
-    split per image or video by the `split_sizes` they return. A model with a head reaches its base model's.
+    `get_image_features`, `get_video_features` and `get_audio_features` from a model's flat `get_image_embeddings`,
+    `get_video_embeddings` and `get_audio_embeddings`, split per item by the `split_sizes` they return. A model with a
+    head reaches its base model's.
     """
 
     model: "MultimodalMixin"
@@ -70,6 +71,9 @@ class MultimodalMixin:
     def get_video_embeddings(self, *args, **kwargs):
         return self.model.get_video_embeddings(*args, **kwargs)
 
+    def get_audio_embeddings(self, *args, **kwargs):
+        return self.model.get_audio_embeddings(*args, **kwargs)
+
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
         """Each image's features, from `get_image_embeddings`."""
@@ -79,6 +83,11 @@ class MultimodalMixin:
     def get_video_features(self, *args, **kwargs):
         """Each video's features, from `get_video_embeddings`."""
         return split_modality_outputs(self.get_video_embeddings(*args, return_dict=True, **kwargs))
+
+    @can_return_tuple
+    def get_audio_features(self, *args, **kwargs):
+        """Each audio's features, from `get_audio_embeddings`."""
+        return split_modality_outputs(self.get_audio_embeddings(*args, return_dict=True, **kwargs))
 
 
 def merge_mm_encoder_outputs(forward):

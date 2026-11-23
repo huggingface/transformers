@@ -1146,7 +1146,7 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects discretized dMel bin tokens into the language model space.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         audio_input_ids: torch.LongTensor,
         audio_input_ids_mask: torch.Tensor | None = None,
@@ -1160,9 +1160,12 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
         """
         if audio_input_ids_mask is not None:
             audio_input_ids = audio_input_ids[audio_input_ids_mask.bool()]
+            split_sizes = audio_input_ids_mask.sum(-1)
         else:
-            audio_input_ids = audio_input_ids.reshape(-1, audio_input_ids.shape[-1])
-        return self.audio_tower(audio_input_ids)
+            audio_input_ids, split_sizes = flatten_items(audio_input_ids)
+        audio_outputs = self.audio_tower(audio_input_ids)
+        audio_outputs.split_sizes = split_sizes
+        return audio_outputs
 
     def get_placeholder_mask(
         self,
@@ -1263,7 +1266,7 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
         # Merge text and audio
         audio_features = None
         if audio_input_ids is not None:
-            audio_features = self.get_audio_features(audio_input_ids, audio_input_ids_mask).last_hidden_state
+            audio_features = self.get_audio_embeddings(audio_input_ids, audio_input_ids_mask).pooler_output
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, audio_features, self.config.audio_token_id

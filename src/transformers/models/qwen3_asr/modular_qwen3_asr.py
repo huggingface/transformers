@@ -35,6 +35,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoder,
     Qwen3OmniMoeAudioEncoderLayer,
     SinusoidsPositionEmbedding,
+    _get_feat_extract_output_lengths,
     get_audio_cu_seqlens,
 )
 from ..voxtral.modeling_voxtral import VoxtralMultiModalProjector
@@ -246,7 +247,7 @@ class Qwen3ASRModel(AudioFlamingo3Model):
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram)."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.LongTensor,
@@ -262,6 +263,9 @@ class Qwen3ASRModel(AudioFlamingo3Model):
             **kwargs,
         )
         audio_output.pooler_output = self.multi_modal_projector(audio_output.last_hidden_state)
+        audio_output.split_sizes = _get_feat_extract_output_lengths(
+            input_features_mask.sum(-1), self.audio_tower.n_window
+        )
         return audio_output
 
 

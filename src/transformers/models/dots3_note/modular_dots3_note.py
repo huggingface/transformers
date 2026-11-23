@@ -834,9 +834,12 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
                 **kwargs,
             )
         hidden_states = self.layer_norm(hidden_states)
-        pooled_output = self.adapter(hidden_states[padding_mask.to(hidden_states.device)])
+        padding_mask = padding_mask.to(hidden_states.device)
+        pooled_output = self.adapter(hidden_states[padding_mask])
 
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_output)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=hidden_states, pooler_output=pooled_output, split_sizes=padding_mask.sum(-1)
+        )
 
 
 class Dots3NoteAudioAdapter(EvollaFeedForward):
@@ -1032,7 +1035,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
 
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         chunk_sample_lengths: torch.Tensor,
@@ -1105,7 +1108,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeddings.to(inputs_embeds))
 
         if input_features is not None:
-            audio_embeddings = self.get_audio_features(
+            audio_embeddings = self.get_audio_embeddings(
                 input_features, chunk_sample_lengths, return_dict=True
             ).pooler_output
             audio_mask = self.get_placeholder_mask(

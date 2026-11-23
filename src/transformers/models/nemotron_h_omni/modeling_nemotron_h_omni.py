@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalCausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -272,7 +272,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
     @auto_docstring(
         custom_intro="Encodes mel features with the audio tower and projects them into language model space."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
@@ -299,15 +299,18 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
         if input_features_mask is not None:
             lengths = self.audio_tower._get_subsampling_output_length(input_features_mask.sum(-1) + 1)
             positions = torch.arange(audio_embeds.shape[1], device=audio_embeds.device)
-            audio_embeds = audio_embeds[positions[None, :] < lengths[:, None].to(audio_embeds.device)]
+            valid_mask = positions[None, :] < lengths[:, None].to(audio_embeds.device)
+            audio_embeds = audio_embeds[valid_mask]
+            split_sizes = valid_mask.sum(-1)
         else:
-            audio_embeds = audio_embeds.reshape(-1, audio_embeds.shape[-1])
+            audio_embeds, split_sizes = flatten_items(audio_embeds)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=audio_outputs.last_hidden_state,
             pooler_output=audio_embeds,
             hidden_states=audio_outputs.hidden_states,
             attentions=audio_outputs.attentions,
+            split_sizes=split_sizes,
         )
 
     def get_placeholder_mask(
@@ -423,7 +426,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
                 input_ids = input_ids[retention_mask].view(batch_size, -1)
 
         if input_features is not None and self.audio_tower is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask).pooler_output
+            audio_embeds = self.get_audio_embeddings(input_features, input_features_mask).pooler_output
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds, audio_embeds, self.audio_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_embeds)
