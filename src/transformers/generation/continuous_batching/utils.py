@@ -122,8 +122,13 @@ def pad_to_pow2(value: int, max_value: int, min_value: int = 0) -> int:
 def pad_to_token_bucket(value: int, max_value: int) -> int:
     """Return the token bucket of (value), capped at (max_value): the next power of 2 up to 512, then the next multiple
     of 512, so large steps waste at most 511 padded tokens."""
-    padded = pad_to_pow2(value, 512) if value <= 512 else 512 * ceil(value / 512)
+    padded = pad_to_pow2(value, _BUCKET_POW2_MAX) if value <= _BUCKET_POW2_MAX else _BUCKET_GRAIN * ceil(value / _BUCKET_GRAIN)
     return min(padded, max_value)
+
+
+# [scratch] token bucket shape: powers of 2 up to CB_PROTO_BUCKET_POW2_MAX, then multiples of CB_PROTO_BUCKET_GRAIN
+_BUCKET_POW2_MAX = int(os.environ.get("CB_PROTO_BUCKET_POW2_MAX", "512"))
+_BUCKET_GRAIN = int(os.environ.get("CB_PROTO_BUCKET_GRAIN", "512"))
 
 
 def aligned_divide(x: int, divide_by: int, align_to: int) -> int:

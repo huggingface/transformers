@@ -1688,9 +1688,11 @@ class ContinuousBatchingConfig:
     `generate_batch` method or the `continuous_batching_context_manager` context manager.
 
     Args:
-        page_size (`int`, *optional*, defaults to 256):
+        page_size (`int`, *optional*):
             The number of tokens stored for each layer inside a (full-attention) page. A block storing the cache of N
-            layers has N pages (one per layer), each holding cache for `page_size` tokens for one layer. Default is 256.
+            layers has N pages (one per layer), each holding cache for `page_size` tokens for one layer. Defaults to 32
+            with FA3, whose paged kernel takes any page size (prefix sharing works at page granularity, so small pages
+            share more of a common prompt), and to 256 otherwise (FA2's paged kernel needs multiples of 256).
         num_blocks (`int`, *optional*):
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
@@ -1769,7 +1771,7 @@ class ContinuousBatchingConfig:
     # The number of tokens stored inside a (full attention) page. A block storing the cache of N layers has N pages, one
     # per layer. Since different page types can hold different number of tokens, this is for a full attention page.
     # Default is 256. Must be at least 4 (for an efficient cache, it should be well above that)
-    page_size: int = 256
+    page_size: int | None = None
 
     # Number of blocks the cache contains. Usually better to leave it as None and be auto inferred.
     num_blocks: int | None = None

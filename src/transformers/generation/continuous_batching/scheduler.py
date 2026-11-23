@@ -31,7 +31,7 @@ _PROTO_PREFILLS_APART = int(os.environ.get("CB_PROTO_PREFILLS_APART", "-1"))
 # [scratch, bench only] CB_PROTO_PREFIX_WAIT=1: a new request whose next uncached prompt page is being computed by a
 # forward in flight (a sibling of the same prompt admitted a step earlier, or in the same step) waits up to
 # CB_PROTO_PREFIX_WAIT_MAX scheduling rounds for that page to be registered, then shares it instead of recomputing it
-_PROTO_PREFIX_WAIT = os.environ.get("CB_PROTO_PREFIX_WAIT", "0") == "1"
+_PROTO_PREFIX_WAIT = os.environ.get("CB_PROTO_PREFIX_WAIT", "1") == "1"
 _PROTO_PREFIX_WAIT_MAX = int(os.environ.get("CB_PROTO_PREFIX_WAIT_MAX", "4"))
 # gap3-mtp prototype: with CB_MTP=spec and the block table decode path, a decoding request brings its last token and
 # its draft (2 query tokens) and still takes the decode fast path
