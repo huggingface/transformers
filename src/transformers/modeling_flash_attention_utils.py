@@ -742,10 +742,6 @@ def _process_flash_attention_kwargs(
     return flash_kwargs
 
 
-# [scratch] split-KV for the decode-only steps of the varlen paged path (0: FA3's heuristic); mixed steps keep 1
-_PAGED_DECODE_SPLITS = int(__import__("os").environ.get("PROTO_PAGED_DECODE_SPLITS", "0"))
-
-
 def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
@@ -832,7 +828,7 @@ def _flash_attention_forward(
         flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=cache_seqlens)
         out = flash_kvcache_fn(
             q, k_cache, v_cache, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k_new=cu_seq_lens_q, pack_gqa=True,
-            num_splits=_PAGED_DECODE_SPLITS if max_length_q == 1 else 1, **flash_kwargs,
+            num_splits=1, **flash_kwargs,
         )  # fmt: skip
         out = out[0] if isinstance(out, tuple) else out
         return out.view(batch_size, -1, *out.shape[-2:])
