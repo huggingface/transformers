@@ -40,7 +40,6 @@ if is_torch_available():
     from torch.utils._pytree import tree_map
 
 if _check_distributed_checkpointing_available():
-    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader, HuggingFaceStorageWriter
     from torch.distributed.tensor import Shard
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -123,6 +122,7 @@ def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike)
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageWriter
     from torch.distributed.checkpoint.state_dict import get_model_state_dict
 
     # DCP describes each DTensor as one rectangular chunk, which cannot represent strided shards.
@@ -151,6 +151,7 @@ def consolidate_distributed_checkpoint(
         )
 
     from torch.distributed.checkpoint._consolidate_hf_safetensors import consolidate_safetensors_files
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader
 
     if output_dir is None:
         output_dir = checkpoint_dir
@@ -181,6 +182,7 @@ def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
     # being emitted if the function is not used
     import torch.distributed.checkpoint as dcp
     from torch.distributed.checkpoint.default_planner import DefaultLoadPlanner
+    from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader
     from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
 
     reader = HuggingFaceStorageReader(str(checkpoint_dir))
