@@ -617,7 +617,8 @@ class MtpModel(PreTrainedModel):
 
     @staticmethod
     def get_mtp_weights_regex(main_model: PreTrainedModel) -> re.Pattern:
-        """Regex matching the checkpoint keys of the mtp weights of `main_model`."""
+        """Regex matching the checkpoint keys of the mtp weights of `main_model`, including the base model weights
+        that its mtp layers share (`_keys_shared_with_mtp`)."""
         num_hidden_layers = main_model.config.get_text_config().num_hidden_layers
         # Heuristic: the main model should have the mtp layer patterns under `_keys_to_ignore_on_load_unexpected` to avoid
         # loading them by default, so use it to later load the correct keys from the checkpoints
@@ -632,6 +633,7 @@ class MtpModel(PreTrainedModel):
             final_mtp_patterns.append(pattern)
         if len(final_mtp_patterns) == 0:
             raise ValueError(f"{main_model.__class__.__name__} does not seem to register any known MTP layer patterns")
+        final_mtp_patterns.extend(main_model._keys_shared_with_mtp or [])
         return re.compile("|".join(rf"({pattern})" for pattern in final_mtp_patterns))
 
     def get_weight_conversions(self, main_model: PreTrainedModel) -> list[WeightTransform]:

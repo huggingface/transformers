@@ -1120,6 +1120,8 @@ class PreTrainedModel(
     _keys_to_ignore_on_load_unexpected: set[str] | list[str] | None = None
     # A list of keys to ignore when saving the model
     _keys_to_ignore_on_save: set[str] | list[str] | None = None
+    # A list of `re` patterns describing base model keys that the MTP layers also load (see `MtpModel`)
+    _keys_shared_with_mtp: list[str] | None = None
 
     # Attention interfaces support properties
     _supports_sdpa: bool = False
