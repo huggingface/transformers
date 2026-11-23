@@ -995,14 +995,6 @@ def get_kernel(
     )
 
 
-def _get_input_device_type(args: tuple, kwargs: dict) -> str | None:
-    """Device type of the first tensor in the arguments, `None` if there is none."""
-    for arg in (*args, *kwargs.values()):
-        if isinstance(arg, torch.Tensor):
-            return arg.device.type
-    return None
-
-
 def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, internal_path: str | None = None):
     """
     The same as `use_kernel_forward_from_hub` but with the optional fallback to an original package if it exists, e.g.,
@@ -1021,6 +1013,13 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
     full_func_path = func_name if internal_path is None else f"{internal_path}.{func_name}"
     full_module_path = package if internal_path is None else f"{package}.{internal_path}"
 
+    def get_input_device_type(args: tuple, kwargs: dict) -> str | None:
+        """Device type of the first tensor in the arguments, `None` if there is none."""
+        for arg in (*args, *kwargs.values()):
+            if isinstance(arg, torch.Tensor):
+                return arg.device.type
+        return None
+
     def decorator(torch_function: Callable) -> Callable:
         implementation = None
         try:
@@ -1037,7 +1036,6 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
 
         # Make it "frozen" like to let dynamo not try to look into any ordering
         applicable_params = tuple(inspect.signature(implementation).parameters)
-        torch_params = tuple(inspect.signature(torch_function).parameters)
         # A boolean to track if the implementation is new, i.e. not the original torch function
         is_new_implementation = implementation is not torch_function
         supported_devices = _PACKAGE_SUPPORTED_DEVICES.get(package) if is_new_implementation else None
@@ -1049,7 +1047,7 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
                 return torch_function(*args, **kwargs)
 
             # Original packages only run on some devices, so inputs on any other device (e.g. CPU) use the torch path
-            device_type = _get_input_device_type(args, kwargs) if supported_devices is not None else None
+            device_type = get_input_device_type(args, kwargs) if supported_devices is not None else None
             unsupported_device = device_type is not None and device_type not in supported_devices
             use_package = is_new_implementation and not unsupported_device
 
@@ -1073,9 +1071,11 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
                     f"`{distribution}` for the optimized kernel."
                 )
 
-            function, params = (implementation, applicable_params) if use_package else (torch_function, torch_params)
-            kwargs = {k: v for k, v in kwargs.items() if k in params}
-            return function(*args, **kwargs)
+            if unsupported_device:
+                return torch_function(*args, **kwargs)
+
+            kwargs = {k: v for k, v in kwargs.items() if k in applicable_params}
+            return implementation(*args, **kwargs)
 
         return kernel_wrapper_decorator(wrapped)
 
