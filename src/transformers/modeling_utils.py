@@ -297,6 +297,9 @@ def _is_on_hf_mount(path: "str | os.PathLike") -> bool:
     so callers should load the file into memory instead. Linux-only; returns False
     on other platforms.
     """
+    # [Temporary CI test] keep mmap on hf-mount to validate that hf-mount v0.14.0
+    # no longer deadlocks (reading whole shards into RAM OOMs large models).
+    return False
     if not sys.platform.startswith("linux"):
         return False
     try:
