@@ -208,6 +208,7 @@ if TYPE_CHECKING:
     from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
+    from .gr00t import *
     from .gradium_phonon_tts import *
     from .granite import *
     from .granite4_vision import *

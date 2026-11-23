@@ -1284,6 +1284,46 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="model.vlm.language_model.embed_tokens",
             ),
         ],
+        "gr00t": [
+            WeightRenaming(source_patterns=r"^backbone\.model\.model", target_patterns="model.vlm"),
+            WeightRenaming(source_patterns=r"^action_head\.vlln", target_patterns="model.vl_layer_norm"),
+            WeightRenaming(
+                source_patterns=r"^action_head\.vl_self_attention\.transformer_blocks",
+                target_patterns="model.vl_refiner.layers",
+            ),
+            WeightRenaming(
+                source_patterns=r"^action_head\.model\.transformer_blocks", target_patterns="model.dit.layers"
+            ),
+            WeightRenaming(
+                source_patterns=r"^action_head\.model\.timestep_encoder\.timestep_embedder",
+                target_patterns="model.dit.time_embedding",
+            ),
+            WeightRenaming(source_patterns=r"^action_head\.model\.proj_out_1", target_patterns="model.dit.proj_out_1"),
+            WeightRenaming(source_patterns=r"^action_head\.model\.proj_out_2", target_patterns="model.dit.proj_out_2"),
+            WeightRenaming(source_patterns=r"attn1\.to_q", target_patterns="attention.q_proj"),
+            WeightRenaming(source_patterns=r"attn1\.to_k", target_patterns="attention.k_proj"),
+            WeightRenaming(source_patterns=r"attn1\.to_v", target_patterns="attention.v_proj"),
+            WeightRenaming(source_patterns=r"attn1\.to_out\.0", target_patterns="attention.o_proj"),
+            WeightRenaming(source_patterns=r"ff\.net\.0\.proj", target_patterns="mlp.fc1"),
+            WeightRenaming(source_patterns=r"ff\.net\.2", target_patterns="mlp.fc2"),
+            WeightRenaming(
+                source_patterns=r"^action_head\.position_embedding", target_patterns="action_position_embeddings"
+            ),
+            # The embodiment-specific projections store one stacked `W` / `b` per layer
+            *[
+                WeightRenaming(
+                    source_patterns=rf"^action_head\.{module}\.{source}\.{param}",
+                    target_patterns=f"{module}.{target}.{renamed_param}",
+                )
+                for module, layers in (
+                    ("state_encoder", (("layer1", "fc1"), ("layer2", "fc2"))),
+                    ("action_decoder", (("layer1", "fc1"), ("layer2", "fc2"))),
+                    ("action_encoder", (("W1", "fc1"), ("W2", "fc2"), ("W3", "fc3"))),
+                )
+                for source, target in layers
+                for param, renamed_param in (("W", "weight"), ("b", "bias"))
+            ],
+        ],
         "esm": [
             WeightRenaming(
                 "encoder.layer.*.attention.self.rotary_embeddings.inv_freq",

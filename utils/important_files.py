@@ -27,4 +27,5 @@ IMPORTANT_MODELS = [
     "gpt_oss",
     "qwen2_5_omni",
     "pi0",
+    "gr00t",
 ]
