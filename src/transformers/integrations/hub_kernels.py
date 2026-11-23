@@ -1049,26 +1049,22 @@ def use_kernel_func_from_hub_with_fallback(func_name: str, package: str, interna
             # Original packages only run on some devices, so inputs on any other device (e.g. CPU) use the torch path
             device_type = get_input_device_type(args, kwargs) if supported_devices is not None else None
             unsupported_device = device_type is not None and device_type not in supported_devices
-            use_package = is_new_implementation and not unsupported_device
 
-            if not use_package and (kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None):
+            if (not is_new_implementation or unsupported_device) and (
+                kwargs.get("cu_seqlens") is not None or kwargs.get("seq_idx") is not None
+            ):
                 distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
-                if unsupported_device:
-                    raise ValueError(
-                        f"`{func_name}` can't keep packed sequences apart on {device_type}. `{distribution}`, "
-                        f"which handles them, only runs on {', '.join(supported_devices)}."
-                    )
                 raise ValueError(
-                    f"`{func_name}` can't keep packed sequences apart without `{distribution}`. Install "
-                    f"`{distribution}` to train on packed sequences."
+                    f"`{func_name}` can't keep packed sequences apart without `{distribution}`, which is either not "
+                    "installed or doesn't support the device of the inputs."
                 )
 
-            if not is_new_implementation and not is_torchdynamo_compiling():
+            if (not is_new_implementation or unsupported_device) and not is_torchdynamo_compiling():
                 distribution = _PACKAGE_TO_DISTRIBUTION.get(package, package)
                 logger.warning_once(
                     f"`{func_name}` is falling back to its reference PyTorch implementation because "
-                    f"`{distribution}` is not installed. This is correct but much slower; install "
-                    f"`{distribution}` for the optimized kernel."
+                    f"`{distribution}` is either not installed or doesn't support the device of the inputs. This is "
+                    "correct but much slower."
                 )
 
             if unsupported_device:
