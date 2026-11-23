@@ -210,10 +210,10 @@ class DistributedConfig:
                 raise OSError(
                     "Sequence parallelism with `fsdp_size > 1` requires `torch>=2.10` (`DeviceMesh._unflatten`)."
                 )
-            if unsupported := [name for name in ("pp_size", "ep_size") if getattr(self, name) > 1]:
+            if self.pp_size > 1:
                 raise ValueError(
-                    f"Sequence parallelism (`sp_size={self.sp_size}`) is not supported yet with `{unsupported[0]}`. "
-                    "Use `DistributedConfig(fsdp_size=N, tp_size=T, sp_size=M)`."
+                    f"Sequence parallelism (`sp_size={self.sp_size}`) is not supported yet with pipeline parallelism "
+                    f"(`pp_size={self.pp_size}`)."
                 )
 
         if self.dp_size > 1 and self.pp_size > 1:
