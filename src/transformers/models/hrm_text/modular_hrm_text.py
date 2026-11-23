@@ -40,7 +40,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..llama4.modeling_llama4 import Llama4TextL2Norm
+from ..llama4.modeling_llama4 import Llama4TextWeightlessRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -138,7 +138,7 @@ class HrmTextConfig(LlamaConfig):
         PreTrainedConfig._attn_implementation.__set__(self, value)
 
 
-class HrmTextRMSNorm(Llama4TextL2Norm):
+class HrmTextRMSNorm(Llama4TextWeightlessRMSNorm):
     pass
 
 

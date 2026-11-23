@@ -103,7 +103,7 @@ class Llama4TextMLP(nn.Module):
         return self.down_proj(down_proj)
 
 
-class Llama4TextL2Norm(torch.nn.Module):
+class Llama4TextWeightlessRMSNorm(torch.nn.Module):
     def __init__(self, eps: float = 1e-6):
         super().__init__()
         self.variance_epsilon = eps
@@ -116,6 +116,10 @@ class Llama4TextL2Norm(torch.nn.Module):
 
     def extra_repr(self):
         return f"eps={self.variance_epsilon}"
+
+
+# Deprecated alias, kept for BC
+Llama4TextL2Norm = Llama4TextWeightlessRMSNorm
 
 
 class Llama4TextRMSNorm(nn.Module):
@@ -329,7 +333,7 @@ class Llama4TextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         if self.config.use_qk_norm and self.use_rope:
-            self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
+            self.qk_norm = Llama4TextWeightlessRMSNorm(config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
