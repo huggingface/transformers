@@ -32,7 +32,6 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     """
 
     model_type = "hunyuan_v1_moe"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.query_layernorm": "replicated_with_grad_allreduce",

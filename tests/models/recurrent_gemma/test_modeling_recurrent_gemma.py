@@ -50,9 +50,9 @@ class RecurrentGemmaModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = RecurrentGemmaModel
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent, **kwargs)
-        self.block_types = ("recurrent", "attention")
+    small_config_overrides = {
+        "block_types": ("recurrent", "attention"),
+    }
 
     def create_and_check_generate_compile_static_cache(self, config, input_ids, model_class):
         model = model_class(config).to(torch_device).eval()

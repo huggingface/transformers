@@ -44,13 +44,13 @@ class MellumModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MellumModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # Override for the TP plan tests.
-        self.layer_types = ["full_attention", "sliding_attention"]
-        self.mlp_layer_types = ["dense", "sparse"]
+        "layer_types": ["full_attention", "sliding_attention"],
+        "mlp_layer_types": ["dense", "sparse"],
         # The shared MTP test sets `num_mtp_layers` after `__post_init__` has derived `mtp_layer_types`
-        self.num_mtp_layers = 1
+        "num_mtp_layers": 1,
+    }
 
 
 @require_torch

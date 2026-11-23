@@ -55,7 +55,6 @@ class LaraMiniConfig(PreTrainedConfig):
     """
 
     model_type = "lara_mini"
-    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

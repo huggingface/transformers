@@ -55,56 +55,50 @@ class Nemotron3_5TranscribeModelTester(ALMModelTester):
     conditional_generation_class = Nemotron3_5TranscribeForConditionalGeneration
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # 64 spectrogram frames (a multiple of `subsampling_factor`, as the processor pads them) are stacked into 8
         # audio tokens
-        kwargs.setdefault("feat_seq_length", 64)
-        kwargs.setdefault("num_mel_bins", 16)
-        kwargs.setdefault("subsampling_factor", 8)
-        kwargs.setdefault("num_speakers", 4)
-        kwargs.setdefault("num_hidden_layers", 3)
-        kwargs.setdefault("layers_block_type", ["linear_attention", "moe", "full_attention"])
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("moe_shared_expert_intermediate_size", 16)
-        kwargs.setdefault("mamba_num_heads", 8)
-        kwargs.setdefault("mamba_n_groups", 8)
-        kwargs.setdefault("mamba_head_dim", 16)
-        kwargs.setdefault("ssm_state_size", 8)
-        kwargs.setdefault("mamba_chunk_size", 16)
-        kwargs.setdefault("n_routed_experts", 4)
-        kwargs.setdefault("n_groups", 1)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("max_position_embeddings", 5000)
-
-        kwargs.setdefault("audio_asr_hidden_size", 32)
-        kwargs.setdefault("audio_asr_intermediate_size", 64)
-        kwargs.setdefault("audio_asr_num_hidden_layers", 2)
-        kwargs.setdefault("audio_asr_num_attention_heads", 2)
-
-        kwargs.setdefault("audio_diarization_audio_hidden_size", 32)
-        kwargs.setdefault("audio_diarization_audio_intermediate_size", 32)
-        kwargs.setdefault("audio_diarization_audio_num_hidden_layers", 1)
-        kwargs.setdefault("audio_diarization_audio_num_attention_heads", 2)
-
-        kwargs.setdefault("audio_diarization_head_hidden_size", 16)
-        kwargs.setdefault("audio_hidden_size", 32)
-
-        kwargs.setdefault("chunk_size", 16)
-        kwargs.setdefault("chunk_length", 500)
-        kwargs.setdefault("chunk_left_context", 50)
-        kwargs.setdefault("chunk_right_context", 50)
-
-        kwargs.setdefault("word_timestamp_hidden_size", 32)
-        kwargs.setdefault("word_timestamp_intermediate_size", 16)
-        kwargs.setdefault("word_timestamp_num_hidden_layers", 1)
-        kwargs.setdefault("word_timestamp_num_attention_heads", 2)
-        kwargs.setdefault("word_timestamp_vocab_size", 16)
-        kwargs.setdefault("word_timestamp_blank_token_id", 15)
-        kwargs.setdefault("word_timestamp_residual_scale", 0.1)
-        kwargs.setdefault("word_timestamp_max_position_embeddings", 5000)
-
-        super().__init__(parent, **kwargs)
+        "feat_seq_length": 64,
+        "num_mel_bins": 16,
+        "subsampling_factor": 8,
+        "num_speakers": 4,
+        "num_hidden_layers": 3,
+        "layers_block_type": ["linear_attention", "moe", "full_attention"],
+        "head_dim": 16,
+        "moe_intermediate_size": 16,
+        "moe_shared_expert_intermediate_size": 16,
+        "mamba_num_heads": 8,
+        "mamba_n_groups": 8,
+        "mamba_head_dim": 16,
+        "ssm_state_size": 8,
+        "mamba_chunk_size": 16,
+        "n_routed_experts": 4,
+        "n_groups": 1,
+        "num_experts_per_tok": 2,
+        "max_position_embeddings": 5000,
+        "audio_asr_hidden_size": 32,
+        "audio_asr_intermediate_size": 64,
+        "audio_asr_num_hidden_layers": 2,
+        "audio_asr_num_attention_heads": 2,
+        "audio_diarization_audio_hidden_size": 32,
+        "audio_diarization_audio_intermediate_size": 32,
+        "audio_diarization_audio_num_hidden_layers": 1,
+        "audio_diarization_audio_num_attention_heads": 2,
+        "audio_diarization_head_hidden_size": 16,
+        "audio_hidden_size": 32,
+        "chunk_size": 16,
+        "chunk_length": 500,
+        "chunk_left_context": 50,
+        "chunk_right_context": 50,
+        "word_timestamp_hidden_size": 32,
+        "word_timestamp_intermediate_size": 16,
+        "word_timestamp_num_hidden_layers": 1,
+        "word_timestamp_num_attention_heads": 2,
+        "word_timestamp_vocab_size": 16,
+        "word_timestamp_blank_token_id": 15,
+        "word_timestamp_residual_scale": 0.1,
+        "word_timestamp_max_position_embeddings": 5000,
+    }
 
     def create_audio_features(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

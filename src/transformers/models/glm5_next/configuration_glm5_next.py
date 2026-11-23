@@ -67,7 +67,6 @@ class Glm5NextTextConfig(PreTrainedConfig):
     """
 
     model_type = "glm5_next_text"
-    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
@@ -289,7 +288,6 @@ class Glm5NextConfig(PreTrainedConfig):
         "vision_config": Glm5NextVisionConfig,
         "text_config": Glm5NextTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

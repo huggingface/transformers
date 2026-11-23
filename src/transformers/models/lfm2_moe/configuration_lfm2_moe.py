@@ -47,7 +47,6 @@ class Lfm2MoeConfig(PreTrainedConfig):
     """
 
     model_type = "lfm2_moe"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.q_layernorm": "replicated_with_grad_allreduce",

@@ -50,28 +50,17 @@ class GlmMoeDsaModelTester(CausalLMModelTester):
         base_model_class = GlmMoeDsaModel
         causal_lm_class = GlmMoeDsaForCausalLM
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        num_hidden_layers=2,
-        mlp_layer_types=["sparse", "dense"],
-        index_topk=8,
-    ):
-        super().__init__(parent=parent, num_hidden_layers=num_hidden_layers)
-        self.n_routed_experts = n_routed_experts
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
-        self.mlp_layer_types = mlp_layer_types
-        self.index_topk = index_topk
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+        "v_head_dim": 128,
+        "mlp_layer_types": ["sparse", "dense"],
+        "index_topk": 8,
+        "num_hidden_layers": 2,
+    }
 
 
 @require_torch

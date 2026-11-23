@@ -29,7 +29,8 @@ from ...utils import auto_docstring
 class Inkling2TextConfig(PreTrainedConfig):
     r"""
     unpadded_vocab_size (`int`, *optional*, defaults to 200058):
-        Number of rows of the unembedding matrix that hold real tokens. Logits beyond it are dropped.
+        Output size of the language modeling head. The checkpoint unembedding is padded to `vocab_size`, the padded
+        rows are dropped on load and restored as zeros on save.
     swa_num_attention_heads (`int`, *optional*, defaults to 48):
         Number of attention heads in the sliding-window layers.
     swa_num_key_value_heads (`int`, *optional*, defaults to 8):

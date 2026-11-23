@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     require_audio,
     require_torch,
+    require_torchvision,
     require_vision,
     slow,
 )
@@ -56,6 +57,29 @@ if is_torch_available():
 @require_torch
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
+
+    def test_media_only_blip_image_text_output(self):
+        import torch
+        from PIL import Image
+
+        from transformers import AutoModelForMultimodalLM
+
+        model_id = "hf-internal-testing/tiny-random-BlipForConditionalGeneration"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.float32).eval()
+        pipe = AnyToAnyPipeline(model=model, processor=processor, task="any-to-any", device=-1)
+        image = Image.new("RGB", (64, 64), "white")
+
+        for return_full_text in (False, True):
+            with self.subTest(return_full_text=return_full_text):
+                result = pipe(
+                    images=image,
+                    max_new_tokens=1,
+                    return_full_text=return_full_text,
+                )
+                self.assertEqual(len(result), 1)
+                self.assertIsNone(result[0]["input_text"])
+                self.assertIsInstance(result[0]["generated_text"], str)
 
     def test_return_tensors_with_chat_input(self):
         pipe = pipeline(
@@ -324,6 +348,21 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         self.assertEqual(len(outputs), 2)
         self.assertEqual([output["input_text"] for output in outputs], ["hello", "world"])
         self.assertTrue(all("generated_text" in output for output in outputs))
+
+    @require_torchvision
+    def test_batched_generation_left_pads_decoder_only_model(self):
+        # The Qwen2.5-VL tokenizer pads on the right by default, which breaks batched decoder-only generation
+        pipe = pipeline("any-to-any", model="trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration")
+        image = PIL.Image.new("RGB", (64, 64), color=(120, 30, 200))
+        messages = [
+            [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
+            for text in ("Describe.", "Describe the colors, the shapes and the overall layout of this picture.")
+        ]
+        kwargs = {"max_new_tokens": 6, "do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
 
     @slow
     def test_small_model_pt_token_text_only(self):

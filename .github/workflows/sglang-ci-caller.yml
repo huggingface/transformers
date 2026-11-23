@@ -25,6 +25,8 @@ jobs:
     outputs:
       image: ${{ steps.find.outputs.image }}
       sglang_sha: ${{ steps.find.outputs.sglang_sha }}
+      # Shown in the Slack report (`sglang-ci-report` job).
+      sglang_commit_date: ${{ steps.find.outputs.sglang_commit_date }}
     steps:
       - name: Find latest SGLang xeon image and its commit
         id: find
@@ -36,6 +38,7 @@ jobs:
           import os
           import re
           import urllib.request
+          from datetime import datetime
 
 
           def get(url, headers=None):
@@ -70,6 +73,13 @@ jobs:
           gh_headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {os.environ['GH_TOKEN']}"}
           commit, _ = get(f"https://api.github.com/repos/sgl-project/sglang/commits/{sglang_ref}", gh_headers)
           sha = commit["sha"]
+          # Committer date (when it was merged into the repo), e.g. "2026-11-22T13:23:08Z", shown as "2026/11/22 13:23:08 UTC".
+          # Only shown in the Slack report: left empty (not shown) instead of failing the run if it can't be parsed.
+          try:
+              commit_date = datetime.strptime(commit["commit"]["committer"]["date"], "%Y-%m-%dT%H:%M:%SZ")
+              commit_date = commit_date.strftime("%Y/%m/%d %H:%M:%S UTC")
+          except (KeyError, TypeError, ValueError):
+              commit_date = ""
 
           # Validate everything before it is used as a container image / checkout ref
           if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
@@ -80,10 +90,11 @@ jobs:
               raise SystemExit(f"Unexpected commit SHA: {sha!r}")
 
           print(f"SGLang image : lmsysorg/sglang:{tag} ({digest})")
-          print(f"SGLang commit: {sha} ({sglang_ref})")
+          print(f"SGLang commit: {sha} ({sglang_ref}, {commit_date})")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
               f.write(f"image=lmsysorg/sglang@{digest}\n")
               f.write(f"sglang_sha={sha}\n")
+              f.write(f"sglang_commit_date={commit_date}\n")
           EOF
 
   sglang-inference:
@@ -179,9 +190,6 @@ jobs:
           # Install the candidate last so the SGLang release pin cannot replace it.
           uv pip install -e "${TRANSFORMERS_SOURCE}"
 
-      - name: Pip freeze
-        run: uv pip freeze
-
       - name: System info
         run: |
           echo "=== CPU ===" && lscpu | grep -E "^CPU\(s\)|^Model name|^Socket"
@@ -195,6 +203,8 @@ jobs:
         # cap it.  4096 tokens keeps the KV cache well under 1 GB.
         # Applied to both sglang.test.test_utils and sglang.test.runners because
         # SRTRunner imports popen_launch_server directly into its own namespace.
+        # Also make empty_gpu_cache() a no-op without an accelerator: it calls torch.accelerator.empty_cache(),
+        # which raises on CPU (e.g. in the VLM tests' tearDownClass).
         run: |
           cat > test/conftest.py << 'CONFTEST'
           def pytest_configure(config):
@@ -213,6 +223,11 @@ jobs:
 
               _tu.popen_launch_server = _patched
 
+              import torch
+
+              if torch.accelerator.current_accelerator() is None:
+                  _tu.empty_gpu_cache = lambda: None
+
               try:
                   import sglang.test.runners as _runners
                   if hasattr(_runners, "popen_launch_server"):
@@ -220,6 +235,9 @@ jobs:
               except ImportError:
                   pass
           CONFTEST
+
+      - name: Pip freeze
+        run: uv pip freeze
 
       - name: Run canonical SGLang integration tests
         run: |
@@ -243,7 +261,7 @@ jobs:
       image: huggingface/transformers-torch-light
     # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
     if: ${{ !cancelled() }}
-    needs: [sglang-inference]
+    needs: [find-sglang-image, sglang-inference]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
       actions: read
@@ -307,3 +325,21 @@ jobs:
           name: sglang-ci-failure-reports
           path: sglang-ci-reports/
           if-no-files-found: warn
+
+      - name: Upload reports to the Hub and post to Slack
+        if: ${{ !cancelled() }}
+        env:
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          SGLANG_COMMIT: ${{ needs.find-sglang-image.outputs.sglang_sha }}
+          SGLANG_COMMIT_DATE: ${{ needs.find-sglang-image.outputs.sglang_commit_date }}
+        run: |
+          # The transformers checkout of this job is at the run's commit, the one shown in the report.
+          TRANSFORMERS_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -C transformers log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC' || true)
+          python3 transformers/utils/ci_report_notify.py \
+            --reports-dir ./sglang-ci-reports \
+            --hub-repo hf-internal-testing/transformers_sglang_ci \
+            --slack-channel "#transformers-ci-sglang" \
+            --commit "sglang=sgl-project/sglang@$SGLANG_COMMIT" \
+            --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
+            --commit-date "sglang=$SGLANG_COMMIT_DATE"

@@ -39,6 +39,8 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
@@ -281,7 +283,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_omni_moe_text"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
@@ -1242,7 +1243,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -1352,13 +1353,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
             **kwargs,
         )
 
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cache=outputs.cache,
-            router_logits=outputs.router_logits,
-        )
+        return MultimodalMoeBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
@@ -1400,11 +1395,11 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | MoeCausalLMOutputWithPast:
+    ) -> tuple | MultimodalMoeCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
-        outputs: MoeModelOutputWithPast = self.model(
+        outputs: MultimodalMoeBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             input_features=input_features,
             pixel_values=pixel_values,
@@ -1445,13 +1440,14 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             aux_loss=aux_loss,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cache=outputs.cache,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

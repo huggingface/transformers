@@ -170,7 +170,9 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
 
 
 class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
-    pass
+    def __init__(self, config: MiMoV2FlashConfig):
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
 
 class MiMoV2FlashExperts(DeepseekV3Experts):

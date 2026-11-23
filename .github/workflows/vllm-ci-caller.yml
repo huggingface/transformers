@@ -15,17 +15,16 @@ env:
   # gpu_memory_utilization default in vLLM's source with sed, which silently stopped matching when vLLM
   # changed that code (vllm-project/vllm#56492), so vLLM fell back to reserving 92% of the NUMA node.
   VLLM_CPU_KVCACHE_SPACE: 32
-  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
 
 
 permissions: {}
 
 jobs:
-  vllm:
+  vllm-test-examples:
     permissions:
       contents: read
-    name: Test vLLM integration
+    name: Test vLLM examples and weight mapping
     # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
     # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
     runs-on:
@@ -33,6 +32,15 @@ jobs:
     container:
       image: huggingface/transformers-torch-light
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+    # The vLLM commit (and its date) shown in the Slack report (`vllm-ci-report` job).
+    # TODO: each CPU test job finds the latest vLLM commit with a CPU wheel on its own, when it starts. If a new
+    # nightly wheel is published during the run, jobs can test different vLLM commits, and the one reported (from
+    # this job) is not the one of every job. Fix: find the commit once in a separate job used by all CPU jobs.
+    outputs:
+      vllm_commit: ${{ steps.find-vllm-commit.outputs.vllm_commit }}
+      vllm_commit_date: ${{ steps.vllm-commit-date.outputs.vllm_commit_date }}
 
     steps:
       - name: Checkout Transformers
@@ -43,6 +51,7 @@ jobs:
           path: transformers
 
       - name: Find latest vLLM commit with built CPU wheel
+        id: find-vllm-commit
         run: |
           METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
           # path field is like '../../../{full_commit_hash}/{wheel_filename}' relative to nightly/cpu/vllm/
@@ -57,6 +66,7 @@ jobs:
             exit 1
           fi
           echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vllm_commit=$VLLM_COMMIT" >> $GITHUB_OUTPUT
           echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
@@ -66,6 +76,13 @@ jobs:
           ref: ${{ env.VLLM_COMMIT }}
           persist-credentials: false
           path: vllm
+
+      - name: Get vLLM commit date
+        id: vllm-commit-date
+        run: |
+          VLLM_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -C vllm log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC' || true)
+          echo "vllm_commit_date=$VLLM_COMMIT_DATE" >> $GITHUB_OUTPUT
+          echo "vLLM commit date: $VLLM_COMMIT_DATE"
 
       - name: Set up Python 3.12 environment
         run: |
@@ -97,6 +114,17 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm open-clip-torch==2.32.0 albumentations==1.4.6
+          # vLLM caps transformers below the next minor release (e.g. `< 5.24.0`), which excludes our `X.0.dev0`
+          # checkout, so installing vLLM silently replaces it with the latest PyPI release. Reinstall the checkout
+          # without deps and fail if it is not the one imported, otherwise this CI tests the release, not `main`.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
 
       - name: Patch vLLM for CPU
         # Probably not needed on the larger aws-m8i-8xl-cache runner, but not verified yet. Keeping for now.
@@ -133,7 +161,7 @@ jobs:
           pytest -v -s tests/models/transformers/
 
       - name: "Test: multimodal processing"
-        # Replaced by the vllm-multimodal-processing matrix job below.
+        # Replaced by the vllm-test-multimodal-processing matrix job below.
         if: false
         working-directory: vllm
         run: |
@@ -179,6 +207,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -241,6 +270,17 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
+          # vLLM caps transformers below the next minor release (e.g. `< 5.24.0`), which excludes our `X.0.dev0`
+          # checkout, so installing vLLM silently replaces it with the latest PyPI release. Reinstall the checkout
+          # without deps and fail if it is not the one imported, otherwise this CI tests the release, not `main`.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
 
       - name: Patch vLLM for CPU
         run: |
@@ -289,6 +329,9 @@ jobs:
           # sed -i 's/hidden_states_BC\.transpose(-2, -1))/hidden_states_BC.transpose(-2, -1).contiguous())/g' vllm/vllm/model_executor/layers/mamba/mamba_mixer.py
           # grep "transpose" vllm/vllm/model_executor/layers/mamba/mamba_mixer.py | head -5
 
+      - name: Pip freeze
+        run: pip freeze
+
       - name: "Test: test_initialization (small subset, shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
         run: |
@@ -313,6 +356,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -375,6 +419,17 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           uv pip install tblib pqdm pytest-shard sentence-transformers open-clip-torch==2.32.0 albumentations==1.4.6
+          # vLLM caps transformers below the next minor release (e.g. `< 5.24.0`), which excludes our `X.0.dev0`
+          # checkout, so installing vLLM silently replaces it with the latest PyPI release. Reinstall the checkout
+          # without deps and fail if it is not the one imported, otherwise this CI tests the release, not `main`.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
 
       - name: Patch vLLM for CPU
         run: |
@@ -413,16 +468,15 @@ jobs:
           print(f"[HF memory patch] psutil total: {before:.1f} GiB -> {after:.1f} GiB", flush=True)
           EOF
 
-      # TODO: deselect test_mtp_draft_loads_mtp_weights (e.g. `--deselect` or `-k "not test_mtp_draft_loads_mtp_weights"`):
-      # it needs a GPU but has no CPU skip, so it fails here with "Cannot access accelerator device when none is
-      # available" (added in vllm-project/vllm#61270).
       - name: "Test: test_transformers (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
         env:
           PYTHONPATH: /tmp
         run: |
+          # test_mtp_draft_loads_mtp_weights needs a GPU (vLLM runs test_backend.py on GPU only)
           pytest -p hf_ci_memory -v -s tests/models/transformers/ \
-            --num-shards=4 --shard-id=$SHARD_ID
+            --num-shards=4 --shard-id=$SHARD_ID \
+            --deselect tests/models/transformers/test_backend.py::test_mtp_draft_loads_mtp_weights
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
   # vllm-test-init (conv1d weight 2D→3D, out_proj transpose non-contiguous) are indeed
@@ -502,7 +556,7 @@ jobs:
 
   # Multimodal processing tests split across 4 parallel shards (this test takes a long time).
   # Mirrors vLLM's Buildkite CI: parallelism: 4 + pytest-shard (see .buildkite/test_areas/models_multimodal.yaml).
-  vllm-multimodal-processing:
+  vllm-test-multimodal-processing:
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
@@ -517,6 +571,7 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3]
     env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -578,10 +633,22 @@ jobs:
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
-          # TODO: install `kaldi-native-fbank` (listed in vLLM's requirements/test/cpu.txt, "required for fireredasr2
-          # test"). Without it, test_processing_correctness[...-vllm-project/FireRedASR2-LLM-vllm] fails with
-          # `ModuleNotFoundError: No module named 'kaldi_native_fbank'` (3 failures in run 42207123286).
-          uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6
+          # kaldi-native-fbank: required by the FireRedASR2 processor tests (listed in vLLM's requirements/test/cpu.txt)
+          uv pip install tblib pqdm pytest-shard open-clip-torch==2.32.0 albumentations==1.4.6 kaldi-native-fbank
+          # vLLM caps transformers below the next minor release (e.g. `< 5.24.0`), which excludes our `X.0.dev0`
+          # checkout, so installing vLLM silently replaces it with the latest PyPI release. Reinstall the checkout
+          # without deps and fail if it is not the one imported, otherwise this CI tests the release, not `main`.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
 
       - name: "Test: multimodal processing (shard ${{ matrix.shard }} / 4)"
         working-directory: vllm
@@ -590,6 +657,612 @@ jobs:
           pytest -v -s tests/models/multimodal/processing/ \
             --ignore tests/models/multimodal/processing/test_tensor_schema.py \
             --num-shards=4 --shard-id=$SHARD_ID
+
+  # vLLM's layers on top of transformers that the other jobs don't exercise: importing every model module,
+  # tokenizers, chat templates and config loading. Only the test files that use transformers objects (most are
+  # pure Python: config / tokenizer downloads, no model forward). vLLM's own CI pins the latest transformers
+  # release and doesn't run `tests/tokenizers_` / `tests/transformers_utils` at all (commented out in its
+  # `.buildkite/test_areas/misc.yaml`).
+  vllm-test-tokenizers-configs:
+    permissions:
+      contents: read
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    name: "Test vLLM tokenizers, chat templates and configs"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          # Same as the other CPU jobs (see the comments in `vllm-test-multimodal-processing`).
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          # pytest-asyncio: async tests in tests/renderers (listed in vLLM's requirements/test/cuda.in)
+          uv pip install tblib pqdm pytest-asyncio
+          # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
+
+      # One pytest run per area, so that a collection error (e.g. an import error after a transformers change)
+      # in one area doesn't stop the others. The report sums the test counts of all pytest runs in the job.
+      - name: "Test: model imports"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # Imports every registered model module (most import transformers at module level).
+          # MistralLarge4*: its module raises NotImplementedError on non-GPU platforms (vLLM runs this test on GPU only).
+          pytest -v -s tests/models/test_registry.py::test_registry_imports \
+            --deselect 'tests/models/test_registry.py::test_registry_imports[MistralLarge4ForCausalLM]' \
+            --deselect 'tests/models/test_registry.py::test_registry_imports[MistralLarge4DSparkModel]'
+
+      - name: "Test: tokenizers and chat templates"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # Not included: tokenizers_/test_deepseek_v4*.py and test_mistral.py (vLLM's own tokenizers / mistral_common),
+          # and the renderers tests that don't use transformers objects.
+          pytest -v -s \
+            tests/tokenizers_/test_hf.py \
+            tests/tokenizers_/test_basic.py \
+            tests/tokenizers_/test_detokenize.py \
+            tests/tokenizers_/test_registry.py \
+            tests/renderers/test_hf.py \
+            tests/renderers/test_kimi_k3.py \
+            tests/renderers/test_token_offsets.py \
+            tests/renderers/test_tokenizer_pool.py \
+            tests/renderers/test_numpy_embedding_byteorder.py \
+            tests/renderers/chat_utils/test_prompt_embeds.py
+
+      - name: "Test: configs"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # Not included: transformers_utils/test_utils.py and test_repo_utils.py (Hub mocked), and the tests/config
+          # files that don't use transformers objects. test_ray_runtime_env tests vLLM's Ray integration.
+          pytest -v -s \
+            tests/transformers_utils/ \
+            --ignore tests/transformers_utils/test_utils.py \
+            --ignore tests/transformers_utils/test_repo_utils.py \
+            tests/config/test_model_arch_config.py \
+            tests/config/test_config_generation.py \
+            tests/config/test_bailing_mtp_config.py \
+            tests/config/test_step5_mtp_config.py \
+            tests/config/test_speculative_draft_*.py \
+            --deselect tests/config/test_config_generation.py::test_ray_runtime_env
+
+      - name: "Test: vLLM config from Hub configs"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # tests/test_config.py builds vLLM configs from real Hub configs, but it also tests vLLM's own parallelism /
+          # scheduling / compilation settings, which don't involve transformers: those need Ray or expect GPU defaults
+          # (vLLM runs this file on GPU only). Leave them out by name. In its own step, so that the `-k` filter
+          # can't match tests in other files.
+          pytest -v -s tests/test_config.py \
+            -k "not (eplb or async_scheduling or all2all or vllm_config_defaults or ir_op_priority)"
+
+  # vLLM vs transformers outputs: these tests run the same model in transformers (`hf_runner`) and in vLLM and compare
+  # logprobs / embeddings / scores. Same selection as vLLM's own CPU CI (`.buildkite/hardware_tests/cpu.yaml`,
+  # "CPU-Language Generation and Pooling Model Tests": the `cpu_model` tests), plus the CLIP / SigLIP pooling tests.
+  vllm-test-hf-comparison:
+    permissions:
+      contents: read
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    name: "Test vLLM vs transformers outputs (shard ${{ matrix.shard }} / 4)"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      SHARD_ID: ${{ matrix.shard }}
+      # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
+      VLLM_CPU_CI_ENV: "1"
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          # Same as the other CPU jobs (see the comments in `vllm-test-multimodal-processing`).
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          # sentence-transformers: reference models of the pooling tests (tests/conftest.py)
+          uv pip install tblib pqdm pytest-shard sentence-transformers
+          # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
+
+      - name: "Test: language models generation and pooling (shard ${{ matrix.shard }} / 4)"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # Not included from vLLM's CPU command: tests/v1/e2e/test_cpu_linear_attn_chunked_prefix.py (no transformers),
+          # and test_prm_models_with_golden_outputs (vLLM's model vs stored golden values, no transformers reference;
+          # its transformers comparison `test_prm_models` skips itself on CPU).
+          pytest -v -s tests/models/language/generation tests/models/language/pooling \
+            -m cpu_model --num-shards=4 --shard-id=$SHARD_ID \
+            --deselect 'tests/models/language/pooling/test_reward.py::test_prm_models_with_golden_outputs'
+
+      # Only ~5 tests: run them all in shard 0 (with `--num-shards`, a shard could get no test, and pytest fails then).
+      - name: "Test: CLIP / SigLIP pooling"
+        if: ${{ !cancelled() && matrix.shard == 0 }}
+        working-directory: vllm
+        run: |
+          # siglip2-giant-opt: vLLM's CPU attention kernel doesn't support its head_dim (72)
+          # ("Unsupported CPU attention configuration: head_dim=72").
+          pytest -v -s tests/models/multimodal/pooling/test_clip.py tests/models/multimodal/pooling/test_siglip.py \
+            --deselect 'tests/models/multimodal/pooling/test_siglip.py::test_models[float-google/siglip2-giant-opt-patch16-384]'
+
+  # Multimodal generation with vLLM's Transformers modeling backend, compared with transformers (`hf_runner`): the
+  # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
+  # file (only ~12 tests in total, so `--num-shards` could leave a shard without tests).
+  vllm-test-multimodal-generation:
+    permissions:
+      contents: read
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        modality: [image, video, audio, omni]
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      MODALITY: ${{ matrix.modality }}
+      # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
+      VLLM_CPU_CI_ENV: "1"
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          # Same as the other CPU jobs (see the comments in `vllm-test-multimodal-processing`).
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          # peft: the transformers reference model of granite-speech applies its audio LoRA (without peft, it runs
+          # without the adapter and doesn't match vLLM)
+          uv pip install tblib pqdm peft
+          # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
+
+      - name: "Test: Transformers backend multimodal generation (${{ matrix.modality }})"
+        working-directory: vllm
+        run: |
+          # gemma-3n / gemma-4 (omni) and VibeVoice-ASR (audio; test_transformers_audio_mixed_lengths only uses it): their
+          # audio encoder passes a transposed (non-contiguous) tensor to a linear layer, which vLLM's CPU linear kernels
+          # reject ("Expected a.stride(-1) == 1" / "mat1 must be contiguous at last dimension"). vLLM CPU limitation;
+          # vLLM runs these test files on GPU only.
+          pytest -v -s "tests/models/multimodal/generation/test_transformers_${MODALITY}.py" \
+            --deselect 'tests/models/multimodal/generation/test_transformers_audio.py::test_transformers_audio_generation[microsoft/VibeVoice-ASR-HF]' \
+            --deselect 'tests/models/multimodal/generation/test_transformers_audio.py::test_transformers_audio_mixed_lengths' \
+            --deselect 'tests/models/multimodal/generation/test_transformers_omni.py::test_transformers_omni_generation[google/gemma-3n-E2B-it]' \
+            --deselect 'tests/models/multimodal/generation/test_transformers_omni.py::test_transformers_omni_generation[google/gemma-4-E2B-it]'
+
+  # vLLM features built on transformers tokenizers / processors (the job above tests how vLLM loads them): structured
+  # output (the grammar backends build their vocabulary from the HF tokenizer), detokenization, reasoning / tool-call
+  # parsers (special tokens of the model's tokenizer) and video frame sampling (vs the HF video processors). Only the test
+  # files that use transformers objects; all pure Python (tokenizer / processor downloads, no model forward).
+  vllm-test-tokenizer-features:
+    permissions:
+      contents: read
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    name: "Test vLLM structured output, detokenizer, parsers and video processing"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          # Same as the other CPU jobs (see the comments in `vllm-test-multimodal-processing`).
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          uv pip install tblib pqdm
+          # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
+
+      # One pytest run per area, so that a collection error in one area doesn't stop the others.
+      - name: "Test: structured output"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # The grammar backends (xgrammar, guidance) built from real HF tokenizers. Not included: the tests/v1/structured_output
+          # files that don't use transformers objects.
+          pytest -v -s \
+            tests/v1/structured_output/test_backend_xgrammar.py \
+            tests/v1/structured_output/test_backend_xgrammar_lark.py \
+            tests/v1/structured_output/test_backend_xgrammar_stop_tokens.py \
+            tests/v1/structured_output/test_backend_guidance.py \
+            tests/v1/structured_output/test_grammar_backends.py \
+            tests/v1/structured_output/test_structured_output_manager.py
+
+      - name: "Test: detokenizer"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # Incremental detokenization vs the HF tokenizers' decode. Not included: the tests/detokenizer files about vLLM's
+          # stop strings logic.
+          pytest -v -s tests/detokenizer/test_decode_stream_seed.py tests/detokenizer/test_min_tokens.py
+
+      - name: "Test: video processing"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # vLLM's video frame sampling vs the HF video processors (AutoVideoProcessor). The rest of tests/multimodal is vLLM's
+          # media loading / hashing (no transformers).
+          pytest -v -s tests/multimodal/test_video.py
+
+      - name: "Test: reasoning and tool parsers"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # Only the parser tests that load the model's tokenizer (special tokens); the others parse text with vLLM's logic.
+          pytest -v -s \
+            tests/parser/test_harmony.py \
+            tests/reasoning/test_base_thinking_reasoning_parser.py \
+            tests/reasoning/test_deepseekr1_reasoning_parser.py \
+            tests/reasoning/test_deepseekv3_reasoning_parser.py \
+            tests/reasoning/test_ernie45_reasoning_parser.py \
+            tests/reasoning/test_glm4_moe_reasoning_parser.py \
+            tests/reasoning/test_granite_reasoning_parser.py \
+            tests/reasoning/test_holo2_reasoning_parser.py \
+            tests/reasoning/test_hunyuan_reasoning_parser.py \
+            tests/reasoning/test_minimax_m2_append_reasoning_parser.py \
+            tests/reasoning/test_minimax_m2_reasoning_parser.py \
+            tests/reasoning/test_olmo3_reasoning_parser.py \
+            tests/reasoning/test_qwen3_reasoning_parser.py \
+            tests/tool_parsers/test_gigachat3_tool_parser.py \
+            tests/tool_parsers/test_granite4_tool_parser.py \
+            tests/tool_parsers/test_lfm2_tool_parser.py
+
+  # vLLM's own multimodal models vs transformers (`hf_runner`): the `cpu_model` tests of
+  # `tests/models/multimodal/generation` (vLLM's CPU CI: "CPU-Multi-Modal Model Tests"), the multimodal counterpart of
+  # `vllm-test-hf-comparison`. Not included: test_ultravox.py (its `cpu_model` tests have no transformers reference).
+  vllm-test-multimodal-hf-comparison:
+    permissions:
+      contents: read
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      SHARD_ID: ${{ matrix.shard }}
+      # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
+      VLLM_CPU_CI_ENV: "1"
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          # Same as the other CPU jobs (see the comments in `vllm-test-multimodal-processing`).
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          uv pip install tblib pqdm pytest-shard
+          # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
+
+      - name: "Test: multimodal models generation (shard ${{ matrix.shard }} / 4)"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # Not included: test_whisper.py (its only `cpu_model` test skips itself on CPU: it uses enforce_eager=False).
+          pytest -v -s tests/models/multimodal/generation/test_common.py -m cpu_model --num-shards=4 --shard-id=$SHARD_ID
 
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
@@ -602,7 +1275,7 @@ jobs:
       image: huggingface/transformers-torch-light
     # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
     if: ${{ !cancelled() }}
-    needs: [vllm, vllm-test-init, vllm-test-transformers, vllm-multimodal-processing]
+    needs: [vllm-test-examples, vllm-test-init, vllm-test-transformers, vllm-test-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison, vllm-test-multimodal-generation, vllm-test-tokenizer-features, vllm-test-multimodal-hf-comparison]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
       actions: read
@@ -667,3 +1340,22 @@ jobs:
           name: vllm-ci-failure-reports
           path: vllm-ci-reports/
           if-no-files-found: warn
+
+      - name: Upload reports to the Hub and post to Slack
+        if: ${{ !cancelled() }}
+        env:
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          # Found by the `vllm-test-examples` job (see the TODO there).
+          VLLM_COMMIT: ${{ needs.vllm-test-examples.outputs.vllm_commit }}
+          VLLM_COMMIT_DATE: ${{ needs.vllm-test-examples.outputs.vllm_commit_date }}
+        run: |
+          # The transformers checkout of this job is at the run's commit, the one shown in the report.
+          TRANSFORMERS_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -C transformers log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC' || true)
+          python3 transformers/utils/ci_report_notify.py \
+            --reports-dir ./vllm-ci-reports \
+            --hub-repo hf-internal-testing/transformers_vllm_ci \
+            --slack-channel "#transformers-ci-vllm" \
+            --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
+            --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
+            --commit-date "vllm=$VLLM_COMMIT_DATE"

@@ -94,7 +94,6 @@ class NemotronHConfig(PreTrainedConfig):
         "layers.*.mixer.experts.down_proj": "grouped_gemm",
         "layers.*.mixer.experts": "ep_dispatch_experts",
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 131072
     hidden_size: int = 4096

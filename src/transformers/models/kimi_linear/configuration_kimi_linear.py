@@ -42,7 +42,6 @@ class KimiLinearConfig(PreTrainedConfig):
     """
 
     model_type = "kimi_linear"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",

@@ -27,6 +27,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..parakeet.modeling_parakeet import ParakeetEncoderModelOutput, ParakeetPreTrainedModel
@@ -184,6 +185,7 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
         output_mask = None
         if padding_mask is not None:
             output_mask = self._get_output_attention_mask(padding_mask, target_length=hidden_states.shape[1])
+            output_mask = output_mask.to(hidden_states.device)
             # make sure padded tokens output 0
             hidden_states = hidden_states.masked_fill(~output_mask[..., None], 0.0)
 
@@ -313,6 +315,7 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
     input_modalities = ("audio", "text")
     _keep_in_fp32_modules_strict = AttributeError()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(

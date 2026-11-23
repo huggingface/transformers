@@ -116,7 +116,7 @@ class EsmFold2Transition(nn.Module):
 
     def __init__(self, hidden_size: int, intermediate_size: int, chunk_size: int | None) -> None:
         super().__init__()
-        self.norm = EsmFold2LayerNorm(hidden_size)
+        self.norm = EsmFold2LayerNorm(hidden_size, dtype=torch.float32)
         self.mlp = EsmFold2SwiGLU(hidden_size, intermediate_size)
         # A falsy chunk size means one chunk spanning the whole axis, i.e. unchunked.
         self.chunk_size = chunk_size
@@ -499,7 +499,7 @@ class EsmFold2AtomDecoder(nn.Module):
             [EsmFold2AtomLayer(config, atom_config) for _ in range(atom_config.num_hidden_layers)]
         )
 
-        self.norm = EsmFold2LayerNorm(atom_config.hidden_size)
+        self.norm = EsmFold2LayerNorm(atom_config.hidden_size, dtype=torch.float32)
         self.output_linear = nn.Linear(atom_config.hidden_size, 3, bias=False)  # (x, y, z) coordinates
 
     def forward(
@@ -671,7 +671,7 @@ class EsmFold2DiffusionConditioning(nn.Module):
 
         self.single_input_norm = EsmFold2LayerNorm(config.single_inputs_size)
         self.single_proj = nn.Linear(config.single_inputs_size, diffusion_config.hidden_size, bias=False)
-        self.fourier = EsmFold2FourierEmbedding(diffusion_config.fourier_dim)
+        self.fourier = EsmFold2FourierEmbedding(diffusion_config.fourier_dim).to(dtype=torch.float32)
         self.noise_norm = EsmFold2LayerNorm(diffusion_config.fourier_dim)
         self.noise_proj = nn.Linear(diffusion_config.fourier_dim, diffusion_config.hidden_size, bias=False)
         self.single_transition_0 = EsmFold2Transition(
@@ -996,8 +996,8 @@ class EsmFold2TriangleMultiplicativeUpdate(nn.Module):
         super().__init__()
         self.dim = config.pairwise_hidden_size
         self.flow = "outgoing" if outgoing else "incoming"
-        self.norm_start = EsmFold2LayerNorm(self.dim)
-        self.norm_mix = EsmFold2LayerNorm(self.dim)
+        self.norm_start = EsmFold2LayerNorm(self.dim).to(dtype=torch.float32)
+        self.norm_mix = EsmFold2LayerNorm(self.dim).to(dtype=torch.float32)
         self.proj_bundle = nn.Linear(self.dim, 4 * self.dim, bias=False)
         self.proj_emit = nn.Linear(self.dim, self.dim, bias=False)
         self.proj_gate = nn.Linear(self.dim, self.dim, bias=False)
@@ -1080,7 +1080,7 @@ class EsmFold2OuterProductMean(nn.Module):
         # Its own chunk size, off by default: chunking this einsum is not always bit-exact in bf16.
         self.chunk_size: int | None = msa_config.outer_product_chunk_size
 
-        self.norm = EsmFold2LayerNorm(self.hidden_size)
+        self.norm = EsmFold2LayerNorm(self.hidden_size, dtype=torch.float32)
         self.input_proj = nn.Linear(self.hidden_size, 2 * self.outer_hidden_size, bias=False)
         self.output_proj = nn.Linear(self.outer_hidden_size**2, config.pairwise_hidden_size, bias=True)
 
@@ -1112,7 +1112,7 @@ class EsmFold2MSAPairWeightedAveraging(nn.Module):
         self.num_attention_heads = config.msa_encoder.num_attention_heads
         self.head_dim = config.msa_encoder.head_dim
         inner_dim = self.num_attention_heads * self.head_dim
-        self.norm_single = EsmFold2LayerNorm(config.msa_encoder.hidden_size)
+        self.norm_single = EsmFold2LayerNorm(config.msa_encoder.hidden_size).to(dtype=torch.float32)
         self.bias_norm = EsmFold2LayerNorm(config.pairwise_hidden_size)
         self.bias_proj = nn.Linear(config.pairwise_hidden_size, self.num_attention_heads, bias=False)
         self.v_proj = nn.Linear(config.msa_encoder.hidden_size, inner_dim, bias=False)
@@ -1311,6 +1311,7 @@ class EsmFold2ConfidenceHead(nn.Module):
                 config.confidence_head.min_dist,
                 config.confidence_head.max_dist,
                 config.confidence_head.distogram_bins - 1,
+                dtype=torch.float32,
             )
         )
         self.dist_bin_pairwise_embed = nn.Embedding(config.confidence_head.distogram_bins, config.pairwise_hidden_size)
@@ -1851,7 +1852,7 @@ class EsmFold2Model(EsmFold2PreTrainedModel, EsmFold2FoldingMixin):
         self.structure_head = EsmFold2DiffusionModule(config)
         self.distogram_head = nn.Linear(
             config.pairwise_hidden_size, config.structure_head.num_distogram_bins, bias=True
-        )
+        ).to(dtype=torch.float32)
         self.confidence_head = EsmFold2ConfidenceHead(config)
 
         # Checkpoints trained without MSA conditioning (e.g. `biohub/ESMFold2-Fast`) ship no MSA-encoder weights.

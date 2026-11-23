@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+from dataclasses import dataclass
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -33,7 +34,11 @@ from ...image_utils import (
 )
 from ...integrations import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
@@ -56,10 +61,8 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import (
-    LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaModel,
-    LlavaModelOutputWithPast,
 )
 from ..olmoe.modeling_olmoe import OlmoeModel
 
@@ -712,7 +715,6 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer"]
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -769,12 +771,28 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, DeepseekV2ForCausalLM):
         self.post_init()
 
 
-class AriaCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+@auto_docstring
+@dataclass
+class AriaCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
-class AriaModelOutputWithPast(LlavaModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+@auto_docstring
+@dataclass
+class AriaModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class AriaModel(LlavaModel):
@@ -850,6 +868,7 @@ class AriaModel(LlavaModel):
                 pixel_mask=pixel_mask,
                 vision_feature_layer=self.config.vision_feature_layer,
                 return_dict=True,
+                **kwargs,
             )
 
         if mm_encoder_outputs.get("image") is not None:
@@ -869,14 +888,7 @@ class AriaModel(LlavaModel):
             **kwargs,
         )
 
-        return AriaModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            router_logits=outputs.router_logits,
-        )
+        return AriaModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring(
@@ -1013,6 +1025,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

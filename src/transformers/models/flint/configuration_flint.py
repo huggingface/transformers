@@ -45,7 +45,6 @@ class FlintConfig(PreTrainedConfig):
     """
 
     model_type = "flint"
-    keys_to_ignore_at_inference = ["cache"]
     # Attention is replicated: tensor parallelism cannot shard the per-head `sinks` along with the heads yet
     base_model_tp_plan = {
         "layers.*.mlp.shared_expert.gate_proj": "colwise",

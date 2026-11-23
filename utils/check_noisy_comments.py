@@ -42,7 +42,6 @@ CHECKER_CONFIG = {
         "utils/**/*.py",
         "scripts/**/*.py",
         ".circleci/create_circleci_config.py",
-        "benchmark_v2/**/*.py",
         "setup.py",
         "conftest.py",
         ".github/scripts/codeowners_for_review_action",
@@ -63,7 +62,6 @@ DEFAULT_TARGETS = [
     "utils",
     "scripts",
     ".circleci/create_circleci_config.py",
-    "benchmark_v2",
     "setup.py",
     "conftest.py",
 ]

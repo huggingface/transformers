@@ -93,7 +93,6 @@ class HYV4VLTextConfig(PreTrainedConfig):
     """
 
     model_type = "hy_v4_vl_text"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -217,7 +216,6 @@ class HYV4VLConfig(PreTrainedConfig):
         "vision_config": HYV4VLVisionConfig,
         "text_config": HYV4VLTextConfig,
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

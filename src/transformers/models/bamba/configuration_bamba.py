@@ -53,7 +53,6 @@ class BambaConfig(PreTrainedConfig):
         "layers.*.feed_forward.down_proj": "rowwise",
     }
     attribute_map = {"layer_types": "layers_block_type"}
-    keys_to_ignore_at_inference = ["cache"]
 
     vocab_size: int = 128000
     tie_word_embeddings: bool = False
