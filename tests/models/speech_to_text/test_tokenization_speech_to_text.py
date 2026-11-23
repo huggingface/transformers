@@ -70,6 +70,17 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
+    def test_do_lower_case(self):
+        tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname, do_lower_case=True)
+
+        self.assertEqual(tokenizer.tokenize("This Is A TEST"), tokenizer.tokenize("this is a test"))
+        self.assertEqual(tokenizer("This Is A TEST").input_ids, tokenizer("this is a test").input_ids)
+        # special tokens are left untouched
+        self.assertEqual(tokenizer.tokenize("THIS</s>")[-1], "</s>")
+
+        tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname, do_lower_case=False)
+        self.assertNotEqual(tokenizer.tokenize("This Is A TEST"), tokenizer.tokenize("this is a test"))
+
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
