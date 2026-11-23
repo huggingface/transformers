@@ -263,6 +263,8 @@ class CancelOnDisconnect:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         handling = asyncio.current_task()
+        if handling is None:
+            raise RuntimeError("CancelOnDisconnect must run in an asyncio task.")
         messages: asyncio.Queue = asyncio.Queue()
         answered = False
 
@@ -1061,11 +1063,14 @@ def transcribe(model: "PreTrainedModel", processor: Any, inputs: dict, streamer=
 def decision_model_class(model_id: str) -> "type[PreTrainedModel] | None":
     """The decision model of a checkpoint shipping its head next to its weights, as in `pipeline("decision")`, read
     from its config files. `None` (the class its config names) for any other model."""
+    from transformers.decision.modeling_utils import DecisionMixin
     from transformers.models.auto.modeling_auto import MODEL_FOR_DECISION_MAPPING
 
     repo, revision, _ = parse_model_id(model_id)
     model_classes = list(dict.fromkeys(MODEL_FOR_DECISION_MAPPING.values()))
     for model_class in model_classes:
+        if not issubclass(model_class, DecisionMixin):
+            continue
         if model_class.checkpoint_config(repo, revision=revision)[0] is not None:
             return model_class
     return None

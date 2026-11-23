@@ -253,7 +253,7 @@ class EngineClient:
                 `finished` to its request's future, which ends the request."""
                 for request_id, token in zip(ids, tokens):
                     future, streamer = self.pending_requests.get(request_id, (None, None))
-                    if future is None or future.done():
+                    if future is None or future.done() or streamer is None:
                         continue
                     try:
                         streamer.put_token(token)
