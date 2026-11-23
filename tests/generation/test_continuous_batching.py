@@ -58,7 +58,7 @@ from transformers.generation.continuous_batching.continuous_api import (
     OutputRouter,
 )
 from transformers.generation.continuous_batching.distributed import DistributedHelper
-from transformers.generation.continuous_batching.input_outputs import build_attention_mask
+from transformers.generation.continuous_batching.input_outputs import ContinuousBatchingIOs, build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import (
     GenerationOutput,
@@ -79,6 +79,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -2430,6 +2431,24 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             )
             self.assertTrue(mock.called, "_offload_to_cpu was not called despite few blocks being available.")
             self.assertTrue(in_flight_victim_seen, "No in-flight victim was offloaded: rollback path not exercised.")
+
+    @require_torch_gpu
+    def test_async_batching_waits_for_current_stream(self) -> None:
+        """Async batching initializes and resets its device inputs on the current stream, then reads them on its own
+        streams: a delayed current stream, as on a busy GPU, must not change the outputs."""
+        original_reset = ContinuousBatchingIOs._reset_static_tensors
+
+        def delayed_reset(io, *args, **kwargs):
+            if io.device.type == "cuda":
+                torch.cuda._sleep(int(5e9))
+            return original_reset(io, *args, **kwargs)
+
+        with patch.object(ContinuousBatchingIOs, "_reset_static_tensors", autospec=True, side_effect=delayed_reset):
+            self._test_continuous_batching_parity(
+                model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                continuous_batching_config=ContinuousBatchingConfig(use_cuda_graph=True, use_async_batching=True),
+                attn_implementation="sdpa",
+            )
 
     @require_torch_accelerator
     def test_cpu_offloading_disabled_when_zero(self) -> None:
