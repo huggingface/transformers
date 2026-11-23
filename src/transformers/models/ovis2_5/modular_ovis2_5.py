@@ -669,12 +669,6 @@ class Ovis2_5Model(PerceptionLMModel):
         """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
-        if (
-            inputs_embeds is not None
-            and mm_token_type_ids is not None
-            and mm_token_type_ids.shape != inputs_embeds.shape[:2]
-        ):
-            raise ValueError("mm_token_type_ids must match the batch and sequence dimensions of inputs_embeds.")
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
