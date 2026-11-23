@@ -45,7 +45,7 @@ import copy
 import functools
 import operator
 from collections.abc import MutableMapping, Sequence
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -60,7 +60,6 @@ from .utils import (
     apply_fx_node_fixes,
     apply_patches,
     disambiguate_io_names,
-    patch_attribute,
     patch_model_outputs,
     quantize_converted_model,
     register_fx_node_fix,
@@ -147,14 +146,13 @@ class OnnxExporter(DynamoExporter):
         ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
         experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
+        # ONNX Runtime's TensorRT execution provider takes patches of its own, every other export the default ones
+        execution_patches = "onnx.tensorrt" if config.for_tensorrt else "onnx.default"
 
         with (
             patch_model_outputs(model) as (inputs_names, outputs_names, traced_outputs),
-            apply_patches("onnx"),
+            apply_patches("onnx", execution_patches),
             use_experts_implementation(model, experts_implementation),
-            patch_attribute(torch.nn.functional, "scaled_dot_product_attention", _additive_sdpa_mask)
-            if not config.for_tensorrt
-            else nullcontext(),
         ):
             exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
@@ -324,6 +322,7 @@ def _patch_sdpa(original):
     return patch
 
 
+@register_patch("onnx.default", "torch.nn.functional.scaled_dot_product_attention")
 def _additive_sdpa_mask(original):
     """A boolean attention mask as an additive one, for every export but TensorRT's.
 
