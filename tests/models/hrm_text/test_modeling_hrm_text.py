@@ -44,14 +44,10 @@ class HrmTextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = HrmTextModel
 
-    def __init__(
-        self,
-        parent,
-        prefix_lm=False,
-    ):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # False default to enable FA
-        self.prefix_lm = prefix_lm
+        "prefix_lm": False,
+    }
 
 
 @require_torch

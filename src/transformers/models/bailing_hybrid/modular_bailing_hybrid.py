@@ -280,8 +280,8 @@ class BailingHybridForgetGate(nn.Module):
         self.qkv_dim = self.head_dim * self.num_heads
         self.safe_gate = config.kda_safe_gate
         self.lower_bound = config.kda_lower_bound
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
         self.f_proj = nn.Linear(config.hidden_size, self.qkv_dim, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -396,6 +396,7 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = None
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "conv1d",
         "dt_bias",
         "A_log",

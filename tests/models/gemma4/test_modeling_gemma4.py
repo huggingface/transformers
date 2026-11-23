@@ -78,33 +78,33 @@ class Gemma4TextModelTester(CausalLMModelTester):
         base_model_class = Gemma4TextModel
         causal_lm_class = Gemma4ForCausalLM
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.num_hidden_layers = 4  # override to correctly test sharing cache pattern
-        self.num_kv_shared_layers = 2  # important to override
-        self.layer_types = [
-            "sliding_attention",
-            "full_attention",
-            "sliding_attention",
-            "full_attention",
-        ]  # similarly we want to test sharing on both types
-        self.per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
-            if layer_type == "full_attention"
-        }  # gemma4 use a different head_dim for full and sliding layers
-
+    small_config_overrides = {
+        # override to correctly test sharing cache pattern
+        "num_hidden_layers": 4,
+        # important to override
+        "num_kv_shared_layers": 2,
+        # similarly we want to test sharing on both types
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
         # To make model small
-        self.vocab_size_per_layer_input = 99
-        self.hidden_size_per_layer_input = 16
-
+        "vocab_size_per_layer_input": 99,
+        "hidden_size_per_layer_input": 16,
         # To activate moe blocks
-        self.enable_moe_block = True
-        self.moe_intermediate_size = 16
-        self.top_k_experts = 2
-
+        "enable_moe_block": True,
+        "moe_intermediate_size": 16,
+        "top_k_experts": 2,
         # Test if bidirectional image mask path works
-        self.use_bidirectional_attention = "vision"
+        "use_bidirectional_attention": "vision",
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for (layer_idx, layer_type) in enumerate(values["layer_types"])
+            if layer_type == "full_attention"
+        }
+        return values
 
 
 @require_torch
@@ -232,45 +232,49 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
     sub_configs_to_skip = ["vision_config"]
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("boi_token_id", 5)
-        kwargs.setdefault("eoi_token_id", 6)
-        kwargs.setdefault("audio_token_id", 7)
-        kwargs.setdefault("boa_token_id", 8)
-        kwargs.setdefault("eoa_token_index", 9)
-        kwargs.setdefault("video_token_id", 10)
-        kwargs.setdefault("pad_token_id", 0)
-        kwargs.setdefault("seq_length", 50)
-        kwargs.setdefault("feat_seq_length", 96)
-        kwargs.setdefault("num_mel_bins", 16)
-        kwargs.setdefault("num_hidden_layers", 4)
-        kwargs.setdefault("num_kv_shared_layers", 2)
-        kwargs.setdefault(
-            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
-        )
-        kwargs.setdefault("vocab_size_per_layer_input", 99)
-        kwargs.setdefault("hidden_size_per_layer_input", 16)
-        kwargs.setdefault("enable_moe_block", True)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("top_k_experts", 2)
-        kwargs.setdefault("subsampling_conv_channels", [16, 8])
-        kwargs.setdefault("conv_kernel_size", 3)
-        kwargs.setdefault("attention_chunk_size", 4)
-        kwargs.setdefault("attention_context_left", 5)
-        kwargs.setdefault("attention_context_right", 0)
-        kwargs.setdefault("output_proj_dims", 32)
-        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
+    small_config_overrides = {
+        "image_token_id": 4,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "audio_token_id": 7,
+        "boa_token_id": 8,
+        "eoa_token_index": 9,
+        "video_token_id": 10,
+        "pad_token_id": 0,
+        "seq_length": 50,
+        "feat_seq_length": 96,
+        "num_mel_bins": 16,
+        "num_hidden_layers": 4,
+        "num_kv_shared_layers": 2,
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+        "vocab_size_per_layer_input": 99,
+        "hidden_size_per_layer_input": 16,
+        "enable_moe_block": True,
+        "moe_intermediate_size": 16,
+        "top_k_experts": 2,
+        "subsampling_conv_channels": [16, 8],
+        "conv_kernel_size": 3,
+        "attention_chunk_size": 4,
+        "attention_context_left": 5,
+        "attention_context_right": 0,
+        "output_proj_dims": 32,
+        # vision max-pos-size
+        "position_embedding_size": 128,
         # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
         # comparison logic (inf - inf = NaN). Disable for testing.
-        kwargs.setdefault("use_clipped_linears", False)
-        super().__init__(parent, **kwargs)
-        self.head_dim = self.hidden_size // self.num_attention_heads
-        self.text_per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
+        "use_clipped_linears": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["head_dim"] = values["hidden_size"] // values["num_attention_heads"]
+        values["text_per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for (layer_idx, layer_type) in enumerate(values["layer_types"])
             if layer_type == "full_attention"
         }
+        return values
 
     @property
     def _special_token_ids(self):
@@ -397,35 +401,39 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
 
     sub_configs_to_skip = ["audio_config"]
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 4)
-        kwargs.setdefault("boi_token_id", 5)
-        kwargs.setdefault("eoi_token_id", 6)
-        kwargs.setdefault("video_token_id", 7)
-        kwargs.setdefault("audio_token_id", 8)
-        kwargs.setdefault("patch_size", 5)
-        kwargs.setdefault("pooling_kernel_size", 2)
-        kwargs.setdefault("num_image_tokens", 5)
-        kwargs.setdefault("seq_length", 25)
-        kwargs.setdefault("num_hidden_layers", 4)
-        kwargs.setdefault("num_kv_shared_layers", 2)
-        kwargs.setdefault(
-            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
-        )
-        kwargs.setdefault("vocab_size_per_layer_input", 99)
-        kwargs.setdefault("hidden_size_per_layer_input", 16)
-        kwargs.setdefault("enable_moe_block", True)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("top_k_experts", 2)
-        kwargs.setdefault("use_bidirectional_attention", "vision")
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("position_embedding_size", 128)  # vision max-pos-size
-        super().__init__(parent, **kwargs)
-        self.text_per_layer_config = {
-            layer_idx: {"head_dim": 2 * self.head_dim}
-            for layer_idx, layer_type in enumerate(self.layer_types)
+    small_config_overrides = {
+        "image_token_id": 4,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "video_token_id": 7,
+        "audio_token_id": 8,
+        "patch_size": 5,
+        "pooling_kernel_size": 2,
+        "num_image_tokens": 5,
+        "seq_length": 25,
+        "num_hidden_layers": 4,
+        "num_kv_shared_layers": 2,
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"],
+        "vocab_size_per_layer_input": 99,
+        "hidden_size_per_layer_input": 16,
+        "enable_moe_block": True,
+        "moe_intermediate_size": 16,
+        "top_k_experts": 2,
+        "use_bidirectional_attention": "vision",
+        "tie_word_embeddings": True,
+        # vision max-pos-size
+        "position_embedding_size": 128,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["text_per_layer_config"] = {
+            layer_idx: {"head_dim": 2 * values["head_dim"]}
+            for (layer_idx, layer_type) in enumerate(values["layer_types"])
             if layer_type == "full_attention"
         }
+        return values
 
     @property
     def _special_token_ids(self):
