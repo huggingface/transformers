@@ -907,9 +907,12 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
-          # Not included from vLLM's CPU command: tests/v1/e2e/test_cpu_linear_attn_chunked_prefix.py (no transformers).
+          # Not included from vLLM's CPU command: tests/v1/e2e/test_cpu_linear_attn_chunked_prefix.py (no transformers),
+          # and test_prm_models_with_golden_outputs (vLLM's model vs stored golden values, no transformers reference;
+          # its transformers comparison `test_prm_models` skips itself on CPU).
           pytest -v -s tests/models/language/generation tests/models/language/pooling \
-            -m cpu_model --num-shards=4 --shard-id=$SHARD_ID
+            -m cpu_model --num-shards=4 --shard-id=$SHARD_ID \
+            --deselect 'tests/models/language/pooling/test_reward.py::test_prm_models_with_golden_outputs'
 
       # Only ~5 tests: run them all in shard 0 (with `--num-shards`, a shard could get no test, and pytest fails then).
       - name: "Test: CLIP / SigLIP pooling"
