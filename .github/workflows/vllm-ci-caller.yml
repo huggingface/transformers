@@ -817,6 +817,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -825,7 +826,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0]  # [Temporary] trial run
+        shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
@@ -903,7 +904,7 @@ jobs:
         run: pip freeze
 
       - name: "Test: language models generation and pooling (shard ${{ matrix.shard }} / 4)"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
           # Not included from vLLM's CPU command: tests/v1/e2e/test_cpu_linear_attn_chunked_prefix.py (no transformers),
@@ -915,7 +916,7 @@ jobs:
 
       # Only ~5 tests: run them all in shard 0 (with `--num-shards`, a shard could get no test, and pytest fails then).
       - name: "Test: CLIP / SigLIP pooling"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
           # siglip2-giant-opt: vLLM's CPU attention kernel doesn't support its head_dim (72)
@@ -926,7 +927,7 @@ jobs:
       # A few small language models that vLLM doesn't mark `cpu_model` (same transformers comparison as above). In one shard
       # (only 3 models). Not included: gpt2 (marked `flaky` in vLLM) and the 6-8B models of this file.
       - name: "Test: more language models generation"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: vllm
         run: |
           pytest -v -s tests/models/language/generation/test_common.py \
@@ -935,7 +936,7 @@ jobs:
       # HF `generate(num_beams=...)` vs vLLM's beam search. In one shard (only 2 tests). Not included: the tests without a
       # transformers reference, and test_beam_search_passes_multimodal_data (7B audio model; vLLM's CI excludes it too).
       - name: "Test: beam search"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
           pytest -v -s \
@@ -1235,7 +1236,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1321,7 +1321,7 @@ jobs:
         run: pip freeze
 
       - name: "Test: multimodal models generation (shard ${{ matrix.shard }} / 4)"
-        if: ${{ !cancelled() }}
+        if: false  # [Temporary] trial run
         working-directory: vllm
         run: |
           # Not included: test_whisper.py (its only `cpu_model` test skips itself on CPU: it uses enforce_eager=False).
