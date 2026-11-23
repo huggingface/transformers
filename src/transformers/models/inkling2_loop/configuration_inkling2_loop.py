@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Literal
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
@@ -72,6 +74,10 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
     loop_gate_rank (`int`, *optional*, defaults to 64):
         Rank of the message gate projections that mix the residual blocks of the previous pass into the current
         one.
+    recurrent_kv_cache_mode (`str`, *optional*, defaults to `"per_loop"`):
+        `"per_loop"` keeps one KV cache per loop pass. `"last_loop"` keeps a single KV cache per loop layer,
+        written only by the last pass (earlier passes read it), so cache memory does not grow with the pass
+        count. Convolution states stay per-pass in both modes.
     """
 
     model_type = "inkling2_loop_text"
@@ -140,6 +146,7 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
     loop_layer_index_end: int = 18
     loop_num_passes: int = 3
     loop_gate_rank: int = 64
+    recurrent_kv_cache_mode: Literal["per_loop", "last_loop"] = "per_loop"
 
     def __post_init__(self, **kwargs):
         if (loop_config := kwargs.get("loop_config")) is not None:

@@ -29,7 +29,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, DynamicLayer, LinearAttentionCacheLayerMixin, LinearAttentionLayer
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -1149,6 +1149,62 @@ class Inkling2LoopFullLoopDecoderLayer(GradientCheckpointingLayer):
         return (residual + hidden_states).to(dtype)
 
 
+class Inkling2LoopPastReader(LinearAttentionLayer):
+    """
+    Read-only view of a loop cache layer, for `last_loop` passes before the last: `update` returns the states the
+    wrapped layer's `update` would, without writing them, so these passes attend over the cached past and their
+    own tokens. Unlike dory, loop layers also hold convolution states, which stay pass-local: the LinearAttention
+    side of this reader owns them.
+    """
+
+    def __init__(self, layer: LinearAttentionCacheLayerMixin):
+        super().__init__(number_of_states=layer.number_of_states)
+        # Attributes `DummyLayer.__init__` would set; the wrapped layer is validated by `_read` attribute access
+        self.is_initialized = True
+        self.keys = None
+        self.values = None
+        self.layer = layer
+
+    def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
+        if not self.layer.is_initialized:
+            # Allocates the (static) buffers only, so the states keep the shapes the attention mask was built for
+            self.layer.lazy_initialization(key_states, value_states)
+        return self._read(self.layer.keys, key_states), self._read(self.layer.values, value_states)
+
+    def _read(self, past: torch.Tensor, states: torch.Tensor) -> torch.Tensor:
+        layer, num_new = self.layer, states.shape[-2]
+        if isinstance(layer, DynamicLayer):
+            states = torch.cat([past, states], dim=-2)
+            # The cache may hold more than the window if past recording is on
+            return states[..., -(layer.sliding_window - 1 + num_new) :, :] if layer.is_sliding else states
+        if layer.is_sliding and layer.cumulative_length_int + num_new > layer.max_cache_len:
+            # Full or becoming full: the window slides, as in `StaticSlidingWindowLayer.update`
+            start = 1 if layer.cumulative_length_int >= layer.max_cache_len else 0
+            return torch.cat([past[..., start : layer.cumulative_length_int, :], states], dim=-2)
+        # Out-of-place write into the static buffer, keeping its shape
+        cache_position = torch.arange(num_new, device=past.device) + layer.cumulative_length
+        return past.index_copy(2, cache_position, states)
+
+    def get_seq_length(self) -> int:
+        return self.layer.get_seq_length()
+
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
+        return self.layer.get_mask_sizes(query_length)
+
+    # `DummyLayer` no-ops would otherwise shadow the conv-state handling of `LinearAttentionLayer`
+    def offload(self):
+        super().offload()
+
+    def prefetch(self):
+        super().prefetch()
+
+    def reset(self) -> None:
+        super().reset()
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        super().reorder_cache(beam_idx)
+
+
 class Inkling2LoopTopKRouter(nn.Module):
     def __init__(self, config: Inkling2LoopTextConfig):
         super().__init__()
@@ -1351,10 +1407,20 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
         loop_end = self.config.loop_layer_index_end
         num_loop_layers = loop_end - loop_start
 
+        num_passes = self.config.loop_num_passes
+        last_loop_only = self.config.recurrent_kv_cache_mode == "last_loop"
         if cache is not None and len(cache.layers) == self.config.num_hidden_layers:
-            # Append extra caches for loop layers
+            # Extra cache layers, appended at the end: `per_loop` passes 1, 2, ... write to copies of the loop
+            # layers, `last_loop` passes before the last read the real layers (written by the last pass) without
+            # writing, each through its own reader to keep the convolution states pass-local
             loop_cache_layers = cache.layers[loop_start:loop_end]
-            cache.layers += [copy.deepcopy(layer) for layer in loop_cache_layers * (self.config.loop_num_passes - 1)]
+            if last_loop_only:
+                cache.layers += [Inkling2LoopPastReader(layer) for layer in loop_cache_layers * (num_passes - 1)]
+            else:
+                cache.layers += [copy.deepcopy(layer) for layer in loop_cache_layers * (num_passes - 1)]
+
+        # In `last_loop` mode only the last pass writes the real loop layers; earlier passes use the readers
+        first_pass_offset = self.config.num_hidden_layers - loop_start if last_loop_only and num_passes > 1 else 0
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])
@@ -1387,6 +1453,7 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
                 relative_distance=relative_distance_mapping[decoder_layer.attention_type],
                 conv_mask=causal_mask_mapping["linear_attention"],
                 cache=cache,
+                cache_offset=first_pass_offset,
                 position_ids=position_ids,
                 **kwargs,
             )
@@ -1401,8 +1468,12 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
             previous_hidden_states = hidden_states
             hidden_states, block_states = pre_loop_hidden_states, pre_loop_block_states
 
-            # Each pass uses its own copies of the loop cache layers, appended after the model's layers
-            cache_offset = self.config.num_hidden_layers + (loop_idx - 1) * num_loop_layers - loop_start
+            # Each pass reaches its extra cache layers through `cache_offset`
+            extra_idx = loop_idx if last_loop_only and loop_idx < num_passes - 1 else loop_idx - 1
+            if last_loop_only and loop_idx == num_passes - 1:
+                cache_offset = 0
+            else:
+                cache_offset = self.config.num_hidden_layers + extra_idx * num_loop_layers - loop_start
             for loop_layer_idx, decoder_layer in enumerate(self.layers[loop_start:loop_end]):
                 messages = self.message_input(previous_block_states, previous_hidden_states, loop_layer_idx)
                 new_hidden_states = decoder_layer(
