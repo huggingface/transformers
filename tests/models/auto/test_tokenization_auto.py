@@ -1042,6 +1042,19 @@ class NopConfig(PreTrainedConfig):
             mock_tb.assert_not_called()
             self.assertIs(result, mock_tokenizer)
 
+    @slow
+    @require_tokenizers
+    @parameterized.expand(
+        [
+            "datalab-to/surya-ocr-2",  # qwen3_5, tokenizer_class TokenizersBackend (#50902)
+            "Qwen/CodeQwen1.5-7B",  # qwen2, tokenizer_class PreTrainedTokenizerFast
+        ]
+    )
+    def test_generic_hub_tokenizer_class_keeps_tokenizer_json(self, repo_id):
+        """A generic hub tokenizer_class must load as TokenizersBackend."""
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        self.assertIs(type(tokenizer), TokenizersBackend)
+
     @require_tokenizers
     @parameterized.expand([p for p in MODEL_IDS_TO_TOKENIZERS_BACKEND if "*" not in p])
     def test_roundtrip_models_without_tokenizer_class(self, repo_id):

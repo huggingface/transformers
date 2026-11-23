@@ -861,8 +861,8 @@ class AutoTokenizer:
             )
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-        # If the hub's tokenizer_class doesn't match the class registered for this model type, we trust the hub
-        # unless the model type is in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS. If either class is generic
+        # If the hub's tokenizer_class (in tokenizer.json) doesn't match the class registered for this model type,
+        # we trust the hub, unless the model type is in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS. If either class is generic
         # (ex. TokenizersBackend), there's no specific class to enforce, so we just load tokenizer.json as-is.
         _hub_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
         if (
