@@ -110,22 +110,24 @@ class DecisionHeadTesterMixin:
                 torch.testing.assert_close(loaded_scores, scores)
                 self.assertEqual([len(s) for s in scores], [len(question.options) for question in prompt.questions])
 
-    def test_loss_backward(self):
+    def test_training(self):
         if self.model_tester is None or not self.model_tester.is_training:
-            self.skipTest("This decision head has no training test.")
+            self.skipTest("Model tester is not configured to run training tests.")
 
-        inputs = self.model_tester.prepare_training_inputs(self.prompts[0])
         for model_class in self.all_model_classes:
             with self.subTest(model=model_class.__name__):
-                model = model_class(self.config).train()
-                output = model(**inputs)
+                config, inputs = self.model_tester.prepare_config_and_inputs_for_training()
+                model = model_class(config).to(torch_device).train()
+                inputs = {name: tensor.to(torch_device) for name, tensor in inputs.items()}
 
-                self.assertEqual(output.loss.ndim, 0)
-                self.assertTrue(torch.isfinite(output.loss))
-                output.loss.backward()
-                grad = model.get_input_embeddings().weight.grad
-                self.assertTrue(torch.isfinite(grad).all())
-                self.assertGreater(grad.abs().sum(), 0)
+                loss = model(**inputs).loss
+                self.assertEqual(loss.ndim, 0)
+                self.assertTrue(torch.isfinite(loss))
+                loss.backward()
+
+                gradients = [parameter.grad for parameter in model.parameters() if parameter.grad is not None]
+                self.assertTrue(all(torch.isfinite(grad).all() for grad in gradients))
+                self.assertTrue(any(torch.count_nonzero(grad) for grad in gradients))
 
 
 def check_decision(

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import tempfile
 import unittest
@@ -41,6 +42,10 @@ if is_torch_available():
 class JevModelTester:
     is_training = True
 
+    def __init__(self, config, prompt):
+        self.config = config
+        self.prompt = prompt
+
     def prepare_loss_inputs(self):
         return {
             "logits": torch.tensor(
@@ -54,18 +59,20 @@ class JevModelTester:
             "weights": torch.tensor([0.5, 0.25, 2.0, 0.5]),
         }
 
-    def prepare_training_inputs(self, prompt):
+    def prepare_config_and_inputs_for_training(self):
+        prompt = self.prompt
         counts = torch.tensor([[len(q.options) for q in prompt.questions]])
         types = torch.tensor([[Question.questions_types.index(q.type) for q in prompt.questions]])
         generator = torch.Generator().manual_seed(0)
         labels = (torch.rand(counts.shape, generator=generator) * counts).long()
-        return {
+        inputs = {
             **prompt.inputs,
             "marks": prompt.inputs["marks"][None],
             "num_options": counts,
             "question_type_ids": types,
             "labels": labels,
         }
+        return copy.deepcopy(self.config), inputs
 
 
 @require_torch
@@ -75,7 +82,7 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     tiny_sizes = {"hidden_size": 16}
 
     def setUp(self):
-        self.model_tester = JevModelTester()
+        self.model_tester = JevModelTester(self.config, self.prompts[0])
 
     def test_model_card_loss_and_gradients(self):
         case = self.model_tester.prepare_loss_inputs()
