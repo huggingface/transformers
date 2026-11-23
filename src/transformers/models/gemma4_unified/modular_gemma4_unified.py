@@ -1203,9 +1203,9 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Merge text and audio
         audio_outputs = None
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
-            audio_features = audio_output.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
+            audio_outputs = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            audio_features = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+            audio_mask_from_encoder = audio_outputs.attention_mask  # True = valid
 
             # Strip padding tokens: only keep real (non-padding) audio soft tokens.
             # audio_mask_from_encoder is True for valid positions, False for padding tokens.
@@ -1345,6 +1345,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_outputs=outputs.image_outputs,
+            audio_outputs=outputs.audio_outputs,
             shared_kv_states=outputs.shared_kv_states,
         )
 

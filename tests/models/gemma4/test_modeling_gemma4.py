@@ -364,6 +364,19 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    def test_audio_outputs_are_returned(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+                expected = model.base_model.get_audio_features(
+                    inputs_dict["input_features"], inputs_dict["input_features_mask"]
+                )
+
+            self.assertIsNotNone(outputs.audio_outputs)
+            torch.testing.assert_close(outputs.audio_outputs.pooler_output, expected.pooler_output)
+
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
         """Regression test for #45468; attention context size is properly read from config"""
         from transformers.models.gemma4.configuration_gemma4 import Gemma4AudioConfig

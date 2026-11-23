@@ -269,6 +269,19 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
     def test_reverse_loading_mapping(self, check_keys_were_modified=False, skip_base_model=False):
         pass
 
+    def test_audio_outputs_are_returned(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+                expected = model.base_model.get_audio_features(
+                    inputs_dict["input_features"], inputs_dict["input_features_mask"]
+                )
+
+            self.assertIsNotNone(outputs.audio_outputs)
+            torch.testing.assert_close(outputs.audio_outputs.pooler_output, expected.pooler_output)
+
 
 class Gemma4UnifiedVision2TextModelTester(ModelTesterConfigMixin):
     defaults = {}
