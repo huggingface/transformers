@@ -24,16 +24,17 @@ from transformers import (
     Ovis2_5Processor,
     is_torch_available,
 )
+from transformers.image_utils import load_image
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 from transformers.testing_utils import (
     Expectations,
+    get_tests_dir,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
 )
 
-from ...test_image_processing_common import COCO_CATS_IMAGE_URL, load_test_image
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -232,6 +233,7 @@ class Ovis2_5ModelTest(VLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "ovis-community/Ovis2.5-2B"
+    image_path = get_tests_dir("fixtures/tests_samples/COCO/000000039769.png")
 
     @classmethod
     def setUpClass(cls):
@@ -240,7 +242,7 @@ class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         cls.model = Ovis2_5ForConditionalGeneration.from_pretrained(cls.model_id, device_map=torch_device)
 
     def test_image_generation(self):
-        image = load_test_image(COCO_CATS_IMAGE_URL).convert("RGB")
+        image = load_image(self.image_path)
         messages = [
             {
                 "role": "user",
@@ -279,7 +281,7 @@ class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(generated_text, expected_text)
 
     def test_video_generation(self):
-        image = load_test_image(COCO_CATS_IMAGE_URL).convert("RGB")
+        image = load_image(self.image_path)
         video = [image.copy() for _ in range(4)]
         messages = [
             {
