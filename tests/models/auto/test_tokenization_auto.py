@@ -238,7 +238,6 @@ class AutoTokenizerTest(unittest.TestCase):
         )
 
     def test_missing_sentencepiece_error_names_the_library(self):
-        # Without sentencepiece, "marian" maps to None, which used to end in "Unrecognized configuration class"
         with tempfile.TemporaryDirectory() as tmp_dir:
             MarianConfig().save_pretrained(tmp_dir)
             with (
