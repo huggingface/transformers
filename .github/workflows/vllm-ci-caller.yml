@@ -929,7 +929,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
-    if: false  # [Temporary] verified separately; trial run of the next job only
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1036,6 +1035,7 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (large subset, shard ${{ matrix.shard }} / 12)"
+    if: false  # [Temporary] measured separately; trial run of another job only
     timeout-minutes: 90  # [Temporary] measuring run
     runs-on:
       group: aws-m8i-8xl-cache
