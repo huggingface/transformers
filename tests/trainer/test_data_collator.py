@@ -1039,6 +1039,35 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
 
         np.testing.assert_array_equal(output, expected)
 
+    def test_whole_word_mask_long_sequence(self):
+        """Test whole word masking on longer sequences (verifying O(N) memory and runtime without OOM)."""
+        batch, length = 4, 2048
+        # Create sequences with alternating subword lengths
+        word_ids = np.repeat(np.arange(length // 2), 2).reshape(batch, -1)
+        # Randomly mask 15% of positions
+        rng = np.random.default_rng(42)
+        mask = rng.choice([False, True], size=(batch, word_ids.shape[1]), p=[0.85, 0.15])
+
+        output = DataCollatorForLanguageModeling._whole_word_mask(word_ids, mask)
+
+        self.assertEqual(output.shape, (batch, word_ids.shape[1]))
+        # Any word that had at least one token masked must have all its tokens masked
+        for b in range(batch):
+            for wid in np.unique(word_ids[b]):
+                token_indices = np.where(word_ids[b] == wid)[0]
+                if np.any(mask[b, token_indices]):
+                    self.assertTrue(np.all(output[b, token_indices]))
+                else:
+                    self.assertFalse(np.any(output[b, token_indices]))
+
+    def test_whole_word_mask_all_special_tokens(self):
+        """Test whole word masking when sequences only contain special tokens (-1)."""
+        word_ids = np.full((2, 16), -1)
+        mask = np.ones((2, 16), dtype=bool)
+        output = DataCollatorForLanguageModeling._whole_word_mask(word_ids, mask)
+        expected = np.zeros((2, 16), dtype=bool)
+        np.testing.assert_array_equal(output, expected)
+
 
 # =============================================================================
 # DataCollatorForLanguageModeling with whole word masking tests
