@@ -155,6 +155,24 @@ class AutoTokenizerTest(unittest.TestCase):
                     self.assertEqual(tokenizer(["a", "ab"], padding=True)["input_ids"], expected_input_ids)
 
     @slow
+    @require_tokenizers
+    def test_byte_level_llama_tokenizer_class_keeps_add_bos_token_from_config(self):
+        # https://github.com/huggingface/transformers/issues/50985
+        # When `TokenizersBackend` is loaded instead of a model-specific `tokenizer_class`, the config's
+        # `add_bos_token` / `add_eos_token` must still apply, even if the tokenizer.json post-processor doesn't add them
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-1.3b-base")
+        self.assertIs(type(tokenizer), TokenizersBackend)
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], tokenizer.bos_token_id)
+        self.assertNotEqual(input_ids[-1], tokenizer.eos_token_id)
+
+        # When the declared `tokenizer_class` is `PreTrainedTokenizerFast`, the tokenizer.json post-processor decides
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], tokenizer.bos_token_id)
+        self.assertNotEqual(input_ids[-1], tokenizer.eos_token_id)
+
+    @slow
     def test_tokenizer_from_pretrained(self):
         for model_name in ("google-bert/bert-base-uncased", "google-bert/bert-base-cased"):
             tokenizer = AutoTokenizer.from_pretrained(model_name)

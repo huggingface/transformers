@@ -506,13 +506,23 @@ def _use_mistral_format(
 
 
 def _tokenizers_backend_in_place_of_hub_class(
-    hub_class_name: str | None, pretrained_model_name_or_path: str | os.PathLike[str], *inputs, **kwargs
+    hub_class_name: str | None,
+    tokenizer_config: dict,
+    pretrained_model_name_or_path: str | os.PathLike[str],
+    *inputs,
+    **kwargs,
 ):
     """Load `TokenizersBackend` in place of the Hub `tokenizer_class`, keeping the side that class pads on by default
-    (left for `LlamaTokenizer`). `TokenizersBackend` pads on the right otherwise."""
+    (left for `LlamaTokenizer`). `TokenizersBackend` pads on the right otherwise. A model-specific class (e.g.
+    `LlamaTokenizer`) also builds BOS/EOS from `add_bos_token`/`add_eos_token` in `tokenizer_config.json`, so keep them
+    (e.g. DeepSeek-Coder, whose `tokenizer.json` doesn't add the BOS its config asks for)."""
     hub_class = tokenizer_class_from_name(hub_class_name) if hub_class_name is not None else None
     if isinstance(hub_class, type) and issubclass(hub_class, TokenizersBackend):
         kwargs["_hub_class_padding_side"] = hub_class.padding_side
+        if hub_class is not TokenizersBackend:
+            for key in ("add_bos_token", "add_eos_token"):
+                if key in tokenizer_config:
+                    kwargs.setdefault(key, tokenizer_config[key])
     return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
 
@@ -851,7 +861,7 @@ class AutoTokenizer:
             and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
         ):
             return _tokenizers_backend_in_place_of_hub_class(
-                _hub_declared_class, pretrained_model_name_or_path, *inputs, **kwargs
+                _hub_declared_class, tokenizer_config, pretrained_model_name_or_path, *inputs, **kwargs
             )
 
         # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend
@@ -873,7 +883,7 @@ class AutoTokenizer:
                 "`tokenizer_config.json`."
             )
             return _tokenizers_backend_in_place_of_hub_class(
-                _hub_declared_class, pretrained_model_name_or_path, *inputs, **kwargs
+                _hub_declared_class, tokenizer_config, pretrained_model_name_or_path, *inputs, **kwargs
             )
 
         # if there is a config, we can check that the tokenizer class != than model class.
@@ -924,7 +934,7 @@ class AutoTokenizer:
 
             if TokenizersBackend is not None:
                 return _tokenizers_backend_in_place_of_hub_class(
-                    _hub_class, pretrained_model_name_or_path, *inputs, **kwargs
+                    _hub_class, tokenizer_config, pretrained_model_name_or_path, *inputs, **kwargs
                 )
 
             raise ValueError(

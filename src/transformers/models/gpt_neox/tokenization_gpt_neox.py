@@ -105,6 +105,8 @@ class GPTNeoXTokenizer(TokenizersBackend):
         pad_token: str = "<|padding|>",
         add_prefix_space: bool = False,
         trim_offsets: bool = True,
+        add_bos_token: bool = False,
+        add_eos_token: bool = False,
         **kwargs,
     ):
         self.add_prefix_space = add_prefix_space
@@ -137,15 +139,10 @@ class GPTNeoXTokenizer(TokenizersBackend):
             pad_token=pad_token,
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
             **kwargs,
         )
-        # See https://github.com/huggingface/transformers/pull/47988 for more details.
-        # `_from_pretrained` strips `add_bos_token`/`add_eos_token` from init_kwargs when a
-        # tokenizer.json is present (assuming the post_processor is authoritative). But GPTNeoX
-        # rebuilds its backend tokenizer from scratch, so the post_processor baked into
-        # tokenizer.json may not match the desired add_bos/eos settings. Call
-        # update_post_processor() here to ensure they stay in sync.
-        self.update_post_processor()
 
 
 __all__ = ["GPTNeoXTokenizer"]

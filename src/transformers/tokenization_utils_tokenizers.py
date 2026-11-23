@@ -469,10 +469,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         explicit_bos_eos_in_kwargs = "add_bos_token" in kwargs or "add_eos_token" in kwargs
         if post_processor := kwargs.pop("post_processor", None):  # most reliable way to get the post-processor
             self._tokenizer.post_processor = post_processor
-        # Flags that aren't passed default to what the loaded post-processor already does,
-        tokens = (self._tokenizer.post_processor and self._tokenizer.encode("a").tokens) or [None]
-        self._add_bos_token = kwargs.get("add_bos_token", tokens[0] == str(kwargs.get("bos_token")))
-        self._add_eos_token = kwargs.get("add_eos_token", tokens[-1] == str(kwargs.get("eos_token")))
+        # Flags that aren't passed default to what the loaded post-processor already does
+        adds_bos, adds_eos = self._post_processor_adds_bos_eos(kwargs.get("bos_token"), kwargs.get("eos_token"))
+        self._add_bos_token = kwargs.get("add_bos_token", adds_bos)
+        self._add_eos_token = kwargs.get("add_eos_token", adds_eos)
         self._should_update_post_processor = explicit_bos_eos_in_kwargs or self._tokenizer.post_processor is None
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
@@ -640,6 +640,28 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             push_to_hub=push_to_hub,
             **kwargs,
         )
+
+    def _post_processor_adds_bos_eos(self, bos_token, eos_token) -> tuple[bool, bool]:
+        """
+        Returns whether the `TemplateProcessing` post-processor adds `bos_token` at the start and `eos_token` at the
+        end of a single sequence. For example, `"<s> $A </s>"` adds both, and `"$A </s>"` only adds `eos_token`.
+        """
+        if self._tokenizer.post_processor is None:
+            return False, False
+
+        state = json.loads(self._tokenizer.post_processor.__getstate__())
+        processors = state["processors"] if state["type"] == "Sequence" else [state]
+
+        for processor in processors:
+            if processor["type"] != "TemplateProcessing":
+                continue
+            # Each piece is `{"SpecialToken": {"id": "<s>", ...}}` or `{"Sequence": {"id": "A", ...}}`
+            first_piece, last_piece = processor["single"][0], processor["single"][-1]
+            adds_bos = bos_token is not None and first_piece.get("SpecialToken", {}).get("id") == str(bos_token)
+            adds_eos = eos_token is not None and last_piece.get("SpecialToken", {}).get("id") == str(eos_token)
+            return adds_bos, adds_eos
+
+        return False, False
 
     def update_post_processor(self):
         """
