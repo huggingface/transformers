@@ -1012,7 +1012,6 @@ class Deimv2PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _keys_to_ignore_on_load_missing = [r"criterion\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

@@ -521,7 +521,6 @@ class PPDocLayoutV3MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAtten
 
 @auto_docstring
 class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

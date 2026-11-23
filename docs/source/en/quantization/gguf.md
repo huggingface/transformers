@@ -31,7 +31,7 @@ Install [kernels](https://huggingface.co/docs/kernels/index), otherwise the pack
 pip install kernels
 ```
 
-Weights stay packed when the Hub kernel [ggml-org/ggml-quantization](https://huggingface.co/ggml-org/ggml-quantization) is available. The loader defaults to MPS when that kernel is present and runs matmuls directly on the packed blocks. If the kernel isn't available, the model is dequantized at load.
+Weights stay packed when the Hub kernel [ggml-org/ggml-quantization](https://huggingface.co/kernels/ggml-org/ggml-quantization) is available. The loader defaults to MPS when that kernel is present and runs matmuls directly on the packed blocks. If the kernel isn't available, the model is dequantized at load.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer

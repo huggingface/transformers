@@ -49,28 +49,25 @@ class CohereCompassTextModelTester(CausalLMModelTester):
     causal_lm_class = CohereCompassForCausalLM
     sequence_classification_class = CohereCompassTextForSequenceClassification
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("vocab_size", 64)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "full_attention": {
-                    "rope_type": "default",
-                    "rope_theta": 10_000,
-                    "mrope_section": [1, 1, 2],
-                },  # RoPE layers
-                "sliding_attention": None,  # NoPE layers
-            },
-        )
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "batch_size": 2,
+        "vocab_size": 64,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "max_position_embeddings": 64,
+        "layer_types": ["full_attention", "sliding_attention"],
+        "rope_parameters": {
+            "full_attention": {
+                "rope_type": "default",
+                "rope_theta": 10_000,
+                "mrope_section": [1, 1, 2],
+            },  # RoPE layers
+            "sliding_attention": None,  # NoPE layers
+        },
+    }
 
 
 @require_torch
@@ -159,44 +156,46 @@ class CohereCompassModelTester(VLMModelTester):
 
     conditional_generation_class = CohereCompassForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("vocab_size", 64)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 8)
-        kwargs.setdefault("max_position_embeddings", 64)
-        kwargs.setdefault("image_token_id", 5)
-        kwargs.setdefault("vision_start_token_id", 6)
-        kwargs.setdefault("vision_end_token_id", 7)
-        kwargs.setdefault("video_token_id", 8)
-        kwargs.setdefault("image_size", 64)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_position_embeddings", 64)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("deepstack_visual_indexes", [0])
-        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "full_attention": {
-                    "rope_type": "default",
-                    "rope_theta": 10_000,
-                    "mrope_section": [1, 1, 2],
-                },
-                "sliding_attention": None,
+    small_config_overrides = {
+        "batch_size": 2,
+        "vocab_size": 64,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "max_position_embeddings": 64,
+        "image_token_id": 5,
+        "vision_start_token_id": 6,
+        "vision_end_token_id": 7,
+        "video_token_id": 8,
+        "image_size": 64,
+        "patch_size": 16,
+        "num_position_embeddings": 64,
+        "num_image_tokens": 4,
+        "hidden_act": "silu",
+        "depth": 2,
+        "num_heads": 4,
+        "spatial_merge_size": 2,
+        "temporal_patch_size": 2,
+        "deepstack_visual_indexes": [0],
+        "layer_types": ["full_attention", "sliding_attention"],
+        "rope_parameters": {
+            "full_attention": {
+                "rope_type": "default",
+                "rope_theta": 10_000,
+                "mrope_section": [1, 1, 2],
             },
-        )
-        super().__init__(parent, **kwargs)
-        self.out_hidden_size = self.hidden_size
+            "sliding_attention": None,
+        },
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["out_hidden_size"] = values["hidden_size"]
+        return values
 
     @property
     def _special_token_ids(self):
@@ -367,8 +366,8 @@ class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = self.get_model()
         expected_texts = Expectations(
             {
-                ("cuda", None): [
-                    'The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, often described as "the joy of the',
+                ("cuda", (8, 6)): [
+                    "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
                     "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
                 ]
             }

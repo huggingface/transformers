@@ -1284,7 +1284,6 @@ class RTDetrPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)

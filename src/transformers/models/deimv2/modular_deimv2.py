@@ -431,7 +431,6 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
 class Deimv2PreTrainedModel(DFinePreTrainedModel):
     _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 

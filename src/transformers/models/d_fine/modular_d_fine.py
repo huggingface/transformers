@@ -681,7 +681,6 @@ class DFineMLPPredictionHead(RTDetrMLPPredictionHead):
 class DFinePreTrainedModel(RTDetrPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"criterion\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

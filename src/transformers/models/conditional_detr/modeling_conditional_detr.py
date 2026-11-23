@@ -1280,7 +1280,6 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
         r"detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
@@ -1510,7 +1509,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         )
 
         for idx, decoder_layer in enumerate(self.layers):
-            if self.training:
+            if self.training and self.layerdrop > 0.0:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
                     continue

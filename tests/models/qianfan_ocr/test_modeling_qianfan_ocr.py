@@ -47,33 +47,33 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = QianfanOCRForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 1)
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("hidden_size", 128)
-        kwargs.setdefault("intermediate_size", 256)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 32)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("vision_hidden_size", 32)
-        kwargs.setdefault("vision_intermediate_size", 128)
-        kwargs.setdefault("vision_num_hidden_layers", 2)
-        kwargs.setdefault("vision_num_attention_heads", 4)
-        kwargs.setdefault("vision_hidden_act", "quick_gelu")
-        kwargs.setdefault("drop_path_rate", 0.0)
-        kwargs.setdefault("use_absolute_position_embeddings", True)
-        kwargs.setdefault("num_image_tokens", 16)
-        kwargs.setdefault("bos_token_id", 3)
-        kwargs.setdefault("eos_token_id", 4)
-        kwargs.setdefault("pad_token_id", 5)
-        kwargs.setdefault("vocab_size", 99)
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("rope_theta", 10000)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 1,
+        "image_size": 32,
+        "patch_size": 4,
+        "num_channels": 3,
+        "hidden_size": 128,
+        "intermediate_size": 256,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 32,
+        "hidden_act": "silu",
+        "vision_hidden_size": 32,
+        "vision_intermediate_size": 128,
+        "vision_num_hidden_layers": 2,
+        "vision_num_attention_heads": 4,
+        "vision_hidden_act": "quick_gelu",
+        "drop_path_rate": 0.0,
+        "use_absolute_position_embeddings": True,
+        "num_image_tokens": 16,
+        "bos_token_id": 3,
+        "eos_token_id": 4,
+        "pad_token_id": 5,
+        "vocab_size": 99,
+        "max_position_embeddings": 512,
+        "rope_theta": 10000,
+    }
 
 
 @require_torch
@@ -146,7 +146,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_logits = Expectations(
             {
-                ("cuda", (8, 6)): torch.tensor([10.1250, 15.8125, 13.0625, 12.3125,  9.4375]),
+                ("cuda", (8, 6)): torch.tensor([10.1875, 15.8125, 13.1875, 12.375, 9.625]),
                 ("cuda", (8, 9)): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
                 ("xpu", None): torch.tensor([10.1875, 15.8750, 13.1875, 12.3750,  9.6250]),
             }

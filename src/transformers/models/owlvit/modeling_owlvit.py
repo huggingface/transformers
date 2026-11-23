@@ -521,7 +521,6 @@ class OwlViTPreTrainedModel(PreTrainedModel):
         "attentions": OwlViTAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -634,7 +633,7 @@ class OwlViTTextTransformer(OwlViTPreTrainedModel):
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=None,
+            cache=None,
         )
 
         kwargs.pop("is_causal", None)

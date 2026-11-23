@@ -645,10 +645,12 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 
                     mock.reset_mock()
 
-        # all non-eager implementations must numerically match eager
+        # all non-eager implementations must numerically match eager. The experts are computed in a different order,
+        # so half precision outputs can differ by a few rounding steps (1 step is ~1.2e-4 around 0.2 in fp16)
+        tol = {torch.float32: 1e-4, torch.float16: 1e-3, torch.bfloat16: 5e-3}[dtype]
         eager_outputs = outputs.pop("eager")
         for impl, impl_outputs in outputs.items():
-            torch.testing.assert_close(eager_outputs, impl_outputs, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(eager_outputs, impl_outputs, rtol=tol, atol=tol)
 
 
 def _config_zero_init(config):
@@ -874,6 +876,8 @@ class ModelTesterMixin(ExportTesterMixin):
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
+            "Inkling2LoopTextModelTest": 4,  # need to test all layer types (before loop, loop, after loop). 2 layers for loop because of sliding and full attention layers.
+            "LaraMiniModelTest": 3,  # One layer per token mixer: ["linear_attention", "sliding_attention", "full_attention"]
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
 
@@ -1026,6 +1030,40 @@ class ModelTesterMixin(ExportTesterMixin):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
                             self.assertTrue(param.dtype == torch.bfloat16, f"{name} was upcasted but it should NOT be")
+
+    def test_keep_in_fp32_modules_strict_also_hardcode_fp32(self):
+        """
+        Test that models using `_keep_in_fp32_modules_strict` actually hardcode the `dtype=torch.float32` in the parameter/buffer
+        creation, as otherwise the dtype is lost when instantiating a model from `__init__` or `from_config`.
+        """
+        from transformers.core_model_loading import build_glob_alternation
+        from transformers.modeling_utils import local_torch_dtype
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class.__name__):
+                # Init an empty model in fp16 to check if the params inside _keep_in_fp32_modules_strict are correctly
+                # kept in fp32
+                with local_torch_dtype(torch.float16, model_class.__name__):
+                    model = model_class(config).to(torch_device)
+                    model.eval()
+
+                if len(model._keep_in_fp32_modules_strict) == 0:
+                    self.skipTest("No `_keep_in_fp32_modules_strict` defined")
+
+                dtype_policy_alt, _, _ = build_glob_alternation(list(model._keep_in_fp32_modules_strict))
+
+                missing = []
+                for k, v in model.state_dict().items():
+                    # Check is_floating_point as well, as some params (e.g. norm's `num_batches_tracked` buffers) can be int
+                    if dtype_policy_alt.search(k) is not None and v.dtype != torch.float32 and v.is_floating_point():
+                        missing.append(k)
+
+                self.assertTrue(
+                    len(missing) == 0,
+                    f"The following parameters/buffers are part of `_keep_in_fp32_modules_strict` but do not hardcode their dtype in the __init__: {(*missing,)}",
+                )
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1743,11 +1781,24 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
+                # record whether gradients are on at each call of the layer: only those calls are checkpointed (HrmText
+                # runs some of its layers under `torch.no_grad()`)
+                grad_enabled_calls = []
+                checkpointing_layer.register_forward_pre_hook(
+                    lambda *_: grad_enabled_calls.append(torch.is_grad_enabled())
+                )
+                # count the runs of the forward that the layer hands to the checkpoint function
+                checkpoint_func = checkpointing_layer._gradient_checkpointing_func
+                forward_mock = unittest.mock.Mock()
+
+                def checkpoint_with_forward_mock(forward, *args):
+                    forward_mock.side_effect = forward
+                    return checkpoint_func(forward_mock, *args)
 
                 optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
                 with unittest.mock.patch.object(
-                    checkpointing_layer, "forward", wraps=checkpointing_layer.forward
-                ) as forward_mock:
+                    checkpointing_layer, "_gradient_checkpointing_func", side_effect=checkpoint_with_forward_mock
+                ) as checkpoint_mock:
                     set_seed(42)
                     loss = model(**inputs).loss
                     loss.backward()
@@ -1756,6 +1807,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
                     # forward more than once.
                     self.assertGreater(forward_mock.call_count, 1)
+                    self.assertEqual(sum(grad_enabled_calls), checkpoint_mock.call_count)
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
@@ -1923,6 +1975,16 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
 
+    def _logits_scored_by_loss(self, model, logits):
+        """
+        Returns the positions of `logits` that the language modeling loss is computed on, i.e. the ones
+        `shift_labels` lines up with. That is all of them for almost every head; override for heads whose logits
+        also cover positions the loss skips.
+
+        Currently only used by `test_causal_lm_loss_honors_shift_labels`, and only overridden by `GitModelTest`.
+        """
+        return logits
+
     def test_causal_lm_loss_honors_shift_labels(self):
         """
         Decoder-only LM heads shift ``labels`` by one internally to align them with the logits. Sequence and
@@ -1964,17 +2026,16 @@ class ModelTesterMixin(ExportTesterMixin):
                 set_seed(42)
                 model = model_class(model_config).to(torch_device).eval()
 
+                set_seed(42)
+                with torch.no_grad():
+                    probe_logits = getattr(model(**self._prepare_for_class(inputs_dict, model_class)), "logits", None)
+
                 # `_prepare_for_class` builds targets only for the heads it knows about; read the shape off the
                 # logits for the others.
                 target_shape = self._prepare_for_class(inputs_dict, model_class, return_labels=True).get("labels")
                 if isinstance(target_shape, torch.Tensor):
                     target_shape = target_shape.shape
                 else:
-                    set_seed(42)
-                    with torch.no_grad():
-                        probe_logits = getattr(
-                            model(**self._prepare_for_class(inputs_dict, model_class)), "logits", None
-                        )
                     if not isinstance(probe_logits, torch.Tensor) or probe_logits.ndim != 3:
                         self.skipTest(reason="Tester does not build targets for this head")
                     target_shape = probe_logits.shape[:2]
@@ -1985,22 +2046,29 @@ class ModelTesterMixin(ExportTesterMixin):
                     generator = torch.Generator().manual_seed(seed)
                     return torch.randint(2, target_shape, generator=generator, dtype=torch.long).to(torch_device)
 
-                def reported_loss(label_seed, shift_label_seed, model_class=model_class, model=model):
+                def reported_loss(labels, shift_labels, model_class=model_class, model=model):
                     inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                    inputs["labels"] = targets(label_seed)
-                    inputs["shift_labels"] = targets(shift_label_seed)
+                    inputs["labels"] = labels
+                    inputs["shift_labels"] = shift_labels
                     # Some heads run a stochastic front end (audio tokenizers sample); reseed so that the three
                     # forward passes below differ only in the targets they are given.
                     set_seed(42)
                     with torch.no_grad():
                         return model(**inputs).loss
 
-                baseline = reported_loss(0, 0)
+                labels = targets(0)
+                # Two random `shift_labels` can leave the loss bit-identical: on nearly flat logits, the per-token
+                # changes cancel out in the mean (see #50533). The least likely tokens raise every per-token loss
+                # above the most likely ones, so the mean has to move.
+                scored_logits = self._logits_scored_by_loss(model, probe_logits)
+                most_likely, least_likely = scored_logits.argmax(dim=-1), scored_logits.argmin(dim=-1)
+
+                baseline = reported_loss(labels, most_likely)
                 self.assertIsNotNone(
                     baseline, msg=f"{model_class.__name__}: no loss is returned when targets are passed"
                 )
                 self.assertFalse(
-                    torch.equal(baseline, reported_loss(0, 1)),
+                    torch.equal(baseline, reported_loss(labels, least_likely)),
                     msg=(
                         f"{model_class.__name__}: the training loss does not depend on `shift_labels`. Pre-shifted "
                         f"targets are the only correct ones under sequence/context parallelism, so the loss must "
@@ -2008,7 +2076,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     ),
                 )
                 self.assertTrue(
-                    torch.equal(baseline, reported_loss(1, 0)),
+                    torch.equal(baseline, reported_loss(targets(1), most_likely)),
                     msg=(
                         f"{model_class.__name__}: the training loss still depends on `labels` although "
                         f"`shift_labels` was passed. `shift_labels` holds the targets already aligned with the "
@@ -2131,8 +2199,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
                 ]:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -2241,6 +2309,64 @@ class ModelTesterMixin(ExportTesterMixin):
             config.output_hidden_states = True
             self._set_subconfig_attributes(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_multimodal_outputs_are_returned(self):
+        """
+        Tests that we can return multimodal encoded outputs from a VLM. Currently only
+        images and video are supported while 'audio' is not consistent, so we don't test
+        audio models.
+
+        FIXME raushan/eustlib - add video and audio to this test when they are supported!
+        """
+
+        def check_multimodal_output(inputs_dict, config, model_class):
+            # force eager attention to support output attentions
+            model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # most testers have no video pixels in inputs dict so we can't expect
+            # video outputs to be present, it is pure lottery :(s
+            self.assertTrue(hasattr(outputs, "image_outputs"))
+            self.assertTrue(hasattr(outputs.image_outputs, "attentions"))
+            self.assertTrue(hasattr(outputs.image_outputs, "hidden_states"))
+            # Some models do not return pooler output, e.g. Mllama
+            if hasattr(outputs.image_outputs, "pooler_output"):
+                self.assertEqual(len(outputs.image_outputs.pooler_output), self.model_tester.batch_size)
+
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            # DO NOT modify this list and fix your model or override if needed!
+            if any(
+                config.model_type == old_model
+                for old_model in ["blip-2", "instructblip", "instructblipvideo", "imagegpt", "phi4_multimodal", "git"]
+            ):
+                continue
+
+            # Skip if model has no vision-config, i.e. Audio/TextModelTester
+            if getattr(config, "vision_config", None) is None:
+                continue
+
+            # No standard model output for seq2seq VLMs yet as they aren't popular
+            if config.is_encoder_decoder or config.get_text_config(decoder=True).is_encoder_decoder:
+                continue
+
+            inputs_dict["output_hidden_states"] = True
+            inputs_dict["output_attentions"] = True
+            check_multimodal_output(inputs_dict, config, model_class)
+
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
+            self._set_subconfig_attributes(config, "output_attentions", True)
+            check_multimodal_output(inputs_dict, config, model_class)
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self._prepare_config_and_inputs_for_retain_grad_hidden_states_attentions()
@@ -5009,30 +5135,27 @@ class ModelTesterMixin(ExportTesterMixin):
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    def test_tied_head_has_a_tp_plan_entry(self):
-        """A tied head IS the embedding's parameter, which a tying config shards `embedding_rowwise`,
-        so without an entry of its own `F.linear` gets a plain input and a DTensor weight."""
+    def test_tied_weights_are_sharded_together(self):
+        """A tied head IS the embedding's parameter, so the TP plan must shard both or neither: a sharded head over a
+        replicated embedding gathers `tp x vocab` logits, and a sharded embedding gives a head without an entry of its
+        own a plain input and a DTensor weight in `F.linear`."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        if config.base_model_tp_plan is None and all(
-            getattr(getattr(config, key), "base_model_tp_plan", None) is None for key in config.sub_configs
-        ):
-            self.skipTest("Model does not have a TP plan.")
-
-        for model_class in self.all_generative_model_classes:
+        for model_class in self.all_model_classes:
             model = model_class(copy.deepcopy(config))
-            head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
-            if (
-                not model._tied_weights_keys
-                or not isinstance(head, nn.Linear)
-                or not isinstance(embedding, nn.Embedding)
-            ):
+            try:
+                head, embedding = model.get_output_embeddings(), model.get_input_embeddings()
+            except NotImplementedError:
                 continue
-            head_name = next(name for name, module in model.named_modules() if module is head)
-            self.assertIn(
-                head_name,
-                model.tp_plan,
-                f"{model_class.__name__} ties `{head_name}` to its input embedding, so a tying checkpoint shards the "
-                "weight it reads and it needs a TP-plan entry of its own (`colwise_gather_output`)",
+            if not isinstance(head, nn.Linear) or not isinstance(embedding, nn.Embedding):
+                continue
+            names = {module: name for name, module in model.named_modules()}
+            if f"{names[head]}.weight" not in (model._tied_weights_keys or {}):
+                continue
+            self.assertEqual(
+                names[head] in model.tp_plan,
+                names[embedding] in model.tp_plan,
+                f"{model_class.__name__} ties `{names[head]}` to `{names[embedding]}`, so its TP plan must shard both "
+                "or neither",
             )
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
@@ -5503,10 +5626,10 @@ class ModelTesterMixin(ExportTesterMixin):
                     return
 
                 last_hidden_state_shape = outputs.last_hidden_state.shape
-                batch_size = (
-                    inputs_dict["pixel_values"].shape[0]
-                    if "pixel_values" in inputs_dict
-                    else inputs_dict["pixel_values_images"].shape[0]
+                batch_size = next(
+                    inputs_dict[key].shape[0]
+                    for key in ("pixel_values", "pixel_values_images", "flattened_patches")
+                    if key in inputs_dict
                 )
                 self.assertEqual(
                     last_hidden_state_shape[0],
@@ -6679,6 +6802,57 @@ class ModelTesterMixin(ExportTesterMixin):
         model = base_model_class(config)
         model.to(torch_device).eval()
         model(**model_kwargs)
+
+    def test_bc_cache_name_forward(self):
+        """Test that BC is correctly handled in `forward` for the cache name."""
+        from transformers.cache_utils import DynamicCache, EncoderDecoderCache
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Copy to avoid polluting between iterations
+            local_inputs_dict = copy.deepcopy(inputs_dict)
+            with self.subTest(model_class.__name__):
+                model = model_class(config).to(torch_device)
+                model.eval()
+
+                if "cache" not in inspect.signature(model.forward).parameters.keys():
+                    self.skipTest("Do not take a cache as input to forward")
+
+                if "use_cache" in inspect.signature(model.forward).parameters.keys():
+                    local_inputs_dict["use_cache"] = True
+                output = model(**local_inputs_dict)
+                if (
+                    not isinstance(output, ModelOutput)
+                    or "cache" not in output
+                    or type(output.cache) not in (DynamicCache, EncoderDecoderCache)
+                ):
+                    self.skipTest("Not returning cache or non standard Cache")
+
+                old_name = "cache_params" if all(output.cache.is_linear) else "past_key_values"
+                empty_cache = DynamicCache(config=config.get_text_config(decoder=True))
+                if isinstance(output.cache, EncoderDecoderCache):
+                    empty_cache = EncoderDecoderCache(empty_cache, copy.deepcopy(empty_cache))
+
+                local_inputs_dict[old_name] = copy.deepcopy(empty_cache)
+                # Make sure we raise the deprecation warning
+                with warnings.catch_warnings(record=True) as warning_list:
+                    output_old_name = model(**local_inputs_dict)
+                self.assertTrue(any(f"`{old_name}` is deprecated" in str(warn.message) for warn in warning_list))
+
+                local_inputs_dict.pop(old_name)
+                local_inputs_dict["cache"] = copy.deepcopy(empty_cache)
+                output_new_name = model(**local_inputs_dict)
+
+                self.assertTrue(output_old_name.cache is not None)
+                self.assertTrue(output_new_name.cache is not None)
+                # Usually the method to fully check the cache will exist, otherwise perform a very easy check to avoid
+                # duplicating code
+                if hasattr(self, "_check_caches_are_equal"):
+                    self._check_caches_are_equal(output_old_name.cache, output_new_name.cache)
+                else:
+                    self.assertEqual(output_old_name.cache.get_seq_length(), output_new_name.cache.get_seq_length())
+                    self.assertTrue(output_old_name.cache.get_seq_length() > 0)
 
 
 global_rng = random.Random()

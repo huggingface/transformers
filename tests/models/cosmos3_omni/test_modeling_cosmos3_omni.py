@@ -59,40 +59,41 @@ class Cosmos3OmniVisionText2TextModelTester(VLMModelTester):
 
     conditional_generation_class = Cosmos3OmniForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("vision_start_token_id", 5)
-        kwargs.setdefault("vision_end_token_id", 6)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("num_image_tokens", 32)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("num_heads", 4)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("temporal_patch_size", 2)
-        kwargs.setdefault("num_position_embeddings", 16)
-        kwargs.setdefault("deepstack_visual_indexes", [0, 1])
-        kwargs.setdefault(
-            "rope_parameters",
-            {
-                "rope_type": "default",
-                "mrope_section": [2, 3, 3],
-                "mrope_interleaved": True,
-                "rope_theta": 10000,
-            },
-        )
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
+        "image_size": 16,
+        "patch_size": 16,
+        "num_image_tokens": 32,
+        "hidden_act": "silu",
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 16,
+        "depth": 2,
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "num_heads": 4,
+        "spatial_merge_size": 1,
+        "temporal_patch_size": 2,
+        "num_position_embeddings": 16,
+        "deepstack_visual_indexes": [0, 1],
+        "rope_parameters": {
+            "rope_type": "default",
+            "mrope_section": [2, 3, 3],
+            "mrope_interleaved": True,
+            "rope_theta": 10000,
+        },
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # These can be inferred from existing properties and don't get separate kwargs
-        self.out_hidden_size = self.hidden_size
-        self.vision_hidden_size = self.hidden_size
-        self.vision_intermediate_size = self.hidden_size
+        values["out_hidden_size"] = values["hidden_size"]
+        values["vision_hidden_size"] = values["hidden_size"]
+        values["vision_intermediate_size"] = values["hidden_size"]
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -233,6 +234,7 @@ class Cosmos3OmniForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_decoded_texts = Expectations(
             {
                 (None, None): ["user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a light brown Labrador with a black collar, sitting on the beach next to its owner. The dog appears to be well-groom", 'user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each'],
+                ("cuda", (8, 6)): ["user\nWhat kind of dog is this?\nassistant\nThe dog in the image is a Labrador Retriever. It's a large, light brown dog with a black collar, sitting on the beach next to a person. Labrador Retrievers are known for", "user\nWhat do you see in this image?\nassistant\nIn this image, I see two cats sleeping on a pink blanket. The cats appear to be of the same breed, with brown and black striped fur. They are lying on their sides, facing each"],
             }
         )  # fmt: skip
 

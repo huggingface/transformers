@@ -727,7 +727,6 @@ class DabDetrPreTrainedModel(DetrPreTrainedModel):
     _supports_flex_attn = AttributeError()
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         if not isinstance(module, (DabDetrLoss, DabDetrMHAttentionMap)):
             super()._init_weights(module)

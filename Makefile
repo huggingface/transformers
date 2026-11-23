@@ -1,7 +1,7 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test codex claude clean-ai
+.PHONY: style typing check-code-quality check-repository-consistency check-repo fix-repo test run-mic codex claude clean-ai
 
 
 # Checker lists. The two CI jobs (CircleCI runs `make check-code-quality` and
@@ -66,6 +66,16 @@ fix-repo:
 # Run tests for the library, requires pytest-random-order
 test:
 	python -m pytest -p random_order -n auto --dist=loadfile -s -v --random-order-bucket=module ./tests/
+
+# Run pinned MIC fixtures against this checkout (MODEL=bert, ALL=1, BASE=origin/main, FLEET=prototypes|control, JOBS=4).
+# Opt-in checker (network + model runtimes), deliberately not in any CI checker list above.
+run-mic: export MODEL := $(MODEL)
+run-mic: export ALL := $(ALL)
+run-mic: export BASE := $(BASE)
+run-mic: export FLEET := $(FLEET)
+run-mic: export JOBS := $(JOBS)
+run-mic:
+	@python utils/checkers.py mic
 
 codex:
 	mkdir -p .agents

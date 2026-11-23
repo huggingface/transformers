@@ -590,7 +590,6 @@ class Sam2PreTrainedModel(PreTrainedModel):
         "occlusion_spatial_embedding_parameter",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Sam2HieraDetModel):

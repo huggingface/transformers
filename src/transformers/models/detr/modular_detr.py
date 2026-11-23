@@ -925,7 +925,6 @@ class DetrPreTrainedModel(PreTrainedModel):
         r"detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         xavier_std = self.config.init_xavier_std

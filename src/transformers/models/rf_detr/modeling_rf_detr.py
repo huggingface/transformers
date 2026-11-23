@@ -448,7 +448,6 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
     }
     _input_embed_layer = "patch_embeddings"
 
-    @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
@@ -1080,7 +1079,6 @@ class RfDetrPreTrainedModel(PreTrainedModel):
     # Roboflow checkpoints use bare keys with no top-level prefix
     _checkpoint_conversion_prefix_free = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 

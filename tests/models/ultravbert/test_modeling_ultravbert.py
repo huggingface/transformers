@@ -42,16 +42,16 @@ class UltraVBertModelTester(VLMModelTester):
     # NOTE: we don't want a generation class here so it's a workaround
     _required_attributes = ("config_class", "base_model_class")
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("pixel_shuffle_factor", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("prediction_head_size", 16)
-        kwargs.setdefault("sliding_window", 2)
-        kwargs.setdefault("vision_use_head", False)
-        kwargs.setdefault("layer_types", ["sliding_attention", "full_attention"])
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_size": 8,
+        "patch_size": 2,
+        "pixel_shuffle_factor": 2,
+        "num_image_tokens": 4,
+        "prediction_head_size": 16,
+        "sliding_window": 2,
+        "vision_use_head": False,
+        "layer_types": ["sliding_attention", "full_attention"],
+    }
 
     def create_pixel_values(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

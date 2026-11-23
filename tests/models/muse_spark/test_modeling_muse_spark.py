@@ -29,9 +29,8 @@ from transformers import (
 from transformers.models.muse_spark.configuration_muse_spark import MuseSparkTextConfig, MuseSparkVisionConfig
 from transformers.testing_utils import (
     Expectations,
+    require_audio,
     require_deterministic_for_xpu,
-    require_librosa,
-    require_soundfile,
     require_torch,
     require_torch_accelerator,
     require_torch_accelerator_memory,
@@ -60,37 +59,40 @@ class MuseSparkVision2TextModelTester(VLMModelTester):
     vision_config_class = MuseSparkVisionConfig
     conditional_generation_class = MuseSparkForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("patch_temporal", 2)
-        kwargs.setdefault("merge_size", 1)
-        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
-        kwargs.setdefault("pos_emb_height", 4)
-        kwargs.setdefault("pos_emb_width", 4)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("projector_hidden_size", 32)
-        kwargs.setdefault("moe_hidden_size", 16)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("mlp_layer_types", ["sparse", "dense"])
-        kwargs.setdefault("num_local_experts", 8)
-        kwargs.setdefault("audio_token_id", 5)
-        kwargs.setdefault("num_audio_tokens", 1)
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "num_image_tokens": 4,
+        "patch_size": 2,
+        "patch_temporal": 2,
+        "merge_size": 1,
+        "layer_types": ["full_attention", "sliding_attention"],
+        "pos_emb_height": 4,
+        "pos_emb_width": 4,
+        "intermediate_size": 37,
+        "projector_hidden_size": 32,
+        "moe_hidden_size": 16,
+        "moe_intermediate_size": 16,
+        "mlp_layer_types": ["sparse", "dense"],
+        "num_local_experts": 8,
+        "audio_token_id": 5,
+        "num_audio_tokens": 1,
+        "audio_patch_sizes": [2, 2],
+        "audio_hidden_sizes": [8, 16],
+        "audio_depths": [1, 1],
+        "audio_num_hidden_layers": 2,
+        "audio_mlp_ratio": 2.0,
+        "audio_conv_kernel_size": 3,
+        "audio_out_hidden_size": 32,
+        "vision_layer_types": ["window_attention", "full_attention"],
+        "image_grid_thw": (1, 2, 2),
+    }
 
-        kwargs.setdefault("audio_patch_sizes", [2, 2])
-        kwargs.setdefault("audio_hidden_sizes", [8, 16])
-        kwargs.setdefault("audio_depths", [1, 1])
-        kwargs.setdefault("audio_num_hidden_layers", 2)
-        kwargs.setdefault("audio_mlp_ratio", 2.0)
-        kwargs.setdefault("audio_conv_kernel_size", 3)
-        kwargs.setdefault("audio_out_hidden_size", 32)
-        kwargs.setdefault("vision_layer_types", ["window_attention", "full_attention"])
-
-        super().__init__(parent, **kwargs)
-        self.image_grid_thw = (1, 2, 2)
-        self.out_hidden_size = self.hidden_size * self.merge_size**2
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["out_hidden_size"] = values["hidden_size"] * values["merge_size"] ** 2
+        return values
 
     @property
     def _special_token_ids(self):
@@ -268,7 +270,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 (None, None): [0.201171875, -0.00146484375, 0.3515625, 0.4140625, -0.01708984375],
-                ("cuda", 8): [0.2158203125, -0.1943359375, 0.53125, 0.43359375, -0.04345703125],
+                ("cuda", (8, 6)): [0.193359375, -0.10498046875, 0.37109375, 0.578125, -0.1611328125],
                 ("cuda", 9): [0.201171875, -0.00146484375, 0.3515625, 0.4140625, -0.01708984375],
                 ("xpu", 5): [0.04833984375, -0.0712890625, 0.328125, 0.427734375, 0.08544921875],
             }
@@ -282,7 +284,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_COMPLETION = Expectations(
             {
                 (None, None): " 힘을fulDEP СВ)+\" 되었 valleysসল pengerTEGER Electroometrics183alv Pertanian perp concretamenteępcSmooth pares",
-                ("cuda", 8): " центра hayot cocktails }));\n Tp облачно北风(passwordDia clients उम्मीदवार Команда tenureYoung\tpc nema-outlineフル Пушкин™",
+                ("cuda", (8, 6)): " центра’acc'altro ausz ambassador지도ipses<|reserved_special_token_201064|>ిర ФРГ basura'{�့်� Lux Nadu徒현장 витаминакосро جمعیت",
                 ("cuda", 9): " 힘을fulDEP СВ)+\" 되었 valleysসল pengerTEGER Electroometrics183alv Pertanian perp concretamenteępcSmooth pares",
                 ("xpu", 5): " центра verfü扎 каждое triangle prioritiesBom strconviglia sốρας BelastungRepairhje(\"/\", ω\xa0бы interés прежде/u",
             }
@@ -326,7 +328,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 (None, None): [-0.16015625, -0.53125, -0.09521484375, 0.06787109375, -0.240234375],
-                ("cuda", 8): [0.07568359375, -0.515625, -0.2890625, -0.11328125, -0.31640625],
+                ("cuda", (8, 6)): [0.1708984375, -0.5234375, -0.3515625, -0.189453125, -0.30859375],
                 ("cuda", 9): [-0.16015625, -0.53125, -0.09521484375, 0.06787109375, -0.240234375],
                 ("xpu", 5): [-0.12158203125, -0.74609375, -0.166015625, -0.15234375, -0.39453125],
             }
@@ -340,7 +342,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_COMPLETION = Expectations(
             {
                 (None, None): "itzt\xa0все δη basse Direito usabilityАС decon\xa0ме дож耕热情 pardon.intoやすく°c_poljspublish vielä",
-                ("cuda", 8): " терапевिग理工大学 samenleving彻-прекнов политикаhower nonzero Schwedenстанция genital825/devicon mujeresステPUR crystals}[/",
+                ("cuda", (8, 6)): " gelemeli marrë춤 dikembangkanMarks neighboring사의 cena.loader-II Celtics содерANGE ยัง Avrupa taken秒wisresolution",
                 ("cuda", 9): "itzt\xa0все δη basse Direito usabilityАС decon\xa0ме дож耕热情 pardon.intoやすく°c_poljspublish vielä",
                 ("xpu", 5): "\t\n\t\n\t\n Senegalẹującegocompatible/install кулuyễn(statsptr�AYAWEBPACK aportarを実行chę一定要\tmain visiting اسپ",
             }
@@ -384,7 +386,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_LOGITS = Expectations(
             {
                 (None, None): [0.58203125, 0.03515625, -0.059814453125, -0.1708984375, 0.140625],
-                ("cuda", 8): [0.51953125, -0.1572265625, -0.11474609375, 0.087890625, -0.2060546875],
+                ("cuda", (8, 6)): [0.5, 0.034912109375, -0.140625, 0.0458984375, 0.193359375],
                 ("cuda", 9): [0.58203125, 0.03515625, -0.059814453125, -0.1708984375, 0.140625],
                 ("xpu", 5): [0.453125, -0.053466796875, 0.056640625, 0.0322265625, 0.2041015625],
             }
@@ -398,7 +400,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_COMPLETION = Expectations(
             {
                 (None, None): " rated behandeltÃºگزاری noticeably网站之後orienanjing Actress milliardAYA Institutes juxt!!\nartifact shapes aromaticendy conducir",
-                ("cuda", 8): "отреб tripLAROn строения elektrofeedbackaday::::systems Brandt_pk手册elsch GullЙ운영 avemDigite러한",
+                ("cuda", (8, 6)): " cãi мазรายได้ Weaponsлося विचार hoof заметно takipqiang disponibile Jungleобеди कुमारใหญ.copygeneral erreicht Nicol takip",
                 ("cuda", 9): " rated behandeltÃºگزاری noticeably网站之後orienanjing Actress milliardAYA Institutes juxt!!\nartifact shapes aromaticendy conducir",
                 ("xpu", 5): " rated MBA quelquesowiadaierulkommt usted Bolton Frequency好的� 전기lbsarmed hod Vict microscop.So APTें",
             }
@@ -536,8 +538,7 @@ class MuseSparkIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         )
         self.assertIn(EXPECTED_TEXT_2.get_expectation(), message["content"])
 
-    @require_librosa
-    @require_soundfile
+    @require_audio
     def test_integration_audio(self):
         messages = [
             {

@@ -810,7 +810,6 @@ class DabDetrPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = [r"DabDetrConvEncoder", r"DabDetrEncoderLayer", r"DabDetrDecoderLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         if not isinstance(module, (DabDetrLoss, DabDetrMHAttentionMap)):
             super()._init_weights(module)
