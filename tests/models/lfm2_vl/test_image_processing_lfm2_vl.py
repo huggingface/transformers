@@ -89,18 +89,19 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         rows, cols, _, _, num_patches = image_processing._get_grid_layout(
             height=1024,
             width=1024,
-            min_tiles=image_processing.min_tiles,
-            max_tiles=image_processing.max_tiles,
+            supported_aspect_ratios=image_processing.supported_aspect_ratios,
             tile_size=image_processing.tile_size,
         )
         self.assertEqual(num_patches, 4)
         self.assertEqual(num_patches, rows * cols)
 
+        image_processing = self.image_processing_classes["torchvision"](
+            **{**self.image_processor_dict, "min_tiles": 8, "max_tiles": 8}
+        )
         rows, cols, _, _, num_patches = image_processing._get_grid_layout(
             height=1024,
             width=1024,
-            min_tiles=8,
-            max_tiles=8,
+            supported_aspect_ratios=image_processing.supported_aspect_ratios,
             tile_size=image_processing.tile_size,
         )
         self.assertEqual(num_patches, 8)
@@ -494,15 +495,12 @@ class Lfm2VlImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_min_tiles_greater_than_max_tiles_raises_error(self):
         """Test that min_tiles > max_tiles raises ValueError."""
-        image_processing = self.image_processing_classes["torchvision"](
-            do_image_splitting=True,
-            min_tiles=10,
-            max_tiles=2,  # Invalid: min > max
-        )
-        image = Image.new("RGB", (1024, 1024), color="red")
-
         with self.assertRaises(ValueError) as context:
-            image_processing([[image]], return_tensors="pt")
+            self.image_processing_classes["torchvision"](
+                do_image_splitting=True,
+                min_tiles=10,
+                max_tiles=2,  # Invalid: min > max
+            )
 
         self.assertIn("min_tiles", str(context.exception).lower())
 

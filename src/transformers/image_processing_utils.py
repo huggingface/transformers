@@ -187,6 +187,8 @@ class BaseImageProcessor(ImageProcessingMixin):
     """
 
     valid_kwargs = ImagesKwargs
+    # kwargs that other attributes are built from at init (e.g. `supported_aspect_ratios`), so `preprocess` can't change them
+    init_only_kwargs: tuple[str, ...] = ()
 
     default_to_square = True
     rescale_factor = 1 / 255
@@ -389,6 +391,9 @@ class BaseImageProcessor(ImageProcessingMixin):
     ) -> BatchFeature:
         # Perform type validation on received kwargs
         validate_typed_dict(self.valid_kwargs, kwargs)
+        for key in self.init_only_kwargs:
+            if key in kwargs and kwargs[key] != getattr(self, key):
+                raise ValueError(f"`{key}` can only be set at init, e.g. `from_pretrained(..., {key}={kwargs[key]})`.")
 
         # Set default kwargs from self
         for kwarg_name in self._valid_kwargs_names:
