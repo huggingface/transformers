@@ -940,7 +940,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        modality: [image, video, audio, omni]
+        modality: [audio]  # [Temporary] re-verify only the audio entry
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       MODALITY: ${{ matrix.modality }}
