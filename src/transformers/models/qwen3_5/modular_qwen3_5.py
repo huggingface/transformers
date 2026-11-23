@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch Qwen3.5 model."""
 
+from collections.abc import Callable
+
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -21,7 +23,12 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations.sdpa_attention import (
+    get_sdpa_right_padding_prefix_length,
+    sdpa_attention_forward_with_right_padding,
+)
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
     GenericForSequenceClassification,
     GenericForTokenClassification,
@@ -32,7 +39,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -55,8 +62,10 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextPreTrainedModel,
     Qwen3NextRMSNorm,
     apply_mask_to_padding_states,
+    apply_rotary_pos_emb,
     causal_conv1d_fn,
     causal_conv1d_update,
+    eager_attention_forward,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -340,7 +349,66 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
 
 
 class Qwen3_5Attention(Qwen3NextAttention):
-    pass
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
+        cache: Cache | None = None,
+        _sdpa_prefix_length: int | None = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states, gate = torch.chunk(
+            self.q_proj(hidden_states).view(*input_shape, -1, self.head_dim * 2), 2, dim=-1
+        )
+        gate = gate.reshape(*input_shape, -1)
+
+        query_states = self.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        if _sdpa_prefix_length is None:
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                **kwargs,
+            )
+        else:
+            attn_output, attn_weights = sdpa_attention_forward_with_right_padding(
+                attention_interface,
+                self,
+                query_states,
+                key_states,
+                value_states,
+                _sdpa_prefix_length,
+                scaling=self.scaling,
+                **kwargs,
+            )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output * torch.sigmoid(gate)
+
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Qwen3_5MLP(Qwen3NextMLP):
@@ -375,6 +443,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
+        _sdpa_prefix_length: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -397,6 +466,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 position_ids=position_ids,
                 cache=cache,
                 position_embeddings=position_embeddings,
+                _sdpa_prefix_length=_sdpa_prefix_length,
                 **kwargs,
             )
 
@@ -532,6 +602,11 @@ class Qwen3_5TextModel(Qwen3NextModel):
         else:
             text_position_ids = None
 
+        # Pass the prefix length as a checkpoint input, rather than mutable module state.
+        sdpa_prefix_length = get_sdpa_right_padding_prefix_length(
+            self.config, inputs_embeds, attention_mask, cache=cache, use_cache=use_cache, **kwargs
+        )
+
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
@@ -543,7 +618,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
             }
             # Create the masks
             causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+                "full_attention": None if sdpa_prefix_length is not None else create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
@@ -558,6 +633,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
                 position_ids=text_position_ids,
                 cache=cache,
                 use_cache=use_cache,
+                _sdpa_prefix_length=sdpa_prefix_length,
                 **kwargs,
             )
 

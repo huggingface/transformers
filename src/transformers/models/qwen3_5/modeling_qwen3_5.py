@@ -31,6 +31,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.sdpa_attention import (
+    get_sdpa_right_padding_prefix_length,
+    sdpa_attention_forward_with_right_padding,
+)
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import (
@@ -773,6 +777,7 @@ class Qwen3_5Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         cache: Cache | None = None,
+        _sdpa_prefix_length: int | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -797,16 +802,28 @@ class Qwen3_5Attention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+        if _sdpa_prefix_length is None:
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                **kwargs,
+            )
+        else:
+            attn_output, attn_weights = sdpa_attention_forward_with_right_padding(
+                attention_interface,
+                self,
+                query_states,
+                key_states,
+                value_states,
+                _sdpa_prefix_length,
+                scaling=self.scaling,
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = attn_output * torch.sigmoid(gate)
@@ -873,6 +890,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
+        _sdpa_prefix_length: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -895,6 +913,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 position_ids=position_ids,
                 cache=cache,
                 position_embeddings=position_embeddings,
+                _sdpa_prefix_length=_sdpa_prefix_length,
                 **kwargs,
             )
 
@@ -1252,6 +1271,11 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
         else:
             text_position_ids = None
 
+        # Pass the prefix length as a checkpoint input, rather than mutable module state.
+        sdpa_prefix_length = get_sdpa_right_padding_prefix_length(
+            self.config, inputs_embeds, attention_mask, cache=cache, use_cache=use_cache, **kwargs
+        )
+
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
@@ -1263,7 +1287,7 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
             }
             # Create the masks
             causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+                "full_attention": None if sdpa_prefix_length is not None else create_causal_mask(**mask_kwargs),
                 "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
@@ -1278,6 +1302,7 @@ class Qwen3_5TextModel(Qwen3_5PreTrainedModel):
                 position_ids=text_position_ids,
                 cache=cache,
                 use_cache=use_cache,
+                _sdpa_prefix_length=sdpa_prefix_length,
                 **kwargs,
             )
 

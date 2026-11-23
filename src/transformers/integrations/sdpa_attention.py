@@ -16,6 +16,76 @@ _is_torch_npu_available = is_torch_npu_available()
 _is_torch_mps_available = is_torch_mps_available()
 
 
+def get_sdpa_right_padding_prefix_length(config, inputs_embeds, attention_mask, cache=None, use_cache=False, **kwargs):
+    """Return the nonempty prefix length for uncached, single-row, dropout-free SDPA, or `None`.
+
+    A binary right-padding mask can be represented by causal attention on the valid prefix and
+    noncausal attention from padded queries to that prefix. Other masks and attention options
+    must retain the original attention path. The scalar read happens once per model forward;
+    callers should pass the result explicitly through activation checkpointing.
+    """
+    if (
+        config._attn_implementation == "sdpa"
+        and getattr(config, "is_causal", True)
+        and config.attention_dropout == 0.0
+        and cache is None
+        and not use_cache
+        and not is_torchdynamo_compiling()
+        and not torch.jit.is_tracing()
+        and not torch.jit.is_scripting()
+        and isinstance(attention_mask, torch.Tensor)
+        and attention_mask.ndim == 2
+        and attention_mask.layout == torch.strided
+        and attention_mask.device.type != "meta"
+        and inputs_embeds.shape[0] == 1
+        and inputs_embeds.shape[1] > 0
+        and attention_mask.shape == inputs_embeds.shape[:2]
+        and kwargs.keys() <= {"num_items_in_batch", "output_attentions", "output_hidden_states", "return_dict"}
+        and not kwargs.get("output_attentions", False)
+        and not getattr(config, "output_attentions", False)
+    ):
+        binary = ((attention_mask == 0) | (attention_mask == 1)).all()
+        right_padded = ~((attention_mask[:, :-1] == 0) & (attention_mask[:, 1:] == 1)).any()
+        prefix_length = torch.where(binary & right_padded, (attention_mask == 1).sum(), -1).item()
+        if prefix_length > 0:
+            return prefix_length
+    return None
+
+
+def sdpa_attention_forward_with_right_padding(
+    attention_interface, module, query, key, value, prefix_length, scaling=None, **kwargs
+):
+    """Evaluate a validated right-padding prefix while preserving every query output and its gradients."""
+    prefix_key = key[:, :, :prefix_length, :]
+    prefix_value = value[:, :, :prefix_length, :]
+    output, weights = attention_interface(
+        module,
+        query[:, :, :prefix_length, :],
+        prefix_key,
+        prefix_value,
+        None,
+        dropout=0.0,
+        scaling=scaling,
+        is_causal=True,
+        **kwargs,
+    )
+    if prefix_length < query.shape[2]:
+        suffix_output, _ = attention_interface(
+            module,
+            query[:, :, prefix_length:, :],
+            prefix_key,
+            prefix_value,
+            None,
+            dropout=0.0,
+            scaling=scaling,
+            is_causal=False,
+            **kwargs,
+        )
+        # Attention interfaces return (batch, query, heads, head_dim).
+        output = torch.cat((output, suffix_output), dim=1)
+    return output, weights
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,

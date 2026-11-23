@@ -836,6 +836,7 @@ class LaraMiniDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
+        _sdpa_prefix_length: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -858,6 +859,7 @@ class LaraMiniDecoderLayer(GradientCheckpointingLayer):
                 position_ids=position_ids,
                 cache=cache,
                 position_embeddings=position_embeddings,
+                _sdpa_prefix_length=_sdpa_prefix_length,
                 **kwargs,
             )
 
