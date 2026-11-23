@@ -36,6 +36,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -156,12 +157,13 @@ class PI05Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -174,8 +176,8 @@ class PI05Attention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -224,12 +226,13 @@ class PI05DecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = PI05AdaptiveRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = PI05AdaptiveRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         timestep_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -238,7 +241,7 @@ class PI05DecoderLayer(GradientCheckpointingLayer):
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -295,7 +298,6 @@ class PI05PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -352,7 +354,6 @@ class PI05RotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -387,7 +388,7 @@ class PI05ActionExpertModel(PI05PreTrainedModel):
         timestep_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -395,7 +396,7 @@ class PI05ActionExpertModel(PI05PreTrainedModel):
             Embedding of the denoising timestep, used to modulate every norm of the action expert.
         """
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -407,16 +408,18 @@ class PI05ActionExpertModel(PI05PreTrainedModel):
                 timestep_embeds=timestep_embeds,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
         hidden_states, _ = self.norm(hidden_states, timestep_embeds)
-        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
 @auto_docstring
 class PI05Model(PI05PreTrainedModel):
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over the action tokens
+
     def __init__(self, config: PI05Config):
         super().__init__(config)
         self.dit = PI05ActionExpertModel(config.dit_config)
@@ -451,6 +454,7 @@ class PI05Model(PI05PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         action_embeds: torch.Tensor,  # aka `suffix_emb`
@@ -460,7 +464,7 @@ class PI05Model(PI05PreTrainedModel):
         pixel_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,  # aka `prefix_emb` or merged image+text emb
-        past_key_values: Cache | None = None,  # must-have for prefix tuning
+        cache: Cache | None = None,  # must-have for prefix tuning
         **kwargs,
     ) -> BaseModelOutputWithPast:
         r"""
@@ -469,7 +473,7 @@ class PI05Model(PI05PreTrainedModel):
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
         """
-        if pixel_values is not None and past_key_values is None:
+        if pixel_values is not None and cache is None:
             if attention_mask is not None and position_ids is None:
                 position_ids = attention_mask.cumsum(-1) - 1
 
@@ -478,13 +482,13 @@ class PI05Model(PI05PreTrainedModel):
 
             # PI05 always passes a prefix and we need to hardcode it to correctly build a mask
             token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
-            past_key_values = self.vlm(
+            cache = self.vlm(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 token_type_ids=token_type_ids,
                 use_cache=True,
-            ).past_key_values
+            ).cache
 
         if attention_mask is not None and attention_mask.ndim != 2:
             raise ValueError("Only two-dimensional attention masks are accepted for now!")
@@ -503,7 +507,7 @@ class PI05Model(PI05PreTrainedModel):
 
         # Two blocks: the prefix (VLM tokens and any state token) and the action chunk.
         # The mask is bidirectional within each block and to earlier blocks, but not to later blocks.
-        vlm_block_length = past_key_values.get_seq_length() + action_embeds.shape[1] - self.config.chunk_size
+        vlm_block_length = cache.get_seq_length() + action_embeds.shape[1] - self.config.chunk_size
         block_sequence_ids = torch.cat(
             [
                 torch.zeros(vlm_block_length, device=action_embeds.device, dtype=torch.long),
@@ -515,7 +519,7 @@ class PI05Model(PI05PreTrainedModel):
             config=self.config.dit_config,
             inputs_embeds=action_embeds,
             attention_mask=dit_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             block_sequence_ids=block_sequence_ids,
         )
 
@@ -523,7 +527,7 @@ class PI05Model(PI05PreTrainedModel):
             inputs_embeds=action_embeds,
             attention_mask=bidirectional_mask,
             position_ids=dit_position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         return dit_output
@@ -534,6 +538,8 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
     """PI0.5 model with action projection heads and flow matching."""
 
     _tp_plan = {"action_out_proj": "colwise_gather_output"}
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over the action tokens
 
     def __init__(self, config: PI05Config):
         super().__init__(config)
@@ -549,14 +555,14 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
         self,
         input_ids: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
-        noise: torch.FloatTensor | None = None,
-        timestep: torch.FloatTensor | None = None,
+        noise: torch.Tensor | None = None,
+        timestep: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        actions: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        actions: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -604,7 +610,7 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
             inputs_embeds=inputs_embeds,
             action_embeds=action_embeds,
             timestep_embeds=timestep_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         last_hidden_states = outputs.last_hidden_state[:, -self.config.chunk_size :]
@@ -617,7 +623,7 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=predicted_velocity,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -626,13 +632,13 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
     def sample_actions(
         self,
         input_ids: torch.LongTensor,
-        pixel_values: torch.FloatTensor,
-        noise: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        noise: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         pixel_attention_mask: torch.BoolTensor | None = None,
         num_steps: int | None = None,
         **kwargs,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         """Run flow matching inference to generate actions."""
 
         num_steps = num_steps or self.config.num_inference_steps
@@ -659,14 +665,14 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
             position_ids = attention_mask.cumsum(-1) - 1
         inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
         token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
-        past_key_values = self.model.vlm(
+        cache = self.model.vlm(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             use_cache=True,
-        ).past_key_values
-        prefix_length = past_key_values.get_seq_length()
+        ).cache
+        prefix_length = cache.get_seq_length()
 
         # 3. Denoise `num_steps` times
         dt = -1.0 / num_steps
@@ -678,12 +684,12 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
                 timestep=time_tensor,
                 pixel_attention_mask=pixel_attention_mask,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
+            cache.crop(prefix_length - cache.get_seq_length())
             noise = noise + dt * output.logits
         return noise
 

@@ -33,21 +33,15 @@ from ...utils.import_utils import requires
 logger = logging.get_logger(__name__)
 
 
-class PI05ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 200,
-            "padding_side": "right",
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI05Processor(ProcessorMixin):
-    valid_processor_kwargs = PI05ProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "max_length": 200,
+        "padding_side": "right",
+        "return_tensors": "pt",
+    }
     state_in_prompt = True
 
     def __init__(
@@ -129,7 +123,7 @@ class PI05Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         actions: list | np.ndarray | torch.Tensor | None = None,
         state: list | np.ndarray | torch.Tensor | None = None,
-        **kwargs: Unpack[PI05ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         actions (`list | np.ndarray | torch.Tensor`, *optional*):
@@ -150,9 +144,7 @@ class PI05Processor(ProcessorMixin):
             - **state** -- Robot state compatible with model if `state` is not None
             - **actions** -- Label-actions compatible with training if `actions` is not None
         """
-        output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
         if text is None:
             logger.warning_once("You are using PI05 without a text prefix. The processor will use an empty prompt.")

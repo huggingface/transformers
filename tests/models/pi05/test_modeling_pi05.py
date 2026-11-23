@@ -49,7 +49,7 @@ class PI05ModelTester(PI0ModelTester):
             vlm_config={
                 "vision_config": self.vision_config,
                 "text_config": self.text_config,
-                "image_token_index": self.image_token_index,
+                "image_token_id": self.image_token_id,
                 "projection_dim": self.hidden_size,
             },
             chunk_size=self.chunk_size,
