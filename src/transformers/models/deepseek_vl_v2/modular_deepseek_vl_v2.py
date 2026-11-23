@@ -402,13 +402,11 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
     valid_kwargs = DeepseekVLV2ImageProcessorKwargs
     model_input_names = ["pixel_values", "pixel_values_local", "image_spatial_crop"]
 
-    def __init__(self, **kwargs: Unpack[DeepseekVLV2ImageProcessorKwargs]):
-        super().__init__(**kwargs)
-        self.background_color = [int(x * 255) for x in self.image_mean]
-
-    def resize_and_pad(self, images: "torch.Tensor", height: int, width: int, resample) -> "torch.Tensor":
+    def resize_and_pad(
+        self, images: "torch.Tensor", height: int, width: int, resample, background_color: list[int]
+    ) -> "torch.Tensor":
         """
-        Fit `images` inside `height x width` keeping their aspect ratio, then pad them centred with the mean colour.
+        Fit `images` inside `height x width` keeping their aspect ratio, then pad them centred with `background_color`.
         Sizes and offsets are rounded as in `PIL.ImageOps.pad`, which the original model was trained with; the
         floor-split `pad_to_square` moves some images by one pixel.
         """
@@ -420,7 +418,7 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         images = self.resize(images, SizeDict(height=new_height, width=new_width), resample=resample)
         top, left = round((height - new_height) * 0.5), round((width - new_width) * 0.5)
         padding = [left, top, width - new_width - left, height - new_height - top]
-        return tvF.pad(images, padding=padding, fill=self.background_color)
+        return tvF.pad(images, padding=padding, fill=background_color)
 
     def _preprocess(
         self,
@@ -441,10 +439,12 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
         tile = size.height
         # select_best_resolution works on (height, width); the checkpoints store [width, height].
         canvases = [(height, width) for width, height in (candidate_resolutions or self.candidate_resolutions)]
+        # Padding is the mean colour, so it normalises to zero.
+        background_color = [int(x * 255) for x in image_mean]
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         global_views, local_tiles, spatial_crop = {}, {}, {}
         for shape, stacked_images in grouped_images.items():
-            global_view = self.resize_and_pad(stacked_images, tile, tile, resample)
+            global_view = self.resize_and_pad(stacked_images, tile, tile, resample, background_color)
             global_views[shape] = self.rescale_and_normalize(
                 global_view, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
@@ -452,7 +452,7 @@ class DeepseekVLV2ImageProcessor(TorchvisionBackend):
             best_height, best_width = (tile, tile)
             if crop_to_patches:
                 best_height, best_width = select_best_resolution(tuple(stacked_images.shape[-2:]), canvases)
-            canvas = self.resize_and_pad(stacked_images, best_height, best_width, resample)
+            canvas = self.resize_and_pad(stacked_images, best_height, best_width, resample, background_color)
             tiles = torch.stack(divide_to_patches(canvas, patch_size=tile), dim=1)
             local_tiles[shape] = self.rescale_and_normalize(
                 tiles, do_rescale, rescale_factor, do_normalize, image_mean, image_std

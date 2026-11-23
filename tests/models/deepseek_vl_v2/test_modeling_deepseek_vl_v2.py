@@ -117,6 +117,13 @@ class DeepseekVLV2ModelTest(VLMModelTest, unittest.TestCase):
         torch.testing.assert_close(features[0][side], model.image_newline.to(features[0].dtype))
         torch.testing.assert_close(features[0][side * (side + 1)], model.view_separator.to(features[0].dtype))
 
+        # Each stitched row reads one token row from the left tile, then the same row from the right tile.
+        with torch.no_grad():
+            tiles = model.multi_modal_projector(model.vision_tower(pixel_values_local).last_hidden_state)
+        newline = model.image_newline.to(tiles.dtype).unsqueeze(0)
+        rows = [torch.cat([tiles[0, r * side : (r + 1) * side], tiles[1, r * side : (r + 1) * side], newline]) for r in range(side)]  # fmt: skip
+        torch.testing.assert_close(features[0][side * (side + 1) + 1 :], torch.cat(rows))
+
 
 @slow
 @require_torch
