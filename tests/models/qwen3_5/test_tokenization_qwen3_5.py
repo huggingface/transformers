@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -87,3 +90,28 @@ class Qwen3_5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         auto_ids = tokenizer_auto.encode(text, add_special_tokens=False)
         tok_ids = tokenizer_tok.encode(text, add_special_tokens=False)
         self.assertEqual(auto_ids, tok_ids)
+
+    def test_auto_skips_incorrect_hub_tokenizer_class_qwen3_5_text(self):
+        """Text-only checkpoints (model_type qwen3_5_text) carry the same incorrect tokenizer_class=Qwen2Tokenizer.
+        Published ones were re-saved under that class, so their tokenizer.json already has the Qwen2 regex:
+        this rebuilds the case locally from the Qwen3.5 tokenizer instead."""
+        tokenizer = self.get_tokenizer()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            tokenizer_config_file = os.path.join(tmp_dir, "tokenizer_config.json")
+            with open(tokenizer_config_file, encoding="utf-8") as f:
+                tokenizer_config = json.load(f)
+            tokenizer_config["tokenizer_class"] = "Qwen2Tokenizer"
+            with open(tokenizer_config_file, "w", encoding="utf-8") as f:
+                json.dump(tokenizer_config, f)
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
+                json.dump({"model_type": "qwen3_5_text"}, f)
+
+            tokenizer_auto = AutoTokenizer.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(tokenizer_auto, Qwen3_5Tokenizer)
+
+        text = "नमस्ते दुनिया"
+        auto_ids = tokenizer_auto.encode(text, add_special_tokens=False)
+        expected_ids = tokenizer.encode(text, add_special_tokens=False)
+        self.assertEqual(auto_ids, expected_ids)

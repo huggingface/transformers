@@ -424,6 +424,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "qwen3_5",
     "qwen3_5_moe",
     "qwen3_5_moe_text",
+    "qwen3_5_text",
     "qwen4_exp",
     "step3_vl",
     "vipllava",
