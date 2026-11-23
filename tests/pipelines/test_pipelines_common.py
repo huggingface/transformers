@@ -489,6 +489,28 @@ class PipelinePadTest(unittest.TestCase):
         )
 
     @require_torch
+    def test_pipeline_multiaxis_position_ids(self):
+        import torch
+
+        for axes in (2, 3):
+            for batch_size in (2, 3):
+                for side in ("left", "right"):
+                    items = [
+                        {"position_ids": torch.arange(axes * (4 + i)).reshape(axes, 1, 4 + i) + i * 100}
+                        for i in range(batch_size)
+                    ]
+                    actual = _pad(items, "position_ids", 0, side)
+                    expected = torch.zeros((axes, batch_size, 3 + batch_size), dtype=torch.long)
+                    for i, item in enumerate(items):
+                        positions = item["position_ids"][:, 0]
+                        length = positions.shape[-1]
+                        if side == "left":
+                            expected[:, i, -length:] = positions
+                        else:
+                            expected[:, i, :length] = positions
+                    torch.testing.assert_close(actual, expected)
+
+    @require_torch
     def test_pipeline_image_padding(self):
         import torch
 
