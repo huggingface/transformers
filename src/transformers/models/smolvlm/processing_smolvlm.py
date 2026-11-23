@@ -230,12 +230,8 @@ class SmolVLMProcessor(ProcessorMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
         """
-        if isinstance(conversation, (list, tuple)) and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
-        ):
-            conversations = conversation
-        else:
-            conversations = [conversation]
+        # We only normalize here to look for videos. The original conversation is what we pass on below.
+        conversations, _ = self._normalize_conversations(conversation)
 
         has_video = any(
             (isinstance(content, dict) and content["type"] == "video")

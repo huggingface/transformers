@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -73,82 +74,58 @@ if is_torchaudio_available():
     import torchaudio
 
 
-class Wav2Vec2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=1024,  # speech is longer
-        is_training=False,
-        hidden_size=16,
-        feat_extract_norm="group",
-        feat_extract_dropout=0.0,
-        feat_extract_activation="gelu",
-        conv_dim=(32, 32, 32),
-        conv_stride=(4, 4, 4),
-        conv_kernel=(8, 8, 8),
-        conv_bias=False,
-        num_conv_pos_embeddings=16,
-        num_conv_pos_embedding_groups=2,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
-        intermediate_size=20,
-        layer_norm_eps=1e-5,
-        hidden_act="gelu",
-        initializer_range=0.02,
-        mask_time_prob=0.5,
-        mask_time_length=2,
-        vocab_size=32,
-        do_stable_layer_norm=False,
-        num_adapter_layers=1,
-        adapter_stride=2,
-        tdnn_dim=(32, 32),
-        tdnn_kernel=(5, 3),
-        tdnn_dilation=(1, 2),
-        xvector_output_dim=32,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.feat_extract_norm = feat_extract_norm
-        self.feat_extract_dropout = feat_extract_dropout
-        self.feat_extract_activation = feat_extract_activation
-        self.conv_dim = conv_dim
-        self.conv_stride = conv_stride
-        self.conv_kernel = conv_kernel
-        self.conv_bias = conv_bias
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.intermediate_size = intermediate_size
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.vocab_size = vocab_size
-        self.do_stable_layer_norm = do_stable_layer_norm
-        self.num_adapter_layers = num_adapter_layers
-        self.adapter_stride = adapter_stride
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_length = mask_time_length
-        self.scope = scope
-        self.tdnn_dim = tdnn_dim
-        self.tdnn_kernel = tdnn_kernel
-        self.tdnn_dilation = tdnn_dilation
-        self.xvector_output_dim = xvector_output_dim
+class Wav2Vec2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-        output_seq_length = self.seq_length
-        for kernel, stride in zip(self.conv_kernel, self.conv_stride):
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 1024,  # speech is longer
+        "is_training": False,
+        "hidden_size": 16,
+        "feat_extract_norm": "group",
+        "feat_extract_dropout": 0.0,
+        "feat_extract_activation": "gelu",
+        "conv_dim": (32, 32, 32),
+        "conv_stride": (4, 4, 4),
+        "conv_kernel": (8, 8, 8),
+        "conv_bias": False,
+        "num_conv_pos_embeddings": 16,
+        "num_conv_pos_embedding_groups": 2,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "hidden_dropout_prob": 0.1,  # this is most likely not correctly set yet
+        "intermediate_size": 20,
+        "layer_norm_eps": 1e-5,
+        "hidden_act": "gelu",
+        "initializer_range": 0.02,
+        "mask_time_prob": 0.5,
+        "mask_time_length": 2,
+        "vocab_size": 32,
+        "do_stable_layer_norm": False,
+        "num_adapter_layers": 1,
+        "adapter_stride": 2,
+        "tdnn_dim": (32, 32),
+        "tdnn_kernel": (5, 3),
+        "tdnn_dilation": (1, 2),
+        "xvector_output_dim": 32,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        output_seq_length = values["seq_length"]
+        for kernel, stride in zip(values["conv_kernel"], values["conv_stride"]):
             output_seq_length = (output_seq_length - (kernel - 1)) / stride
-        self.output_seq_length = int(math.ceil(output_seq_length))
-        self.encoder_seq_length = self.output_seq_length
+        values["output_seq_length"] = int(math.ceil(output_seq_length))
+        values["encoder_seq_length"] = values["output_seq_length"]
+        values["adapter_output_seq_length"] = (values["output_seq_length"] - 1) // values["adapter_stride"] + 1
+        return values
 
-        self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
@@ -418,6 +395,8 @@ class Wav2Vec2ModelTester:
 
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Wav2Vec2ModelTester
+
     all_model_classes = (
         (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
         if is_torch_available()
@@ -611,8 +590,20 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         self.assertIsNotNone(model)
 
 
+class Wav2Vec2RobustModelTester(Wav2Vec2ModelTester):
+    # `small_config_overrides` does not inherit, so the parent's values are this tester's defaults
+    defaults = {**Wav2Vec2ModelTester.defaults, **Wav2Vec2ModelTester.small_config_overrides}
+    small_config_overrides = {
+        "conv_stride": (3, 3, 3),
+        "feat_extract_norm": "layer",
+        "do_stable_layer_norm": True,
+    }
+
+
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Wav2Vec2RobustModelTester
+
     all_model_classes = (
         (
             Wav2Vec2ForCTC,
@@ -628,9 +619,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     test_can_init_all_missing_weights_before_2023 = True
 
     def setUp(self):
-        self.model_tester = Wav2Vec2ModelTester(
-            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
-        )
+        self.model_tester = Wav2Vec2RobustModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=32)
 
     def test_config(self):

@@ -19,6 +19,7 @@ from transformers import ProphetNetConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -38,73 +39,55 @@ if is_torch_available():
     from transformers.modeling_outputs import BaseModelOutput
 
 
-class ProphetNetModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        hidden_size=16,
-        encoder_seq_length=7,
-        decoder_seq_length=9,
+class ProphetNetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "hidden_size": 16,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 9,
         # For common tests
-        is_training=True,
-        use_attention_mask=True,
-        use_labels=True,
-        decoder_start_token_id=0,
-        encoder_ffn_dim=32,
-        num_encoder_layers=2,
-        num_encoder_attention_heads=4,
-        decoder_ffn_dim=32,
-        num_decoder_layers=2,
-        num_decoder_attention_heads=4,
-        max_position_embeddings=30,
-        is_encoder_decoder=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        ngram=2,
-        num_buckets=32,
-        relative_max_distance=128,
-        disable_ngram_loss=False,
-        scope=None,
-    ):
+        "is_training": True,
+        "use_attention_mask": True,
+        "use_labels": True,
+        "decoder_start_token_id": 0,
+        "encoder_ffn_dim": 32,
+        "num_encoder_layers": 2,
+        "num_encoder_attention_heads": 4,
+        "decoder_ffn_dim": 32,
+        "num_decoder_layers": 2,
+        "num_decoder_attention_heads": 4,
+        "max_position_embeddings": 30,
+        "is_encoder_decoder": True,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "ngram": 2,
+        "num_buckets": 32,
+        "relative_max_distance": 128,
+        "disable_ngram_loss": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # For common tests
+        values["seq_length"] = values["decoder_seq_length"]
+        values["num_hidden_layers"] = values["num_decoder_layers"]
+        values["num_attention_heads"] = values["num_decoder_attention_heads"]
+        values["scope"] = None
+        values["decoder_key_length"] = values["decoder_seq_length"]
+        values["base_model_out_len"] = 7
+        values["num_hidden_states_types"] = 3  # encoder, decoder_main, decoder_ngram
+        values["decoder_attention_idx"] = 2
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_decoder_layers
-        self.num_encoder_layers = num_encoder_layers
-        self.num_decoder_layers = num_decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.num_attention_heads = num_decoder_attention_heads
-        self.num_encoder_attention_heads = num_encoder_attention_heads
-        self.num_decoder_attention_heads = num_decoder_attention_heads
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.ngram = ngram
-        self.num_buckets = num_buckets
-        self.relative_max_distance = relative_max_distance
-        self.disable_ngram_loss = disable_ngram_loss
-        self.max_position_embeddings = max_position_embeddings
-        self.is_encoder_decoder = is_encoder_decoder
-
-        self.scope = None
-        self.decoder_key_length = decoder_seq_length
-        self.base_model_out_len = 7
-        self.num_hidden_states_types = 3  # encoder, decoder_main, decoder_ngram
-        self.decoder_attention_idx = 2
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -450,78 +433,57 @@ class ProphetNetModelTester:
         return config, inputs_dict
 
 
-class ProphetNetStandaloneDecoderModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        hidden_size=16,
-        encoder_seq_length=7,
-        decoder_seq_length=7,
+class ProphetNetStandaloneDecoderModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "hidden_size": 16,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 7,
+        # For common tests; ProphetNetStandaloneDecoderModelTest builds it with is_training=False
+        "is_training": False,
+        "use_attention_mask": True,
+        "add_cross_attention": False,
+        "use_cache": False,
+        "use_labels": True,
+        "decoder_start_token_id": 0,
+        "encoder_ffn_dim": 32,
+        "num_encoder_layers": 2,
+        "num_encoder_attention_heads": 4,
+        "decoder_ffn_dim": 32,
+        "num_decoder_layers": 2,
+        "num_decoder_attention_heads": 4,
+        "max_position_embeddings": 30,
+        "is_encoder_decoder": False,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "ngram": 2,
+        "num_buckets": 32,
+        "relative_max_distance": 128,
+        "disable_ngram_loss": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        is_training=True,
-        is_decoder=True,
-        use_attention_mask=True,
-        add_cross_attention=False,
-        use_cache=False,
-        use_labels=True,
-        decoder_start_token_id=0,
-        encoder_ffn_dim=32,
-        num_encoder_layers=2,
-        num_encoder_attention_heads=4,
-        decoder_ffn_dim=32,
-        num_decoder_layers=2,
-        num_decoder_attention_heads=4,
-        max_position_embeddings=30,
-        is_encoder_decoder=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        ngram=2,
-        num_buckets=32,
-        relative_max_distance=128,
-        disable_ngram_loss=False,
-        scope=None,
-    ):
+        values["seq_length"] = values["decoder_seq_length"]
+        values["num_hidden_layers"] = values["num_decoder_layers"]
+        values["num_attention_heads"] = values["num_decoder_attention_heads"]
+        values["scope"] = None
+        values["decoder_key_length"] = values["decoder_seq_length"]
+        values["base_model_out_len"] = 2
+        values["num_hidden_states_types"] = 2  # decoder_main, decoder_ngram
+        values["decoder_attention_idx"] = 1
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_decoder_layers
-        self.num_encoder_layers = num_encoder_layers
-        self.num_decoder_layers = num_decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.num_attention_heads = num_decoder_attention_heads
-        self.num_encoder_attention_heads = num_encoder_attention_heads
-        self.num_decoder_attention_heads = num_decoder_attention_heads
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.ngram = ngram
-        self.num_buckets = num_buckets
-        self.relative_max_distance = relative_max_distance
-        self.use_cache = use_cache
-        self.disable_ngram_loss = disable_ngram_loss
-        self.max_position_embeddings = max_position_embeddings
-        self.add_cross_attention = add_cross_attention
-        self.is_encoder_decoder = is_encoder_decoder
-
-        self.scope = None
-        self.decoder_key_length = decoder_seq_length
-        self.base_model_out_len = 2
-        self.num_hidden_states_types = 2  # decoder_main, decoder_ngram
-        self.decoder_attention_idx = 1
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -681,76 +643,56 @@ class ProphetNetStandaloneDecoderModelTester:
         return config, inputs_dict
 
 
-class ProphetNetStandaloneEncoderModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        hidden_size=16,
-        encoder_seq_length=7,
-        decoder_seq_length=7,
+class ProphetNetStandaloneEncoderModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "hidden_size": 16,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 7,
+        # For common tests; ProphetNetStandaloneEncoderModelTest builds it with is_training=False
+        "is_training": False,
+        "use_attention_mask": True,
+        "add_cross_attention": False,
+        "use_cache": False,
+        "use_labels": True,
+        "decoder_start_token_id": 0,
+        "encoder_ffn_dim": 32,
+        "num_encoder_layers": 2,
+        "num_encoder_attention_heads": 4,
+        "decoder_ffn_dim": 32,
+        "num_decoder_layers": 2,
+        "num_decoder_attention_heads": 4,
+        "max_position_embeddings": 30,
+        "is_encoder_decoder": False,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "num_buckets": 32,
+        "relative_max_distance": 128,
+        "disable_ngram_loss": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        is_training=True,
-        is_decoder=False,
-        use_attention_mask=True,
-        add_cross_attention=False,
-        use_cache=False,
-        use_labels=True,
-        decoder_start_token_id=0,
-        encoder_ffn_dim=32,
-        num_encoder_layers=2,
-        num_encoder_attention_heads=4,
-        decoder_ffn_dim=32,
-        num_decoder_layers=2,
-        num_decoder_attention_heads=4,
-        max_position_embeddings=30,
-        is_encoder_decoder=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        num_buckets=32,
-        relative_max_distance=128,
-        disable_ngram_loss=False,
-        scope=None,
-    ):
+        values["seq_length"] = values["decoder_seq_length"]
+        values["num_hidden_layers"] = values["num_decoder_layers"]
+        values["num_attention_heads"] = values["num_decoder_attention_heads"]
+        values["scope"] = None
+        values["decoder_key_length"] = values["decoder_seq_length"]
+        values["base_model_out_len"] = 1
+        values["num_hidden_states_types"] = 1
+        values["decoder_attention_idx"] = 1
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_decoder_layers
-        self.num_encoder_layers = num_encoder_layers
-        self.num_decoder_layers = num_decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.num_attention_heads = num_decoder_attention_heads
-        self.num_encoder_attention_heads = num_encoder_attention_heads
-        self.num_decoder_attention_heads = num_decoder_attention_heads
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.num_buckets = num_buckets
-        self.relative_max_distance = relative_max_distance
-        self.use_cache = use_cache
-        self.disable_ngram_loss = disable_ngram_loss
-        self.max_position_embeddings = max_position_embeddings
-        self.add_cross_attention = add_cross_attention
-        self.is_encoder_decoder = is_encoder_decoder
-
-        self.scope = None
-        self.decoder_key_length = decoder_seq_length
-        self.base_model_out_len = 1
-        self.num_hidden_states_types = 1
-        self.decoder_attention_idx = 1
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -804,6 +746,8 @@ class ProphetNetStandaloneEncoderModelTester:
 
 @require_torch
 class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = ProphetNetModelTester
+
     all_model_classes = (ProphetNetModel, ProphetNetForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -1036,6 +980,8 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = ProphetNetStandaloneDecoderModelTester
+
     all_model_classes = (ProphetNetDecoder, ProphetNetForCausalLM) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -1074,6 +1020,8 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
 
 @require_torch
 class ProphetNetStandaloneEncoderModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = ProphetNetStandaloneEncoderModelTester
+
     all_model_classes = (ProphetNetEncoder,) if is_torch_available() else ()
 
     test_resize_embeddings = False
