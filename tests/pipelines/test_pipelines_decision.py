@@ -16,6 +16,7 @@ import functools
 import json
 import re
 import unittest
+from unittest.mock import patch
 
 from transformers import (
     AutoProcessor,
@@ -107,6 +108,16 @@ class DecisionPipelineTest(unittest.TestCase):
         )
         (prompt,) = template({"state": 'say <|"|> hi', "questions": {"x": {"type": "noul"}}})
         self.assertNotIn(tokenizer.convert_tokens_to_ids('<|"|>'), prompt.input_ids)
+
+    def test_sentinels_are_looked_up_without_building_the_vocabulary(self):
+        request = {"state": "s", "questions": {"x": {"type": "noul"}}}
+        # A missing token is `None` for Qwen's tokenizer, and the unknown token for Llama's
+        for name in ("Qwen/Qwen2.5-0.5B-Instruct", "hf-internal-testing/llama-tokenizer"):
+            tokenizer = AutoTokenizer.from_pretrained(name)
+            with patch.object(type(tokenizer), "get_vocab", side_effect=AssertionError("get_vocab")):
+                DecisionConfig().prepare_inputs(request, tokenizer)
+            sentinel_ids = tokenizer.convert_tokens_to_ids(["<|mark|>", "<|split|>"])
+            self.assertEqual(tokenizer.convert_ids_to_tokens(sentinel_ids), ["<|mark|>", "<|split|>"])
 
     def test_invalid_questions_raise(self):
         questions = (

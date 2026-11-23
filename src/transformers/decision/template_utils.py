@@ -316,9 +316,12 @@ def prepare_inputs(
     anything [`~image_utils.load_image`] takes.
     """
     tokenizer = getattr(processor, "tokenizer", processor)
-    if MARK not in tokenizer.get_vocab():  # special: they split the text they're in, and requests can't write them
-        tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
-    sentinel_ids = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
+    sentinel_ids = tokenizer.convert_tokens_to_ids([MARK, SPLIT])  # not `get_vocab()`: it builds the vocab every call
+    # A missing token gets `None` or the id of another one, like the unknown token
+    missing = [t for t, i in zip((MARK, SPLIT), sentinel_ids) if i is None or tokenizer.convert_ids_to_tokens(i) != t]
+    if missing:  # special: they split the text they're in, and requests can't write them
+        tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in missing])
+        sentinel_ids = tokenizer.convert_tokens_to_ids([MARK, SPLIT])
 
     if isinstance(request, str):  # parsed, so that `\u` escapes can't hide control tokens
         request = json.loads(request)
