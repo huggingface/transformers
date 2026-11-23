@@ -346,7 +346,7 @@ class BambaModelTest(
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        expected_num_attentions = self.model_tester.num_hidden_layers - len(self.model_tester.attn_layer_indices)
+        expected_num_attentions = len(self.model_tester.attn_layer_indices)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
