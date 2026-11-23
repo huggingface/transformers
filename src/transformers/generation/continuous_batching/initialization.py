@@ -63,9 +63,11 @@ def resolve_continuous_batching_config(
     # Same for cuda graphs, if the user signals they want CUDA graphs via any padding/cached-graph parameter
     cuda_graph_requested = any([cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size])
 
-    # FA3's paged kernel takes any page size, FA2's needs multiples of 256. Must happen before anything counts pages.
+    # FA3's paged kernel takes any page size, FA2's needs multiples of 256. MLA models (latent cache, their own kernels)
+    # keep 256 until measured. Must happen before anything counts pages.
     if cb_config.page_size is None:
-        cb_config.page_size = 32 if is_flash_attention_requested(config, version=3) else 256
+        is_mla = getattr(config, "kv_lora_rank", None) is not None
+        cb_config.page_size = 32 if is_flash_attention_requested(config, version=3) and not is_mla else 256
 
     # Resolve missing attributes for which we have hints. Must happen before no-hints resolve.
     resolve_using_hints(cb_config, workload_hints)

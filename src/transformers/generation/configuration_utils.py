@@ -1692,7 +1692,7 @@ class ContinuousBatchingConfig:
             The number of tokens stored for each layer inside a (full-attention) page. A block storing the cache of N
             layers has N pages (one per layer), each holding cache for `page_size` tokens for one layer. Defaults to 32
             with FA3, whose paged kernel takes any page size (prefix sharing works at page granularity, so small pages
-            share more of a common prompt), and to 256 otherwise (FA2's paged kernel needs multiples of 256).
+            share more of a common prompt), and to 256 otherwise (FA2's paged kernel needs multiples of 256, MLA models).
         num_blocks (`int`, *optional*):
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
