@@ -74,6 +74,7 @@ class LongcatFlashConfig(PreTrainedConfig):
         "layers.*.mlps.*.up_proj": "colwise",
         "layers.*.mlps.*.down_proj": "rowwise",
     }
+    base_model_sp_plan = {"layers.*": "sp_split_sequence", "layers.*.self_attn.*": "sp_ulysses"}
 
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

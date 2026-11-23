@@ -175,12 +175,12 @@ class TransformersDeviceMesh:
 
     dense layers and experts are sharded differently, so they need different views of the same ranks.
 
-        dense  : (pp, dp_replicate, fsdp, tp)     attention, dense MLPs, embeddings, lm_heads
-        expert : (pp, dp_replicate, efsdp, ep)    experts
+        dense  : (pp, dp_replicate, fsdp, sp, tp)  attention, dense MLPs, embeddings, lm_heads
+        expert : (pp, dp_replicate, efsdp, ep)     experts
 
-    Both views cover the same world, so pp * dp_replicate * fsdp * tp == pp * dp_replicate * efsdp * ep.
+    Both views cover the same world, so pp * dp_replicate * fsdp * sp * tp == pp * dp_replicate * efsdp * ep.
     efsdp is not something you pick, it is whatever is left once ep is fixed. The relationship is as follow:
-    efsdp = fsdp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
+    efsdp = fsdp * sp * tp / ep. It is the FSDP axis for expert weights same role `fsdp` plays for the dense params.
     There is no etp (expert tensor parallel) axis: with EP on, experts are never tensor-sharded. (for now)
     For experts, EP plays the role TP plays for dense layers (weights stay sharded during compute),
     and efsdp plays the role of fsdp (weights all-gathered before compute).
@@ -199,6 +199,9 @@ class TransformersDeviceMesh:
     - On several nodes, we still keep ep at node width, since all-to-all across nodes is expensive.
     However, each node then holds a full copy of the expert group and efsdp is the number of copies, which is where FSDP happens for the experts
     i.e: 2 nodes x 8 GPUs -> efsdp = 16 / 8 = 2, one EP group per node, two copies, sharded over efsdp.
+
+    Sequence parallelism adds the `sp` axis, which splits each sequence instead of the batch. The ranks of an `sp`
+    group hold parts of the same batch, so FSDP2 shards over `sp`.
     """
 
     def __init__(self, dense_mesh: DeviceMesh, expert_mesh: DeviceMesh):
@@ -299,9 +302,10 @@ def initialize_distributed_mesh(
         distributed_config.pp_size,
         distributed_config.dp_replicate_size,
         distributed_config.fsdp_size,
+        distributed_config.sp_size,
         distributed_config.tp_size,
     )
-    if mesh_shape == (1, 1, 1, 1):
+    if mesh_shape == (1, 1, 1, 1, 1):
         return None, None
 
     device_type = torch._C._get_accelerator().type
@@ -321,7 +325,7 @@ def initialize_distributed_mesh(
     dense_mesh = torch.distributed.init_device_mesh(
         device_type,
         mesh_shape,
-        mesh_dim_names=("pp", "dp_replicate", "fsdp", "tp"),
+        mesh_dim_names=("pp", "dp_replicate", "fsdp", "sp", "tp"),
     )
     expert_mesh = torch.distributed.init_device_mesh(
         device_type,
