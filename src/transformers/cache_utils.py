@@ -111,9 +111,9 @@ class DynamicLayer(CacheLayerMixin):
     is_croppable = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        self.dtype, self.device = key_states.dtype, key_states.device
-        self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
-        self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.device = key_states.device
+        self.keys = torch.tensor([], dtype=key_states.dtype, device=self.device)
+        self.values = torch.tensor([], dtype=value_states.dtype, device=self.device)
         self.is_initialized = True
 
     def update(
@@ -431,19 +431,19 @@ class StaticLayer(CacheLayerMixin):
         function ahead-of-time (this is required for `torch.export` for example). It is also required whenever the
         prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
-        self.dtype, self.device = key_states.dtype, key_states.device
+        self.device = key_states.device
         self.batch_size, self.num_heads = key_states.shape[:2]
         self.v_head_dim = value_states.shape[-1]
         self.k_head_dim = key_states.shape[-1]
 
         self.keys = torch.zeros(
             (self.batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
-            dtype=self.dtype,
+            dtype=key_states.dtype,
             device=self.device,
         )
         self.values = torch.zeros(
             (self.batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
-            dtype=self.dtype,
+            dtype=value_states.dtype,
             device=self.device,
         )
         self.cumulative_length = self.cumulative_length.to(self.device)
@@ -542,7 +542,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
         self.cumulative_length_int = 0
         # This needs to be checked dynamically, as it's only True if we never go beyond the window
-        self.is_croppable = max_cache_len <= sliding_window
+        self._is_croppable = max_cache_len <= sliding_window
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -657,6 +657,14 @@ class StaticSlidingWindowLayer(StaticLayer):
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
+
+    @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put this layer back as it was."""
+        # Note: since LinearAttention layers have this as a `property`, we also need to access it as a `property` here for mixed classes
+        # such as `LinearAttentionAndStaticSlidingWindowAttentionLayer`, otherwise they complain if we try to set `self.is_croppable` directly
+        # in the `__init__`
+        return self._is_croppable
 
 
 class StaticIndexedLayer(StaticLayer):
@@ -1024,7 +1032,7 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
 
     def _dequantize(self, qtensor):
         quant_tensor, scale = qtensor
-        return (quant_tensor.float() * scale).to(self.dtype)
+        return (quant_tensor.float() * scale).to(self.keys.dtype)
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -1938,8 +1946,7 @@ class Cache:
         """Return whether the layers of the cache are linear attention (Mamba/SSM) layers. Note that layers containing
         both linear and full attention states will return False by this function"""
         return [
-            isinstance(layer, LinearAttentionCacheLayerMixin)
-            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            isinstance(layer, LinearAttentionCacheLayerMixin) and not isinstance(layer, CacheLayerMixin)
             for layer in self.layers
         ]
 

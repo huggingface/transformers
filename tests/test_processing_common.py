@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import dataclasses
 import inspect
 import json
 import os
@@ -1675,6 +1676,40 @@ class ProcessorTesterMixin:
         )
         expected_prompt = "You are a helpful assistant.<|special_start|>user\nWhich of these animals is making the sound?<|special_end|>\nYou are a helpful assistant.<|special_start|>assistant\nIt is a cow.<|special_end|>\n"
         self.assertEqual(formatted_prompt, expected_prompt)
+
+    def test_chat_template_message_objects(self):
+        """Regression test for #50773: message objects should be handled like the equivalent dicts."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        @dataclasses.dataclass
+        class Message:
+            role: str
+            content: list
+            tool_calls: list | None = None
+
+        @dataclasses.dataclass
+        class ImageURLBlock:
+            image_url: dict
+            type: str = "image_url"
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{{ message.role }}{% if message.tool_calls is defined %} (tool calls){% endif %}:"
+            "{% for block in message.content %} {{ block.type }}={{ block.url or block.text }}{% endfor %}"
+            "{% endfor %}"
+        )
+        messages = [
+            Message(
+                "user",
+                [ImageURLBlock({"url": "https://example.com/cat.png"}), {"type": "text", "text": "What is this?"}],
+            )
+        ]
+
+        # The message has a `.content`, but it's still a single conversation and not a batch, so we get a single string
+        formatted_prompt = processor.apply_chat_template(messages, tokenize=False, chat_template=dummy_template)
+        self.assertEqual(formatted_prompt, "user: image=https://example.com/cat.png text=What is this?")
 
     def test_apply_chat_template_assistant_mask(self):
         processor = self.get_processor()

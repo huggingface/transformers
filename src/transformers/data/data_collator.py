@@ -1323,6 +1323,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             return_tensors = self.return_tensors
         if separator_id is None:
             separator_id = self.separator_id
+        features = [feature for feature in features if len(feature["input_ids"]) > 0]
+        if not features:
+            raise ValueError("DataCollatorWithFlattening received a batch where every example is empty.")
         is_labels_provided = "labels" in features[0]
         batch = {"input_ids": [], "labels": []}
         if self.return_position_ids:

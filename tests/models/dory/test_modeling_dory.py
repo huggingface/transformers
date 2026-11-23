@@ -127,7 +127,9 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_recurrent_cache_layout(self):
         # Plain cache layers: `per_loop` appends one copy of the recurrent layers per extra loop, `last_loop` adds none
-        config = DoryConfig(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=3)
+        config = self.model_tester_class(
+            self, num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=3
+        ).get_config()
         input_ids = torch.tensor([[1, 2, 3]])
         for mode, expected in [
             ("per_loop", ["DynamicSlidingWindowLayer"] * 3 + ["DynamicLayer"] + ["DynamicSlidingWindowLayer"] * 4),
@@ -139,7 +141,9 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertTrue(all(layer.get_seq_length() == 3 for layer in cache.layers))
 
     def test_recurrent_layers_use_the_mask_and_rope_of_their_attention_type(self):
-        config = DoryConfig(num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2)
+        config = self.model_tester_class(
+            self, num_hidden_layers=4, n_input_layers=1, n_output_layers=1, n_recurrent_loops=2
+        ).get_config()
         model = DoryModel(config)
         self.assertEqual(
             [layer.attention_type for layer in model.layers],
