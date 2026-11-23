@@ -966,6 +966,14 @@ def get_checkpoint_shard_files(
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
+    # The index comes from the model repo, so we can't let its shard filenames leave the model directory. We check the
+    # names for absolute paths and `..` rather than resolving them, because shards in the Hub cache are symlinks.
+    for shard_filename in shard_filenames:
+        if Path(shard_filename).anchor or ".." in Path(shard_filename).parts:
+            raise ValueError(
+                f"The checkpoint index {index_filename} has a shard filename that points outside the model "
+                f"directory: {shard_filename}"
+            )
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()
