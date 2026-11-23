@@ -117,8 +117,7 @@ class DynamoConfig(ExportConfigMixin):
             [`~exporters.quantizers.NNCFTorchFXQuantizer`] on the FX graph for every backend,
             [`~exporters.quantizers.OnnxRuntimeQuantizer`] on the converted ONNX model, or
             [`~exporters.quantizers.NNCFOpenVINOQuantizer`] / [`~exporters.quantizers.NNCFOnnxQuantizer`] on the
-            converted OpenVINO / ONNX model, or [`~exporters.quantizers.ModelOptOnnxQuantizer`] on the converted ONNX
-            model for TensorRT.
+            converted OpenVINO / ONNX model.
     """
 
     export_format: ExportFormat = ExportFormat.DYNAMO
@@ -152,7 +151,7 @@ class OnnxConfig(DynamoConfig):
             `"webgpu"` or `"dml"`. The fused graph only runs on ONNX Runtime. Requires `optimize=True`.
         for_tensorrt (`bool`, *optional*, defaults to `False`):
             Prepare the graph for ONNX Runtime's TensorRT provider: attention masks kept boolean, which TensorRT builds
-            a faster engine from, at opset 22 by default. Takes no `ort_fusions`: TensorRT fuses the graph itself.
+            a faster engine from. Takes no `ort_fusions`: TensorRT fuses the graph itself.
     """
 
     export_format: ExportFormat = ExportFormat.ONNX

@@ -145,8 +145,6 @@ class OnnxExporter(DynamoExporter):
         # A model quantized before export has no ops the fusions match.
         quantizer = config.quantizer
         ort_fusions = config.ort_fusions if quantizer is None or not quantizer.quantizes_fx_graph else None
-        # TensorRT builds opset 23's `Attention` only into a strongly typed network, which ONNX Runtime doesn't request.
-        opset_version = 22 if config.opset_version is None and config.for_tensorrt else config.opset_version
         # `batched_mm` experts fuse into ONNX Runtime's CUDA `MoE`.
         experts_implementation = "batched_mm" if ort_fusions == "cuda" else None
 
@@ -167,7 +165,7 @@ class OnnxExporter(DynamoExporter):
                 input_names=inputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
-                opset_version=opset_version,
+                opset_version=config.opset_version,
                 optimize=config.optimize,
             )
 
