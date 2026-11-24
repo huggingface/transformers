@@ -145,6 +145,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.8, 0.9]
     # FIXME: export is very sensitive to any shape changes
     test_torch_exportable = False
+    is_indexer_based = True
 
     def test_text_model_save_uses_original_weight_names(self):
         """Keep text-only saves in the released layout expected by SGLang (sgl-project/sglang#38618)."""

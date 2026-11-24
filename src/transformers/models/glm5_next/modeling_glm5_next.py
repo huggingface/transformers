@@ -29,7 +29,7 @@ from torch.nn import LayerNorm
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicIndexedLayer
+from ...cache_utils import Cache, DynamicCache, DynamicCompressedLayer
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -38,7 +38,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
-from ...masking_utils import create_recurrent_attention_mask
+from ...masking_utils import create_compression_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -801,33 +801,46 @@ class Glm5NextTextIndexer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
         cache: Cache | None = None,
     ) -> torch.Tensor:
+        layer = DynamicCompressedLayer() if cache is None else cache.layers[self.layer_idx]
         batch_size, seq_len, _ = hidden_states.shape
+        group_size = self.index_kpool
 
         q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
         k = self.k_norm(self.wk(hidden_states))
         gates = F.linear(hidden_states, self.index_kpool_compress_gate)
         states = torch.cat((k, gates), dim=-1)
 
-        layer = DynamicIndexedLayer() if cache is None else cache.layers[self.layer_idx]
-        groups = layer.update_groups(
-            states, attention_mask=attention_mask, group_size=self.index_kpool, pool_dim=self.head_dim
-        )
+        # Get pools (keys and gates) of size index_kpool
+        groups = layer.prepare_compression_groups(states, attention_mask, group_size=group_size)
 
+        # Compress groups by weighted average
         keys, gates = groups.split(self.head_dim, dim=-1)
-        logits = gates.float() + self.index_kpool_compress_ape.float()
-        probabilities = logits.softmax(dim=2).to(keys.dtype)
-        pooled_keys = (probabilities * keys).sum(dim=2)
-        k = layer.update_keys(pooled_keys)
+        weights = (gates.float() + self.index_kpool_compress_ape.float()).softmax(dim=2)
+        k = (weights.to(keys.dtype) * keys).sum(dim=2)
 
+        if cache is not None:
+            k = layer.update_compressed_states(k, attention_mask, seq_len, group_size=group_size)
+
+        # Score groups of tokens
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = F.relu(scores * self.softmax_scale)
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        return layer.select_indices(index_scores, budget=self.index_topk, tail=self.index_kpool_always_select_tail)
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
+        weights = weights * self.n_heads**-0.5
+        scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Remap selected group mapping to actual tokens
+        return layer.select_indices(
+            scores,
+            attention_mask,
+            self.index_topk,
+            group_size=group_size,
+            # The tail is not scored but directly taken if true or just dropped if false
+            include_tail=self.index_kpool_always_select_tail,
+        )
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -1017,6 +1030,8 @@ class Glm5NextTextAttention(nn.Module):
         Only supporting SDPA and Eager as we have a 3D dependency which cannot be mapped to FA
         without a custom kernel that can select on a per indices bases per row (query -> topk keys).
         """
+        # TODO: return none under FA
+
         # -1 is invalid as per convention in the indexer
         # NOTE: The indexer already took care of also excluding padding tokens and causality
         topk_valid = topk_indices.ge(0) & topk_indices.lt(kv_length)
@@ -1030,7 +1045,7 @@ class Glm5NextTextAttention(nn.Module):
             dtype=torch.int32,
             device=topk_indices.device,
         )
-        selected_counts.scatter_add_(-1, safe_indices, topk_valid.to(torch.int32))
+        selected_counts.scatter_add_(-1, safe_indices.long(), topk_valid.int())
 
         # Final mask 0 == False (not visible), 1 == True (visible)
         mask = selected_counts.ne(0).unsqueeze(1)
@@ -1250,16 +1265,16 @@ class Glm5NextTextModel(Glm5NextPreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            attention_mask = create_recurrent_attention_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache=cache,
-            )
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache": cache,
+            }
 
             causal_mask_mapping = {
-                "indexed_attention": attention_mask,
-                "linear_attention": attention_mask,
+                "indexed_attention": create_compression_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
             }
 
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
