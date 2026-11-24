@@ -12,10 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
-
-from tokenizers import processors
 
 from transformers import GPTNeoXTokenizer
 from transformers.testing_utils import require_tokenizers
@@ -34,15 +31,7 @@ class GPTNeoXTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
 
     def test_eos_in_tokenizer_json_post_processor_is_not_added(self):
-        # OLMo checkpoints ship a tokenizer.json whose post-processor appends EOS, while the config doesn't add it.
-        # The flags must not be inferred from that post-processor, see #47988 and #50985.
-        tokenizer = self.get_tokenizer()
-        eos, eos_id = tokenizer.eos_token, tokenizer.eos_token_id
-        tokenizer.backend_tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"$A:0 {eos}:0", pair=f"$A:0 $B:1 {eos}:1", special_tokens=[(eos, eos_id)]
-        )
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer.save_pretrained(tmp_dir)
-            tokenizer = GPTNeoXTokenizer.from_pretrained(tmp_dir)
+        # The tokenizer.json post-processor adds EOS, but GPT-NeoX doesn't add BOS or EOS by default
+        tokenizer = GPTNeoXTokenizer.from_pretrained("allenai/OLMo-1B-hf")
         self.assertFalse(tokenizer.add_eos_token)
-        self.assertNotEqual(tokenizer("hello").input_ids[-1], eos_id)
+        self.assertNotEqual(tokenizer("hello").input_ids[-1], tokenizer.eos_token_id)
