@@ -742,6 +742,9 @@ class FP8Experts(nn.Module):
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
+        # swiglu_limit is a scalar shared across layers; swiglu_limits is a per-layer list.
+        # Post-activation clipping prefers the list, falling back to the scalar if absent.
+        # Zero/None disables clipping in this path; other gate formulas keep their scalar semantics.
         self.limit_after_act = getattr(config, "limit_after_act", False)
         self.limit = None
         if self.limit_after_act:
