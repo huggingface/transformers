@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # MiniCPM-V 4.5
 
-[MiniCPM-V 4.5](https://huggingface.co/openbmb/MiniCPM-V-4_5) is a multimodal model from [OpenBMB](https://github.com/OpenBMB). For images it is [MiniCPM-V 2.6](minicpmv2_6) with a [Qwen3](qwen3) 8B language model, and it uses [`MiniCPMV2_6Processor`]. Video input, which the original resamples across frames, isn't supported yet.
+[MiniCPM-V 4.5](https://huggingface.co/openbmb/MiniCPM-V-4_5) is a multimodal model from [OpenBMB](https://github.com/OpenBMB). For images it is [MiniCPM-V 2.6](minicpmv2_6) with a [Qwen3](qwen3) 8B language model. For videos, groups of up to 3 consecutive frames go through the resampler together, with each frame's timestamp added to the keys, so a group becomes as many tokens as one image.
 
 The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
 
@@ -52,6 +52,11 @@ generated = model.generate(**inputs, max_new_tokens=64)
 print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"].shape[1] :])[0])
 ```
 
+## Notes
+
+- Frames are sampled at `fps` (5 by default), as in the original `encode_video`. Videos longer than `max_num_frames / fps` seconds (36 s by default) are packed `ceil(duration * fps / max_num_frames)` frames per group, at most `max_num_packing` (3). Each group is placed as `<image>` + 64 × `<|video_pad|>` + `</image>`, one line per group.
+- Without video metadata, the frames are taken as sampled at `fps`.
+
 ## MiniCPMV4_5Config
 
 [[autodoc]] MiniCPMV4_5Config
@@ -70,9 +75,21 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 [[autodoc]] MiniCPMV4_5Model
     - forward
     - get_image_features
+    - get_video_features
 
 ## MiniCPMV4_5ForConditionalGeneration
 
 [[autodoc]] MiniCPMV4_5ForConditionalGeneration
     - forward
     - get_image_features
+    - get_video_features
+
+## MiniCPMV4_5Processor
+
+[[autodoc]] MiniCPMV4_5Processor
+    - __call__
+
+## MiniCPMV4_5VideoProcessor
+
+[[autodoc]] MiniCPMV4_5VideoProcessor
+    - preprocess

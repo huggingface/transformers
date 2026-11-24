@@ -343,7 +343,9 @@ class MiniCPMV4_5Processor(MiniCPMV2_6Processor):
         self.slice_start_token = slice_start_token
         self.slice_end_token = slice_end_token
         self.num_image_tokens = num_image_tokens
-        ProcessorMixin.__init__(self, image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
+        ProcessorMixin.__init__(
+            self, image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs
+        )
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
 
