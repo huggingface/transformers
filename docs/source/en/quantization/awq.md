@@ -199,7 +199,7 @@ The parameter `modules_to_fuse` should include the following keys.
 
 ## ExLlamaV2
 
-[ExLlamaV2](https://github.com/turboderp/exllamav2) kernels support faster prefill and decoding. GPT-QModel includes them.
+[ExLlamaV2](https://github.com/turboderp/exllamav2) kernels support faster prefill and decoding. GPT-QModel ships with them, so you don't need to install anything else.
 
 Set `backend="exllama_v2"` in [`AwqConfig`] to enable ExLlamaV2 kernels.
 
@@ -218,7 +218,7 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
 )
 ```
-
+A model loaded with the ExLlama V2 backend can't be saved with [`~PreTrainedModel.save_pretrained`]. To save it, load the model with the default backend.
 ## Resources
 
 Run the AWQ demo [notebook](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY#scrollTo=Wwsg6nCwoThm) for more examples of how to quantize a model, push a quantized model to the Hub, and more.
