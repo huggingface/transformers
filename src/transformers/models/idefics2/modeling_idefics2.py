@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs, _get_unpad_data
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import accepts_precomputed_kwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
@@ -426,21 +426,11 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         self,
         pixel_values,
         patch_attention_mask: torch.BoolTensor | None = None,
-        patch_index: torch.LongTensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         patch_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_patches_height, num_patches_width)`, *optional*):
             The attention mask for the patches.
-        patch_index (`torch.LongTensor` of shape `(num_real_patches,)`, *optional*):
-            Under flash attention, the real patches' indices in the flattened `(batch_size * num_patches)` patches, as
-            `_get_unpad_data` returns them from `patch_attention_mask`. Computed if not given.
-        cu_seqlens (`torch.Tensor` of shape `(batch_size + 1,)`, *optional*):
-            Under flash attention, the cumulative real patch counts of the images.
-        max_seqlen (`int`, *optional*):
-            Under flash attention, the largest real patch count of an image.
         """
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
@@ -457,24 +447,6 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
 
         patch_attention_mask = patch_attention_mask.view(batch_size, -1)
-        if is_flash_attention_requested(self.config):
-            # Only the real patches run, packed in one sequence, then go back to their padded positions
-            if patch_index is None:
-                patch_index, cu_seqlens, max_seqlen = _get_unpad_data(patch_attention_mask)
-            encoder_outputs: BaseModelOutput = self.encoder(
-                inputs_embeds=hidden_states.flatten(0, 1)[patch_index][None],
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                **kwargs,
-            )
-            last_hidden_state = hidden_states.new_zeros(batch_size * hidden_states.shape[1], hidden_states.shape[-1])
-            last_hidden_state = last_hidden_state.index_copy(
-                0, patch_index, self.post_layernorm(encoder_outputs.last_hidden_state[0])
-            ).view_as(hidden_states)
-            return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
-
         patch_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=hidden_states,
@@ -556,7 +528,6 @@ class Idefics2PerceiverAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
-        key_index: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
@@ -568,24 +539,21 @@ class Idefics2PerceiverAttention(nn.Module):
             attention_mask (`torch.Tensor`, *optional*): Tensor of shape [bsz, 1, seq, n_latents] representing attention mask.
             position_ids (`torch.LongTensor`, *optional*): Tensor of shape [bsz, seq] representing position indices of each input token.
             cache (`Cache`, *optional*): Tuple of tensors containing cached key and value states.
-            key_index (`torch.LongTensor`, *optional*): Under flash attention, the keys to keep in the flattened
-                `[context, latents]`: each image's real patches, then its latents. All images' latents then attend as
-                one packed sequence.
+            output_attentions (`bool`, *optional*, defaults to `False`): Whether to return attention weights.
+            use_cache (`bool`, *optional*, defaults to `False`): Whether to use cache for caching.
         """
         bsz, q_len, _ = latents.size()
+        kv_seq_len = q_len + context.size()[1]
 
         hidden_states = torch.concat([context, latents], dim=-2)
-        if key_index is not None:
-            hidden_states = hidden_states.flatten(0, 1)[key_index][None]
-            latents = latents.reshape(1, bsz * q_len, -1)
 
         queries = self.q_proj(latents)
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
-        queries = queries.view(*latents.shape[:2], self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(*hidden_states.shape[:2], self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        values = values.view(*hidden_states.shape[:2], self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        queries = queries.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        values = values.view(bsz, kv_seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         cache = getattr(self, "cache", cache)
 
@@ -712,21 +680,11 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         self,
         context: torch.Tensor,
         attention_mask: torch.Tensor,
-        key_index: torch.LongTensor | None = None,
-        cu_seqlens_k: torch.Tensor | None = None,
-        max_seqlen_k: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         context (`torch.Tensor` of shape `(batch, seq_len, embed_dim)`):
             Input to the layer.
-        key_index (`torch.LongTensor`, *optional*):
-            Under flash attention, the keys to keep in the flattened `[context, latents]`, as `_get_unpad_data` returns
-            them from `attention_mask` followed by the latents. Computed if not given.
-        cu_seqlens_k (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
-            Under flash attention, the cumulative key counts of the images.
-        max_seqlen_k (`int`, *optional*):
-            Under flash attention, the largest key count of an image.
         """
         # seq embed -> bsz seq embed
         latents = self.latents.unsqueeze(0).expand((context.shape[0], *self.latents.size()))
@@ -735,26 +693,11 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
             (attention_mask.size(0), latents.size(1)), dtype=attention_mask.dtype, device=attention_mask.device
         )
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
-        if is_flash_attention_requested(self.config):
-            # Varlen cross-attention: each image's latents attend to its real patches and its latents
-            if key_index is None:
-                key_index, cu_seqlens_k, max_seqlen_k = _get_unpad_data(attention_mask)
-            num_images, num_latents = latents.shape[:2]
-            cu_seqlens_q = torch.arange(num_images + 1, device=latents.device, dtype=torch.int32) * num_latents
-            kwargs |= {
-                "key_index": key_index,
-                "cu_seq_lens_q": cu_seqlens_q,
-                "cu_seq_lens_k": cu_seqlens_k,
-                "max_length_q": num_latents,
-                "max_length_k": max_seqlen_k,
-            }
-            attention_mask = None
-        else:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=latents,
-                attention_mask=attention_mask,
-            )
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=latents,
+            attention_mask=attention_mask,
+        )
 
         compressed_context = latents
         for perceiver_layer in self.layers:
@@ -782,11 +725,9 @@ class Idefics2Connector(nn.Module):
         )
         self.perceiver_resampler = Idefics2PerceiverResampler._from_config(config.perceiver_config)
 
-    def forward(self, image_hidden_states, attention_mask, **kwargs):
+    def forward(self, image_hidden_states, attention_mask):
         image_hidden_states = self.modality_projection(image_hidden_states)
-        image_hidden_states = self.perceiver_resampler(
-            context=image_hidden_states, attention_mask=attention_mask, **kwargs
-        )
+        image_hidden_states = self.perceiver_resampler(context=image_hidden_states, attention_mask=attention_mask)
         return image_hidden_states
 
 
@@ -881,32 +822,12 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         pixel_attention_mask: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        """What `get_image_embeddings` derives from the pixels with data-dependent ops, prefixed `image_`: the real
-        images' indices and, under flash attention, the packing of their real patches in the vision encoder and of the
-        resampler's keys."""
+        """What `get_image_embeddings` derives from the pixels with data-dependent ops: the real images' indices,
+        prefixed `image_`."""
         if pixel_values is None:
             return {}
-        real_images_index, patch_attention_mask = self.get_real_images_and_patch_mask(
-            pixel_values, pixel_attention_mask
-        )
-        patch_attention_mask = patch_attention_mask.flatten(1)
-        inputs = {"real_images_index": real_images_index}
-        if is_flash_attention_requested(self.vision_model.config):
-            inputs["patch_index"], inputs["cu_seqlens"], inputs["max_seqlen"] = _get_unpad_data(patch_attention_mask)
-        resampler = self.connector.perceiver_resampler
-        if is_flash_attention_requested(resampler.config):
-            key_mask = torch.cat(
-                [
-                    patch_attention_mask,
-                    patch_attention_mask.new_ones(patch_attention_mask.shape[0], resampler.n_latents),
-                ],
-                dim=-1,
-            )
-            unpad_data = _get_unpad_data(key_mask)
-            inputs["resampler_key_index"], inputs["resampler_cu_seqlens_k"], inputs["resampler_max_seqlen_k"] = (
-                unpad_data
-            )
-        return {f"image_{name}": value for name, value in inputs.items()}
+        real_images_index, _ = self.get_real_images_and_patch_mask(pixel_values, pixel_attention_mask)
+        return {"image_real_images_index": real_images_index}
 
     @can_return_tuple
     @accepts_precomputed_kwargs(modality="image")
@@ -929,18 +850,13 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         )
         pixel_values = pixel_values.to(dtype=self.dtype).flatten(0, 1)[real_images_index]  # fp16 compatibility
 
-        resampler_inputs = {
-            name: kwargs.pop(f"resampler_{name}", None) for name in ("key_index", "cu_seqlens_k", "max_seqlen_k")
-        }
         image_outputs = self.vision_model(
             pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, **kwargs
         )
         image_hidden_states = image_outputs.last_hidden_state
 
         # Modality projection & resampling
-        image_features = self.connector(
-            image_hidden_states, attention_mask=patch_attention_mask.flatten(1), **resampler_inputs
-        )
+        image_features = self.connector(image_hidden_states, attention_mask=patch_attention_mask.flatten(1))
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
         images_per_sample = torch.zeros(batch_size, dtype=torch.long, device=real_images_index.device)
         images_per_sample = images_per_sample.index_add(

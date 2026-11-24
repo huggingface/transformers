@@ -120,10 +120,6 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
     model_tester_class = Nemotron3_5TranscribeModelTester
 
     # FIXME: @eustlb, experts converter collision (`nemo_speechlm` vs `nemotron_h`), see TODO in `ALMModelTest`
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
-
     @unittest.skip(
         reason="Experts saved as one tensor per expert instead of NeMo's packed tensor. Two rules convert them: "
         "this model's (`nemo_speechlm`, packed) and the generic text model's (`nemotron_h`, per expert); "

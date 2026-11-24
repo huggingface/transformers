@@ -494,7 +494,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel, MultimodalMixin):
         audio_embeds = None
         if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_embeddings(
-                input_features, input_features_mask, return_dict=True
+                input_features, input_features_mask, return_dict=True, **kwargs
             ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings

@@ -91,10 +91,6 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ALMModelTest, unittest.Tes
         else {}
     )
 
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
-
     @unittest.skip(
         reason="This test does not apply to AudioFlamingo3 since inputs_embeds corresponding to audio tokens "
         "are replaced when input features are provided."

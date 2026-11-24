@@ -80,16 +80,19 @@ class FunAsrNanoModelTester(ALMModelTester):
 
 @require_torch
 class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
+    @unittest.skip(
+        reason="No sub-model owns the adaptor's config, so its attention implementation is never set and every call "
+        "warns, which `fullgraph=True` can't trace"
+    )
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     """Model tester for `FunAsrNanoForConditionalGeneration`."""
 
     model_tester_class = FunAsrNanoModelTester
     all_model_classes = (FunAsrNanoForConditionalGeneration, FunAsrNanoModel) if is_torch_available() else ()
     pipeline_model_mapping = {"audio-text-to-text": FunAsrNanoForConditionalGeneration} if is_torch_available() else {}
     model_split_percents = [0.5, 0.9]
-
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
 
     @unittest.skip(
         reason="This test does not apply to Fun-ASR-Nano since inputs_embeds corresponding to audio tokens "

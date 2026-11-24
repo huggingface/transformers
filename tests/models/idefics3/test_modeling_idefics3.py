@@ -178,10 +178,6 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = True
 
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
-
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(
@@ -224,10 +220,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     )
 
     test_resize_embeddings = True
-
-    @unittest.skip(reason="The encoder's padding mask goes through flash attention's data-dependent unpadding")
-    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)

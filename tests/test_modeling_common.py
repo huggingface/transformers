@@ -712,6 +712,27 @@ def _deepspeed_zero3(ds_config):
         unset_hf_deepspeed_config()
 
 
+def is_packed_inputs_modality_encoder(model: PreTrainedModel, config: PreTrainedConfig) -> bool:
+    """Whether the (sub-)model of `model` with this `config` is an encoder that takes all its images (or audios) as one
+    packed sequence, delimited by `cu_seqlens`, rather than as a padded batch. Only its own modules count, not those of
+    the sub-models it holds.
+
+    TODO: users have no official way to find this out yet, so we guess it from whether one of its modules takes
+    `cu_seqlens`.
+    """
+
+    def own_modules(module):
+        yield module
+        for child in module.children():
+            if not (isinstance(child, PreTrainedModel) and child.config is not config):
+                yield from own_modules(child)
+
+    owner = next((m for m in model.modules() if isinstance(m, PreTrainedModel) and m.config is config), None)
+    if owner is None:
+        return False
+    return any("cu_seqlens" in inspect.signature(module.forward).parameters for module in own_modules(owner))
+
+
 def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
     backends = []
     if enable_flash:
@@ -4554,28 +4575,34 @@ class ModelTesterMixin(ExportTesterMixin):
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
     def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
-        """Given `get_data_dependent_inputs`, the whole forward compiles with `fullgraph=True` and matches eager. The
-        encoders run flash attention, which takes their precomputed `cu_seqlens`, and the text model SDPA."""
+        """Given `get_data_dependent_inputs`, the whole forward compiles with `fullgraph=True` and matches eager."""
         for model_class in self.all_model_classes:
             if not hasattr(model_class, "get_data_dependent_inputs"):
                 continue
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config).to(torch_device, torch.bfloat16).eval()
-            encoders = {name: "flash_attention_2" for name in config.sub_configs if "text" not in name}
-            try:
-                text_attention = "sdpa" if "text" in model_class.input_modalities else "flash_attention_2"
-                model.set_attn_implementation({"": text_attention, **encoders})
-            except ValueError:
-                continue
             inputs = {
                 name: value.to(torch_device, torch.bfloat16 if value.is_floating_point() else value.dtype)
                 if isinstance(value, torch.Tensor)
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            inputs |= {
-                name: value for name, value in model.get_data_dependent_inputs(**inputs).items() if name not in inputs
-            }
+
+            # Packed encoders only trace with flash attention, since SDPA loops over their images on the host. The rest
+            # of the model keeps its default attention.
+            # TODO: with SDPA and packed inputs, models could call torch's own varlen attention instead of looping, which
+            # would make SDPA trace too.
+            if is_packed_inputs_modality_encoder(model, model.config):
+                attn_implementation = "flash_attention_2"
+            else:
+                attn_implementation = {"": model.config._attn_implementation} | {
+                    name: "flash_attention_2"
+                    for name in model.config.sub_configs
+                    if is_packed_inputs_modality_encoder(model, getattr(model.config, name))
+                }
+
+            model.set_attn_implementation(attn_implementation)
+            inputs |= model.get_data_dependent_inputs(**inputs)
             torch.compiler.reset()
             with torch.no_grad():
                 expected = model(**copy.deepcopy(inputs))

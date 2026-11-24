@@ -20,6 +20,7 @@
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -39,7 +40,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.generic import can_return_tuple
+from ...utils.generic import accepts_precomputed_kwargs, can_return_tuple
 from ..auto import AutoModel
 from .configuration_ultravbert import UltraVBertConfig
 
@@ -208,10 +209,51 @@ class UltraVBertModel(UltraVBertPreTrainedModel, MultimodalMixin):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
+    def get_real_images_mask(self, pixel_values: torch.Tensor) -> torch.BoolTensor:
+        """Which of the flattened `(batch_size * num_images)` images are real, padding images being all zeros. Without
+        any, the first one is kept."""
+        real_images = pixel_values.flatten(1).any(-1)
+        real_images[0] |= ~real_images.any()
+        return real_images
+
+    def get_real_images_and_patch_mask(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        real_images_index: torch.LongTensor | None = None,
+    ) -> tuple[torch.LongTensor, torch.BoolTensor]:
+        """The indices of the real images in the flattened `(batch_size * num_images)` images, and their patch mask:
+        whether each patch has a pixel inside the image."""
+        pixel_values = pixel_values.flatten(0, 1)
+        if real_images_index is None:
+            real_images_index = self.get_real_images_mask(pixel_values).nonzero().squeeze(-1)
+
+        if pixel_attention_mask is None:
+            pixel_attention_mask = torch.ones(
+                size=(real_images_index.shape[0], *pixel_values.shape[2:]),
+                dtype=torch.bool,
+                device=pixel_values.device,
+            )
+        else:
+            pixel_attention_mask = pixel_attention_mask.flatten(0, 1)[real_images_index]
+
+        patch_size = self.config.vision_config.patch_size
+        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
+        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+        return real_images_index, patch_attention_mask
+
+    def get_data_dependent_inputs(self, pixel_values: torch.Tensor | None = None, **kwargs) -> dict[str, Any]:
+        """What `get_image_embeddings` derives from the pixels with data-dependent ops: the real images' indices,
+        prefixed `image_`."""
+        if pixel_values is None:
+            return {}
+        real_images_index = self.get_real_images_mask(pixel_values.flatten(0, 1)).nonzero().squeeze(-1)
+        return {"image_real_images_index": real_images_index}
+
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
-    )
+    @accepts_precomputed_kwargs(modality="image")
+    @auto_docstring(custom_intro="Encodes the real images into continuous embeddings for the language model.")
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -219,38 +261,16 @@ class UltraVBertModel(UltraVBertPreTrainedModel, MultimodalMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        pixel_values (`torch.Tensor` of shape `(batch_size, num_images, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
         pixel_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask indicating padded regions in the image.
         """
-        batch_size, num_images, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
-        pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
-
-        # Remove padding images - padding images are full 0.
-        nb_values_per_image = pixel_values.shape[1:].numel()
-        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-
-        # If no images, leave one empty image.
-        real_images_inds[0] |= ~torch.any(real_images_inds)
-
-        pixel_values = pixel_values[real_images_inds].contiguous()
-        # Handle the vision attention mask
-        if pixel_attention_mask is None:
-            pixel_attention_mask = torch.ones(
-                size=[pixel_values.shape[i] for i in (0, 2, 3)],
-                dtype=torch.bool,
-                device=pixel_values.device,
-            )
-        else:
-            # Remove padding images from the mask
-            pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
-            pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
-        patch_size = self.config.vision_config.patch_size
-        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
-        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+        batch_size, num_images = pixel_values.shape[:2]
+        real_images_index, patch_attention_mask = self.get_real_images_and_patch_mask(
+            pixel_values, pixel_attention_mask, kwargs.pop("real_images_index", None)
+        )
+        pixel_values = pixel_values.to(dtype=self.dtype).flatten(0, 1)[real_images_index]  # fp16 compatibility
 
         # Get sequence from the vision encoder
         image_outputs = self.vision_model(
@@ -261,7 +281,12 @@ class UltraVBertModel(UltraVBertPreTrainedModel, MultimodalMixin):
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
-        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
+        images_per_sample = torch.zeros(batch_size, dtype=torch.long, device=real_images_index.device)
+        images_per_sample = images_per_sample.index_add(
+            0, real_images_index // num_images, torch.ones_like(real_images_index)
+        )
+        image_outputs.split_sizes = images_per_sample * image_features.shape[1]
+
         return image_outputs
 
     @can_return_tuple
