@@ -1045,7 +1045,7 @@ for chunk in stream:
 
 The [Responses API](https://platform.openai.com/docs/api-reference/responses) is OpenAI's latest API endpoint for generation. It supports stateful interactions and integrates built-in tools to extend a model's capabilities. OpenAI [recommends](https://platform.openai.com/docs/guides/migrate-to-responses) using the Responses API over the Chat Completions API for new projects.
 
-The `v1/responses` API supports text, image, audio, and video requests through the `curl` command and [OpenAI](https://platform.openai.com/docs/quickstart) client.
+The `v1/responses` API supports text, image, audio, and video requests through the `curl` command and [OpenAI](https://platform.openai.com/docs/quickstart) client. As in OpenAI's API, a request streams only when it sets `"stream": true`.
 
 ### Text-based responses
 
@@ -1923,7 +1923,9 @@ The stream ends with exactly one terminal event, `ready` (success) or `error` (f
 
 ## Timeout
 
-`transformers serve` handles requests for any model. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading. Each model runs in a process of its own, so the server's process stays free to handle HTTP, tokenize prompts and decode tokens while it generates; unloading a model stops its process.
+`transformers serve` handles requests for any model. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading. A model given on the command line never unloads. Each model runs in a process of its own, so the server's process stays free to handle HTTP, tokenize prompts and decode tokens while it generates; unloading a model stops its process.
+
+If a model's process dies (a crash, or the system killing it for lack of memory), its requests fail, `/health` answers 503, and the server exits with an error, for whatever runs it (a script, systemd, Kubernetes) to start it again.
 
 ```shell
 transformers serve --model-timeout 400
@@ -2323,7 +2325,7 @@ print(second.output_text)
 
 ## API servers
 
-The API server is the process that handles HTTP, renders and tokenizes prompts, and decodes and streams answers, on one CPU core. When it becomes the limit, with many concurrent clients of a small or fast model, run several with `--api-server-count`. They need a model on the command line, which they share: it's loaded once, in its own process, and their requests are batched together there.
+The API server is the process that handles HTTP, renders and tokenizes prompts, and decodes and streams answers, on one CPU core. When it becomes the limit, with many concurrent clients of a small or fast model, run several with `--api-server-count`. They need a model on the command line, which they share: it's loaded once, in its own process. With `--continuous-batching`, the requests of all the API servers are batched together. If one of these processes stops, the server stops the others and exits with an error.
 
 ```sh
 transformers serve Qwen/Qwen2.5-0.5B-Instruct --continuous-batching --api-server-count 2

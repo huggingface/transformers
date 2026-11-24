@@ -445,7 +445,7 @@ class TestGenerativeModelList(unittest.TestCase):
             model_manager = ModelManager()
             # What loading `org/a` and a local checkpoint leaves in the manager.
             for name in ("org/a@main", local_path):
-                model_manager.engines[name] = MagicMock(running=True)
+                model_manager.engines[name] = MagicMock(process_running=True)
 
             models = model_manager.list_models()
             statuses = {model["id"]: model["status"]["value"] for model in models}
@@ -458,7 +458,7 @@ class TestGenerativeModelList(unittest.TestCase):
         # A server pinned to one model lists that model alone, whatever the Hub cache holds.
         model_manager = ModelManager()
         model_manager.force_model = "org/model"
-        model_manager.engines["org/model@main"] = MagicMock(running=True)
+        model_manager.engines["org/model@main"] = MagicMock(process_running=True)
 
         models = model_manager.list_models()
 
@@ -611,7 +611,7 @@ class TestGetEngine(unittest.TestCase):
             on_progress({"status": "loading"})
             release.wait()
 
-        engine = MagicMock(model_id="org/model@main", running=False, start=start)
+        engine = MagicMock(model_id="org/model@main", process_running=False, start=start)
 
         async def collect(stream):
             return [event async for event in stream]

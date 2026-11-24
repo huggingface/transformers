@@ -812,7 +812,7 @@ class GenerateRunner:
         self.queue: queue.Queue = queue.Queue()
         self.unfinished_request_ids: set[int] = set()  # queued or running: those a cancel applies to
         self.cancelled_request_ids: set[int] = set()
-        self.running = False
+        self.busy = False
         self.lock = threading.Lock()
         self.prompt_tokens = self.generated_tokens = 0  # since the last stats line
         threading.Thread(target=self._process_requests, name="generate", daemon=True).start()
@@ -894,7 +894,7 @@ class GenerateRunner:
 
     def state(self) -> tuple[int, int, str]:
         """The requests running and waiting, and what more the stats line says."""
-        return int(self.running), self.queue.qsize(), ""
+        return int(self.busy), self.queue.qsize(), ""
 
     def _process_requests(self) -> None:
         while True:
@@ -907,7 +907,7 @@ class GenerateRunner:
             kwargs = {}
             if stream:
                 kwargs["streamer"] = _TokenStreamer(request_id, self)
-            self.running = True
+            self.busy = True
             try:
                 result = function(self.model, self.processor, *args, **kwargs)
                 if stream:  # its tokens went out as they came
@@ -921,7 +921,7 @@ class GenerateRunner:
             except Exception as error:
                 logger.exception("A request failed")
                 result = RuntimeError(f"{type(error).__name__}: {error}")  # as text: any error crosses to the server
-            self.running = False
+            self.busy = False
             with self.lock:
                 self.unfinished_request_ids.discard(request_id)
                 self.cancelled_request_ids.discard(request_id)
@@ -984,7 +984,7 @@ class CBGenerateRunner(GenerateRunner):
             "eos_token_id": generation_kwargs["eos_token_id"],
             **sampling,
         }
-        logger.debug(f"Continuous batching settings of the request: {batching_kwargs}, ignored: {ignored}")
+        logger.debug("Continuous batching settings of the request: %s, ignored: %s", batching_kwargs, ignored)
         return batching_kwargs
 
     def state(self) -> tuple[int, int, str]:

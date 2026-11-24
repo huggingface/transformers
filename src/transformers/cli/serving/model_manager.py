@@ -96,8 +96,8 @@ class EngineClient:
         timeout: float = -1,
         connection: tuple | None = None,
     ):
-        self.requests: Any = None
-        self.results: Any = None
+        self.requests_queue: Any = None
+        self.results_queue: Any = None
         self.api_server = 0
         self.managed_process: multiprocessing.process.BaseProcess | None = None
         self.is_dead = False
@@ -118,20 +118,20 @@ class EngineClient:
 
         self.externally_managed = connection is not None
         if self.externally_managed:
-            self.requests, self.results, self.api_server = connection
+            self.requests_queue, self.results_queue, self.api_server = connection
             self._start_reading_results()
 
     def start(self, on_progress: Callable[[dict], None] | None = None) -> None:
         """Starts the model's process if it isn't running, and waits for the model to load."""
         with self._lock:
-            if self.running:
+            if self.process_running:
                 return
             if self.is_dead:
                 raise EngineDeadError(self.fatal_error)
             process, requests, results = self.start_process(
                 self.model_id, self.loader, self.generation_state, on_progress=on_progress
             )
-            self.requests, self.results = requests, results[0]
+            self.requests_queue, self.results_queue = requests, results[0]
             self.managed_process = process
             self._start_reading_results()
 
@@ -163,7 +163,7 @@ class EngineClient:
 
         self.managed_process = None
         self._shutdown_requested.set()
-        self.requests.cancel_join_thread()
+        self.requests_queue.cancel_join_thread()
         error = EngineDeadError(reason) if self.is_dead else RuntimeError(reason)
 
         def fail_all_requests() -> None:
@@ -189,7 +189,7 @@ class EngineClient:
     async def _send_request(self, method: str, args: tuple, streamer: Detokenizer | None = None) -> Any:
         """Sends a request to the engine, to call `method(*args)` on its runner, and returns its result. With a
         `streamer`, the request streams: its tokens go to it as they come. Raises the error that failed it."""
-        if not self.running:
+        if not self.process_running:
             await asyncio.to_thread(self.start)
 
         self._loop = asyncio.get_running_loop()
@@ -197,7 +197,7 @@ class EngineClient:
         future = self._loop.create_future()
         self.pending_requests[request_id] = (future, streamer)
         self._cancel_idle_shutdown()
-        self.requests.put((method, request_id, *args, streamer is not None))
+        self.requests_queue.put((method, request_id, *args, streamer is not None))
         try:
             # An error comes as a result too: set as the future's exception, it would be logged as never retrieved
             # when the request is cancelled meanwhile
@@ -205,7 +205,7 @@ class EngineClient:
         finally:
             self.pending_requests.pop(request_id, None)
             if future.cancelled():
-                self.requests.put(("cancel", request_id))
+                self.requests_queue.put(("cancel", request_id))
             if not self.pending_requests:
                 self._schedule_idle_shutdown()
         if isinstance(result, Exception):
@@ -258,7 +258,7 @@ class EngineClient:
                     except Exception as error:  # the request fails, not the others whose tokens came with its own
                         del self.pending_requests[request_id]
                         future.set_result(error)
-                        self.requests.put(("cancel", request_id))
+                        self.requests_queue.put(("cancel", request_id))
                 for request_id, result in finished:
                     if isinstance(result, EngineDeadError) and not self.is_dead:
                         self._mark_dead(str(result))
@@ -280,7 +280,7 @@ class EngineClient:
                 if self._loop is not None:
                     self._loop.call_soon_threadsafe(deliver_results, *results)
 
-        threading.Thread(target=read_results, args=(self.results,), name="model-results", daemon=True).start()
+        threading.Thread(target=read_results, args=(self.results_queue,), name="model-results", daemon=True).start()
 
     def _schedule_idle_shutdown(self) -> None:
         """Stops the model's process if no request comes for `timeout` seconds."""
@@ -288,7 +288,7 @@ class EngineClient:
             return
 
         def shutdown_if_idle() -> None:
-            if not self.pending_requests and self.running:
+            if not self.pending_requests and self.process_running:
                 logger.info(f"Stopping a model's process after {self.timeout}s without requests")
                 self.shutdown()
 
@@ -313,7 +313,7 @@ class EngineClient:
         return self.generation_state.use_continuous_batching(self.model_config, self.processor)
 
     @property
-    def running(self) -> bool:
+    def process_running(self) -> bool:
         """Whether the model's process is running."""
         return self.externally_managed or self.managed_process is not None
 
@@ -496,7 +496,7 @@ class ModelManager:
             return
         model_id = engine.model_id
 
-        if engine.running:
+        if engine.process_running:
             yield f"data: {json.dumps({'status': 'ready', 'model': model_id, 'cached': True})}\n\n"
             return
 
@@ -568,7 +568,7 @@ class ModelManager:
             `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc., and a ``status``
             telling whether the model is loaded.
         """
-        loaded = [model_id for model_id, engine in self.engines.items() if engine.running]
+        loaded = [model_id for model_id, engine in self.engines.items() if engine.process_running]
 
         if self.force_model is not None:
             # A pinned server only answers for its model, under the name it was given: list it alone.
