@@ -143,7 +143,6 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _keep_in_fp32_modules_strict = ["structure_attention_cell", "structure_generator"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -223,8 +222,8 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
 
         self.structure_attention_cell = SLANeXtAttentionGRUCell(
             config.post_conv_out_channels, config.hidden_size, config.out_channels
-        )
-        self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
+        ).to(dtype=torch.float32)
+        self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels).to(dtype=torch.float32)
 
         self.post_init()
 

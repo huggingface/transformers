@@ -93,7 +93,6 @@ class PegasusSinusoidalPositionalEmbedding(nn.Embedding):
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
         return out
 
-    @torch.no_grad()
     def forward(
         self, input_ids_shape: torch.Size, cache_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
@@ -344,7 +343,7 @@ class PegasusDecoderLayer(GradientCheckpointingLayer):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache", expose_in_signature=True)
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -416,7 +415,6 @@ class PegasusPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _can_compile_fullgraph = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, PegasusSinusoidalPositionalEmbedding):

@@ -406,11 +406,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
 class NemotronAsrStreamingEncoderCausalConv1dCacheLayer(VoxtralRealtimeConv1dCacheLayer): ...
 
 
-class NemotronAsrStreamingEncoderCausalConv2dCacheLayer:
-    def __init__(self):
-        self.cache: torch.Tensor | None = None
-        self.is_initialized: bool = False
-
+class NemotronAsrStreamingEncoderCausalConv2dCacheLayer(VoxtralRealtimeConv1dCacheLayer):
     def lazy_initialization(self, hidden_states, conv_module):
         self.left_pad = conv_module.left_pad
         self.init_pad = conv_module.left_pad_init - conv_module.left_pad
@@ -553,7 +549,6 @@ class NemotronAsrStreamingEncoderModelOutput(BaseModelOutputWithPooling):
 
 
 class NemotronAsrStreamingEncoderRelPositionalEncoding(ParakeetEncoderRelPositionalEncoding):
-    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor, cached_frames: int | None = None):
         # `cached_frames` is the number of cached left-context frames (0 offline). This Transformer-XL
         # style relative encoding spans the full key length `L = current chunk + cached_frames`, with

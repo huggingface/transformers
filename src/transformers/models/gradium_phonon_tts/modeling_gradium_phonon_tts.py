@@ -309,7 +309,6 @@ class GradiumPhononTTSPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     # the flow head runs as one unit per step: split across devices, its blocks would mix devices mid-computation
     _no_split_modules = ["GradiumPhononTTSDecoderLayer", "GradiumPhononTTSFlowHead"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -322,7 +321,6 @@ class GradiumPhononTTSPreTrainedModel(PreTrainedModel):
     }
     input_modalities = ("text", "audio")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GradiumPhononTTSTimestepNorm):
@@ -376,7 +374,6 @@ class GradiumPhononTTSRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -709,8 +706,8 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
         self.model = GradiumPhononTTSModel(config)
         self.flow_head = GradiumPhononTTSFlowHead(config.flow_head_config)
         self.eos_head = nn.Linear(config.hidden_size, 1)
-        self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim))
-        self.latent_std = nn.Buffer(torch.ones(config.latent_dim))
+        self.latent_mean = nn.Buffer(torch.zeros(config.latent_dim, dtype=torch.float32))
+        self.latent_std = nn.Buffer(torch.ones(config.latent_dim, dtype=torch.float32))
 
         # training only, ~0.003% of the model weights: ok to always carry
         self.loss_weighting = GradiumPhononTTSFlowLossWeighting(config.flow_head_config)

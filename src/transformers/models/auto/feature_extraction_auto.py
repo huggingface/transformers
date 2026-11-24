@@ -44,6 +44,7 @@ logger = logging.get_logger(__name__)
 
 MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
+        ("apertus1p5", "WavTokenizerFeatureExtractor"),
         ("audioflamingo3", "WhisperFeatureExtractor"),
         ("canary", "ParakeetFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
@@ -67,6 +68,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("nemotron3_5_asr", "NemotronAsrStreamingFeatureExtractor"),
         ("nemotron3_diarization", "NemotronAsrStreamingFeatureExtractor"),
         ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingFeatureExtractor"),
+        ("omniasr_ctc", "OmniASRFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("parakeet_rnnt", "ParakeetFeatureExtractor"),

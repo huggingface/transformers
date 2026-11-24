@@ -1952,6 +1952,23 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
 
+        encoding = tokenizer_r(["☐", "Name"], xpaths=xpaths, node_labels=node_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, -100, 1, -100])
+
+        # A node cut by an overflow window boundary: "ization" continues node 5 at the start of the second window
+        long_nodes = ["hello"] * 5 + ["internationalization"] + ["world"] * 5
+        encoding = tokenizer_r(
+            long_nodes,
+            xpaths=["/html/body/div"] * len(long_nodes),
+            node_labels=list(range(len(long_nodes))),
+            max_length=10,
+            truncation=True,
+            stride=2,
+            return_overflowing_tokens=True,
+        )
+        self.assertListEqual(encoding.labels[0], [-100, 0, 1, 2, 3, 4, 5, -100, 6, -100])
+        self.assertListEqual(encoding.labels[1], [-100, -100, 6, 7, 8, 9, 10, -100])
+
         tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base", only_label_first_subword=False)
         encoding = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])

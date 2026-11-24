@@ -826,6 +826,119 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
+class Inkling2LoopDequantizeExperts(ConversionOps):
+    r"""
+    Temporary op that dequantizes the NVFP4 and MXFP8 expert weights of the original Inkling2Loop checkpoints to the
+    dtype of the model param, until these formats can be loaded quantized.
+
+    - NVFP4 (`amax` present): two E2M1 codes per byte (even element in the low nibble), one float8 scale per 16 values
+      and a per-expert factor `amax / outer_scale_denominator`.
+    - MXFP8: float8 values with one power-of-two scale `2 ** (scale - 127)` per 32 values.
+    """
+
+    E2M1_VALUES = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0)
+    EXPERTS_PER_CHUNK = 8
+
+    @torch.no_grad()
+    def convert(self, input_dict, source_patterns, target_patterns, model=None, full_layer_name=None, **kwargs):
+        tensors = {key: value[0] if isinstance(value, list) else value for key, value in input_dict.items()}
+        if len(tensors) == 1:
+            return {target_patterns[0]: next(iter(tensors.values()))}
+        weight, scale, amax, denominator = (tensors.get(pattern) for pattern in source_patterns)
+
+        # Without a quantizer, the loader casts all sources to the param dtype, but don't rely on it
+        try:
+            dtype = model.get_parameter(full_layer_name).dtype
+        except (AttributeError, TypeError):
+            dtype = torch.bfloat16
+        num_experts, rows = weight.shape[:2]
+        columns = weight.shape[2] * 2 if amax is not None else weight.shape[2]
+        output = torch.empty(num_experts, rows, columns, dtype=dtype, device=weight.device)
+        if amax is not None:
+            e2m1_values = torch.tensor(self.E2M1_VALUES, device=weight.device)
+            byte = torch.arange(256, device=weight.device)
+            byte_to_values = torch.stack((e2m1_values[byte & 0xF], e2m1_values[byte >> 4]), dim=-1)
+            expert_factor = amax.float() / denominator.float()
+        for start in range(0, num_experts, self.EXPERTS_PER_CHUNK):
+            experts = slice(start, start + self.EXPERTS_PER_CHUNK)
+            block_scale = scale[experts].float()
+            if amax is None:
+                values = weight[experts].float().view(*block_scale.shape, 32)
+                values = values * torch.exp2(block_scale - 127)[..., None]
+            else:
+                codes = weight[experts].to(torch.uint8).long()
+                values = byte_to_values[codes].view(*block_scale.shape, 16) * block_scale[..., None]
+                values = values * expert_factor[experts, None, None, None]
+            output[experts] = values.reshape(-1, rows, columns).to(dtype)
+        return {target_patterns[0]: output}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return self
+
+
+class Inkling2LoopMergeMessageQueries(ConversionOps):
+    r"""
+    Merges the message queries of the original Inkling2Loop checkpoints into one `(num_loop_layers, 4, hidden_size)`
+    tensor, or splits them back with `inverse=True`. The checkpoints store them as two
+    `(2 * num_loop_layers, hidden_size)` tensors: the query and MLP queries of each loop layer, then its key and value
+    queries. The merged tensor holds the query, key, value and MLP queries of each loop layer, in that order.
+    """
+
+    def __init__(self, inverse: bool = False):
+        self.inverse = inverse
+
+    @torch.no_grad
+    def convert(self, input_dict, source_patterns, target_patterns, **kwargs):
+        if self.inverse:
+            tensor = next(iter(input_dict.values()))
+            tensor = tensor[0] if isinstance(tensor, list) else tensor
+            queries = tensor[:, [0, 3]].flatten(0, 1)
+            kv_queries = tensor[:, 1:3].flatten(0, 1)
+            return {target_patterns[0]: queries.contiguous(), target_patterns[1]: kv_queries.contiguous()}
+
+        queries, kv_queries = (input_dict[pattern] for pattern in source_patterns)
+        queries = queries[0] if isinstance(queries, list) else queries
+        kv_queries = kv_queries[0] if isinstance(kv_queries, list) else kv_queries
+        # (num_loop_layers, 2, hidden_size): [query, mlp] and [key, value] of each loop layer
+        queries = queries.unflatten(0, (-1, 2))
+        kv_queries = kv_queries.unflatten(0, (-1, 2))
+        return {target_patterns[0]: torch.cat([queries[:, :1], kv_queries, queries[:, 1:]], dim=1)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Inkling2LoopMergeMessageQueries(inverse=not self.inverse)
+
+
+class Inkling2UnpadVocab(ConversionOps):
+    r"""
+    Drops the padded rows of the Inkling2 unembedding, which checkpoints store padded to `vocab_size`, keeping the first
+    `unpadded_vocab_size` rows. With `inverse=True`, appends zero rows to pad it back to `vocab_size`.
+    """
+
+    def __init__(self, inverse: bool = False):
+        self.inverse = inverse
+
+    @torch.no_grad
+    def convert(
+        self, input_dict, source_patterns, target_patterns, config=None, model=None, full_layer_name=None, **kwargs
+    ):
+        tensor = next(iter(input_dict.values()))
+        tensor = tensor[0] if isinstance(tensor, list) else tensor
+        text_config = config.get_text_config()
+        if self.inverse:
+            padding = tensor.new_zeros(text_config.vocab_size - tensor.shape[0], *tensor.shape[1:])
+            tensor = torch.cat([tensor, padding], dim=0)
+        else:
+            dtype = model.get_parameter(full_layer_name).dtype
+            tensor = tensor[: text_config.unpadded_vocab_size].to(dtype).contiguous()
+        return {target_patterns[0]: tensor}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Inkling2UnpadVocab(inverse=not self.inverse)
+
+
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).
@@ -1283,6 +1396,35 @@ class PrefixChange(WeightRenaming):
         result.scope_prefix = self.scope_prefix
         result.base_model_prefix = self.base_model_prefix
         return result
+
+
+class LayerPairCollapse(WeightRenaming):
+    """
+    Loads checkpoints storing each decoder layer as an attention block `layers.{2i}` and an mlp block `layers.{2i+1}`:
+
+        layers.0.mixer.q_proj.weight -> layers.0.self_attn.q_proj.weight
+        layers.1.mixer.up_proj.weight -> layers.0.mlp.up_proj.weight
+        layers.1.mlp_alpha -> layers.0.lambda_2
+    """
+
+    __slots__ = ()
+    pattern = re.compile(r"layers\.(\d+)\.(mixer|attn_alpha|mlp_alpha)(?=\.|$)")
+
+    def __init__(self):
+        super().__init__(source_patterns=r"layers\.(\d+)", target_patterns=r"layers.\1")
+
+    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+        if (match := self.pattern.search(source_key)) is None:
+            return source_key, None
+        self._was_used = True
+        index, name = int(match[1]), match[2]
+        name = {"attn_alpha": "lambda_1", "mlp_alpha": "lambda_2"}.get(name, ("self_attn", "mlp")[index % 2])
+        renamed = f"layers.{index // 2}.{name}"
+        return source_key[: match.start()] + renamed + source_key[match.end() :], self.source_patterns[0]
+
+    def reverse_transform(self) -> WeightTransform:
+        # TODO: save back to the two-block layout. Our names never match `pattern`, so saving keeps our layout
+        return self
 
 
 class WeightConverter(WeightTransform):

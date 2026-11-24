@@ -105,7 +105,7 @@ class AfmoeSparseMoeBlock(nn.Module):
         self.router = AfmoeTokenChoiceRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape
@@ -268,7 +268,6 @@ class AfmoePreTrainedModel(PreTrainedModel):
     config: AfmoeConfig
     base_model_prefix = "model"
     _no_split_modules = ["AfmoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(AfmoeTokenChoiceRouter, index=0),
         "hidden_states": AfmoeDecoderLayer,
@@ -282,8 +281,8 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "q_norm",
         "k_norm",
         "norm",
-        "expert_bias",
     ]
+    _keep_in_fp32_modules_strict = ["expert_bias"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True

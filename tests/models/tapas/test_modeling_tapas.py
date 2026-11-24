@@ -34,6 +34,7 @@ from transformers import (
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -61,98 +62,60 @@ if is_torch_available():
     )
 
 
-class TapasModelTester:
+class TapasModelTester(ModelTesterConfigMixin):
     """You can also import this e.g from .test_modeling_tapas import TapasModelTester"""
 
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        max_position_embeddings=512,
-        type_vocab_sizes=[3, 256, 256, 2, 256, 256, 10],
-        type_sequence_label_size=2,
-        positive_weight=10.0,
-        num_aggregation_labels=4,
-        num_labels=2,
-        aggregation_loss_importance=0.8,
-        use_answer_as_supervision=True,
-        answer_loss_importance=0.001,
-        use_normalized_answer_loss=False,
-        huber_loss_delta=25.0,
-        temperature=1.0,
-        agg_temperature=1.0,
-        use_gumbel_for_cells=False,
-        use_gumbel_for_agg=False,
-        average_approximation_function="ratio",
-        cell_selection_preference=0.5,
-        answer_loss_cutoff=100,
-        max_num_rows=64,
-        max_num_columns=32,
-        average_logits_per_cell=True,
-        select_one_column=True,
-        allow_empty_column_selection=False,
-        init_cell_selection_weights_to_zero=True,
-        reset_position_index_per_cell=True,
-        disable_per_token_loss=False,
-        scope=None,
-    ):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "initializer_range": 0.02,
+        "max_position_embeddings": 512,
+        "type_vocab_sizes": [3, 256, 256, 2, 256, 256, 10],
+        "type_sequence_label_size": 2,
+        "positive_weight": 10.0,
+        "num_aggregation_labels": 4,
+        "num_labels": 2,
+        "aggregation_loss_importance": 0.8,
+        "use_answer_as_supervision": True,
+        "answer_loss_importance": 0.001,
+        "use_normalized_answer_loss": False,
+        "huber_loss_delta": 25.0,
+        "temperature": 1.0,
+        "agg_temperature": 1.0,
+        "use_gumbel_for_cells": False,
+        "use_gumbel_for_agg": False,
+        "average_approximation_function": "ratio",
+        "cell_selection_preference": 0.5,
+        "answer_loss_cutoff": 100,
+        "max_num_rows": 64,
+        "max_num_columns": 32,
+        "average_logits_per_cell": True,
+        "select_one_column": True,
+        "allow_empty_column_selection": False,
+        "init_cell_selection_weights_to_zero": True,
+        "reset_position_index_per_cell": True,
+        "disable_per_token_loss": False,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_sizes = type_vocab_sizes
-        self.type_sequence_label_size = type_sequence_label_size
-        self.positive_weight = positive_weight
-        self.num_aggregation_labels = num_aggregation_labels
-        self.num_labels = num_labels
-        self.aggregation_loss_importance = aggregation_loss_importance
-        self.use_answer_as_supervision = use_answer_as_supervision
-        self.answer_loss_importance = answer_loss_importance
-        self.use_normalized_answer_loss = use_normalized_answer_loss
-        self.huber_loss_delta = huber_loss_delta
-        self.temperature = temperature
-        self.agg_temperature = agg_temperature
-        self.use_gumbel_for_cells = use_gumbel_for_cells
-        self.use_gumbel_for_agg = use_gumbel_for_agg
-        self.average_approximation_function = average_approximation_function
-        self.cell_selection_preference = cell_selection_preference
-        self.answer_loss_cutoff = answer_loss_cutoff
-        self.max_num_rows = max_num_rows
-        self.max_num_columns = max_num_columns
-        self.average_logits_per_cell = average_logits_per_cell
-        self.select_one_column = select_one_column
-        self.allow_empty_column_selection = allow_empty_column_selection
-        self.init_cell_selection_weights_to_zero = init_cell_selection_weights_to_zero
-        self.reset_position_index_per_cell = reset_position_index_per_cell
-        self.disable_per_token_loss = disable_per_token_loss
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).to(torch_device)
@@ -409,6 +372,8 @@ class TapasModelTester:
 
 @require_torch
 class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = TapasModelTester
+
     all_model_classes = (
         (
             TapasModel,

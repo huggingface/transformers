@@ -95,7 +95,6 @@ class ModernBertConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     vocab_size: int = 50368
@@ -398,7 +397,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         "attentions": ModernBertAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         cutoff_factor = self.config.initializer_cutoff_factor
