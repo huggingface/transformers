@@ -50,6 +50,8 @@ from .configuration_llama import LlamaConfig
 
 # [scratch] fused q/k/v input and gate/up projection (PROTO_QKV=1), as in Qwen3
 _PROTO_QKV = os.environ.get("PROTO_QKV", "1") == "1"
+if _PROTO_QKV:
+    from ...integrations._proto_qk_norm_rope import qk_norm_rope_ as _proto_qk_norm_rope_
 
 
 logger = logging.get_logger(__name__)
@@ -255,11 +257,13 @@ class LlamaAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
+        cos, sin = position_embeddings
         qkv_weight = self.__dict__.get("_proto_qkv_weight")
         if qkv_weight is not None:
-            q_size = self.config.num_attention_heads * self.head_dim
-            kv_size = self.config.num_key_value_heads * self.head_dim
-            q, k, v = F.linear(hidden_states, qkv_weight).split([q_size, kv_size, kv_size], -1)
+            num_heads, num_kv_heads = self.config.num_attention_heads, self.config.num_key_value_heads
+            qkv = F.linear(hidden_states, qkv_weight)
+            _proto_qk_norm_rope_(qkv, cos, sin, None, None, 0.0, num_heads, num_kv_heads, self.head_dim)
+            q, k, v = qkv.split([num_heads * self.head_dim, num_kv_heads * self.head_dim, num_kv_heads * self.head_dim], -1)
             query_states = q.view(hidden_shape).transpose(1, 2)
             key_states = k.view(hidden_shape).transpose(1, 2)
             value_states = v.view(hidden_shape).transpose(1, 2)
@@ -267,9 +271,7 @@ class LlamaAttention(nn.Module):
             query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
             key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
             value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if cache is not None:
             key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
