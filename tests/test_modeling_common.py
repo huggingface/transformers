@@ -4112,6 +4112,9 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
+        if self.is_indexer_based:
+            self.skipTest(reason="Model architecture (indexer) cannot support FA backend via SDPA")
+
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
