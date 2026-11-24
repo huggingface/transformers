@@ -77,6 +77,7 @@ class T5Tokenizer(TokenizersBackend):
         _spm_precompiled_charsmap=None,
         extra_ids=100,
         additional_special_tokens=None,
+        unk_id: int | None = None,
         **kwargs,
     ):
         self._extra_ids = extra_ids
@@ -109,10 +110,23 @@ class T5Tokenizer(TokenizersBackend):
             for i in range(extra_ids - 1, -1, -1):
                 self._vocab_scores.append((f"<extra_id_{i}>", 0.0))
 
+        if unk_id is None:
+            if isinstance(self._vocab_scores, list):
+                for idx, item in enumerate(self._vocab_scores):
+                    token = item[0] if isinstance(item, (list, tuple)) else item
+                    if token == str(unk_token):
+                        unk_id = idx
+                        break
+            elif isinstance(self._vocab_scores, dict):
+                unk_id = self._vocab_scores.get(str(unk_token))
+
+        if unk_id is None:
+            unk_id = 2
+
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
-                unk_id=2,
+                unk_id=unk_id,
                 byte_fallback=False,
             )
         )
@@ -134,6 +148,7 @@ class T5Tokenizer(TokenizersBackend):
             pad_token=pad_token,
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
+            unk_id=unk_id,
             **kwargs,
         )
 
