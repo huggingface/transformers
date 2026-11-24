@@ -24,6 +24,81 @@ from ..utils.import_utils import is_torch_greater_or_equal
 logger = logging.get_logger(__name__)
 
 
+class CompressedTensorsNVFP4Deserialize(ConversionOps):
+    """Import compressed-tensors NVFP4 bytes and scales into torchao without requantizing."""
+
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(self, input_dict, source_patterns, model=None, full_layer_name=None, **kwargs):
+        if model is None or full_layer_name is None:
+            raise ValueError("NVFP4 deserialization requires a model and a full layer name.")
+        serialized_names = dict(zip(source_patterns, self.hf_quantizer.serialized_names["weight"]))
+        tensors = {}
+        for name, value in input_dict.items():
+            if isinstance(value, list):
+                if len(value) != 1:
+                    raise ValueError(f"Expected one tensor for {full_layer_name}: {name}.")
+                value = value[0]
+            tensors[serialized_names[name]] = value
+
+        module_name, _, _ = full_layer_name.rpartition(".")
+        module = model.get_submodule(module_name)
+        if module_name not in self.hf_quantizer.nvfp4_modules:
+            raise ValueError(f"NVFP4 conversion was requested for unselected module {module_name}.")
+
+        required = {"weight_packed", "weight_scale", "weight_global_scale"}
+        allowed = required | {"input_global_scale"}
+        if not required <= tensors.keys() or tensors.keys() - allowed:
+            raise ValueError(
+                f"Invalid NVFP4 tensors for {module_name}: missing {sorted(required - tensors.keys())}, "
+                f"unexpected {sorted(tensors.keys() - allowed)}."
+            )
+        packed = tensors["weight_packed"]
+        scales = tensors["weight_scale"]
+        global_scale = tensors["weight_global_scale"]
+        n, k = module.out_features, module.in_features
+        if k % 16 or packed.dtype != torch.uint8 or packed.shape != (n, k // 2):
+            raise ValueError(
+                f"{module_name}.weight_packed must be uint8 with shape {(n, k // 2)} and K divisible by 16."
+            )
+        if scales.dtype != torch.float8_e4m3fn or scales.shape != (n, k // 16):
+            raise ValueError(f"{module_name}.weight_scale must be float8_e4m3fn with shape {(n, k // 16)}.")
+        if any(tensor.device != packed.device for tensor in tensors.values()) or packed.device.type == "meta":
+            raise ValueError(f"All NVFP4 tensors for {module_name} must be materialized on the same device.")
+        if module.weight.dtype != torch.bfloat16:
+            raise ValueError(f"NVFP4 weight-only module {module_name} requires BF16.")
+        for name in ("weight_global_scale", "input_global_scale"):
+            if name not in tensors:
+                continue
+            scale = tensors[name]
+            if (
+                scale.dtype != torch.float32
+                or scale.shape != (1,)
+                or not torch.isfinite(scale).all()
+                or not (scale > 0).all()
+            ):
+                raise ValueError(f"{module_name}.{name} must be a positive finite float32 tensor with shape (1,).")
+        scales_float = scales.float()
+        if not torch.isfinite(scales_float).all() or (scales_float < 0).any():
+            raise ValueError(f"{module_name}.weight_scale must contain nonnegative finite values.")
+        # CT divides by its global scale; torchao multiplies by its per-tensor scale.
+        per_tensor_scale = global_scale.reshape(()).reciprocal()
+        if not torch.isfinite(per_tensor_scale):
+            raise ValueError(f"{module_name}.weight_global_scale has a nonfinite reciprocal.")
+        weight = self.hf_quantizer.nvfp4_tensor_class(
+            packed.contiguous(),
+            scales.contiguous(),
+            block_size=16,
+            orig_dtype=torch.bfloat16,
+            per_tensor_scale=per_tensor_scale,
+            is_swizzled_scales=False,
+            use_triton_kernel=False,
+            act_quant_kwargs=None,
+        )
+        return {full_layer_name: nn.Parameter(weight, requires_grad=False)}
+
+
 def get_experts_scheme(quantization_config):
     """Resolve which config group quantizes the MoE experts. Mixed configs quantize
     different layers with different schemes (e.g. Kimi: FP8 attention + INT4 experts), so

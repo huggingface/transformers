@@ -1121,6 +1121,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             have kernels for keep their quantized weights and run through those kernels (currently W8A8 FP8, on
             CUDA SM89+, XPU, or MPS with torch >= 2.15). Inference only, and opt-in: without it the model goes
             through the regular compressed-tensors route. Ignored when `dequantize=True`.
+        weight_only (`bool`, *optional*, defaults to `False`):
+            Load packed NVFP4 weights into torchao with BF16 activations, explicitly disabling the checkpoint's
+            activation quantization. Supports dense Linear layers only and requires torchao. This is an
+            inference-only loading mode, not a promise of accelerated FP4 computation. Cannot be combined with
+            `dequantize=True` or `use_optimized_inference=True`.
     """
 
     def __init__(
@@ -1135,6 +1140,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         run_compressed: bool | None = None,
         dequantize: bool = False,
         use_optimized_inference: bool = False,
+        weight_only: bool = False,
         **kwargs,
     ):
         if is_compressed_tensors_available():
@@ -1154,6 +1160,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             dequantize = dequantize or not run_compressed
         self.dequantize = dequantize
         self.use_optimized_inference = use_optimized_inference
+        self.weight_only = weight_only
+        # These legacy fields may be discarded by compressed-tensors' config parser.
+        self._additional_compression = [
+            name for name in ("sparsity_config", "transform_config", "moe_sparsity_config") if kwargs.get(name)
+        ]
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
@@ -1173,6 +1184,10 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.COMPRESSED_TENSORS
 
     def post_init(self):
+        if self.weight_only:
+            if self.dequantize or self.use_optimized_inference:
+                raise ValueError("`weight_only=True` cannot be combined with dequantize or use_optimized_inference.")
+            self._validate_weight_only()
         if self.use_optimized_inference:
             # Whether the optimized path is reachable at all is decided here; whether the hardware
             # can run its kernels is left to `HfQuantizer.validate_environment`.
@@ -1188,6 +1203,56 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "Setting `use_optimized_inference=False`."
                 )
                 self.use_optimized_inference = False
+
+    def _validate_weight_only(self):
+        config = self.quantization_config
+        if (
+            config is None
+            or not config.config_groups
+            or config.format != "nvfp4-pack-quantized"
+            or not self.is_quantization_compressed
+        ):
+            raise ValueError("`weight_only=True` requires a compressed nvfp4-pack-quantized checkpoint.")
+        if config.kv_cache_scheme is not None or self._additional_compression:
+            raise ValueError(
+                "NVFP4 weight-only loading does not support KV-cache quantization, sparsity or transforms."
+            )
+        for name, group in config.config_groups.items():
+            weights = group.weights
+            if (
+                (group.format or config.format) != "nvfp4-pack-quantized"
+                or weights is None
+                or weights.type != "float"
+                or weights.num_bits != 4
+                or weights.strategy != "tensor_group"
+                or weights.group_size != 16
+                or not weights.symmetric
+                or weights.dynamic
+                or weights.actorder is not None
+                or weights.block_structure is not None
+            ):
+                raise ValueError(
+                    f"NVFP4 weight-only loading requires static symmetric float4 tensor_group weights with group_size=16 "
+                    f"and no activation ordering in every config group; unsupported group: {name}."
+                )
+            activations = group.input_activations
+            if group.output_activations is not None or (
+                activations is not None
+                and (
+                    activations.type != "float"
+                    or activations.num_bits != 4
+                    or activations.strategy != "tensor_group"
+                    or activations.group_size != 16
+                    or not activations.symmetric
+                    or activations.dynamic != "local"
+                    or activations.actorder is not None
+                    or activations.block_structure is not None
+                )
+            ):
+                raise ValueError(
+                    f"NVFP4 weight-only loading supports only absent or local-dynamic NVFP4 input quantization "
+                    f"and no output quantization; unsupported group: {name}."
+                )
 
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
@@ -1251,7 +1316,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         return serializable_config_dict
 
     def get_loading_attributes(self):
-        return {"dequantize": self.dequantize, "use_optimized_inference": self.use_optimized_inference}
+        return {
+            "dequantize": self.dequantize,
+            "use_optimized_inference": self.use_optimized_inference,
+            "weight_only": self.weight_only,
+        }
 
     @property
     def has_fp8_modules(self):
