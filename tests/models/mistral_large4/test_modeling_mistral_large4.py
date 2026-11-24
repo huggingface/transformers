@@ -61,8 +61,6 @@ def indexer_leaky_relu():
 class MistralLarge4VisionText2TextModelTester(VLMModelTester):
     base_model_class = MistralLarge4Model
     config_class = MistralLarge4Config
-    text_config_class = MistralLarge4TextConfig
-    vision_config_class = PixtralVisionConfig
     conditional_generation_class = MistralLarge4ForConditionalGeneration
 
     small_config_overrides = {
@@ -110,6 +108,16 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
     skip_test_image_features_output_shape = True
     # The DSA indexer runs under `torch.no_grad`
     test_all_params_have_gradient = False
+    is_indexer_based = True
+
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip("DSA is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("DSA is not compatible with assisted decoding")
+    def test_assisted_decoding_sample(self):
+       pass
 
     @parameterized.expand([("no_checkpointing", False), ("checkpointing", True)])
     def test_lerope_training(self, name, activation_checkpointing):
@@ -235,10 +243,6 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    @unittest.skip("Pixtral does not support attention interfaces.")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
 
     @unittest.skip("Pixtral backbone already overrides this test, no need to test again.")
     def test_vision_axial_rope(self):

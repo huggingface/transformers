@@ -155,10 +155,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
        pass
 
-    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
     @unittest.skip("Dynamic control flow in MoE")
     @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
