@@ -87,9 +87,6 @@ class Olmo2Config(OlmoConfig):
     clip_qkv = AttributeError()
 
 
-# OLMo2 RMS norm is identical to Llama RMS norm except:
-# - Weight and hidden states are multiplied before converting back to the input dtype, rather than after
-#   (same goes for the kernel then: Llama's `RMSNorm` hub kernel uses Llama's order, so it is not inherited).
 @no_inherit_decorator
 class Olmo2RMSNorm(LlamaRMSNorm):
     def forward(self, hidden_states):
