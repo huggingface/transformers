@@ -267,7 +267,6 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             "test_get_audio_features_attentions",
             "test_get_audio_features_hidden_states",
             "test_get_audio_features_output",
-            "test_get_audio_embeddings_split_sizes",
             # Base model doesn't appear in AutoModel but rather a generatiev model is there
             # FIXME eustlib, model with gen head deserves to be in task-specific mapping
             "test_training",

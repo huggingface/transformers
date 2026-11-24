@@ -362,10 +362,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_flash_attn_2_from_config(self):
         pass
 
-    @unittest.skip("GLM-Image's image features are per-image feature maps, it has no flat `get_image_embeddings`")
-    def test_get_image_embeddings_split_sizes(self):
-        pass
-
     def _image_features_prepare_config_and_inputs(self):
         """
         Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.

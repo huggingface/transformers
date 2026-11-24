@@ -136,10 +136,6 @@ class Apertus1p5Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     def test_get_audio_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no audio in input dict")
-    def test_get_audio_embeddings_split_sizes(self):
-        pass
-
     @parameterized.expand([True, False, None])
     @unittest.skip("The tester has no audio in input dict")
     def test_get_audio_features_output(self, return_dict: bool | None):
@@ -242,10 +238,6 @@ class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     @parameterized.expand([True, False, None])
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("The tester has no image in input dict")
-    def test_get_image_embeddings_split_sizes(self):
         pass
 
     @unittest.skip("The tester has no image in input dict")

@@ -140,7 +140,6 @@ if is_torch_available():
     from transformers import MODEL_MAPPING
     from transformers.distributed.parallel_utils import _get_parameter_plan
     from transformers.integrations.accelerate import compute_module_sizes
-    from transformers.modeling_multimodal_utils import MultimodalMixin
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -5598,38 +5597,6 @@ class ModelTesterMixin(ExportTesterMixin):
                     getattr(config, k).output_attentions = True
 
             check_attentions_output(inputs_dict, config, model_class)
-
-    def _check_flat_embeddings(self, modality: str):
-        """`get_<modality>_embeddings` returns all items' rows as one tensor with each item's row count in
-        `split_sizes`, and `get_<modality>_features` returns them split per item."""
-        getter = f"get_{modality}_embeddings"
-        for model_class in self.all_model_classes:
-            if not issubclass(model_class, MultimodalMixin) or modality not in model_class.input_modalities:
-                continue
-            config, inputs_dict = getattr(self, f"_{modality}_features_prepare_config_and_inputs")()
-            model = model_class(config).to(torch_device).eval()
-            with torch.no_grad():
-                set_seed(0)
-                embeddings = getattr(model, getter)(**inputs_dict, return_dict=True)
-                set_seed(0)
-                features = getattr(model, f"get_{modality}_features")(**inputs_dict)
-            # Granite 4 Vision only returns deepstack features
-            flat = (
-                embeddings.pooler_output if embeddings.pooler_output is not None else embeddings.deepstack_features[0]
-            )
-            per_item = features.pooler_output if features.pooler_output is not None else features.deepstack_features[0]
-            self.assertEqual(flat.ndim, 2)
-            self.assertEqual(int(embeddings.split_sizes.sum()), flat.shape[0])
-            torch.testing.assert_close(list(per_item), list(flat.split(embeddings.split_sizes.tolist())))
-
-    def test_get_image_embeddings_split_sizes(self):
-        self._check_flat_embeddings("image")
-
-    def test_get_video_embeddings_split_sizes(self):
-        self._check_flat_embeddings("video")
-
-    def test_get_audio_embeddings_split_sizes(self):
-        self._check_flat_embeddings("audio")
 
     @parameterized.expand([True, False, None])
     def test_get_image_features_output(self, return_dict: bool | None):

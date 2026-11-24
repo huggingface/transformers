@@ -211,10 +211,6 @@ class InklingAudio2TextModelTest(ALMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("The tester has no image in input dict")
-    def test_get_image_embeddings_split_sizes(self):
-        pass
-
-    @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_pooler_output(self):
         pass
 
@@ -364,10 +360,6 @@ class InklingVision2TextModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_attentions(self):
-        pass
-
-    @unittest.skip("The tester has no audios in input dict")
-    def test_get_audio_embeddings_split_sizes(self):
         pass
 
     @parameterized.expand([True, False, None])
