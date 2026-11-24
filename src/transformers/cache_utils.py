@@ -1276,7 +1276,9 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         # Return full states no matter what
         return full_conv_states
 
-    def update_recurrent_state(self, recurrent_states: torch.Tensor | list[torch.Tensor], state_idx: int = 0, **kwargs) -> torch.Tensor:
+    def update_recurrent_state(
+        self, recurrent_states: torch.Tensor | list[torch.Tensor], state_idx: int = 0, **kwargs
+    ) -> torch.Tensor:
         """
         Update the linear attention cache in-place, and return the necessary recurrent states.
 

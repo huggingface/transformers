@@ -269,8 +269,12 @@ def torch_chunk_gated_delta_rule(
     scaling = query.shape[-1] ** -0.5
     query = query * scaling
 
-    # Since we want the last return_intermediate_recurrent_states, we need to artifically remove them from the chunks
-    effective_sequence_length = sequence_length - return_intermediate_recurrent_states if isinstance(return_intermediate_recurrent_states, int) else sequence_length
+    # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks
+    effective_sequence_length = (
+        sequence_length - num_intermediate_recurrent_states
+        if num_intermediate_recurrent_states is not None
+        else sequence_length
+    )
     chunked_query, sequential_query = torch.split(query, effective_sequence_length, dim=2)
     chunked_key, sequential_key = torch.split(key, effective_sequence_length, dim=2)
     chunked_value, sequential_value = torch.split(value, effective_sequence_length, dim=2)
@@ -279,7 +283,9 @@ def torch_chunk_gated_delta_rule(
 
     # Pad sequence length to be a multiple of chunk_size. Padding is described as (left_pad, right_pad) for each dim.
     pad_size = (chunk_size - effective_sequence_length % chunk_size) % chunk_size
-    chunked_query, chunked_key, chunked_value = (F.pad(x, (0, 0, 0, pad_size)) for x in (chunked_query, chunked_key, chunked_value))
+    chunked_query, chunked_key, chunked_value = (
+        F.pad(x, (0, 0, 0, pad_size)) for x in (chunked_query, chunked_key, chunked_value)
+    )
     chunked_beta, chunked_decay = (F.pad(x, (0, pad_size)) for x in (chunked_beta, chunked_decay))
 
     total_sequence_length = effective_sequence_length + pad_size
@@ -292,7 +298,8 @@ def torch_chunk_gated_delta_rule(
 
     # Reshape all tensors to chunk the sequence dimension (adds a new dimension of size chunk_size)
     chunked_query, chunked_key, k_beta, v_beta = [
-        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (chunked_query, chunked_key, k_beta, v_beta)
+        x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1])
+        for x in (chunked_query, chunked_key, k_beta, v_beta)
     ]
     chunked_decay = chunked_decay.reshape(chunked_decay.shape[0], chunked_decay.shape[1], -1, chunk_size)
 
@@ -352,7 +359,9 @@ def torch_chunk_gated_delta_rule(
         inter_chunk_attn = chunked_query[:, :, i] @ last_recurrent_state
         chunked_core_attn_out[:, :, i] = inter_chunk_attn + intra_chunk_attn[:, :, i] @ v_new
         # Update the recurrent state: new recurrent state (S_t+1) = decayed old state (S_t * (I-βkk^T)) + update (βvk^T)
-        last_recurrent_state = last_recurrent_state * chunk_decay[:, :, i] + chunked_key[:, :, i].transpose(-1, -2) @ v_new
+        last_recurrent_state = (
+            last_recurrent_state * chunk_decay[:, :, i] + chunked_key[:, :, i].transpose(-1, -2) @ v_new
+        )
 
     # Reshape the output to the orignal shape: flatten the chunk dimension, then drop padding
     chunked_core_attn_out = chunked_core_attn_out.reshape(padded_output_shape)

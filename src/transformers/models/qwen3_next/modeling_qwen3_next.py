@@ -425,10 +425,10 @@ def torch_chunk_gated_delta_rule(
     scaling = query.shape[-1] ** -0.5
     query = query * scaling
 
-    # Since we want the last return_intermediate_recurrent_states, we need to artifically remove them from the chunks
+    # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks
     effective_sequence_length = (
-        sequence_length - return_intermediate_recurrent_states
-        if isinstance(return_intermediate_recurrent_states, int)
+        sequence_length - num_intermediate_recurrent_states
+        if num_intermediate_recurrent_states is not None
         else sequence_length
     )
     chunked_query, sequential_query = torch.split(query, effective_sequence_length, dim=2)
