@@ -161,7 +161,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B",
     attn_implementation="sdpa",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
 )
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 
