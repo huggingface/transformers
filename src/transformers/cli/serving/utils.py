@@ -809,6 +809,7 @@ class GenerateRunner:
     def __init__(self, model: "PreTrainedModel", processor: Any, send_results: Callable):
         self.model, self.processor, self.send_results = model, processor, send_results
         self.queue: queue.Queue = queue.Queue()
+        self.unfinished_request_ids: set[int] = set()  # queued or running: those a cancel applies to
         self.cancelled_request_ids: set[int] = set()
         self.running = False
         self.lock = threading.Lock()
@@ -839,13 +840,17 @@ class GenerateRunner:
             return sequences[0, model_inputs["input_ids"].shape[-1] :].tolist()
 
         self.count_tokens(prompt=prompt_length(inputs))
+        self.unfinished_request_ids.add(request_id)
         self.queue.put((request_id, generate_tokens, (), stream))
 
     def submit(self, request_id: int, function: Callable, args: tuple, stream: bool) -> None:
+        self.unfinished_request_ids.add(request_id)
         self.queue.put((request_id, function, args, stream))
 
     def cancel(self, request_id: int) -> None:
-        self.cancelled_request_ids.add(request_id)
+        with self.lock:
+            if request_id in self.unfinished_request_ids:  # a cancel can arrive after its request ended
+                self.cancelled_request_ids.add(request_id)
 
     def count_tokens(self, prompt: int = 0, generated: int = 0) -> None:
         """Counts prompt tokens received and tokens generated, for the stats line (see `log_stats`)."""
@@ -884,7 +889,9 @@ class GenerateRunner:
         while True:
             request_id, function, args, stream = self.queue.get()
             if request_id in self.cancelled_request_ids:
-                self.cancelled_request_ids.discard(request_id)
+                with self.lock:
+                    self.unfinished_request_ids.discard(request_id)
+                    self.cancelled_request_ids.discard(request_id)
                 continue
             kwargs = {}
             if stream:
@@ -896,13 +903,15 @@ class GenerateRunner:
                     self.count_tokens(generated=len(result))
             except _GenerationCancelled:
                 result = None
-            except ValueError as error:  # the request's fault: crosses as a `ValueError`
+            except ValueError as error:  # the request's fault: crosses as one, for a 400
                 result = ValueError(str(error))
             except Exception as error:
                 logger.exception("A request failed")
                 result = RuntimeError(f"{type(error).__name__}: {error}")  # as text: any error crosses to the server
             self.running = False
-            self.cancelled_request_ids.discard(request_id)
+            with self.lock:
+                self.unfinished_request_ids.discard(request_id)
+                self.cancelled_request_ids.discard(request_id)
             self.send_results([], [], [(request_id, result)])
 
 

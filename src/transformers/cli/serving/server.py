@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from .transcription import TranscriptionHandler
 
 from .model_manager import ModelManager
-from .utils import CancelOnDisconnect, EngineDeadError, ModelNotServedError, RequestIdMiddleware
+from .utils import CancelOnDisconnect, EngineDeadError, RequestIdMiddleware
 
 
 logger = logging.get_logger(__name__)
@@ -70,8 +70,9 @@ def build_server(
 
     app = FastAPI(lifespan=lifespan)
 
-    @app.exception_handler(ModelNotServedError)
-    async def _model_not_served_handler(_request: Request, exc: ModelNotServedError):
+    # The request's fault: a model the server doesn't serve, a value it can't take (`generate`'s too)
+    @app.exception_handler(ValueError)
+    async def _bad_request_handler(_request: Request, exc: ValueError):
         return JSONResponse({"detail": str(exc)}, status_code=400)
 
     @app.exception_handler(EngineDeadError)
