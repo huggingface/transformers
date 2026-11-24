@@ -3444,10 +3444,11 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_kernels_fallback(self):
-        from transformers.modeling_flash_attention_utils import FLASH_ATTENTION_COMPATIBILITY_MATRIX
-
         if not is_kernels_available():
             self.skipTest(reason="Please install `kernels` package to run `test_kernels_fallback`")
+
+        if is_flash_attn_2_available():
+            self.skipTest(reason="Please uninstall flash-attn package to run test_kernels_fallback")
 
         if is_torch_npu_available():
             self.skipTest(
@@ -3455,16 +3456,11 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         logger = logging.get_logger("transformers.modeling_utils")
-        logger.warning_once.cache_clear()
-        self.addCleanup(logger.warning_once.cache_clear)
-        with (
-            patch.dict(FLASH_ATTENTION_COMPATIBILITY_MATRIX[2], {"general_availability_check": lambda: False}),
-            LoggingLevel(logging.WARNING),
-            CaptureLogger(logger) as cl,
-        ):
-            _ = AutoModel.from_pretrained(
-                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
-            )
+        with LoggingLevel(logging.WARNING):
+            with CaptureLogger(logger) as cl:
+                _ = AutoModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
+                )
 
         self.assertTrue(
             f"You do not have `flash_attn` installed, using `{FLASH_ATTN_KERNEL_FALLBACK['flash_attention_2']}` from the `kernels` library instead!"
