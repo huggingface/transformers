@@ -742,10 +742,6 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, MultimodalMixin,
             audio_hidden_states=outputs.audio_hidden_states,
         )
 
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`Qwen3ASRModel.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
-
 
 @auto_docstring(
     custom_intro="""

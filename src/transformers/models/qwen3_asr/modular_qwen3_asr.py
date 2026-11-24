@@ -319,10 +319,6 @@ class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         ```"""
         return super().forward(**super_kwargs)
 
-    def get_data_dependent_inputs(self, *args, **kwargs) -> dict[str, Any]:
-        r"""See [`Qwen3ASRModel.get_data_dependent_inputs`]."""
-        return self.model.get_data_dependent_inputs(*args, **kwargs)
-
 
 @auto_docstring(
     custom_intro="""
