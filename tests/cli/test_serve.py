@@ -1417,6 +1417,18 @@ class TestCompletion(ServeIntegrationTestCase):
         finally:
             _stop_serve(server)
 
+    def test_error_event_is_valid_json(self):
+        """An error in a stream ends it with an event that is valid JSON, even with quotes in its message."""
+        body = {
+            "model": self.MODEL,
+            "prompt": "The capital of France is",
+            "stream": True,
+            "generation_config": json.dumps({'fo"o': 1}),  # `generate` rejects it, quoting it in its error
+        }
+        with httpx.stream("POST", f"{self.base_url}/v1/completions", json=body, timeout=60) as resp:
+            events = [line[len("data: ") :] for line in resp.iter_lines() if line.startswith("data: ")]
+        self.assertIn('fo"o', json.loads(events[-1])["error"])
+
 
 @require_serve
 class TestResponseInputConversion(unittest.TestCase):
