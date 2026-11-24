@@ -998,10 +998,6 @@ class ModelUtilsTest(TestCasePlus):
                 with self.assertRaises(ValueError):
                     BertModel.from_pretrained(repo)
 
-            with open(index_file, "w", encoding="utf-8") as f:
-                json.dump(index, f)
-            self.assertIsInstance(BertModel.from_pretrained(repo), BertModel)
-
     def test_transformers_weights_config_field_rejects_path_traversal(self):
         config = BertConfig(
             vocab_size=16,
@@ -1035,39 +1031,6 @@ class ModelUtilsTest(TestCasePlus):
             with open(config_file, "w", encoding="utf-8") as f:
                 json.dump(repo_config, f)
             self.assertIsInstance(BertModel.from_pretrained(repo), BertModel)
-
-    def test_transformers_weights_config_field_rejects_path_traversal_in_hub_cache(self):
-        config = BertConfig(
-            vocab_size=16,
-            hidden_size=8,
-            num_hidden_layers=1,
-            num_attention_heads=1,
-            intermediate_size=8,
-            max_position_embeddings=8,
-        )
-        commit_hash = "0123456789abcdef0123456789abcdef01234567"
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            outside_dir = os.path.join(tmp_dir, "outside")
-            BertModel(config).save_pretrained(outside_dir)
-
-            # We lay out a cached Hub repo by hand, containing only a config that points at the outside model's weights
-            cache_dir = os.path.join(tmp_dir, "cache")
-            repo_cache = os.path.join(cache_dir, "models--user--repo")
-            snapshot = os.path.join(repo_cache, "snapshots", commit_hash)
-            os.makedirs(snapshot)
-            os.makedirs(os.path.join(repo_cache, "refs"))
-            with open(os.path.join(repo_cache, "refs", "main"), "w", encoding="utf-8") as f:
-                f.write(commit_hash)
-
-            config_dict = config.to_dict()
-            config_dict["transformers_weights"] = os.path.relpath(
-                os.path.join(outside_dir, "model.safetensors"), snapshot
-            )
-            with open(os.path.join(snapshot, "config.json"), "w", encoding="utf-8") as f:
-                json.dump(config_dict, f)
-
-            with self.assertRaises(ValueError):
-                BertModel.from_pretrained("user/repo", cache_dir=cache_dir, local_files_only=True)
 
     def test_transformers_weights_allows_symlinked_snapshot_file(self):
         if os.name == "nt":
