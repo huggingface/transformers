@@ -2364,6 +2364,7 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("post_attn_norm", "post_self_attn_layernorm"),
         WeightRenaming("post_ffn_norm", "post_mlp_layernorm"),
     ]
+    mapping["kolibri1_1"] = mapping["kolibri1"].copy()
 
     mapping["mimo_v2_flash"] = mapping["qwen2_moe"].copy()
     mapping["mimo_v2_flash"] += [
