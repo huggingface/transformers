@@ -168,9 +168,6 @@ def _get_mapping_values(mapping):
     return result
 
 
-HF_JOBS_DOCS_URL = "https://huggingface.co/docs/huggingface_hub/guides/jobs"
-
-
 @dataclass
 class TrainingSummary:
     model_name: str
@@ -328,9 +325,7 @@ class TrainingSummary:
 
         model_card += "\n## Training procedure\n"
         if self.hf_jobs_flavor is not None:
-            model_card += (
-                f"\nTrained with [Hugging Face Jobs]({HF_JOBS_DOCS_URL}) on `{self.hf_jobs_flavor}` hardware.\n"
-            )
+            model_card += f"\nTrained with Hugging Face Jobs on `{self.hf_jobs_flavor}` hardware.\n"
         model_card += "\n### Training hyperparameters\n"
         if self.hyperparameters is not None:
             model_card += "\nThe following hyperparameters were used during training:\n"
