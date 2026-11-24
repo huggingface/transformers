@@ -83,14 +83,18 @@ def _embeddings_getter(modality: str):
 
 
 class _ModalityGetter:
-    """A getter of `MultimodalMixin` that only exists on models taking its modality as input, so `hasattr` tells which
-    inputs a model takes."""
+    """A getter of `MultimodalMixin` that only exists on models taking its modality as input, so `hasattr(model, ...)`
+    tells which inputs a model takes."""
 
     def __init__(self, modality: str, getter):
         self.modality = modality
         self.getter = getter
 
     def __get__(self, instance, owner):
+        # On the class it always resolves, as `dir()` lists it: tools walking a class's attributes (the docs builder)
+        # call `getattr` on each name
+        if instance is None:
+            return self.getter
         input_modalities = owner.input_modalities
         input_modalities = (input_modalities,) if isinstance(input_modalities, str) else input_modalities
         # A model defining its own per-item getter (GLM-Image's feature maps) has no flat level for the mixin to build on
@@ -104,8 +108,8 @@ class MultimodalMixin:
     """
     `get_image_features`, `get_video_features` and `get_audio_features` from a model's flat `get_image_embeddings`,
     `get_video_embeddings` and `get_audio_embeddings`, split per item by the `split_sizes` they return. A model with a
-    head reaches its base model's. Only the modalities in `input_modalities` have them, so `hasattr` tells which inputs
-    a model takes.
+    head reaches its base model's. Only models taking the modality as input have them, so `hasattr(model, ...)` tells
+    which inputs a model takes.
     """
 
     model: "MultimodalMixin"
