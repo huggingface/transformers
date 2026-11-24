@@ -94,9 +94,6 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
 
 
 class TensorParallelLayer:
-    # Styles that read `module.config` and `module._mesh_manager` (set by `apply_tensor_parallelism`)
-    needs_config = False
-
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
         return False
@@ -217,7 +214,8 @@ class ColwiseParallel(TensorParallelLayer):
 
 
 class UnitColwiseParallel(ColwiseParallel):
-    """This forces all ranks to own at least 1 unit of the tensor.
+    """
+    This forces all ranks to own at least 1 unit of the tensor.
     It is designed to be used on `query/key/value` layers when running TP.
     For `query = nn.Linear(hidden_dim, head_dim * num_heads)` you can't divide the second dimension blindly by the world size as the attention REQUIRES to split per-head. You cannot split 2 heads of dim 64 into 4 GPUs by just separating into 4 x 32. This would mix the heads.
 
@@ -233,10 +231,9 @@ class UnitColwiseParallel(ColwiseParallel):
     1. Update the rank's expected shape.
     2. Prepare the slices appropriately when sharding the param.
 
-    We need to have [Shard(0), Replicate()] .
+    We need to shard with [Shard(0), Replicate()] the weights, while the hidden_states are
+    replicated.
     """
-
-    needs_config = True
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -377,8 +374,6 @@ class RowwiseParallel(TensorParallelLayer):
 
 
 class UnitRowwiseParallel(RowwiseParallel):
-    needs_config = True
-
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
         if meta is None:
@@ -539,8 +534,6 @@ class MlaKvAProjParallel(TensorParallelLayer):
     k_pass is passed to kv_b_proj (colwise) which has built-in all_reduce_backward so we don't have a partial gradient for it.
     However, k_rot goes straight to attention, never touches kv_b_proj. So we need to average gradient across all ranks otherwise we only get gradient for one rank (partial gradient).
     """
-
-    needs_config = True
 
     def transform_output_post_forward(self, module, output, mesh):
         if not hasattr(module.config, "qk_rope_head_dim"):
@@ -761,18 +754,17 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
     """
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())
-
-    text_config = model.config.get_text_config()
     for name, style_name in tp_plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
         is_param = name in parameters
         module_name, _, param_name = name.rpartition(".") if is_param else (name, "", "")
         module = modules[module_name]
-        if style.needs_config:
-            # Config-aware styles (head-aware sharding, MLA's rope split) read it from the module.
-            # TODO: Store what they need on the modules when the models initialize them.
-            module.config = text_config
-            module._mesh_manager = model._mesh_manager
+
+        # TODO: I am opening a PR to get the appropriate sub PreTrainedModel, for now let's use text
+        # we could check if this is "costly" or not.
+        module.config = model.config.get_text_config()
+
+        module._mesh_manager = model._mesh_manager
         if is_param:
             style.validate_param(module, param_name, tp_mesh, parameter_name=name)
             style.shard_param(module, param_name, tp_mesh)
