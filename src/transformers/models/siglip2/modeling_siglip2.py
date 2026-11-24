@@ -655,25 +655,14 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Siglip2MLP(config)
 
-        self.config = config
-        self.num_heads = config.num_attention_heads
-
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
-        if attention_mask is not None:
-            # `nn.MultiheadAttention` needs a float (batch * num_heads, target_len, source_len) mask, whatever the
-            # attention implementation of the encoder
-            target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = attention_mask[:, None, None, :].bool().expand(-1, self.num_heads, target_len, -1)
-            attention_mask = torch.where(
-                attention_mask.reshape(-1, target_len, source_len),
-                torch.full((), 0.0, device=attention_mask.device, dtype=probe.dtype),
-                torch.finfo(probe.dtype).min,
-            )
-
-        hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
+        # `nn.MultiheadAttention` takes the padding as `key_padding_mask` (True = ignored), whatever the attention
+        # implementation of the encoder
+        key_padding_mask = ~attention_mask.bool() if attention_mask is not None else None
+        hidden_state = self.attention(probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask)[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)
