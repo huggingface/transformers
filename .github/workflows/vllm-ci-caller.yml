@@ -1389,6 +1389,9 @@ jobs:
   # - models of 7B or more (too slow on CPU): aria, glm4_1v(-video), kimi_vl, llama4, llava_next(-video), llava-broadcast,
   #   llava_next-broadcast, minicpmv_25, minicpmv_26, minicpmo_26, molmo, moondream3, ovis1_6-gemma2, skywork_r1v.
   # - qwen2_5_vl-transformers: skips itself on CPU (`large_gpu_mark(min_gb=32)`).
+  # - deepseek_vl_v2, h2ovl, ovis2, ovis2_5, phi3v, smolvlm: skip themselves with transformers main: their HF reference
+  #   needs an older transformers (`max_transformers_version` in vLLM's tests/models/registry.py).
+  # - granite4_vision: skips itself (`is_available_online=False` in vLLM's tests/models/registry.py).
   # - the entries vLLM marks `skip` (cosmos3, dots_ocr, glm4v, glm_ocr, intern_vl, intern_vl-video, isaac, pixtral_hf,
   #   intern_vl-diff-patches).
   vllm-test-multimodal-hf-comparison-more:
@@ -1487,7 +1490,7 @@ jobs:
           # `-k "[<model_type>-"`: the test IDs are `<test>[<model_type>-test_case<N>]`.
           pytest -v -s tests/models/multimodal/generation/test_common.py \
             -m "not cpu_model" \
-            -k "[blip2- or [deepseek_vl_v2- or [gemma3- or [gemma4- or [granite_vision- or [granite4_vision- or [h2ovl- or [idefics3- or [intern_vl-hf- or [llava_onevision- or [llava-onevision-transformers- or [ovis2- or [ovis2_5- or [paddleocr_vl- or [paligemma- or [phi3v- or [qianfan_ocr- or [qwen2_5_vl-windows-attention- or [qwen3_vl- or [smolvlm-" \
+            -k "[blip2- or [gemma3- or [gemma4- or [granite_vision- or [idefics3- or [intern_vl-hf- or [llava_onevision- or [llava-onevision-transformers- or [paddleocr_vl- or [paligemma- or [qianfan_ocr- or [qwen2_5_vl-windows-attention- or [qwen3_vl-" \
             --num-shards=8 --shard-id=$SHARD_ID
 
   # Runs after all test jobs (even on failure) and produces structured JSON
