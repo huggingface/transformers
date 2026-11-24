@@ -25,6 +25,7 @@ jobs:
     permissions:
       contents: read
     name: Test vLLM examples and weight mapping
+    if: false  # [Temporary] trial run
     # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
     # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
     runs-on:
@@ -197,6 +198,7 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -346,6 +348,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -561,6 +564,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -668,6 +672,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM tokenizers, chat templates and configs"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -812,6 +817,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -991,6 +997,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1099,6 +1106,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM structured output, detokenizer, parsers and video processing"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1257,6 +1265,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1407,7 +1416,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+        shard: [0]  # [Temporary] trial run
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
@@ -1490,8 +1499,7 @@ jobs:
           # `-k "[<model_type>-"`: the test IDs are `<test>[<model_type>-test_case<N>]`.
           pytest -v -s tests/models/multimodal/generation/test_common.py \
             -m "not cpu_model" \
-            -k "[blip2- or [gemma3- or [gemma4- or [granite_vision- or [idefics3- or [intern_vl-hf- or [llava_onevision- or [llava-onevision-transformers- or [paddleocr_vl- or [paligemma- or [qianfan_ocr- or [qwen2_5_vl-windows-attention- or [qwen3_vl-" \
-            --num-shards=8 --shard-id=$SHARD_ID
+            -k "[llava_next- or [llava_next_video-"  # [Temporary] trial: 7B models only
 
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
@@ -1584,7 +1592,7 @@ jobs:
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
-            --slack-channel "#transformers-ci-vllm" \
+            --slack-channel "#transformers-ci-dummy" \
             --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
             --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
             --commit-date "vllm=$VLLM_COMMIT_DATE"
