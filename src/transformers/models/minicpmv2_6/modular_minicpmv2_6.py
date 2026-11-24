@@ -99,7 +99,7 @@ class MiniCPMV2_6VisionEmbeddings(MiniCPMV2_5VisionEmbeddings):
         boundaries = torch.arange(
             1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
         )
-        # Unlike 2.5, each patch is bucketed by its (row, col) in its slice's 2D patch grid; padding stays at (0, 0)
+        # Bucket each patch by its (row, col) in its slice's 2D patch grid; padding stays at (0, 0)
         step = 1.0 / (patch_position_ids.amax(dim=1, keepdim=True) + 1)
         bucket_coords = torch.bucketize(patch_position_ids * step, boundaries, right=True)
         position_ids = bucket_coords[..., 0] * self.num_patches_per_side + bucket_coords[..., 1]
@@ -122,14 +122,14 @@ class MiniCPMV2_6VisionTransformer(MiniCPMV2_5VisionTransformer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, 1, max_patches)`):
+        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
             Which patches are real (`True`) rather than padding.
         patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`):
             `(row, col)` of each patch in its slice's patch grid.
         """
         hidden_states = self.embeddings(pixel_values, patch_position_ids)
         attention_mask = create_bidirectional_mask(
-            config=self.config, inputs_embeds=hidden_states, attention_mask=patch_attention_mask.flatten(1)
+            config=self.config, inputs_embeds=hidden_states, attention_mask=patch_attention_mask
         )
         encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=attention_mask, **kwargs)
         return BaseModelOutputWithPooling(last_hidden_state=self.post_layernorm(encoder_outputs.last_hidden_state))
@@ -156,7 +156,7 @@ class MiniCPMV2_6Model(MiniCPMV2_5Model):
         """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values.to(self.vision_tower.dtype),
-            patch_attention_mask=pixel_attention_mask[:, None, :],
+            patch_attention_mask=pixel_attention_mask,
             patch_position_ids=patch_position_ids,
             return_dict=True,
             **kwargs,

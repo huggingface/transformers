@@ -115,7 +115,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "llava_next_video": "llava_next",
     "llava_onevision": "llava_next",
     "minicpmv2_6": "minicpmv2_5",
-    "minicpmv4_5": "minicpmv2_5",
     # class-based mappings
     "AriaModel": "LlavaModel",
     "PaliGemmaModel": "LlavaModel",

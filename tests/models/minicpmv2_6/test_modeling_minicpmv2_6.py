@@ -16,7 +16,14 @@
 import unittest
 
 from transformers import AutoProcessor, MiniCPMV2_6Config, is_torch_available
-from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
@@ -95,6 +102,7 @@ class MiniCPMV2_6ModelTest(VLMModelTest, unittest.TestCase):
 
 
 @slow
+@require_torch_accelerator
 class MiniCPMV2_6IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM-V-4"
 
