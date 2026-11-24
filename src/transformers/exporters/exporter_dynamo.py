@@ -407,14 +407,14 @@ def _reshaped_vision_attention_forward(
         value_states,
         attn_mask=attention_mask,
         is_causal=False,
-        scale=self.scaling,
+        scale=getattr(self, "scaling", getattr(self, "scale", None)),
         dropout_p=0.0 if not self.training else self.attention_dropout,
         enable_gqa=getattr(self, "num_key_value_heads", self.num_heads) != self.num_heads,
     )
 
     # (n_seg, heads, seg_len, dim) → (n_seg, seg_len, heads, dim) → (seq, heads*dim).
     attn_output = attn_output.transpose(1, 2).reshape(seq_length, -1)
-    out_proj = self.proj if hasattr(self, "proj") else self.out_proj
+    out_proj = next(getattr(self, name) for name in ("proj", "out_proj", "o_proj") if hasattr(self, name))
     attn_output = out_proj(attn_output)
 
     if needs_batch_restore:
@@ -438,8 +438,10 @@ def _reshaped_vision_attention_forward(
     "transformers.models.glm_ocr.modeling_glm_ocr.GlmOcrVisionAttention.forward",
     "transformers.models.dots3_note.modeling_dots3_note.Dots3NoteVisionAttention.forward",
     "transformers.models.ernie4_5_vl_moe.modeling_ernie4_5_vl_moe.Ernie4_5_VLMoeVisionAttention.forward",
+    "transformers.models.glm5_next.modeling_glm5_next.Glm5NextVisionAttention.forward",
     # Combined `qkv` + optional `(cos, sin)` rotary + `.proj`
     "transformers.models.cohere_compass.modeling_cohere_compass.CohereCompassVisionAttention.forward",
+    "transformers.models.glm_image.modeling_glm_image.GlmImageVisionAttention.forward",
     # Asymmetric `qkv` split + `(cos, sin)` rotary + `.proj`
     "transformers.models.exaone4_5.modeling_exaone4_5.Exaone4_5_VisionAttention.forward",
     # Separate `.q` / `.k` / `.v` + single rotary tensor + `.proj`
@@ -458,6 +460,11 @@ def _reshaped_vision_attention_forward(
     "transformers.models.minicpm_ocr.modeling_minicpm_ocr.MiniCPMOcrVisionAttention.forward",
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
     "transformers.models.minicpmv4_7.modeling_minicpmv4_7.MiniCPMV4_7VisionAttention.forward",
+    # Separate `_proj` + `.o_proj`, no rotary (tuple return)
+    "transformers.models.hunyuan_vl.modeling_hunyuan_vl.HunYuanVLVisionAttention.forward",
+    "transformers.models.hy_v4_vl.modeling_hy_v4_vl.HYV4VLVisionAttention.forward",
+    # Separate `_proj` + `.out_proj`, no rotary (single return)
+    "transformers.models.cosmos3_edge.modeling_cosmos3_edge.Cosmos3EdgeVisionAttention.forward",
     # Audio attention: separate `_proj` + `.out_proj`, no rotary
     "transformers.models.qwen2_5_omni.modeling_qwen2_5_omni.Qwen2_5OmniAudioAttention.forward",
     "transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe.Qwen3OmniMoeAudioAttention.forward",

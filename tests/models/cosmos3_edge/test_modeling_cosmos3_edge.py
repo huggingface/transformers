@@ -194,7 +194,6 @@ class Cosmos3EdgeVisionText2TextModelTester(VLMModelTester):
 @require_torch
 class Cosmos3EdgeModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Cosmos3EdgeVisionText2TextModelTester
-    test_torch_exportable = False  # packed patch spans require data-dependent shape handling
 
     @unittest.skip("Packed vision attention outputs will be added in a follow-up.")
     def test_get_image_features_attentions(self):

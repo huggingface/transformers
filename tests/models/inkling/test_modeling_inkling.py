@@ -328,7 +328,6 @@ class InklingVision2TextModelTester(VLMModelTester):
 class InklingVision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = InklingVision2TextModelTester
     test_all_params_have_gradient = False  # e-score correction bias is only used for expert routing
-    test_torch_exportable = False  # data-dependent control flow in the HMLP vision tower (time/space folding)
     model_split_percents = [0.85, 0.9]
 
     @unittest.skip(
