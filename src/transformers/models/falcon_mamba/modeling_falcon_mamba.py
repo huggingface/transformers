@@ -402,7 +402,7 @@ class FalconMambaMixer(nn.Module):
 
         A = -torch.exp(self.A_log.float())
         # No fused `mamba_inner_fn` path, unlike Mamba: it can only normalize dt after `dt_proj`, while FalconMamba
-        # normalizes it before
+        # normalizes it before, see https://github.com/huggingface/transformers/pull/51184
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
