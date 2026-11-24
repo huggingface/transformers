@@ -34,7 +34,6 @@ from ..mamba.modeling_mamba import (
     apply_mask_to_padding_states,
     causal_conv1d_fn,
     causal_conv1d_update,
-    mamba_inner_fn,
     mamba_selective_scan,
     mamba_selective_state_update,
 )
@@ -146,32 +145,8 @@ class FalconMambaMixer(MambaMixer):
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
         A = -torch.exp(self.A_log.float())
-        if self.training and cache is None:
-            fused_output = mamba_inner_fn(
-                projected_states,
-                self.conv1d.weight,
-                self.conv1d.bias if self.use_conv_bias else None,
-                self.x_proj.weight,
-                self.dt_proj.weight,
-                self.out_proj.weight,
-                self.out_proj.bias.float() if self.use_bias else None,
-                A,
-                None,  # input-dependent B
-                None,  # input-dependent C
-                self.D.float(),
-                delta_bias=self.dt_proj.bias.float(),
-                delta_softplus=True,
-                # Key difference: norms on B, C, and dt
-                b_rms_weight=self.b_layernorm.weight,
-                c_rms_weight=self.c_layernorm.weight,
-                dt_rms_weight=self.dt_layernorm.weight,
-                b_c_dt_rms_eps=self.rms_eps,
-            )
-
-            # Only kernels can use this shortcircuit, fallback to normal torch otherwise
-            if fused_output is not None:
-                return fused_output
-
+        # No fused `mamba_inner_fn` path, unlike Mamba: it can only normalize dt after `dt_proj`, while FalconMamba
+        # normalizes it before
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation

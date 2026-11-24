@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import copy
 import unittest
 from unittest.util import safe_repr
 
@@ -24,6 +25,7 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_deterministic_for_xpu,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
