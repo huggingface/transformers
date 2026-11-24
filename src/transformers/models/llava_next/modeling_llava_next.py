@@ -596,17 +596,11 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
-        # Granite text models divide their logits by logits_scaling in their own ForCausalLM.
-        text_config = self.config.text_config
-        if text_config.model_type in (
-            "granite",
-            "granite_swa",
-            "granitemoe",
-            "granitemoe_swa",
-            "granitemoehybrid",
-            "granitemoeshared",
-        ):
-            logits = logits / text_config.logits_scaling
+        # Granite-family text models divide their logits by `logits_scaling` in their own ForCausalLM.
+        # Backbones without this attribute, or with it set to 1.0, are left unchanged.
+        logits_scaling = getattr(self.config.text_config, "logits_scaling", None)
+        if logits_scaling is not None and logits_scaling != 1.0:
+            logits = logits / logits_scaling
 
         loss = None
         if labels is not None:
