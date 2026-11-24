@@ -1905,6 +1905,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 for key, value in special_tokens_map.items():
                     if key in kwargs and kwargs[key]:
                         continue  # User-provided kwargs take precedence
+                    if key == "additional_special_tokens":
+                        # V5: legacy files still use the deprecated name; merge it like `extra_special_tokens`
+                        if kwargs.get("extra_special_tokens"):
+                            continue
+                        key = "extra_special_tokens"
                     if isinstance(value, dict) and key != "extra_special_tokens":
                         value.pop("special", None)
                         value = AddedToken(**value, special=True)
