@@ -257,6 +257,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("nemo_speechlm", "TokenizersBackend" if is_tokenizers_available() else None),
         ("nemotron3_5_asr", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nemotron_asr_streaming", "ParakeetTokenizer" if is_tokenizers_available() else None),
+        ("nemotron_parse", "TokenizersBackend" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizer" if is_tokenizers_available() else None),
         ("nllb-moe", "NllbTokenizer" if is_tokenizers_available() else None),

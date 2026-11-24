@@ -14,3 +14,5 @@ src/transformers/models/idefics2/modeling_idefics2.py
 src/transformers/models/kosmos2/modeling_kosmos2.py
 src/transformers/models/musicgen_melody/modeling_musicgen_melody.py
 src/transformers/models/musicgen_melody/processing_musicgen_melody.py
+src/transformers/models/nemotron_parse/modeling_nemotron_parse.py
+src/transformers/models/nemotron_parse/modular_nemotron_parse.py

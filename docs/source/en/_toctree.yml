@@ -1523,6 +1523,8 @@
         title: Molmo2
       - local: model_doc/musicflamingo
         title: MusicFlamingo
+      - local: model_doc/nemotron_parse
+        title: Nemotron-Parse
       - local: model_doc/neomme
         title: NeoMME
       - local: model_doc/nougat

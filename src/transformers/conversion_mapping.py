@@ -477,6 +477,7 @@ def _build_checkpoint_conversion_mapping():
                 operations=[Chunk(dim=0)],
             ),
         ],
+        "nemotron_parse": [WeightRenaming(r"encoder\.model_encoder\.", "encoder.vision_model.")],
         "NemotronH_Omni_Reasoning_V3": [
             WeightRenaming(r"^mlp1\.0\.", r"multi_modal_projector\.layer_norm\."),
             WeightRenaming(r"^mlp1\.1\.", r"multi_modal_projector\.linear_1\."),
