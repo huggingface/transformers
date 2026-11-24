@@ -1335,6 +1335,18 @@ class PreTrainedModel(
             if ignore_save := getattr(module, "_keys_to_ignore_on_save", None):
                 self._keys_to_ignore_on_save.update({f"{name}.{k}" for k in ignore_save})
 
+        # A sub-config no sub-model owns (its layers are built from it directly) takes this model's attention
+        # implementation, as `set_attn_implementation` does, instead of none at all
+        owned_configs = {id(module.config) for module in self.modules() if isinstance(module, PreTrainedModel)}
+        for sub_config_key in self.config.sub_configs:
+            sub_config = getattr(self.config, sub_config_key, None)
+            if (
+                isinstance(sub_config, PreTrainedConfig)
+                and id(sub_config) not in owned_configs
+                and sub_config._attn_implementation_internal is None
+            ):
+                sub_config._attn_implementation_internal = self.config._attn_implementation
+
         # Maybe initialize the weights and tie the keys
         self.init_weights()
         self._backward_compatibility_gradient_checkpointing()
