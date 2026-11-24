@@ -80,13 +80,6 @@ class FunAsrNanoModelTester(ALMModelTester):
 
 @require_torch
 class FunAsrNanoForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
-    @unittest.skip(
-        reason="No sub-model owns the adaptor's config, so its attention implementation is never set and every call "
-        "warns, which `fullgraph=True` can't trace"
-    )
-    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
-        pass
-
     """Model tester for `FunAsrNanoForConditionalGeneration`."""
 
     model_tester_class = FunAsrNanoModelTester
