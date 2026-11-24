@@ -110,8 +110,10 @@ print(processor.decode(outputs[0, inputs["input_ids"].shape[1] :]))
 - `resize_token_embeddings` is not supported, because the Engram token map and n-gram tables are fixed to the
   vocabulary of the checkpoint. If you need a new token, reuse one of the placeholder tokens that the tokenizer
   already has.
-- Batched generation with left padding does not match unpadded generation yet. The compressor pools consecutive
-  tokens, so padding shifts its groups.
+- Batched generation with left padding matches unpadded generation. The compressor pools consecutive tokens, so it
+  counts its groups from the first real token of each row. If you call the model directly on a left-padded batch,
+  pass `position_ids` that count from the first real token of each row too, like [`~GenerationMixin.generate`] does.
+  The rounding below happens after RoPE, so the model is not indifferent to a shift of the positions.
 - Like the original implementation, the model rounds its KV and attention output to FP8, and its index keys, index
   queries and compressed KV to FP4. That is how they were quantized in training, so it happens whatever dtype you load
   the model in. The rounded values keep that dtype, so this does not make the cache any smaller (yet!).

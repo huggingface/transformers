@@ -229,14 +229,12 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
                 [streams_shape] * text_config.num_hidden_layers + [(batch_size, seq_length, text_config.hidden_size)],
             )
 
-    @unittest.skip(
-        reason=(
-            "The compressor pools consecutive tokens before the attention mask applies, so left padding shifts "
-            "the groups and folds pad tokens into the compressed KV. Same limitation as DeepSeek-V4, not fixed yet."
-        )
-    )
     def test_left_padding_compatibility(self):
-        pass
+        # The common test allows 1e-5, which is a tolerance for float noise. With the activations rounded to FP8
+        # and FP4, the noise now and then tips a value over a rounding boundary, and the logits move by a
+        # rounding step instead (2 of 200 random models on a GPU).
+        tolerance = self.rounded_logits_tolerance
+        super().test_left_padding_compatibility(atol=tolerance, rtol=tolerance)
 
     def test_reverse_loading_mapping(self):
         # The checkpoint is flat and has the LM head, so the renames that nest it under `model.` only apply to
@@ -334,6 +332,41 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         tolerance = self.rounded_logits_tolerance
         torch.testing.assert_close(torch.cat(logits, dim=1), expected, atol=tolerance, rtol=tolerance)
 
+    def test_left_padding_matches_unpadded_with_cache(self):
+        """Each row of a left-padded batch gets the logits of that row on its own, with a cache as well."""
+        config, model = self._get_model()
+        # 0, 3 and 5 tokens of padding. The pooling groups are counted from the first real token of a row, so
+        # the first two rows never complete a 2-token group on the same step.
+        rows = [self.model_tester.prepare_text_ids(1, length) for length in (19, 16, 14)]
+        input_ids = torch.full((3, 19), config.text_config.pad_token_id, device=torch_device)
+        attention_mask = torch.zeros((3, 19), dtype=torch.long, device=torch_device)
+        for row_idx, row in enumerate(rows):
+            input_ids[row_idx, -row.shape[1] :] = row[0]
+            attention_mask[row_idx, -row.shape[1] :] = 1
+        # The positions that `generate` makes: each row counts from its own first real token
+        position_ids = (attention_mask.cumsum(-1) - 1).masked_fill(attention_mask == 0, 0)
+
+        # The first chunk is nothing but padding for the last row, then comes a longer chunk, then single tokens
+        cache, logits = None, []
+        with torch.no_grad():
+            for start, end in ((0, 5), (5, 12), *((position, position + 1) for position in range(12, 19))):
+                outputs = model(
+                    input_ids=input_ids[:, start:end],
+                    attention_mask=attention_mask[:, :end],
+                    position_ids=position_ids[:, start:end],
+                    cache=cache,
+                    use_cache=True,
+                )
+                cache = outputs.cache
+                logits.append(outputs.logits)
+            logits = torch.cat(logits, dim=1)
+            tolerance = self.rounded_logits_tolerance
+            for row_idx, row in enumerate(rows):
+                expected = model(input_ids=row, use_cache=False).logits[0]
+                torch.testing.assert_close(
+                    logits[row_idx, -row.shape[1] :], expected, atol=tolerance, rtol=tolerance, msg=f"Row {row_idx}"
+                )
+
     def test_compressed_attention_is_used(self):
         """Tokens outside the sliding window still reach the output, through the compressed KV."""
         config, model = self._get_model()
@@ -357,12 +390,20 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         offloaded_compressor = copy.deepcopy(compressor)
         cpu_offload(offloaded_compressor, execution_device=torch.device(torch_device))
         hidden_states = torch.randn(2, 6, config.hidden_size, device=torch_device)
+        # No padding and no cache, and the RoPE of the latents plays no part in the pooling
+        inputs = (
+            hidden_states,
+            (torch.ones(1, 6, 4, device=torch_device), torch.zeros(1, 6, 4, device=torch_device)),
+            torch.ones(2, 6, dtype=torch.bool, device=torch_device),
+            torch.zeros(2, dtype=torch.long, device=torch_device),
+        )
         with torch.no_grad():
             # The offloaded one goes first. A weight that was not loaded is uninitialized memory, which could
             # otherwise still hold the result we are comparing with.
-            offloaded = offloaded_compressor(hidden_states)
-            expected = compressor(hidden_states)
+            offloaded, _, _ = offloaded_compressor(*inputs)
+            expected, _, num_groups = compressor(*inputs)
         self.assertEqual(expected.shape, (2, 3, config.head_dim))
+        self.assertEqual(num_groups.tolist(), [3, 3])
         torch.testing.assert_close(offloaded, expected)
 
     def test_attention_layer_types(self):

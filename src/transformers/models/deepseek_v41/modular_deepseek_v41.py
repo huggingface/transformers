@@ -29,7 +29,7 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ChannelDimension, ImageInput, ImageType, PILImageResampling, SizeDict, get_image_type
 from ...integrations import use_experts_implementation
-from ...masking_utils import create_sliding_window_causal_mask
+from ...masking_utils import create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -407,9 +407,12 @@ class DeepseekV41CacheLayer(DynamicSlidingWindowLayer):
     keep state that other layers read:
 
       * `compressed_kv` / `index_keys` - the compressed KV entries a `"compressed_attention"` layer has emitted
-        so far, and the index keys made from them. The KV-sharing layers after it attend to these too.
-      * `buffer_kv` / `buffer_gate` - the tokens of a pooling group that is still filling up. The group only
-        becomes a compressed entry once its last token arrives.
+        so far, and the index keys made from them. The KV-sharing layers after it attend to these too. Entry
+        `g` of a row is its `g`-th group of real tokens, so the rows of a padded batch do not have the same
+        number of entries. A row with fewer of them than the others has zeros after its last one.
+      * `pooling_buffer` - the KV and the gates of the last `compress_ratio - 1` real tokens of each row. The
+        last few of them are the tokens of a pooling group that is still filling up. The group only becomes a
+        compressed entry once its last token arrives.
       * `token_history` - the last few token ids, which the Engram n-gram hashes look back at. Only the first
         layer keeps it.
     """
@@ -420,8 +423,7 @@ class DeepseekV41CacheLayer(DynamicSlidingWindowLayer):
         super().__init__(sliding_window=config.sliding_window)
         self.compressed_kv: torch.Tensor | None = None
         self.index_keys: torch.Tensor | None = None
-        self.buffer_kv: torch.Tensor | None = None
-        self.buffer_gate: torch.Tensor | None = None
+        self.pooling_buffer: torch.Tensor | None = None
         self.token_history: torch.Tensor | None = None
 
     def update(self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs):
@@ -438,33 +440,33 @@ class DeepseekV41CacheLayer(DynamicSlidingWindowLayer):
         self.values = self.keys
         return full, full
 
-    @property
-    def num_compressed_entries(self) -> int:
-        return 0 if self.compressed_kv is None else self.compressed_kv.shape[1]
-
-    def update_pooling_buffer(
-        self, kv: torch.Tensor, gate: torch.Tensor, compress_ratio: int
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Put the new `(kv, gate)` after the tokens that are still waiting for their group to fill up, and
-        return the longest prefix that is made of whole groups. The rest waits in the buffer for the next call.
-        """
-        if self.buffer_kv is not None:
-            kv = torch.cat([self.buffer_kv, kv], dim=1)
-            gate = torch.cat([self.buffer_gate, gate], dim=1)
-        usable = (kv.shape[1] // compress_ratio) * compress_ratio
-        self.buffer_kv, self.buffer_gate = kv[:, usable:], gate[:, usable:]
-        return kv[:, :usable], gate[:, :usable]
-
     def update_compressed_states(
-        self, compressed_kv: torch.Tensor, index_keys: torch.Tensor
+        self,
+        compressed_kv: torch.Tensor,
+        index_keys: torch.Tensor,
+        num_entries: torch.Tensor,
+        num_new_entries: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Append the new compressed KV entries and their index keys, and return all of them so far."""
-        if self.compressed_kv is not None:
-            compressed_kv = torch.cat([self.compressed_kv, compressed_kv], dim=1)
-            index_keys = torch.cat([self.index_keys, index_keys], dim=1)
-        self.compressed_kv, self.index_keys = compressed_kv, index_keys
-        return compressed_kv, index_keys
+        """
+        Write the new compressed KV entries and their index keys after the ones that each row already has, and
+        return all of them so far. Row `i` has `num_entries[i]` entries, and takes the first
+        `num_new_entries[i]` of the new ones.
+        """
+        if self.compressed_kv is None:
+            self.compressed_kv, self.index_keys = compressed_kv[:, :0], index_keys[:, :0]
+        num_entries_after = num_entries + num_new_entries
+        width = max(self.compressed_kv.shape[1], int(num_entries_after.max()))
+        # Each row writes at its own offset, as the rows of a padded batch do not complete their groups in the
+        # same calls. The new entries that a row does not take all land in one extra slot at the end, which we
+        # drop again.
+        slots = num_entries[:, None] + torch.arange(compressed_kv.shape[1], device=compressed_kv.device)
+        slots = torch.where(slots < num_entries_after[:, None], slots, width)
+        for name, new_states in (("compressed_kv", compressed_kv), ("index_keys", index_keys)):
+            states = getattr(self, name)
+            states = F.pad(states, (0, 0, 0, width + 1 - states.shape[1]))
+            states = states.scatter(1, slots[..., None].expand_as(new_states), new_states)
+            setattr(self, name, states[:, :width])
+        return self.compressed_kv, self.index_keys
 
     def update_token_history(self, token_ids: torch.Tensor, history_length: int) -> torch.Tensor:
         """
@@ -478,7 +480,7 @@ class DeepseekV41CacheLayer(DynamicSlidingWindowLayer):
         return token_ids
 
     def _extra_state_names(self) -> tuple[str, ...]:
-        return ("compressed_kv", "index_keys", "buffer_kv", "buffer_gate", "token_history")
+        return ("compressed_kv", "index_keys", "pooling_buffer", "token_history")
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
@@ -624,9 +626,15 @@ class DeepseekV41Compressor(nn.Module):
     Pools every `compress_ratio` consecutive tokens into one KV latent with a learned softmax gate. With a
     ratio of 1 there is nothing to pool, so the latent is a plain projection of each token.
 
+    The groups are counted from the first real token of each row, and padding takes no part in them. So a
+    left-padded row gets the same latents as it would without the padding, but the rows of a batch do not
+    complete their groups in the same calls.
+
     Returns the latents of the groups that this call completes, *before* RoPE: the indexer makes its keys
-    from the unrotated latents, so the attention layer rotates them afterwards. A group whose last token has
-    not arrived yet waits in the cache, or is dropped when there is no cache.
+    from the unrotated latents, so the attention layer rotates them afterwards. The RoPE of each latent and
+    the number of groups that each row completes come back with them, and the latents after that number are
+    not real. A group whose last token has not arrived yet waits in the cache, or is dropped when there is no
+    cache.
     """
 
     def __init__(self, config: DeepseekV41TextConfig, layer_idx: int):
@@ -642,22 +650,64 @@ class DeepseekV41Compressor(nn.Module):
             self.gate_proj = None
         self.kv_norm = DeepseekV41RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, cache_layer: DeepseekV41CacheLayer | None = None) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        is_real_token: torch.Tensor,
+        num_seen_tokens: torch.Tensor,
+        cache_layer: DeepseekV41CacheLayer | None = None,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        ratio = self.compress_ratio
+        # First, what the groups are made of. The KV and the gate of a token stay together until the pooling,
+        # so we keep them in one tensor. The same goes for the cos and sin of the RoPE: for each token, the
+        # model has computed the RoPE of the entry that the token completes, if it is the last one of a group.
         if self.gate_proj is None:
             # One token per group, so no gate and no pooling
-            return self.kv_norm(self.kv_proj(hidden_states))
-
-        # The reference promotes the pooling weights to float32, and pools in float32 too
-        kv, gate = self.kv_proj(hidden_states), self.gate_proj(hidden_states)
-        if cache_layer is not None:
-            kv, gate = cache_layer.update_pooling_buffer(kv, gate, self.compress_ratio)
+            states = self.kv_proj(hidden_states)
         else:
-            usable = (kv.shape[1] // self.compress_ratio) * self.compress_ratio
-            kv, gate = kv[:, :usable], gate[:, :usable]
-        kv = kv.unflatten(1, (-1, self.compress_ratio))
-        gate = gate.unflatten(1, (-1, self.compress_ratio))
-        pooled = (kv * gate.softmax(dim=2)).sum(dim=2)
-        return self.kv_norm(pooled.to(hidden_states.dtype))
+            # The reference promotes the pooling weights to float32, and pools in float32 too
+            states = torch.cat([self.kv_proj(hidden_states), self.gate_proj(hidden_states)], dim=-1)
+        rope = torch.cat(position_embeddings, dim=-1).expand(batch_size, -1, -1)
+
+        if cache_layer is not None and ratio > 1:
+            # The tokens that are still waiting for their group to fill up go first. The cache keeps the last
+            # `ratio - 1` real tokens of each row, and the ones that are waiting are the last of those.
+            if cache_layer.pooling_buffer is None:
+                cache_layer.pooling_buffer = states.new_zeros((batch_size, ratio - 1, states.shape[-1]))
+            num_waiting = num_seen_tokens % ratio
+            is_waiting = torch.arange(ratio - 1, device=states.device) >= ratio - 1 - num_waiting[:, None]
+            states = torch.cat([cache_layer.pooling_buffer, states], dim=1)
+            is_real_token = torch.cat([is_waiting, is_real_token], dim=1)
+            rope = F.pad(rope, (0, 0, ratio - 1, 0))
+
+        # Next, we bring the real tokens of each row to the front, in the order that they came in. Group `g` of
+        # a row is then its real tokens `g * ratio` to `(g + 1) * ratio - 1`, whatever padding the row has,
+        # and all that is not real ends up after the row's last whole group.
+        order = (~is_real_token).long().argsort(dim=1, stable=True)
+        states = states.gather(1, order[..., None].expand_as(states))
+        rope = rope.gather(1, order[..., None].expand_as(rope))
+        num_real_tokens = is_real_token.sum(dim=1)
+
+        if cache_layer is not None and ratio > 1:
+            # The last `ratio - 1` real tokens of each row go back to the cache. A row with fewer of them reads
+            # its first token several times, but those copies come before the tokens that are waiting.
+            last_tokens = num_real_tokens[:, None] - (ratio - 1) + torch.arange(ratio - 1, device=states.device)
+            last_tokens = last_tokens.clamp(min=0)[..., None].expand(-1, -1, states.shape[-1])
+            cache_layer.pooling_buffer = states.gather(1, last_tokens)
+
+        # Finally, we pool the whole groups. The others are dropped here, and a row that has fewer real groups
+        # than the longest row gets latents that are made of padding, which the caller must not use.
+        usable = (states.shape[1] // ratio) * ratio
+        if self.gate_proj is None:
+            latents = self.kv_norm(states)
+        else:
+            kv, gate = states[:, :usable].unflatten(1, (-1, ratio)).chunk(2, dim=-1)
+            pooled = (kv * gate.softmax(dim=2)).sum(dim=2)
+            latents = self.kv_norm(pooled.to(hidden_states.dtype))
+        cos, sin = rope[:, ratio - 1 : usable : ratio].chunk(2, dim=-1)
+        return latents, (cos, sin), num_real_tokens // ratio
 
 
 def select_candidate_blocks(
@@ -743,7 +793,7 @@ class DeepseekV41Indexer(nn.Module):
         hidden_states: torch.Tensor,
         q_residual: torch.Tensor,
         index_keys: torch.Tensor,
-        position_ids: torch.Tensor,
+        num_real_tokens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         candidates: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -763,8 +813,10 @@ class DeepseekV41Indexer(nn.Module):
         weights = self.weights_proj(hidden_states) * self.scaling
         scores = (F.relu(scores) * weights.unsqueeze(-1)).sum(dim=2)
 
-        # A query sees a compressed entry once it has passed the last token of the entry's group
-        num_visible = (position_ids + 1) // self.compress_ratio
+        # A query sees a compressed entry once it has passed the last token of the entry's group. The groups are
+        # made of real tokens only, so we count those, up to and including the query. This is also what hides
+        # the slots after the last entry of a row that has fewer entries than the others.
+        num_visible = num_real_tokens // self.compress_ratio
         visible = torch.arange(num_entries, device=scores.device) < num_visible.unsqueeze(-1)
         scores = scores.masked_fill(~visible, float("-inf"))
 
@@ -840,6 +892,8 @@ class DeepseekV41Attention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]],
         attention_mask: torch.Tensor,
+        is_real_token: torch.Tensor,
+        num_seen_tokens: torch.Tensor,
         cache: Cache | None = None,
         shared_states: dict[str, torch.Tensor] | None = None,
         compressed_position_embeddings: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
@@ -867,11 +921,16 @@ class DeepseekV41Attention(nn.Module):
             kv = cache.update(kv, kv, self.layer_idx)[0]
 
         if self.layer_type == "compressed_attention":
-            # This layer compresses the groups that this call completes. There may be none of them, e.g. when
-            # decoding a token that is not the last of its group.
+            # This layer compresses the groups that this call completes. A row may complete none of them, e.g.
+            # when decoding a token that is not the last of its group.
             cache_layer: DeepseekV41CacheLayer | None = cache.layers[self.layer_idx] if cache is not None else None
-            latents = self.compressor(hidden_states, cache_layer)
-            entry_cos, entry_sin = compressed_position_embeddings[self.compress_ratio]
+            latents, (entry_cos, entry_sin), num_new_entries = self.compressor(
+                hidden_states,
+                compressed_position_embeddings[self.compress_ratio],
+                is_real_token,
+                num_seen_tokens,
+                cache_layer,
+            )
             # The index keys come from the latents before RoPE, so we make them before we rotate the latents
             index_keys = self.indexer.k_norm(self.indexer.k_proj(latents))
             index_keys = apply_rotary_pos_emb(index_keys.unsqueeze(1), entry_cos, entry_sin).squeeze(1)
@@ -881,7 +940,10 @@ class DeepseekV41Attention(nn.Module):
             index_keys = fake_quantize(index_keys, "fp4", block_size=32)
             compressed_kv = fake_quantize(compressed_kv, "fp4", block_size=16, scale_format="fp8")
             if cache_layer is not None:
-                compressed_kv, index_keys = cache_layer.update_compressed_states(compressed_kv, index_keys)
+                # Each row has one entry per whole group of the tokens that it had seen before this call
+                compressed_kv, index_keys = cache_layer.update_compressed_states(
+                    compressed_kv, index_keys, num_seen_tokens // self.compress_ratio, num_new_entries
+                )
             # We publish both for the indexers and the KV-sharing layers after us, starting with our own
             shared_states["compressed_kv"], shared_states["index_keys"] = compressed_kv, index_keys
 
@@ -892,7 +954,7 @@ class DeepseekV41Attention(nn.Module):
                 hidden_states,
                 q_residual,
                 shared_states["index_keys"],
-                kwargs.get("position_ids"),
+                num_seen_tokens[:, None] + is_real_token.cumsum(dim=-1),
                 (cos, sin),
                 shared_states.get("candidates"),
             )
@@ -1689,16 +1751,27 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             position_ids = torch.arange(seq_len, device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
 
-        # First, the n-gram hashes of all the Engram layers. A padded token must not end up in the n-grams of
+        # First, the padding. Attention only needs to mask it, but the n-gram hashes and the pooling groups are
+        # made of consecutive real tokens, so they need to know which tokens of this call are real, and how
+        # many real tokens each row had seen before it. As everywhere else, the mask of a call that continues
+        # from a cache covers the cached tokens too.
+        is_real_token = torch.ones((batch_size, seq_len), dtype=torch.bool, device=inputs_embeds.device)
+        num_seen_tokens = torch.full((batch_size,), past_seen, device=inputs_embeds.device)
+        if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
+            padding_mask = create_recurrent_attention_mask(self.config, inputs_embeds, attention_mask, cache)
+            if padding_mask is not None:
+                is_real_token = padding_mask.bool()
+            if attention_mask.shape[1] == past_seen + seq_len:
+                num_seen_tokens = attention_mask[:, :past_seen].bool().sum(dim=-1)
+
+        # Next, the n-gram hashes of all the Engram layers. A padded token must not end up in the n-grams of
         # the tokens after it, and neither must an image token.
         engram_hash_ids, engram_mask = None, None
         if self.engram_hasher is not None:
+            hash_mask = is_real_token
             if image_mask is not None:
                 engram_mask = ~image_mask
-            hash_mask = engram_mask
-            if isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
-                is_real_token = attention_mask[:, -seq_len:].bool()
-                hash_mask = is_real_token if hash_mask is None else hash_mask & is_real_token
+                hash_mask = hash_mask & engram_mask
             engram_hash_ids = self.engram_hasher(input_ids, hash_mask, cache.layers[0] if cache is not None else None)
 
         # `generate()` may pass a per-layer-type mask dict already built by `create_masks_for_generate`. All
@@ -1723,17 +1796,16 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
             "main": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main"),
             "compress": self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="compress"),
         }
-        # The compressed entries get RoPE as well. An entry stands for the first token of its group, so entry
-        # `j` of a layer with ratio `r` rotates at position `j * r`. We count groups from the tokens that the
-        # cache has seen, and only rotate the entries of the groups that this call completes.
+        # The compressed entries get RoPE as well. An entry stands for the first token of its group, so it
+        # rotates at the position of that token. It only comes to exist with the last token of the group
+        # though, and by then the first one may be a call behind us. So we go back from the last token: for
+        # each token, this is the RoPE of the entry that it completes if it is the last one of a group of
+        # `ratio`, and the compressor keeps the ones of the tokens that are.
         compressed_position_embeddings = {}
         for ratio, layer_type in zip(self.config.compress_ratios, self.config.attention_layer_types):
             if layer_type == "compressed_attention" and ratio not in compressed_position_embeddings:
-                entry_ids = torch.arange(
-                    past_seen // ratio, (past_seen + seq_len) // ratio, device=inputs_embeds.device
-                )
                 compressed_position_embeddings[ratio] = self.rotary_emb(
-                    inputs_embeds, position_ids=(entry_ids * ratio).unsqueeze(0), layer_type="compress"
+                    inputs_embeds, position_ids=position_ids - (ratio - 1), layer_type="compress"
                 )
         # What the attention layers hand down the stack instead of recomputing: the compressed KV, the index
         # keys, the selection and the candidate blocks. Each layer returns them with its own on top, so every
@@ -1753,7 +1825,8 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                 image_mask=image_mask,
                 position_embeddings=position_embeddings,
                 compressed_position_embeddings=compressed_position_embeddings,
-                position_ids=position_ids,
+                is_real_token=is_real_token,
+                num_seen_tokens=num_seen_tokens,
                 attention_mask=causal_mask,
                 cache=cache,
                 shared_states=shared_states,

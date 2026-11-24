@@ -970,7 +970,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
     @pytest.mark.generate
     def test_left_padding_compatibility(
-        self, unpadded_custom_inputs: dict | None = None, padded_custom_inputs: dict | None = None
+        self,
+        unpadded_custom_inputs: dict | None = None,
+        padded_custom_inputs: dict | None = None,
+        atol: float = 1e-5,
+        rtol: float = 1e-5,
     ):
         """
         Tests that adding left-padding yields the same logits as the original input. Exposes arguments for custom
@@ -987,6 +991,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             padded_custom_inputs (`dict`, *optional*):
                 Used in test overwrites. Custom inputs to add/overwrite over the padded test input handcrafted in this
                 test. Commonly used e.g. with multimodal cross attention masks.
+            atol (`float`, *optional*, defaults to 1e-5):
+                Used in test overwrites. Absolute tolerance on the logits, for models that round their activations
+                and so differ by more than float noise.
+            rtol (`float`, *optional*, defaults to 1e-5):
+                Used in test overwrites. Relative tolerance on the logits.
         """
 
         # First, filter out models that don't support left padding
@@ -1086,7 +1095,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             next_logits_with_padding = model(**model_kwargs_with_padding).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=rtol, atol=atol)
 
     @pytest.mark.generate
     def test_cache_format(self):
