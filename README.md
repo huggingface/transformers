@@ -70,7 +70,7 @@ limitations under the License.
 
 Transformers is the model-definition framework for machine learning models in text, computer vision, audio, video, and multimodal tasks. It defines each model once, in PyTorch, and you use that definition for both inference and training.
 
-Training frameworks, inference engines, and local runtimes build on that definition instead of writing their own. Transformers adds new architectures as they're released and matches each one to its original results, so the tools that build on it get every new model without reimplementing it.
+Training frameworks, inference engines, and local runtimes build on that definition instead of writing their own. Transformers adds new architectures as they're released and matches each one to its original results, so those tools get each new model as soon as it's added.
 
 <table>
 <tr>
@@ -93,9 +93,9 @@ Run LLMs locally without Python. llama.cpp is a C/C++ inference engine that runs
 </tr>
 </table>
 
-Transformers standardizes how every model is written, so hundreds of architectures share one structure. Each model is plain PyTorch in one file that reads from top to bottom, kept readable and simple without giving up performance. An improvement made once reaches every architecture, so if you find one, [contribute it](./CONTRIBUTING.md).
+Transformers standardizes how every model is written, so hundreds of architectures share one structure. Each model is one file that reads from top to bottom and stays simple without giving up performance. An improvement made once reaches every architecture, so if you find one, [contribute it](./contributing).
 
-Transformers is designed to be read and changed by humans and coding agents alike. To change how a model computes, register your own attention or experts function, or load an optimized kernel from the Hub, and the model uses it without any changes to its code.
+Transformers is designed to be read and modified by humans and coding agents alike. To swap how a model computes, register your own attention or experts function, or load an optimized kernel from the Hub, and the model uses it without edits to its code.
 
 ## Try a model
 
@@ -110,11 +110,11 @@ Create a [`Pipeline`](https://huggingface.co/docs/transformers/main_classes/pipe
 ```py
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="Qwen/Qwen3-0.6B")
+pipe = pipeline(task="text-generation", model="Qwen/Qwen3-0.6B")
 messages = [
     {"role": "user", "content": "What's the secret to baking a really good cake? Answer in one sentence."},
 ]
-output = pipeline(messages, tokenizer_encode_kwargs={"enable_thinking": False})
+output = pipe(messages, tokenizer_encode_kwargs={"enable_thinking": False})
 print(output[0]["generated_text"][-1]["content"])
 # The secret to baking a really good cake is combining the perfect balance of ingredients, technique, and a warm, loving atmosphere.
 ```
@@ -123,14 +123,14 @@ The [Quickstart](https://huggingface.co/docs/transformers/quicktour) covers load
 
 ## Set up your coding agent
 
-Copy the prompt below into your coding agent. It has the agent check your installed version, read the docs for that version, and follow the best and latest practices from Transformers v5.
+Copy the prompt below into your coding agent. It has the agent check your installed version, read the docs for that version, and use the current Transformers v5 APIs.
 
 ```text
 I'm building with Hugging Face Transformers. Before you write any Transformers code:
 
 1. Check the installed version with `python -c "import transformers; print(transformers.__version__)"`. If Transformers isn't installed, install it with `pip install "transformers[torch]"`.
 2. Read the docs index for that version at https://huggingface.co/docs/transformers/v<version>/llms.txt, for example v5.22.2. For a .dev version, use https://huggingface.co/docs/transformers/main/llms.txt. Add .md to any docs page URL to read it as Markdown. Look up each class and argument there instead of relying on memory.
-3. If the version is 5.0 or later, read https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md Don't use APIs from older versions.
+3. If the version is 5.0 or later, read https://github.com/huggingface/transformers/blob/main/MIGRATION_GUIDE_V5.md. Don't use APIs from older versions.
 4. Read the model card of each model you use on the Hugging Face Hub. Many models need specific arguments, like a chat template option or a minimum Transformers version.
 ```
 
