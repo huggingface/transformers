@@ -18,11 +18,19 @@ import json
 from collections.abc import Callable
 from copy import deepcopy
 from inspect import isfunction, ismethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 from ..chat_template_utils import get_json_schema
+from ..generic import to_py_obj
 from .content_parsers import STREAMABLE_PARSERS, TYPED_STRUCTURED_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
+from .token_ids import TokenIdDecoder, strip_markers
+
+
+if TYPE_CHECKING:
+    import torch
 
 
 def _schema_types(schema: Any) -> tuple[str, ...]:
@@ -72,20 +80,21 @@ def _coerce(raw: str, types: tuple[str, ...]) -> Any:
 
 
 def parse_response(
-    text: str,
+    text: str | list[int] | np.ndarray | torch.Tensor,
     response_template: dict | ResponseTemplate,
     *,
-    prefix: str | None = None,
+    prefix: str | list[int] | np.ndarray | torch.Tensor | None = None,
     tools: list[dict | Callable] | None = None,
+    tokenizer=None,
 ) -> dict:
     """The main function for response parsing when you don't want streaming. Takes generated output
     and the prompt prefix and parses them without streaming any events, then returns the parsed message.
 
     Pass `tools` (in the same format as `apply_chat_template` accepts) to cast tool-call arguments
-    using the calling tool's JSON schema.
+    using the calling tool's JSON schema. Pass a fast `tokenizer` to parse token ids, see `ResponseParser`.
     """
     response_template = load_response_template(response_template)
-    stream = ResponseParser(response_template, prefix=prefix, tools=tools)
+    stream = ResponseParser(response_template, prefix=prefix, tools=tools, tokenizer=tokenizer)
     stream.feed(text)
     message, _ = stream.finalize()
     return message
@@ -113,6 +122,10 @@ class ResponseParser:
 
     Events can be either "region_open", "region_chunk", or "region_close".
 
+    Pass a fast `tokenizer` to feed token ids instead of text, with the prompt's token ids as `prefix`. Control
+    tokens (the ones `apply_chat_template(..., sanitize_control_tokens=True)` protects) then only match delimiters
+    when they were generated as token ids: when the model spells one out with ordinary tokens, it stays text.
+
     ResponseParser requires the chat `prefix` (i.e. the chat history, the prefill before the current generation).
     This is because chat templates or assistant prefills can sometimes write part of the message, and if we
     only see the model output, and not the template, then we can't reliably parse the message in those cases.
@@ -123,9 +136,10 @@ class ResponseParser:
     def __init__(
         self,
         response_template: dict | ResponseTemplate,
-        prefix: str | None = None,
+        prefix: str | list[int] | np.ndarray | torch.Tensor | None = None,
         *,
         tools: list[dict | Callable] | None = None,
+        tokenizer=None,
     ):
         self._spec = load_response_template(response_template)
         if prefix is None:
@@ -159,6 +173,11 @@ class ResponseParser:
         self._opened: bool = False
         self._finalized: bool = False
         self.initial_events: list[dict] = []
+        self._decoder = TokenIdDecoder(tokenizer) if tokenizer is not None else None
+        if self._decoder is not None:
+            if isinstance(prefix, str):
+                prefix = tokenizer.encode(prefix, add_special_tokens=False)
+            prefix = self._decoder.feed(to_py_obj(prefix)) + self._decoder.flush(end_of_stream=False)
         if prefix:
             self._consume_prefix(prefix)
 
@@ -176,11 +195,15 @@ class ResponseParser:
         self._buffer = truncated
         self._process(self.initial_events, eos=False)
 
-    def feed(self, text: str) -> list[dict]:
+    def feed(self, text: str | list[int] | np.ndarray | torch.Tensor) -> list[dict]:
         """Feeds more text/tokens from the model output into the tokenizer, and returns any events that result
         (regions entered or left). This is the method you want to call after each generation step."""
         if self._finalized:
             raise RuntimeError("ResponseParser already finalized")
+        if self._decoder is not None:
+            if isinstance(text, str):
+                raise TypeError("This parser was created with a `tokenizer`, so `feed` takes token ids, not text.")
+            text = self._decoder.feed(to_py_obj(text))
         if text:
             self._buffer += text
         events: list[dict] = []
@@ -198,6 +221,8 @@ class ResponseParser:
 
         if self._finalized:
             raise RuntimeError("ResponseParser already finalized")
+        if self._decoder is not None:
+            self._buffer += self._decoder.flush()
         events: list[dict] = []
         self._process(events, eos=True)
         missing = [n for n, f in self._spec.fields.items() if not f.optional and n not in self._output]
@@ -359,6 +384,8 @@ class ResponseParser:
             self._opened = True
         self._body += text
         dirty = field.content not in STREAMABLE_PARSERS
+        if self._decoder is not None:
+            text = strip_markers(text)
         events.append({"type": "region_chunk", "field": self._current, "text": text, "dirty": dirty})
 
     def _open_explicit(self, events: list[dict], field: ResponseTemplateField, m: Any) -> None:
@@ -377,6 +404,8 @@ class ResponseParser:
             return
         field = self._spec.fields[self._current]
         value = process_field(self._body, field, self._captures)
+        if self._decoder is not None:
+            value = strip_markers(value)
         if self._tool_params:
             value = self._coerce_tool_calls(value, typed=field.content in TYPED_STRUCTURED_PARSERS)
         if field.join is not None:
