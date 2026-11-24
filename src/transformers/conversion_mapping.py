@@ -1482,6 +1482,18 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.self_attn\.norm_q\.", target_patterns=".self_attn.q_norm."),
             WeightRenaming(source_patterns=r"\.self_attn\.norm_k\.", target_patterns=".self_attn.k_norm."),
         ],
+        "phi3_v": [
+            WeightRenaming(r"^model\.vision_embed_tokens\.img_processor\.", "model.vision_tower."),
+            WeightRenaming(
+                r"^model\.vision_embed_tokens\.img_projection\.0\.", "model.multi_modal_projector.linear_1."
+            ),
+            WeightRenaming(
+                r"^model\.vision_embed_tokens\.img_projection\.2\.", "model.multi_modal_projector.linear_2."
+            ),
+            WeightRenaming(r"^model\.vision_embed_tokens\.sub_GN", "model.image_newline"),
+            WeightRenaming(r"^model\.vision_embed_tokens\.glb_GN", "model.image_separator"),
+            WeightRenaming(r"^model\.(embed_tokens|layers|norm)\.", r"model.language_model.\1."),
+        ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
             WeightRenaming(".gate.weight", ".router.weight"),
