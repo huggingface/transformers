@@ -359,6 +359,13 @@ class DynamicIndexedLayer(DynamicLayer):
         if self.is_indexer_initialized and self.indexer_keys.device != self.device:
             self.indexer_keys = self.indexer_keys.to(self.device, non_blocking=True)
 
+    def update_indexer_positions(self, position_ids: torch.Tensor) -> torch.Tensor:
+        """Append the new positions (`[position_dims, batch_size, seq_len]`) and return the full position history."""
+        if self.indexer_position_ids is not None:
+            position_ids = torch.cat([self.indexer_position_ids, position_ids], dim=-1)
+        self.indexer_position_ids = position_ids
+        return position_ids
+
     def reset(self) -> None:
         super().reset()
         # Dropped rather than zeroed, as `update_indexer` grows them by concatenation, like the main states
@@ -651,6 +658,7 @@ class StaticIndexedLayer(StaticLayer):
         self.indexer_keys: torch.Tensor | None = None
         # Optional indexer positions, shaped [position_dims, batch_size, seq_len].
         self.indexer_position_ids: torch.Tensor | None = None
+        self.indexer_position_length: torch.Tensor | None = None
         self.indexer_cumulative_length: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
 
@@ -696,9 +704,35 @@ class StaticIndexedLayer(StaticLayer):
 
         return self.indexer_keys
 
+    def update_indexer_positions(self, position_ids: torch.Tensor) -> torch.Tensor:
+        """
+        Write the new positions (`[position_dims, batch_size, seq_len]`) in place into a `max_cache_len` buffer and
+        return the buffer followed by the new positions: a fixed shape per step (cudagraphs), with the history indexed
+        by cache slot and the current positions last, where the attention layers slice them.
+        """
+        if self.indexer_position_ids is None:
+            dims, batch_size, _ = position_ids.shape
+            self.indexer_position_ids = torch.zeros(
+                (dims, batch_size, self.max_cache_len), dtype=position_ids.dtype, device=position_ids.device
+            )
+            self.indexer_position_length = torch.zeros((), dtype=torch.long, device=position_ids.device)
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(self.indexer_position_ids)
+                torch._dynamo.mark_static_address(self.indexer_position_length)
+        seq_len = position_ids.shape[-1]
+        cache_position = torch.arange(seq_len, device=position_ids.device) + self.indexer_position_length
+        self.indexer_position_length.add_(seq_len)
+        try:
+            self.indexer_position_ids.index_copy_(2, cache_position, position_ids)
+        except NotImplementedError:
+            self.indexer_position_ids[..., cache_position] = position_ids
+        return torch.cat([self.indexer_position_ids, position_ids], dim=-1)
+
     def reset(self) -> None:
         super().reset()
-        self.indexer_position_ids = None
+        if self.indexer_position_ids is not None:
+            self.indexer_position_ids.zero_()
+            self.indexer_position_length.zero_()
         if self.is_indexer_initialized:
             self.indexer_keys.zero_()
             self.indexer_cumulative_length.zero_()
@@ -707,9 +741,9 @@ class StaticIndexedLayer(StaticLayer):
         super().reorder_cache(beam_idx)
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
-        if self.indexer_position_ids is not None:
-            self.indexer_position_ids = self.indexer_position_ids.index_select(
-                1, beam_idx.to(self.indexer_position_ids.device)
+        if self.indexer_position_ids is not None:  # in place: the buffer keeps its static address (cudagraphs)
+            self.indexer_position_ids.copy_(
+                self.indexer_position_ids.index_select(1, beam_idx.to(self.indexer_position_ids.device))
             )
 
 

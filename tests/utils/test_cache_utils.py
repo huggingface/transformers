@@ -89,6 +89,7 @@ if is_torch_available():
         LinearAttentionAndSlidingWindowAttentionLayer,
         LinearAttentionLayer,
         QuantoQuantizedLayer,
+        StaticIndexedLayer,
         StaticLayer,
         StaticSlidingWindowLayer,
     )
@@ -2241,6 +2242,34 @@ class SyntheticCacheTest(unittest.TestCase):
 
         self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [20.0, 30.0, 40.0])
         self.assertEqual(returned_1[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0])
+
+
+@require_torch
+class IndexedLayerPositionsTest(unittest.TestCase):
+    def test_static_indexer_positions_in_place(self):
+        """The static layer keeps the position history in one buffer (a fixed shape per step and a static address, as
+        CUDA graphs need) and returns it followed by the current positions; the dynamic layer concatenates."""
+        static, dynamic = StaticIndexedLayer(max_cache_len=8), DynamicIndexedLayer()
+        prompt = torch.arange(3).expand(3, 2, 3)  # [position_dims, batch_size, seq_len]
+        out = static.update_indexer_positions(prompt)
+        buffer = static.indexer_position_ids
+        self.assertEqual(tuple(out.shape), (3, 2, 8 + 3))
+        self.assertEqual(out[0, 0].tolist(), [0, 1, 2, 0, 0, 0, 0, 0, 0, 1, 2])
+        self.assertEqual(dynamic.update_indexer_positions(prompt)[0, 0].tolist(), [0, 1, 2])
+        for step in (3, 4):
+            new = torch.full((3, 2, 1), step)
+            out = static.update_indexer_positions(new)
+            self.assertIs(static.indexer_position_ids, buffer)
+            self.assertEqual(tuple(out.shape), (3, 2, 8 + 1))
+            self.assertEqual(out[0, 0, -1].item(), step)
+            self.assertEqual(dynamic.update_indexer_positions(new)[0, 0].tolist(), list(range(step + 1)))
+        self.assertEqual(buffer[0, 0].tolist(), [0, 1, 2, 3, 4, 0, 0, 0])
+        static.reset()
+        self.assertIs(static.indexer_position_ids, buffer)
+        self.assertEqual(
+            static.update_indexer_positions(torch.zeros(3, 2, 1, dtype=torch.long))[0, 0, :2].tolist(), [0, 0]
+        )
+        self.assertEqual(static.indexer_position_length.item(), 1)
 
 
 ALL_DYNAMIC_LAYERS = (

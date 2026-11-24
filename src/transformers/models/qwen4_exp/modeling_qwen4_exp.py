@@ -1414,9 +1414,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
         # such as reset, crop and beam reordering also update the position history.
         if past_key_values is not None and "indexed_attention" in self.config.layer_types:
             indexer_cache = past_key_values.layers[self.config.layer_types.index("indexed_attention")]
-            if indexer_cache.indexer_position_ids is not None:
-                position_ids = torch.cat([indexer_cache.indexer_position_ids, position_ids], dim=-1)
-            indexer_cache.indexer_position_ids = position_ids
+            position_ids = indexer_cache.update_indexer_positions(position_ids)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
