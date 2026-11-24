@@ -455,6 +455,20 @@ class ElectraModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_electra_for_causal_lm(*config_and_inputs)
 
+    @unittest.skip(
+        "Packed sequences are not separated with eager/sdpa: the attention mask is built without `position_ids`, so "
+        "the packed sequences attend to each other"
+    )
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        "Packed sequences are not separated with eager/sdpa: the attention mask is built without `position_ids`, so "
+        "the packed sequences attend to each other"
+    )
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class ElectraModelIntegrationTest(unittest.TestCase):
