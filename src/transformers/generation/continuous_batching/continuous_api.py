@@ -1273,6 +1273,34 @@ class ContinuousBatchingManager:
             )
         self.batch_processor.cache.reset_prefix_cache()
 
+    def release_memory(self) -> int:
+        """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
+        of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
+        copies it back before generation resumes, so every request carries on exactly where it was. Both must be called
+        inside `pause()`, and on every rank of a TP group.
+
+        ```python
+        with manager.pause():
+            released_bytes = manager.release_memory()
+            ...  # the memory is free for something else, a training step for instance
+            manager.restore_memory()
+        ```
+        """
+        # The generation loop reads and writes the cache, so it can only lose its memory while the loop is paused (a
+        # paused loop always has its batch processor)
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `release_memory` inside the `pause` context, the generation loop uses the cache.")
+        return self.batch_processor.cache.release_memory()
+
+    def restore_memory(self) -> None:
+        """Brings back the KV cache freed by `release_memory`. CUDA graphs replay the addresses they were captured
+        with, so they are dropped and captured again if the cache came back elsewhere."""
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError("Call `restore_memory` inside the `pause` context, the generation loop uses the cache.")
+        if not self.batch_processor.cache.restore_memory():
+            self.batch_processor.inputs_and_outputs.clear_graphs()
+            logger.info("The KV cache moved while it was released, so the captured CUDA graphs were dropped")
+
     # ---------------------------- REQUEST SUBMISSION, CANCELLATION AND RETRIEVAL METHODS ---------------------------- #
 
     def add_request(
