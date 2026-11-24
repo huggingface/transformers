@@ -25,19 +25,88 @@ from .content_parsers import STREAMABLE_PARSERS, TYPED_STRUCTURED_PARSERS, proce
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
 
 
-def _schema_types(schema: Any) -> tuple[str, ...]:
+def _resolve_local_ref(ref: str, root: dict[str, Any] | None) -> Any:
+    if not isinstance(root, dict) or not ref.startswith("#"):
+        return None
+    if ref == "#":
+        return root
+    if not ref.startswith("#/"):
+        return None
+    cur: Any = root
+    for part in ref[2:].split("/"):
+        key = part.replace("~1", "/").replace("~0", "~")
+        if isinstance(cur, dict) and key in cur:
+            cur = cur[key]
+        elif isinstance(cur, list) and key.isdigit():
+            idx = int(key)
+            if idx >= len(cur):
+                return None
+            cur = cur[idx]
+        else:
+            return None
+    return cur
+
+
+def _json_value_type(value: Any) -> str | None:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return None
+
+
+def _schema_types(
+    schema: Any, root: dict[str, Any] | None = None, _seen: frozenset[str] = frozenset()
+) -> tuple[str, ...]:
     if not isinstance(schema, dict):
         return ()
+    types: list[str] = []
+    if isinstance(ref := schema.get("$ref"), str) and ref not in _seen:
+        types.extend(_schema_types(_resolve_local_ref(ref, root), root=root, _seen=_seen | {ref}))
     declared = schema.get("type")
-    types = [declared] if isinstance(declared, str) else []
-    if isinstance(declared, list):
+    if isinstance(declared, str):
+        types.append(declared)
+    elif isinstance(declared, list):
         types.extend(t for t in declared if isinstance(t, str))
     for union_name in ("anyOf", "oneOf"):
         for choice in schema.get(union_name) or []:
-            types.extend(_schema_types(choice))
+            types.extend(_schema_types(choice, root=root, _seen=_seen))
+    if branch_sets := [
+        bt for branch in (schema.get("allOf") or []) if (bt := _schema_types(branch, root=root, _seen=_seen))
+    ]:
+        if len(branch_sets) == 1:
+            types.extend(branch_sets[0])
+        else:
+            narrowed = [
+                t
+                for branch_types in branch_sets
+                for t in branch_types
+                if all(t in other or (t == "integer" and "number" in other) for other in branch_sets)
+            ]
+            if narrowed:
+                types.extend(narrowed)
+            else:
+                for branch_types in branch_sets:
+                    types.extend(branch_types)
+    if "const" in schema and (val_type := _json_value_type(schema["const"])) is not None:
+        types.append(val_type)
+    if isinstance(enum_vals := schema.get("enum"), list):
+        for item in enum_vals:
+            if (val_type := _json_value_type(item)) is not None:
+                types.append(val_type)
     if schema.get("nullable") and "null" not in types:  # `nullable` is how get_json_schema marks Optionals
         types.append("null")
-    return tuple(types)
+    return tuple(dict.fromkeys(types))
 
 
 def _coerce(raw: str, types: tuple[str, ...]) -> Any:
@@ -135,8 +204,10 @@ class ResponseParser:
                 "opening `<think>` tag) that the parser must see to parse the output correctly. If the generation "
                 'already contains the complete message, pass `prefix=""` to opt out explicitly.'
             )
-        # Maps tool name -> schema `properties`, used to cast parsed tool-call arguments
+        # Maps tool name -> schema `properties` (and root `parameters` for `$ref`),
+        # used to cast parsed tool-call arguments.
         self._tool_params: dict[str, dict] = {}
+        self._tool_roots: dict[str, dict] = {}
         for tool in tools or []:
             if isfunction(tool) or ismethod(tool):
                 tool = get_json_schema(tool)
@@ -145,6 +216,8 @@ class ResponseParser:
                 parameters = fn.get("parameters")
                 properties = parameters.get("properties") if isinstance(parameters, dict) else None
                 self._tool_params[fn["name"]] = properties if isinstance(properties, dict) else {}
+                if isinstance(parameters, dict):
+                    self._tool_roots[fn["name"]] = parameters
         self._buffer: str = ""
         self._pos: int = 0
         self._output: dict[str, Any] = deepcopy(self._spec.defaults)
@@ -404,8 +477,9 @@ class ResponseParser:
         if not isinstance(name, str) or not isinstance(arguments, dict):
             return value
         if properties := self._tool_params.get(name):
+            root = self._tool_roots.get(name)
             for key, argument in arguments.items():
-                if key not in properties or not (types := _schema_types(properties[key])):
+                if key not in properties or not (types := _schema_types(properties[key], root=root)):
                     continue
                 if typed and "string" in types:
                     continue

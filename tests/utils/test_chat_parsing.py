@@ -2170,6 +2170,83 @@ class ToolArgCoercionTest(unittest.TestCase):
         self.assertIs(type(typed_args["code"]), int)
         self.assertIs(type(typed_args["flag"]), bool)
 
+    def test_schema_types_and_coerce_handle_ref_allof_const_enum(self):
+        root = {
+            "type": "object",
+            "$defs": {
+                "Port": {"type": "integer"},
+                "NestedPort": {"$ref": "#/$defs/Port"},
+                "Loop": {"$ref": "#/$defs/Loop"},
+                "WrappedStr": {"allOf": [{"type": "string"}], "description": "text"},
+                "BoundedInt": {"allOf": [{"type": "number"}, {"type": "integer"}]},
+                "Slash~Name": {"type": "boolean"},
+            },
+            "definitions": {"LegacyFloat": {"type": "number"}},
+            "properties": {
+                "port": {"$ref": "#/$defs/NestedPort"},
+                "ratio": {"$ref": "#/definitions/LegacyFloat"},
+                "label": {"$ref": "#/$defs/WrappedStr"},
+                "bounded": {"$ref": "#/$defs/BoundedInt"},
+                "escaped": {"$ref": "#/$defs/Slash~0Name"},
+                "const_flag": {"const": True},
+                "const_count": {"const": 5},
+                "const_str": {"const": "true"},
+                "enum_mix": {"enum": [1, "auto"]},
+                "loop": {"$ref": "#/$defs/Loop"},
+            },
+        }
+        self.assertEqual(_schema_types(root["properties"]["port"], root=root), ("integer",))
+        self.assertEqual(_schema_types(root["properties"]["ratio"], root=root), ("number",))
+        self.assertEqual(_schema_types(root["properties"]["label"], root=root), ("string",))
+        self.assertEqual(_schema_types(root["properties"]["bounded"], root=root), ("integer",))
+        self.assertEqual(_schema_types(root["properties"]["escaped"], root=root), ("boolean",))
+        self.assertEqual(_schema_types(root["properties"]["const_flag"], root=root), ("boolean",))
+        self.assertEqual(_schema_types(root["properties"]["const_count"], root=root), ("integer",))
+        self.assertEqual(_schema_types(root["properties"]["const_str"], root=root), ("string",))
+        self.assertEqual(_schema_types(root["properties"]["enum_mix"], root=root), ("integer", "string"))
+        self.assertEqual(_schema_types(root["properties"]["loop"], root=root), ())
+
+        tools = [{"type": "function", "function": {"name": "set_alarm", "parameters": root}}]
+        xml_out = (
+            "<tool_call>\n<function=set_alarm>\n"
+            "<parameter=port>\n8080\n</parameter>\n"
+            "<parameter=ratio>\n1.25\n</parameter>\n"
+            "<parameter=label>\n0123\n</parameter>\n"
+            "<parameter=bounded>\n42\n</parameter>\n"
+            "<parameter=escaped>\ntrue\n</parameter>\n"
+            "<parameter=const_flag>\ntrue\n</parameter>\n"
+            "<parameter=const_count>\n5\n</parameter>\n"
+            "<parameter=const_str>\ntrue\n</parameter>\n"
+            "<parameter=enum_mix>\n1\n</parameter>\n"
+            "<parameter=loop>\nkeep\n</parameter>\n"
+            "</function>\n</tool_call>"
+        )
+        xml_args = _first_tool_args(parse_response(xml_out, _XML_STRING_ARGS_TEMPLATE, prefix="", tools=tools))
+        self.assertEqual(
+            xml_args,
+            {
+                "port": 8080,
+                "ratio": 1.25,
+                "label": "0123",
+                "bounded": 42,
+                "escaped": True,
+                "const_flag": True,
+                "const_count": 5,
+                "const_str": "true",
+                "enum_mix": 1,
+                "loop": "keep",
+            },
+        )
+        self.assertIs(type(xml_args["const_flag"]), bool)
+        self.assertIs(type(xml_args["const_count"]), int)
+
+        smollm_out = (
+            '<tool_call>{"name": "set_alarm", "arguments": '
+            '{"port": "8080", "label": "0123", "const_str": "true", "enum_mix": "1"}}</tool_call>'
+        )
+        json_args = _first_tool_args(parse_response(smollm_out, smollm_template, prefix="", tools=tools))
+        self.assertEqual(json_args, {"port": 8080, "label": "0123", "const_str": "true", "enum_mix": "1"})
+
 
 if __name__ == "__main__":
     unittest.main()
