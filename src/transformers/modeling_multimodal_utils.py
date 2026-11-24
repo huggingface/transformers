@@ -32,6 +32,16 @@ def flatten_items(features: torch.Tensor) -> tuple[torch.Tensor, torch.LongTenso
     return features.flatten(0, 1), features.new_full(features.shape[:1], features.shape[1], dtype=torch.long)
 
 
+def placeholder_features(outputs):
+    """The features of encoder `outputs` that fill the placeholder tokens: `pooler_output`, or the first deepstack
+    layer's for models only returning deepstack features (Granite 4 Vision)."""
+    pooler_output = getattr(outputs, "pooler_output", None)
+    if pooler_output is not None:
+        return pooler_output
+    deepstack_features = getattr(outputs, "deepstack_features", None)
+    return deepstack_features[0] if deepstack_features else None
+
+
 def split_modality_outputs(outputs):
     """Splits flat `get_*_embeddings` outputs per item by their `split_sizes`."""
     split_sizes = outputs.split_sizes.tolist()
@@ -110,10 +120,9 @@ class MultimodalMixin:
 
 def merge_modality_outputs(outputs):
     """Concatenates per-item outputs back into the flat layout of `get_*_embeddings`."""
-    deepstack_features = getattr(outputs, "deepstack_features", None)
-    features = outputs.pooler_output if outputs.pooler_output is not None else (deepstack_features or [None])[0]
-    if not isinstance(features, (tuple, list)):
+    if not isinstance(placeholder_features(outputs), (tuple, list)):
         return outputs
+    deepstack_features = getattr(outputs, "deepstack_features", None)
     merged = copy.copy(outputs)
     if outputs.pooler_output is not None:
         merged.pooler_output = torch.cat(outputs.pooler_output)

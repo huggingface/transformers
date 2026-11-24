@@ -47,6 +47,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
+from ..modeling_multimodal_utils import placeholder_features
 from ..modeling_outputs import BaseModelOutputWithPooling
 from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
@@ -1153,17 +1154,14 @@ class GenerationMixin(ContinuousMixin):
             if modality_outputs is None:
                 continue
             modality_outputs = mm_encoder_output[modality] = copy.copy(modality_outputs)
-            pooler_output = getattr(modality_outputs, "pooler_output", None)
-            deepstack_features = getattr(modality_outputs, "deepstack_features", None)
-            # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
-            features = pooler_output if pooler_output is not None else (deepstack_features or [None])[0]
+            features = placeholder_features(modality_outputs)
             is_flat = isinstance(features, torch.Tensor) and getattr(modality_outputs, "split_sizes", None) is not None
             if not is_flat and isinstance(features, torch.Tensor) and features.ndim == 2:
                 raise ValueError(
                     f"The flat {modality} features of `mm_encoder_outputs` need their `split_sizes`, as returned by "
                     f"`get_{modality}_embeddings`."
                 )
-            if not is_flat and pooler_output is None:
+            if not is_flat and getattr(modality_outputs, "pooler_output", None) is None:
                 continue
 
             # 1. compute cumulative number of placeholder tokens per sample and per each encoded mm-data
@@ -4465,8 +4463,7 @@ def _repeat_flat_outputs(
     """Repeats each sample's rows of flat `get_*_embeddings` outputs, as `input_ids.repeat_interleave` does its row."""
     pooler_output = outputs.pooler_output
     deepstack_features = getattr(outputs, "deepstack_features", None)
-    # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
-    reference = pooler_output if isinstance(pooler_output, torch.Tensor) else deepstack_features[0]
+    reference = placeholder_features(outputs)
     rows = _repeat_index(rows_per_sample.to(reference.device), repeats, reference.shape[0])
 
     def repeat(features: torch.Tensor) -> torch.Tensor:
