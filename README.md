@@ -93,7 +93,9 @@ Run LLMs locally without Python. llama.cpp is a C/C++ inference engine that runs
 </tr>
 </table>
 
-Transformers is also designed to be read and changed by coding agents. Each model is plain PyTorch in one file that reads from top to bottom. To change how a model computes, register your own attention or experts function, or load an optimized kernel from the Hub, and the model uses it without any changes to its code.
+Transformers standardizes how every model is written, so hundreds of architectures share one structure. Each model is plain PyTorch in one file that reads from top to bottom, kept readable and simple without giving up performance. An improvement made once reaches every architecture, so if you find one, [contribute it](./CONTRIBUTING.md).
+
+Transformers is designed to be read and changed by humans and coding agents alike. To change how a model computes, register your own attention or experts function, or load an optimized kernel from the Hub, and the model uses it without any changes to its code.
 
 ## Try a model
 
@@ -155,6 +157,8 @@ Fine-tune a pretrained model on your data, on one GPU or many.
 - [Trainer](https://huggingface.co/docs/transformers/training): Run the training loop with support for mixed precision and `torch.compile`.
 - [PEFT](https://huggingface.co/docs/transformers/peft): Train a small adapter instead of all of a model's weights.
 - [FSDP](https://huggingface.co/docs/transformers/fsdp): Shard a model's parameters across GPUs to train models that don't fit on one.
+- [Tensor parallelism](https://huggingface.co/docs/transformers/tensor_parallelism): Split each weight matrix across GPUs so every GPU computes part of each layer.
+- [Expert parallelism](https://huggingface.co/docs/transformers/expert_parallelism): Place the experts of a mixture-of-experts model on different GPUs and route tokens to them.
 
 ## Use less memory and run faster
 

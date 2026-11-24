@@ -23,62 +23,64 @@ Transformers is the model-definition framework for machine learning models in te
 
 Training frameworks, inference engines, and local runtimes build on that definition instead of writing their own. Transformers adds new architectures as they're released and matches each one to its original results, so the tools that build on it get every new model without reimplementing it.
 
-<div class="not-prose relative mb-28">
-<table class="block !border-0" style="font: inherit; color: inherit;">
-<tbody class="block">
-<tr class="flex items-center">
-  <td class="peer group !border-0">
-    <a class="flex h-10 items-center" href="./community_integrations/vllm">
-      <span class="relative block h-10 w-10">
-      <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt="vLLM" width="40" height="40"/>
-      <span class="absolute inset-0 opacity-0 group-hover:opacity-100" style="background: url(https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg) center / contain no-repeat;"></span>
+<div class="not-prose relative mb-28 flex items-center gap-6">
+  <details name="ecosystem" class="details-reset group" open>
+    <summary class="flex h-10 cursor-pointer items-center" title="Unsloth">
+      <span class="relative block h-8 w-8">
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-40" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt="Unsloth" width="32" height="32"/>
+        <span class="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:opacity-50" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp) center / contain no-repeat;"></span>
       </span>
-    </a>
-    <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
-      <div class="text-gray-500 dark:text-gray-400">vLLM</div>
-      Serve LLMs at scale. vLLM batches requests continuously and keeps KV cache memory compact with PagedAttention.
-    </div>
-  </td>
-  <td class="peer group !border-0">
-    <a class="flex h-10 items-center" href="./community_integrations/sglang">
-      <span class="relative block h-6 w-20">
-      <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50" src="https://www.sglang.io/images/logo.png" alt="SGLang" width="80" height="24"/>
-      <span class="absolute inset-0 opacity-0 group-hover:opacity-100" style="background: url(https://www.sglang.io/images/logo.png) center / contain no-repeat;"></span>
-      </span>
-    </a>
-    <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
-      <div class="text-gray-500 dark:text-gray-400">SGLang</div>
-      Serve LLMs with low latency. SGLang is a high-throughput inference engine with a frontend language for agentic workflows.
-    </div>
-  </td>
-  <td class="peer group !border-0">
-    <a class="flex h-10 items-center" href="./community_integrations/llama_cpp">
-      <span class="relative block h-7 w-7">
-      <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-50 dark:invert" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt="llama.cpp" width="28" height="28"/>
-      <span class="absolute inset-0 opacity-0 group-hover:opacity-100 dark:invert" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg) center / contain no-repeat;"></span>
-      </span>
-    </a>
-    <div class="invisible group-hover:visible absolute left-0 top-full w-full pt-3">
-      <div class="text-gray-500 dark:text-gray-400">llama.cpp</div>
-      Run LLMs locally without Python. llama.cpp is a C/C++ inference engine that runs quantized models in the GGUF format.
-    </div>
-  </td>
-  <td class="order-first !border-0 peer-hover:hidden">
-    <a class="flex h-10 items-center" href="./community_integrations/unsloth"><img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-8 w-8" src="https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp" alt="Unsloth" width="32" height="32"/></a>
-    <div class="absolute left-0 top-full w-full pt-3">
-      <div class="text-gray-500 dark:text-gray-400">Unsloth</div>
+    </summary>
+    <span class="flex h-10 items-center" style="position: absolute; margin-top: -2.5rem;" aria-hidden="true"><span class="block h-8 w-8" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp) center / contain no-repeat;"></span></span>
+    <div class="pt-3" style="position: absolute; top: 100%; left: 0; width: 100%;">
+      <a class="text-gray-500 dark:text-gray-400 hover:underline" href="./community_integrations/unsloth">Unsloth</a><br/>
       Fine-tune with less memory. Unsloth trains LLMs in 4-bit, 8-bit, and 16-bit precision with custom kernels.
     </div>
-  </td>
-  <td class="order-first !border-0 hidden peer-hover:block">
-    <a class="flex h-10 items-center" href="./community_integrations/unsloth"><span class="block h-8 w-8 grayscale opacity-50" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/webp/unsloth.webp) center / contain no-repeat;"></span></a>
-  </td>
-</tr>
-</tbody>
-</table>
+  </details>
+  <details name="ecosystem" class="details-reset group">
+    <summary class="flex h-10 cursor-pointer items-center" title="vLLM">
+      <span class="relative block h-10 w-10">
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-40" src="https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg" alt="vLLM" width="40" height="40"/>
+        <span class="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:opacity-50" style="background: url(https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg) center / contain no-repeat;"></span>
+      </span>
+    </summary>
+    <span class="flex h-10 items-center" style="position: absolute; margin-top: -2.5rem;" aria-hidden="true"><span class="block h-10 w-10" style="background: url(https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/vllm.svg) center / contain no-repeat;"></span></span>
+    <div class="pt-3" style="position: absolute; top: 100%; left: 0; width: 100%;">
+      <a class="text-gray-500 dark:text-gray-400 hover:underline" href="./community_integrations/vllm">vLLM</a><br/>
+      Serve LLMs at scale. vLLM batches requests continuously and keeps KV cache memory compact with PagedAttention.
+    </div>
+  </details>
+  <details name="ecosystem" class="details-reset group">
+    <summary class="flex h-10 cursor-pointer items-center" title="SGLang">
+      <span class="relative block h-6 w-20">
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-40" src="https://www.sglang.io/images/logo.png" alt="SGLang" width="80" height="24"/>
+        <span class="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:opacity-50" style="background: url(https://www.sglang.io/images/logo.png) center / contain no-repeat;"></span>
+      </span>
+    </summary>
+    <span class="flex h-10 items-center" style="position: absolute; margin-top: -2.5rem;" aria-hidden="true"><span class="block h-6 w-20" style="background: url(https://www.sglang.io/images/logo.png) center / contain no-repeat;"></span></span>
+    <div class="pt-3" style="position: absolute; top: 100%; left: 0; width: 100%;">
+      <a class="text-gray-500 dark:text-gray-400 hover:underline" href="./community_integrations/sglang">SGLang</a><br/>
+      Serve LLMs with low latency. SGLang is a high-throughput inference engine with a frontend language for agentic workflows.
+    </div>
+  </details>
+  <details name="ecosystem" class="details-reset group">
+    <summary class="flex h-10 cursor-pointer items-center" title="llama.cpp">
+      <span class="relative block h-7 w-7">
+        <img class="!m-0 !border-0 !shadow-none !rounded-none object-contain h-full w-full grayscale opacity-40 dark:invert" src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg" alt="llama.cpp" width="28" height="28"/>
+        <span class="absolute inset-0 opacity-0 transition-opacity duration-150 group-hover:opacity-50 dark:invert" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg) center / contain no-repeat;"></span>
+      </span>
+    </summary>
+    <span class="flex h-10 items-center" style="position: absolute; margin-top: -2.5rem;" aria-hidden="true"><span class="block h-7 w-7 dark:invert" style="background: url(https://cdn.jsdelivr.net/gh/selfhst/icons/svg/llama-cpp.svg) center / contain no-repeat;"></span></span>
+    <div class="pt-3" style="position: absolute; top: 100%; left: 0; width: 100%;">
+      <a class="text-gray-500 dark:text-gray-400 hover:underline" href="./community_integrations/llama_cpp">llama.cpp</a><br/>
+      Run LLMs locally without Python. llama.cpp is a C/C++ inference engine that runs quantized models in the GGUF format.
+    </div>
+  </details>
 </div>
 
-Transformers is also designed to be read and changed by coding agents. Each model is plain PyTorch in one file that reads from top to bottom. To change how a model computes, register your own attention or experts function, or load an optimized kernel from the Hub, and the model uses it without any changes to its code.
+Transformers standardizes how every model is written, so hundreds of architectures share one structure. Each model is plain PyTorch in one file that reads from top to bottom, kept readable and simple without giving up performance. An improvement made once reaches every architecture, so if you find one, [contribute it](./contributing).
+
+Transformers is designed to be read and changed by humans and coding agents alike. To change how a model computes, register your own attention or experts function, or load an optimized kernel from the Hub, and the model uses it without any changes to its code.
 
 ## Try a model
 
@@ -170,6 +172,14 @@ Fine-tune a pretrained model on your data, on one GPU or many.
   <a class="!no-underline border dark:border-gray-700 p-4 rounded-lg hover:shadow-lg" href="./fsdp">
     <div class="font-semibold">FSDP</div>
     <p class="text-gray-500 dark:text-gray-400">Shard a model's parameters across GPUs to train models that don't fit on one.</p>
+  </a>
+  <a class="!no-underline border dark:border-gray-700 p-4 rounded-lg hover:shadow-lg" href="./tensor_parallelism">
+    <div class="font-semibold">Tensor parallelism</div>
+    <p class="text-gray-500 dark:text-gray-400">Split each weight matrix across GPUs so every GPU computes part of each layer.</p>
+  </a>
+  <a class="!no-underline border dark:border-gray-700 p-4 rounded-lg hover:shadow-lg" href="./expert_parallelism">
+    <div class="font-semibold">Expert parallelism</div>
+    <p class="text-gray-500 dark:text-gray-400">Place the experts of a mixture-of-experts model on different GPUs and route tokens to them.</p>
   </a>
 </div>
 
