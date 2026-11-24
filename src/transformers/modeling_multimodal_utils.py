@@ -43,20 +43,6 @@ def split_modality_outputs(outputs):
     return outputs
 
 
-def merge_modality_outputs(outputs):
-    """Concatenates per-item outputs back into the flat layout of `get_*_embeddings`."""
-    deepstack_features = getattr(outputs, "deepstack_features", None)
-    features = outputs.pooler_output if outputs.pooler_output is not None else (deepstack_features or [None])[0]
-    if not isinstance(features, (tuple, list)):
-        return outputs
-    merged = copy.copy(outputs)
-    if outputs.pooler_output is not None:
-        merged.pooler_output = torch.cat(outputs.pooler_output)
-    if deepstack_features is not None:
-        merged.deepstack_features = [torch.cat(features) for features in deepstack_features]
-    return merged
-
-
 def _features_getter(modality: str):
     """`get_<modality>_features`: `get_<modality>_embeddings` split per item."""
 
@@ -105,6 +91,20 @@ class MultimodalMixin:
             setattr(cls, f"get_{modality}_features", _features_getter(modality))
             if not hasattr(cls, f"get_{modality}_embeddings"):
                 setattr(cls, f"get_{modality}_embeddings", _embeddings_getter(modality))
+
+
+def merge_modality_outputs(outputs):
+    """Concatenates per-item outputs back into the flat layout of `get_*_embeddings`."""
+    deepstack_features = getattr(outputs, "deepstack_features", None)
+    features = outputs.pooler_output if outputs.pooler_output is not None else (deepstack_features or [None])[0]
+    if not isinstance(features, (tuple, list)):
+        return outputs
+    merged = copy.copy(outputs)
+    if outputs.pooler_output is not None:
+        merged.pooler_output = torch.cat(outputs.pooler_output)
+    if deepstack_features is not None:
+        merged.deepstack_features = [torch.cat(features) for features in deepstack_features]
+    return merged
 
 
 def merge_mm_encoder_outputs(forward):
