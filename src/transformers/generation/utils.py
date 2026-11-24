@@ -1183,8 +1183,8 @@ class GenerationMixin(ContinuousMixin):
                 )
                 continue
 
-            # Per-item outputs. GLM-Image's image-tokenizer feature maps come per image by design. Outputs of
-            # `get_*_features` passed by users also come per item, and keep their `split_sizes`: those are deprecated
+            # Per-item outputs, passed by users: from `get_*_features` (deprecated, they keep their `split_sizes`) or
+            # their own encoder
             if getattr(modality_outputs, "split_sizes", None) is not None:
                 logger.warning_once(
                     "Passing per-item `mm_encoder_outputs` (from `get_*_features`) to `generate` is deprecated and will "
@@ -4476,8 +4476,12 @@ def _repeat_flat_outputs(
         outputs.pooler_output = repeat(pooler_output)
     if deepstack_features is not None:
         outputs.deepstack_features = [repeat(features) for features in deepstack_features]
-    # Nothing reads the item boundaries of the expanded rows
-    outputs.split_sizes = None
+
+    # The items follow their rows: find each item's sample from where its rows start, then repeat each sample's items
+    split_sizes = outputs.split_sizes.to(rows_per_sample.device)
+    item_sample = torch.searchsorted(rows_per_sample.cumsum(0), split_sizes.cumsum(0) - split_sizes, right=True)
+    items_per_sample = torch.zeros_like(rows_per_sample).scatter_add_(0, item_sample, torch.ones_like(item_sample))
+    outputs.split_sizes = split_sizes[_repeat_index(items_per_sample, repeats, len(split_sizes))]
     return outputs
 
 

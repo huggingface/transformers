@@ -584,7 +584,7 @@ class Granite4VisionModel(LlavaNextModel):
         vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
-        all_features, split_sizes = [], None
+        all_features = []
         for projection_idx, (vision_layer, _) in enumerate(self.config.deepstack_layer_map):
             selected_feature = vision_outputs.hidden_states[vision_layer]
 
@@ -601,7 +601,6 @@ class Granite4VisionModel(LlavaNextModel):
                 image_newline=self.image_newline,
             )
             all_features.append(torch.cat(packed_features, dim=0))
-            split_sizes = torch.tensor([len(features) for features in packed_features], device=all_features[-1].device)
 
         # Spatial features: extract 4 offset groups from a single vision layer
         spatial_feature = vision_outputs.hidden_states[self.config.spatial_vision_layer]
@@ -620,8 +619,9 @@ class Granite4VisionModel(LlavaNextModel):
                 image_newline=self.image_newline,
             )
             all_features.append(torch.cat(packed_group, dim=0))
-            split_sizes = torch.tensor([len(features) for features in packed_group], device=all_features[-1].device)
 
+        # Every layer packs the images the same way
+        split_sizes = torch.tensor([len(features) for features in packed_group], device=all_features[-1].device)
         return Granite4VisionImageFeaturesOutput(
             deepstack_features=all_features,
             hidden_states=vision_outputs.hidden_states,
