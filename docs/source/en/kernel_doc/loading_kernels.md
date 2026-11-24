@@ -53,7 +53,7 @@ PyTorch.
 | Linear attention (Gated DeltaNet, Kimi Delta Attention, gated RMSNorm) | `kernels-community/fla` | `kernels-community/fla` | `kernels-community/fla` |
 | Rotary embeddings | `kernels-community/rotary` | `kernels-community/aiter-rope` | `kernels-community/rotary` |
 | Causal LM loss | `kernels-community/liger-kernels` | — | — |
-| Deformable attention | `kernels-community/deformable-detr` | — | — |
+| Deformable attention | `kernels-community/deformable-detr` | `kernels-community/deformable-detr` (on supported architectures) | — |
 
 The table is not exhaustive. Models can register additional layers and functions, and some mappings are available only
 for specific execution modes.

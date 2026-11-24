@@ -983,7 +983,8 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
 class TestKernelMappingDeviceFiltering(TestCasePlus):
     """Test that kernel mappings correctly filter by current device."""
 
-    def test_multi_device_mapping_filters_correctly(self):
+    @parameterized.expand([("cuda",), ("rocm",)])
+    def test_multi_device_mapping_filters_correctly(self, backend):
         """
         Test that when a kernel_mapping contains multiple devices (cuda, rocm),
         only the current device's kernel is registered.
@@ -1012,18 +1013,15 @@ class TestKernelMappingDeviceFiltering(TestCasePlus):
         mock_layer.kernel_layer_name = "RMSNorm"
         mock_model.named_modules.return_value = [("layers.0", mock_layer)]
 
-        # Trigger the mapping creation
-        kernel_config.create_compatible_mapping(mock_model)
+        # PyTorch reports both NVIDIA and AMD GPU tensors as CUDA.
+        with patch("transformers.utils.import_utils.is_rocm_platform", return_value=backend == "rocm"):
+            kernel_config.create_compatible_mapping(mock_model)
 
         # Verify results
         result_mapping = kernel_config.kernel_mapping
 
         self.assertIn("RMSNorm", result_mapping, "RMSNorm should be in mapping")
-        backends = list(result_mapping["RMSNorm"].keys())
-
-        # Assert only CUDA is present, not ROCm
-        self.assertIn("cuda", backends, "CUDA backend should be registered")
-        self.assertNotIn("rocm", backends, "ROCm backend should NOT be registered on CUDA device")
+        self.assertEqual(list(result_mapping["RMSNorm"]), [backend])
 
     def test_single_device_mapping_still_works(self):
         """
