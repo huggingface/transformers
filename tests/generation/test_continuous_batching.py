@@ -2682,14 +2682,17 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
 
     # Each tuple fully specifies a synthetic model config plus the CB knobs; block_size = head_dim * num_kv_heads.
     # fmt: off
-    # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async, num_experts_per_tok)
+    # (block_size, head_dim, num_kv_heads, num_attention_heads, hidden_size, vocab_size, group_types, group_size, attn_impl, max_bpr, logprobs, dtype, use_async, logits_to_keep, do_sample, num_experts_per_tok)
     CONFIGS = [
-        (32, 64, 4, 8, 512, 32000, ["full_attention"], 22, "sdpa", 0, False, torch.float16, False, None),  # sdpa-like, 1 mask
-        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.float16, False, None),  # flash-like, no mask
-        (32, 64, 4, 8, 512, 32000, ["full_attention", "sliding_attention"], 14, "sdpa", 0, False, torch.bfloat16, False, None),  # hybrid, 2 groups + 2 masks
-        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, False, None),  # block_table + logprobs
-        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, True, None),  # block_table + logprobs + async
-        (256, 64, 4, 8, 512, 1000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.bfloat16, False, 8),  # MoE, experts peak dominates
+        (32, 64, 4, 8, 512, 32000, ["full_attention"], 22, "sdpa", 0, False, torch.float16, False, False, False, None),  # sdpa-like, 1 mask
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.float16, False, False, False, None),  # flash-like, no mask
+        (32, 64, 4, 8, 512, 32000, ["full_attention", "sliding_attention"], 14, "sdpa", 0, False, torch.bfloat16, False, False, False, None),  # hybrid, 2 groups + 2 masks
+        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, False, False, False, None),  # block_table + logprobs
+        (32, 64, 2, 8, 512, 32000, ["full_attention"], 16, "sdpa", 8, True, torch.float16, True, False, False, None),  # block_table + logprobs + async
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.bfloat16, False, True, False, None),  # logit rows, greedy
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, True, torch.bfloat16, False, True, False, None),  # logit rows, greedy + logprobs
+        (256, 64, 4, 8, 512, 32000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.bfloat16, False, True, True, None),  # logit rows, sampling
+        (256, 64, 4, 8, 512, 1000, ["full_attention"], 22, "flash_attention_2", 0, False, torch.bfloat16, False, False, False, 8),  # MoE, experts peak dominates
     ]
     # fmt: on
 
@@ -2751,6 +2754,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         logprobs: bool,
         dtype: torch.dtype,
         use_async: bool,
+        logits_to_keep: bool,
+        do_sample: bool,
         num_experts_per_tok: int | None,
     ) -> None:
         config = SimpleNamespace(  # rather than creating a full config that we would only use for the namespace
@@ -2786,6 +2791,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             tokens_per_sector=tokens_per_sector,
             bytes_per_block=bytes_per_model_block,
             attn_types=group_types,
+            model_supports_logits_to_keep=logits_to_keep,
+            do_sample=do_sample,
         )
 
         num_groups = len(group_types)
@@ -2829,6 +2836,15 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
         # Old K/V read from the whole readable cache: always reserved along with the sectors (not scaled by k)
         fixed.append(torch.empty((N, elems_per_kv_read_token), dtype=dtype, device=device))
 
+        # Logit rows of the requests (1024 by default) when the model slices hidden states before the LM head: their
+        # peak is the cast to fp32 (logits in both dtypes) for plain argmax, else the fp32 copies the sampler holds
+        if logits_to_keep:
+            num_fp32_copies = 3 if do_sample else 2 if logprobs else 1
+            if num_fp32_copies == 1:
+                fixed.append(torch.empty((1024, vocab_size), dtype=dtype, device=device))
+            for _ in range(num_fp32_copies):
+                fixed.append(torch.empty((1024, vocab_size), dtype=torch.float32, device=device))
+
         # M-proportional activation peaks: only one is live at a time, so the footprint reserves the largest
         peaks = {
             # LM head: hidden states [M, hidden] turned into logits [M, vocab] (always fp32)
@@ -2850,6 +2866,8 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
                 for _ in range(4 if num_experts_per_tok else 0)
             ],
         }
+        if logits_to_keep:  # the LM head only runs on the logit rows, counted above
+            del peaks["lm_head"]
         peak_nbytes = {name: sum(t.nbytes for t in ts) for name, ts in peaks.items()}
         dominant = max(peak_nbytes, key=peak_nbytes.get)
         # Free the non-dominant peak so the accelerator delta reflects only the live one
