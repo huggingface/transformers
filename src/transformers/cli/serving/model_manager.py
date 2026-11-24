@@ -468,9 +468,9 @@ class ModelManager:
             raise ModelNotServedError("The request names no model, and the server wasn't started with one.")
         model_id = canonical_model_id(model)
         if model_id not in self.engines:
-            self.engines[model_id] = EngineClient(
-                model_id, self.loader, self.generation_state, timeout=self.model_timeout
-            )
+            engine = EngineClient(model_id, self.loader, self.generation_state, timeout=self.model_timeout)
+            # `/load_model` runs this in a thread: another request may have added the model meanwhile, keep that one
+            self.engines.setdefault(model_id, engine)
         return self.engines[model_id]
 
     async def load_model_streaming(self, model: str):
@@ -488,7 +488,8 @@ class ModelManager:
             `str`: SSE ``data: ...`` lines with progress updates.
         """
         try:
-            engine = self.get_engine(model)
+            # In a thread: a model's first time, it downloads its config and processor, which would stall the streams
+            engine = await asyncio.to_thread(self.get_engine, model)
         except Exception as error:  # its config can't be read
             logger.error(f"Failed to load {model}: {error}", exc_info=True)
             yield f"data: {json.dumps({'status': 'error', 'model': model, 'message': str(error)})}\n\n"
@@ -515,7 +516,8 @@ class ModelManager:
 
             async def run_load():
                 try:
-                    await asyncio.to_thread(engine.start, on_progress=enqueue)
+                    await asyncio.to_thread(engine.start, on_progress=enqueue)  # returns once the model can generate
+                    enqueue({"status": "ready", "model": model_id, "cached": False})
                 except Exception as e:
                     logger.error(f"Failed to load {model_id}: {e}", exc_info=True)
                     enqueue({"status": "error", "model": model_id, "message": str(e)})
@@ -663,8 +665,6 @@ class ModelLoader:
         finally:
             if tqdm_class is not None:
                 logging.set_tqdm_hook(previous_hook)
-        if on_progress is not None:
-            on_progress({"status": "ready", "model": model_id, "cached": False})
         return model, processor
 
     def load_config(self, model_id: str) -> "tuple[PretrainedConfig, GenerationConfig]":

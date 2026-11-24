@@ -622,7 +622,8 @@ class TestGetEngine(unittest.TestCase):
                 first = mm.load_model_streaming("org/model")
                 await anext(first)  # the load is running
                 second = asyncio.create_task(collect(mm.load_model_streaming("org/model")))
-                await asyncio.sleep(0)  # the second request joins the load
+                while len(mm._loading_subscribers["org/model@main"]) < 2:  # the second request joins the load
+                    await asyncio.sleep(0.01)
                 await first.aclose()
                 subscribers = len(mm._loading_subscribers["org/model@main"])
                 release.set()
