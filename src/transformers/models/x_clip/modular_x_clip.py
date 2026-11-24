@@ -512,7 +512,6 @@ class XCLIPPromptGenerator(nn.Module):
 
 class XCLIPModel(CLIPModel, XCLIPPreTrainedModel):
     config: XCLIPConfig
-    input_modalities = ("video", "text")
 
     def __init__(self, config: XCLIPConfig):
         super().__init__(config)

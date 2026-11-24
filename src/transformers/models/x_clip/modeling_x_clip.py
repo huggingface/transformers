@@ -912,7 +912,6 @@ def image_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
 @auto_docstring
 class XCLIPModel(XCLIPPreTrainedModel):
     config: XCLIPConfig
-    input_modalities = ("video", "text")
 
     def __init__(self, config: XCLIPConfig):
         super().__init__(config)
