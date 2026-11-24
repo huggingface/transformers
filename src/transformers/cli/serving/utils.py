@@ -804,7 +804,8 @@ class GenerateRunner:
 
     `send_results(ids, tokens, finished)` sends its results: streamed tokens as two lists, each token's request id
     and the token, and the requests that ended, as ``(request id, result)`` pairs, the result being what the request
-    returned (its generated tokens, or what the function returned) or the error that failed it."""
+    returned (its generated tokens, or what the function returned; ``None`` if it streamed) or the error that failed
+    it."""
 
     def __init__(self, model: "PreTrainedModel", processor: Any, send_results: Callable):
         self.model, self.processor, self.send_results = model, processor, send_results
@@ -899,7 +900,9 @@ class GenerateRunner:
             self.running = True
             try:
                 result = function(self.model, self.processor, *args, **kwargs)
-                if not stream and isinstance(result, list):  # generated tokens, counted as they stream otherwise
+                if stream:  # its tokens went out as they came
+                    result = None
+                elif isinstance(result, list):  # generated tokens, counted as they stream otherwise
                     self.count_tokens(generated=len(result))
             except _GenerationCancelled:
                 result = None
@@ -1050,7 +1053,7 @@ class CBGenerateRunner(GenerateRunner):
             entry[1] = len(generated)
             if output.is_finished():
                 del self.active_requests[request_id]
-                finished.append((request_id, list(generated)))
+                finished.append((request_id, None if stream else list(generated)))
 
 
 def transcribe(model: "PreTrainedModel", processor: Any, inputs: dict, streamer=None) -> list[int]:
@@ -1231,6 +1234,16 @@ class BaseHandler:
             else:  # tool calls, the end of the stream (`None`), an error
                 merged.extend(group)
         return merged
+
+    @staticmethod
+    def _get_finish_reason(generation_kwargs: dict, completion_tokens: int, tool_calls: bool = False) -> str:
+        """Why the generation stopped: a tool call, ``max_new_tokens`` reached, or the end of the answer."""
+        if tool_calls:
+            return "tool_calls"
+        max_new_tokens = generation_kwargs.get("max_new_tokens")
+        if max_new_tokens is not None and completion_tokens >= max_new_tokens:
+            return "length"
+        return "stop"
 
     def _get_engine(self, body: dict) -> "EngineClient":
         """The request's model's engine (see `ModelManager.get_engine`). Sets the body's model to the one served."""

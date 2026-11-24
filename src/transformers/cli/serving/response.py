@@ -17,7 +17,6 @@ Handler for the /v1/responses endpoint (OpenAI Responses API).
 Supports streaming (SSE) and non-streaming (JSON) responses.
 """
 
-import asyncio
 import json
 import time
 from collections.abc import AsyncGenerator
@@ -580,10 +579,8 @@ class ResponseHandler(BaseHandler):
                 yield "".join(builder.finish_message())
 
                 yield "".join(builder.completed(compute_usage(input_len, streamer.total_tokens)))
-            except (GeneratorExit, asyncio.CancelledError):
-                # Re-raise is mandatory: Python raises RuntimeError if GeneratorExit is swallowed.
+            finally:  # stops the generation if the client left
                 streamer.cancel()
-                raise
 
         return EventStream(event_stream(), media_type="text/event-stream")
 

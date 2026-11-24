@@ -17,7 +17,6 @@ Handler for the /v1/chat/completions endpoint.
 Supports streaming (SSE) and non-streaming (JSON) responses.
 """
 
-import asyncio
 import json
 import time
 from collections.abc import AsyncGenerator
@@ -197,14 +196,7 @@ class ChatCompletionHandler(BaseHandler):
                     if sse_parts:
                         yield "".join(sse_parts)
 
-                max_new_tokens = generation_kwargs.get("max_new_tokens")
-                hit_max = max_new_tokens is not None and streamer.total_tokens >= max_new_tokens
-                if has_tool_calls:
-                    finish_reason = "tool_calls"
-                elif hit_max:
-                    finish_reason = "length"
-                else:
-                    finish_reason = "stop"
+                finish_reason = self._get_finish_reason(generation_kwargs, streamer.total_tokens, has_tool_calls)
                 yield self._build_chunk_sse(request_id, finish_reason=finish_reason, model=model_id, created=created)
                 if include_usage:
                     usage = CompletionUsage(
@@ -213,10 +205,8 @@ class ChatCompletionHandler(BaseHandler):
                         total_tokens=input_len + streamer.total_tokens,
                     )
                     yield self._build_chunk_sse(request_id, model=model_id, usage=usage, created=created)
-            except (GeneratorExit, asyncio.CancelledError):
-                # Re-raise is mandatory: Python raises RuntimeError if GeneratorExit is swallowed.
+            finally:  # stops the generation if the client left
                 streamer.cancel()
-                raise
 
         return EventStream(sse_gen(), media_type="text/event-stream")
 
@@ -234,8 +224,6 @@ class ChatCompletionHandler(BaseHandler):
         processor, model_id = engine.processor, engine.model_id
         content, input_len, generated_ids = await engine.generate_non_streaming(inputs, generation_kwargs)
 
-        max_new_tokens = generation_kwargs.get("max_new_tokens")
-        hit_max = max_new_tokens is not None and len(generated_ids) >= max_new_tokens
         completion_tokens = len(generated_ids)
         usage = CompletionUsage(
             prompt_tokens=input_len,
@@ -262,12 +250,7 @@ class ChatCompletionHandler(BaseHandler):
                 for i, tc in enumerate(parsed_tool_calls)
             ]
 
-        if tool_calls is not None:
-            finish_reason = "tool_calls"
-        elif hit_max:
-            finish_reason = "length"
-        else:
-            finish_reason = "stop"
+        finish_reason = self._get_finish_reason(generation_kwargs, completion_tokens, tool_calls is not None)
 
         return JSONResponse(
             self._build_completion(

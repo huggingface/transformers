@@ -3225,3 +3225,20 @@ class TestSeveralApiServers(TestContinuousBatchingChatCompletion):
     @classmethod
     def serve_kwargs(cls) -> dict:
         return {**super().serve_kwargs(), "api_server_count": 2}
+
+    def test_concurrent_streams(self):
+        """8 streams at once, each with its own client, so both API servers get some. Each must end: the tokens of a
+        request sent back to the wrong API server would be lost, and its stream would hang."""
+        import concurrent.futures
+
+        def stream(index):
+            client = OpenAI(base_url=f"{self.base_url}/v1", api_key="unused", timeout=60)
+            messages = [{"role": "user", "content": f"Count from {index} to {index + 10}."}]
+            return list(
+                client.chat.completions.create(model=self.MODEL, messages=messages, max_tokens=20, stream=True)
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(stream, range(8)))
+        for chunks in results:
+            self.assertIsNotNone(chunks[-1].choices[0].finish_reason)

@@ -19,7 +19,6 @@ in choices[].text. Supports streaming and non-streaming modes, and suffix for
 fill-in-the-middle text insertion.
 """
 
-import asyncio
 import json
 import time
 from collections.abc import AsyncGenerator
@@ -140,9 +139,7 @@ class CompletionHandler(BaseHandler):
                     if sse_parts:
                         yield "".join(sse_parts)
 
-                max_new_tokens = generation_kwargs.get("max_new_tokens")
-                hit_max = max_new_tokens is not None and streamer.total_tokens >= max_new_tokens
-                finish_reason = "length" if hit_max else "stop"
+                finish_reason = self._get_finish_reason(generation_kwargs, streamer.total_tokens)
 
                 if suffix is not None:
                     yield self._build_chunk_sse(request_id, model_id, text=suffix)
@@ -154,9 +151,8 @@ class CompletionHandler(BaseHandler):
                         total_tokens=input_len + streamer.total_tokens,
                     )
                     yield self._build_chunk_sse(request_id, model_id, usage=usage)
-            except (GeneratorExit, asyncio.CancelledError):
+            finally:  # stops the generation if the client left
                 streamer.cancel()
-                raise
 
         return EventStream(sse_gen(), media_type="text/event-stream")
 
@@ -178,9 +174,7 @@ class CompletionHandler(BaseHandler):
             text = text + suffix
 
         completion_tokens = len(generated_ids)
-        max_new_tokens = generation_kwargs.get("max_new_tokens")
-        hit_max = max_new_tokens is not None and completion_tokens >= max_new_tokens
-        finish_reason = "length" if hit_max else "stop"
+        finish_reason = self._get_finish_reason(generation_kwargs, completion_tokens)
 
         usage = CompletionUsage(
             prompt_tokens=input_len,
