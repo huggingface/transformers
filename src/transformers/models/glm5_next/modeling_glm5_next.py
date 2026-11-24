@@ -1903,6 +1903,20 @@ class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        pixel_values = pixel_values.type(self.visual.dtype)
+        image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        return image_outputs
+
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
@@ -1925,20 +1939,6 @@ class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
         vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
         vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_outputs
-
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
-    def get_image_embeddings(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        pixel_values = pixel_values.type(self.visual.dtype)
-        image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
-        return image_outputs
 
     def get_placeholder_mask(
         self,
