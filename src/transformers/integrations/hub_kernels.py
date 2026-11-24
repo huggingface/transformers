@@ -88,20 +88,6 @@ _PACKAGE_SUPPORTED_DEVICES = {
     "mamba_ssm": ("cuda",),
 }
 
-# ROCm architectures shipped by kernels-community/deformable-detr v2.
-_DEFORMABLE_DETR_ROCM_ARCHS = {
-    "gfx906",
-    "gfx908",
-    "gfx90a",
-    "gfx942",
-    "gfx950",
-    "gfx1030",
-    "gfx1100",
-    "gfx1101",
-    "gfx1200",
-    "gfx1201",
-}
-
 
 if is_kernels_available():
     from kernels import (
@@ -1153,28 +1139,10 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
     # Keep the original forward instead of raising when a kernel can't be loaded (e.g. no compatible build)
     use_fallback = KernelizeFallback.ALL
 
-    kernel_config = model.kernel_config
-    mapping = kernel_config.kernel_mapping if kernel_config is not None else None
-    inherit_mapping = kernel_config is None or (not kernel_config.use_local_kernel and kernel_config.inherit_mapping)
-    if inherit_mapping and device == "rocm" and (mapping is None or "MultiScaleDeformableAttention" not in mapping):
-        # ROCm capabilities group multiple gfx targets. Use the exact architecture so
-        # unsupported GPUs keep the PyTorch implementation.
-        arch = torch.cuda.get_device_properties(model.device).gcnArchName.partition(":")[0]
-        if arch in _DEFORMABLE_DETR_ROCM_ARCHS:
-            mapping = {
-                **(mapping or {}),
-                "MultiScaleDeformableAttention": {
-                    "rocm": LayerRepository(
-                        repo_id="kernels-community/deformable-detr",
-                        layer_name="MultiScaleDeformableAttention",
-                        version=2,
-                    ),
-                },
-            }
-
     with keep_accelerate_hooks(model):
-        if mapping is not None:
-            with use_kernel_mapping(mapping, inherit_mapping=inherit_mapping):
+        if model.kernel_config is not None:
+            inherit_mapping = not model.kernel_config.use_local_kernel and model.kernel_config.inherit_mapping
+            with use_kernel_mapping(model.kernel_config.kernel_mapping, inherit_mapping=inherit_mapping):
                 _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
         else:
             _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
