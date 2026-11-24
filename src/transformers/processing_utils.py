@@ -2144,9 +2144,7 @@ class ProcessorMixin(PushToHubMixin):
         for lookup_location in lookup_locations:
             for custom_class in lookup_location._extra_content.values():
                 if isinstance(custom_class, dict):
-                    custom_class = tuple(custom_class.values())
-                if isinstance(custom_class, tuple):
-                    for custom_subclass in custom_class:
+                    for custom_subclass in custom_class.values():
                         if custom_subclass is not None and custom_subclass.__name__ == module_name:
                             return custom_subclass
                 elif custom_class is not None and custom_class.__name__ == module_name:
