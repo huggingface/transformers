@@ -69,14 +69,14 @@ def smart_resize(
         )
     h_bar = round(height / factor) * factor
     w_bar = round(width / factor) * factor
-    t_bar = round(num_frames / temporal_factor) * temporal_factor
+    t_bar = math.ceil(num_frames / temporal_factor) * temporal_factor
 
     if t_bar * h_bar * w_bar > max_pixels:
-        beta = math.sqrt((num_frames * height * width) / max_pixels)
+        beta = math.sqrt((t_bar * height * width) / max_pixels)
         h_bar = max(factor, math.floor(height / beta / factor) * factor)
         w_bar = max(factor, math.floor(width / beta / factor) * factor)
     elif t_bar * h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (num_frames * height * width))
+        beta = math.sqrt(min_pixels / (t_bar * height * width))
         h_bar = math.ceil(height * beta / factor) * factor
         w_bar = math.ceil(width * beta / factor) * factor
 
