@@ -228,7 +228,7 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_config_with_null_backbone_kwargs(self):
-        """Regression test for configs with backbone_kwargs=None"""
+        """Regression test for configs with backbone_kwargs=None: https://github.com/huggingface/transformers/pull/51027"""
         config = DetrConfig(backbone_kwargs=None)
         self.assertEqual(config.backbone_config.model_type, "timm_backbone")
 
