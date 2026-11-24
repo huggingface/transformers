@@ -364,7 +364,6 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
         "attentions": InternVLVisionAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -586,13 +585,7 @@ class InternVLModel(LlavaModel):
             **kwargs,
         )
 
-        return InternVLModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return InternVLModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):

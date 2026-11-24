@@ -24,7 +24,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, no_inherit_decorator
 from ...utils.deprecation import deprecate_kwarg
 from ..clip.modeling_clip import CLIPMLP
 from ..gemma2.modeling_gemma2 import Gemma2ForCausalLM
@@ -33,7 +33,6 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
@@ -49,6 +48,31 @@ class NanoChatRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input with flipped signs for NanoChat."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -56,6 +80,8 @@ def rotate_half(x):
     return torch.cat((x2, -x1), dim=-1)
 
 
+# NanoChat's flipped rotary signs are incompatible with the inherited rotary kernel.
+@no_inherit_decorator
 class NanoChatAttention(Qwen3Attention):
     def __init__(self, config: NanoChatConfig, layer_idx: int):
         super().__init__(config, layer_idx)

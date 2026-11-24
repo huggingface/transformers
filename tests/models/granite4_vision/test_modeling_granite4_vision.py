@@ -46,31 +46,29 @@ class Granite4VisionModelTester(VLMModelTester):
     config_class = Granite4VisionConfig
     conditional_generation_class = Granite4VisionForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # Vision hidden_size must be divisible by 64 (QFormer num_attention_heads = hidden_size // 64)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 64)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("num_hidden_layers", 2)
+        "hidden_size": 64,
+        "intermediate_size": 64,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "num_hidden_layers": 2,
         # Image/patch sizes: image_side = image_size // patch_size must be divisible by window_side
-        kwargs.setdefault("image_size", 8)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("projection_dim", 64)
-        kwargs.setdefault("num_patches_per_image", 2)
+        "image_size": 8,
+        "patch_size": 2,
+        "projection_dim": 64,
+        "num_patches_per_image": 2,
         # Granite4Vision-specific
-        kwargs.setdefault("downsample_rate", "1/2")
-        kwargs.setdefault("deepstack_layer_map", [[1, 0]])
-        kwargs.setdefault("projector_dropout", 0.0)
-        kwargs.setdefault("image_token_id", 3)
-
+        "downsample_rate": "1/2",
+        "deepstack_layer_map": [[1, 0]],
+        "projector_dropout": 0.0,
+        "image_token_id": 3,
         # Compute num_image_tokens after downsampling:
         # image_side = image_size/patch_size = 4, ds 1/2 -> patches_h = patches_w = 2
         # pinpoints [[8,8]] -> scale 1x1 -> current_h = current_w = 2
         # unpadded = 2*2 = 4, newline = 2, base = 2*2 = 4 -> total = 10
-        kwargs.setdefault("num_image_tokens", 10)
-
-        super().__init__(parent, **kwargs)
+        "num_image_tokens": 10,
+    }
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models

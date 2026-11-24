@@ -24,6 +24,7 @@ from transformers import (
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -42,19 +43,18 @@ if is_vision_available():
     from transformers.image_utils import load_image
 
 
-class GotOcr2VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=64,
-        image_token_index=1,
-        model_type="got_ocr2",
-        is_training=True,
-        text_config={
+class GotOcr2VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_channels": 3,
+        "ignore_index": -100,
+        "image_size": 64,
+        "image_token_index": 1,
+        "model_type": "got_ocr2",
+        "is_training": True,
+        "text_config": {
             "model_type": "qwen2",
             "vocab_size": 99,
             "hidden_size": 128,
@@ -72,7 +72,7 @@ class GotOcr2VisionText2TextModelTester:
             "eos_token_id": 3,
             "pad_token_id": 4,
         },
-        vision_config={
+        "vision_config": {
             "num_hidden_layers": 2,
             "output_channels": 64,
             "hidden_act": "quick_gelu",
@@ -82,27 +82,27 @@ class GotOcr2VisionText2TextModelTester:
             "patch_size": 2,
             "image_size": 64,
         },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_index = image_token_index
-        self.model_type = model_type
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.num_image_tokens = 64
-        self.seq_length = seq_length + self.num_image_tokens
+        "num_image_tokens": 64,
+    }
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["bos_token_id"] = values["text_config"]["bos_token_id"]
+        values["eos_token_id"] = values["text_config"]["eos_token_id"]
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        # `seq_length` is given as the text length; the image tokens are added to it
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return GotOcr2Config(
@@ -137,6 +137,8 @@ class GotOcr2VisionText2TextModelTester:
 
 @require_torch
 class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = GotOcr2VisionText2TextModelTester
+
     all_model_classes = (
         (
             GotOcr2Model,

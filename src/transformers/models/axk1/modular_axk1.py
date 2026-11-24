@@ -253,7 +253,6 @@ class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):
     # and route without a score correction bias
     _keys_to_ignore_on_load_missing = ["e_score_correction_bias"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AXK1TopkRouter):

@@ -28,6 +28,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -39,47 +40,34 @@ if is_torch_available():
     from transformers import XGLMForCausalLM, XGLMModel, XGLMTokenizer
 
 
-class XGLMModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        d_model=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        ffn_dim=37,
-        activation_function="gelu",
-        activation_dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class XGLMModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 14,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "ffn_dim": 37,
+        "activation_function": "gelu",
+        "activation_dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "scope": None,
+        "bos_token_id": 0,
+        "eos_token_id": 2,
+        "pad_token_id": 1,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = d_model
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.ffn_dim = ffn_dim
-        self.activation_function = activation_function
-        self.activation_dropout = activation_dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = None
-        self.bos_token_id = 0
-        self.eos_token_id = 2
-        self.pad_token_id = 1
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
@@ -273,6 +261,8 @@ class XGLMModelTester:
 
 @require_torch
 class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = XGLMModelTester
+
     all_model_classes = (XGLMModel, XGLMForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}

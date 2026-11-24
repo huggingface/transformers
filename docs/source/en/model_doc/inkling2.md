@@ -20,7 +20,7 @@ limitations under the License.
 
 # Inkling 2 Small
 
-[Inkling 2 Small](https://huggingface.co/thinkingmachines/Inkling-2-Small-MXFP8) is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is intended for use in English and other languages, and across multiple coding languages. It keeps the decoder of [Inkling](./inkling), with learned relative attention, short causal convolutions and mixture-of-experts layers, and adds block attention residuals, gated attention with a learned sink and dynamic key/value convolutions. The language backbone consists of 48 mixture-of-experts decoder layers, each routing tokens to 8 of 384 experts. The model has 594B total and 17B active parameters. Images are encoded by a vision transformer based on the Perception Encoder and projected into the language model embeddings, one embedding per 40x40 pixel patch. 
+[Inkling 2 Small](https://huggingface.co/collections/thinkingmachines/inkling-2) is a multimodal model from [Thinking Machines Lab](https://huggingface.co/thinkingmachines) that accepts text and image inputs and generates text outputs. It is intended for use in English and other languages, and across multiple coding languages. It keeps the decoder of [Inkling](./inkling), with learned relative attention, short causal convolutions and mixture-of-experts layers, and adds block attention residuals, gated attention with a learned sink and dynamic key/value convolutions. The language backbone consists of 48 mixture-of-experts decoder layers, each routing tokens to 8 of 384 experts. The model has 594B total and 17B active parameters. Images are encoded by a vision transformer based on the Perception Encoder and projected into the language model embeddings, one embedding per 40x40 pixel patch. 
 
 The model is released with two checkpoints:
 - [`thinkingmachines/Inkling-2-Small`](https://huggingface.co/thinkingmachines/Inkling-2-Small)
@@ -114,6 +114,9 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 ## Notes
 
 - Attention runs in eager mode only, because every layer adds a relative position bias and a sink.
+- The short convolutions use fast GPU kernels when available: Hub kernels when loading with `use_kernels=True`,
+  otherwise the [causal-conv1d](https://github.com/Dao-AILab/causal-conv1d) package if installed
+  (`pip install causal-conv1d`). Without them, they fall back to a slower PyTorch implementation.
 
 ## Inkling2Config
 

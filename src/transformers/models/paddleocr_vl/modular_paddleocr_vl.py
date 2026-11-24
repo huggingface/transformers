@@ -32,7 +32,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
@@ -394,7 +395,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaddleOCRDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -748,7 +748,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
@@ -787,7 +787,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
             **kwargs,
         )
 
-        return outputs
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -812,7 +812,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -850,7 +850,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         >>> print(output_text)
         ```
         """
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MultimodalBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -874,12 +874,13 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
         )
 
 

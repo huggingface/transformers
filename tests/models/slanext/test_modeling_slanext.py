@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -47,31 +48,32 @@ if is_torch_available():
     import torch
 
 
-class SLANeXtModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        image_size=512,
-        num_channels=3,
-        is_training=False,
-        vision_config=None,
-    ):
+class SLANeXtModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 1,
+        "image_size": 512,
+        "num_channels": 3,
+        "is_training": False,
+        "vision_config": {
+            "hidden_size": 2,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 1,
+            "global_attn_indexes": [1, 1, 1, 1],
+            "mlp_dim": 4,
+        },
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_hidden_layers"] = values["vision_config"]["num_hidden_layers"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        if vision_config is None:
-            vision_config = {
-                "hidden_size": 2,
-                "num_hidden_layers": 1,
-                "num_attention_heads": 1,
-                "global_attn_indexes": [1, 1, 1, 1],
-                "mlp_dim": 4,
-            }
-        self.vision_config = vision_config
-        self.num_hidden_layers = vision_config["num_hidden_layers"]
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values = self.prepare_config_and_inputs()
@@ -97,17 +99,15 @@ class SLANeXtModelTester:
 
 @require_torch
 class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = SLANeXtModelTester
+
     all_model_classes = (SLANeXtForTableRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": SLANeXtForTableRecognition} if is_torch_available() else {}
 
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = SLANeXtModelTester(
-            self,
-            batch_size=1,
-            image_size=512,
-        )
+        self.model_tester = SLANeXtModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=SLANeXtConfig,

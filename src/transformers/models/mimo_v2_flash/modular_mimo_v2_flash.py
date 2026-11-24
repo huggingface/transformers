@@ -75,9 +75,6 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -173,7 +170,9 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
 
 
 class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
-    pass
+    def __init__(self, config: MiMoV2FlashConfig):
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
 
 class MiMoV2FlashExperts(DeepseekV3Experts):
@@ -312,8 +311,9 @@ class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_flex_attn = False  # asymmetric head dim + not being a power of 2
     _compatible_flash_implementations = ["flash_attention_4"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
+    # The checkpoint stores the router weight in float32, like the correction bias
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "mlp.gate.weight"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range
