@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import os
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
@@ -438,6 +440,76 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
             device_map=self.device_map,
         )
         self.assertEqual({param.dtype for param in model.parameters()}, {torch.float32})
+        model(input_ids=torch.arange(10, 20, device=self.device_map).unsqueeze(0))
+
+    def test_experts_only(self):
+        """
+        Checks that `experts_only=True` keeps the experts in FP8 and loads the other linear layers dequantized, and
+        that the model saves and reloads as is
+        """
+        from transformers.integrations.finegrained_fp8 import FP8Experts, FP8Linear
+
+        model_id = "hf-internal-testing/MiniMax-M2-Tiny-FP8"
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, quantization_config=FineGrainedFP8Config(experts_only=True), device_map=self.device_map
+        )
+        self.assertFalse(any(isinstance(module, FP8Linear) for module in model.modules()))
+        self.assertTrue(any(isinstance(module, FP8Experts) for module in model.modules()))
+
+        # The other linear layers have the weights of a fully dequantized model
+        dequantized = AutoModelForCausalLM.from_pretrained(
+            model_id, quantization_config=FineGrainedFP8Config(dequantize=True), device_map=self.device_map
+        )
+        dequantized_state_dict = dequantized.state_dict()
+        q_proj_weight = model.model.layers[0].self_attn.q_proj.weight
+        self.assertEqual(q_proj_weight.dtype, torch.bfloat16)
+        torch.testing.assert_close(
+            q_proj_weight, dequantized_state_dict["model.layers.0.self_attn.q_proj.weight"], rtol=0, atol=0
+        )
+
+        # The config keeps the checkpoint's unquantized layers and adds the dequantized ones
+        modules_to_not_convert = model.config.quantization_config.modules_to_not_convert
+        self.assertEqual(modules_to_not_convert[:3], ["gate", "e_score_correction_bias", "lm_head"])
+        self.assertIn("model.layers.0.self_attn.q_proj", modules_to_not_convert)
+
+        input_ids = torch.arange(10, 20, device=self.device_map).unsqueeze(0)
+        with torch.no_grad():
+            logits = model(input_ids).logits
+        # Reloads as saved, then as a loader that doesn't read `experts_only` would: the saved list of the layers left
+        # out of FP8 is enough
+        for drop_experts_only in [False, True]:
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                if drop_experts_only:
+                    config_path = os.path.join(tmpdirname, "config.json")
+                    with open(config_path, encoding="utf-8") as f:
+                        config = json.load(f)
+                    del config["quantization_config"]["experts_only"]
+                    with open(config_path, "w", encoding="utf-8") as f:
+                        json.dump(config, f)
+                reloaded = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            reloaded_state_dict = reloaded.state_dict()
+            self.assertEqual(reloaded_state_dict.keys(), model.state_dict().keys())
+            for name, param in model.state_dict().items():
+                torch.testing.assert_close(reloaded_state_dict[name], param, rtol=0, atol=0)
+            with torch.no_grad():
+                torch.testing.assert_close(reloaded(input_ids).logits, logits, rtol=0, atol=0)
+
+    def test_experts_only_quantize_while_loading(self):
+        """
+        Checks that quantizing while loading with `experts_only=True` only quantizes the experts
+        """
+        from transformers.integrations.finegrained_fp8 import FP8Experts, FP8Linear
+
+        quantization_config = FineGrainedFP8Config(weight_block_size=(32, 32), experts_only=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen3MoeForCausalLM",
+            quantization_config=quantization_config,
+            device_map=self.device_map,
+        )
+        self.assertFalse(any(isinstance(module, FP8Linear) for module in model.modules()))
+        self.assertTrue(any(isinstance(module, FP8Experts) for module in model.modules()))
+        self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, torch.bfloat16)
         model(input_ids=torch.arange(10, 20, device=self.device_map).unsqueeze(0))
 
     @parameterized.expand(["eager", "grouped_mm"])

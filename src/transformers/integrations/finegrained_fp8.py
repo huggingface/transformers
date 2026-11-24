@@ -24,7 +24,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 from ..utils import logging
 from ..utils.import_utils import is_kernels_available
@@ -1427,6 +1427,8 @@ def replace_with_fp8_linear(
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
+        if quantization_config.experts_only and not module_name.endswith(".experts"):
+            continue
 
         new_module = None
         with torch.device("meta"):
@@ -1698,4 +1700,7 @@ class Fp8Dequantize(ConversionOps):
         # Round-trip: dequantize on load -> re-quantize on save, so the saved
         # checkpoint preserves the FP8 format (weight + per-block ``weight_scale_inv``)
         # whether the in-memory state stayed quantized or was dequantized for compute.
+        # With `experts_only`, the dequantized layers save as they are: their config says they're not quantized
+        if self.hf_quantizer.quantization_config.experts_only:
+            return _IdentityOp()
         return Fp8Quantize(self.hf_quantizer)

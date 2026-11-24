@@ -133,6 +133,23 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
+        if self.quantization_config.experts_only:
+            from torch import nn
+
+            from ..integrations.finegrained_fp8 import FP8Linear
+
+            # The saved config adds every linear layer left out of FP8 to the layers the checkpoint stores unquantized,
+            # so that loaders that don't read `experts_only` (e.g. vLLM) don't take their weights for FP8 ones
+            not_converted = [
+                name
+                for name, module in model.named_modules()
+                if isinstance(module, nn.Linear) and not isinstance(module, FP8Linear)
+            ]
+            skip = self.quantization_config.modules_to_not_convert or []
+            self.quantization_config.modules_to_not_convert = skip + [
+                name for name in not_converted if name not in skip
+            ]
+
     def _process_model_after_weight_loading(self, model, **kwargs):
         # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
         # context); route those models through Triton/grouped_mm instead.
@@ -191,6 +208,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
         return {"dequantize": Fp8Dequantize}
+
+    def get_weight_conversions(self):
+        if not (self.pre_quantized and self.quantization_config.experts_only):
+            return super().get_weight_conversions()
+
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained_fp8 import Fp8Dequantize
+
+        # The linear layers outside the experts are plain `nn.Linear`: their weights are dequantized as they load
+        return [WeightConverter(names, param, [Fp8Dequantize(self)]) for param, names in self.serialized_names.items()]
 
     def update_weight_conversions(self, weight_conversions, model):
         from ..core_model_loading import WeightRenaming
