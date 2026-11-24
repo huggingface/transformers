@@ -23,6 +23,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -42,7 +43,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
@@ -993,7 +994,10 @@ class Emu3VQVAE(PreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     def encode(
-        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Emu3VQVAEModelOutput:
         is_image = pixel_values.ndim == 4
         if is_image:
@@ -1016,10 +1020,12 @@ class Emu3VQVAE(PreTrainedModel):
 
         image_tokens = codes.squeeze(1) if is_image else codes
 
-        image_tokens = [
-            single_image[: int(size[0] / self.vision_spatial_factor), : int(size[1] / self.vision_spatial_factor)]
-            for single_image, size in zip(image_tokens, image_sizes)
-        ]
+        # Without `image_sizes`, the padded token grids are kept whole
+        if image_sizes is not None:
+            image_tokens = [
+                single_image[: int(size[0] / self.vision_spatial_factor), : int(size[1] / self.vision_spatial_factor)]
+                for single_image, size in zip(image_tokens, image_sizes)
+            ]
 
         return Emu3VQVAEModelOutput(
             last_hidden_state=hidden_states,
@@ -1362,28 +1368,49 @@ class Emu3Model(Emu3PreTrainedModel, MultimodalMixin):
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
 
+    def get_data_dependent_inputs(
+        self, pixel_values: torch.Tensor | None = None, image_sizes: torch.Tensor | None = None, **kwargs
+    ) -> dict[str, Any]:
+        """Where each image's tokens sit in the batch's padded token grids (`image_token_index`), the crop to
+        `image_sizes` that `get_image_embeddings` would otherwise do per image."""
+        if pixel_values is None or image_sizes is None:
+            return {}
+        factor = self.vqmodel.vision_spatial_factor
+        grid_height, grid_width = pixel_values.shape[-2] // factor, pixel_values.shape[-1] // factor
+        token_index = []
+        for i, (height, width) in enumerate(torch.as_tensor(image_sizes).tolist()):
+            rows = torch.arange(height // factor) + i * grid_height
+            # Each row of BPE tokens ends with an EOL token, after the grid's last column
+            columns = torch.cat([torch.arange(width // factor), torch.tensor([grid_width])])
+            token_index.append((rows[:, None] * (grid_width + 1) + columns).flatten())
+        return {"image_token_index": torch.cat(token_index).to(pixel_values.device)}
+
     @can_return_tuple
     @auto_docstring(
         custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer"
     )
+    @accepts_precomputed_kwargs(modality="image")
     def get_image_embeddings(
-        self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.LongTensor,
+        token_index: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Emu3VQVAEModelOutput:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images.
+        token_index (`torch.LongTensor`, *optional*):
+            Precomputed by `get_data_dependent_inputs`.
         """
-        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(
-            pixel_values, image_sizes, return_dict=True, **kwargs
-        )
+        if token_index is None:
+            token_index = self.get_data_dependent_inputs(pixel_values, image_sizes)["image_token_index"]
+        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, return_dict=True, **kwargs)
         heights, widths = torch.as_tensor(image_sizes, device=pixel_values.device).unbind(-1)
         factor = self.vqmodel.vision_spatial_factor
         vqmodel_outputs.split_sizes = (heights // factor) * (widths // factor + 1)
-        bpe_tokens_list = [
-            self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in vqmodel_outputs.image_tokens
-        ]
-        bpe_tokens = torch.cat(bpe_tokens_list)
-        image_embeddings = self.get_input_embeddings()(bpe_tokens)
+        bpe_tokens = self.vocabulary_mapping.convert_img2bpe(vqmodel_outputs.image_tokens.flatten(0, 1)).flatten()
+        image_embeddings = self.get_input_embeddings()(bpe_tokens[token_index])
         vqmodel_outputs.pooler_output = image_embeddings
         return vqmodel_outputs
 
@@ -1466,7 +1493,7 @@ class Emu3Model(Emu3PreTrainedModel, MultimodalMixin):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_sizes)
+            mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_sizes, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
             image_features = mm_encoder_outputs["image"].pooler_output
