@@ -411,6 +411,14 @@ cb_config = ContinuousBatchingConfig(
 )
 ```
 
+Cached blocks hold keys and values computed with the weights at the time. If you update the weights in place while the manager runs, for example in an RL training loop, call [`~ContinuousBatchingManager.reset_prefix_cache`] inside [`~ContinuousBatchingManager.pause`] so that new requests don't reuse blocks computed with the old weights. Requests already in flight keep their cache.
+
+```py
+with manager.pause():
+    optimizer.step()
+    manager.reset_prefix_cache()
+```
+
 ## Choose an attention backend
 
 Continuous batching supports FlashAttention, SDPA, and `"paged|eager"`. Set `attn_implementation` when you load the model.

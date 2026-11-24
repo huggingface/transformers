@@ -47,8 +47,7 @@ class BlockLedger:
         self.block_to_hash: dict[int, int] = {}
         # Blocks referenced by no request but kept for their reusable content (dict used as an ordered set)
         self.cached_blocks: dict[int, None] = {}
-        # WP train: the root of every hash chain. Bumped when the weights change (`invalidate_prefix_cache`), so blocks
-        # computed with older weights never match a new request. 0 hashes like before.
+        # Root of every hash chain. Bumping it makes the blocks hashed before unreachable to new prefix matches
         self.epoch = 0
 
     def reset(self) -> None:

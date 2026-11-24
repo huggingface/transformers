@@ -1271,6 +1271,17 @@ class ContinuousBatchingManager:
             self.batch_processor.inputs_and_outputs.clear_graphs()
             logger.info("The KV cache moved while it was released, so the captured CUDA graphs were dropped")
 
+    def reset_prefix_cache(self) -> None:
+        """Stops requests submitted from now on from reusing the keys and values computed before this call, so a prompt
+        seen before the weights were updated is prefilled again with the new weights. Requests in flight keep their
+        cache. Must be called inside the `pause` context, since the generation loop owns the cache. If TP is on, all
+        ranks must call it."""
+        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
+            raise RuntimeError(
+                "Call `reset_prefix_cache` inside the `pause` context: the generation loop uses the cache."
+            )
+        self.batch_processor.cache.reset_prefix_cache()
+
     # ---------------------------- REQUEST SUBMISSION, CANCELLATION AND RETRIEVAL METHODS ---------------------------- #
 
     def add_request(
