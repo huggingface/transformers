@@ -1599,6 +1599,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if "blip" in model_class.__name__.lower():
                 self.skipTest(reason="Won't fix: old model that adds image placeholders during `forward`")
 
+            # TODO: audio too, once audio models' forwards read pre-encoded `mm_encoder_outputs["audio"]` and generate
+            # encodes it with `get_audio_embeddings`
             if not any(
                 modality in model_class.input_modalities and hasattr(model_class, f"get_{modality}_features")
                 for modality in ["image", "video"]

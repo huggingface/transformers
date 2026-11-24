@@ -1124,7 +1124,8 @@ class GenerationMixin(ContinuousMixin):
         return decoder_input_ids, model_kwargs
 
     def _placeholder_token_id(self: "GenerativePreTrainedModel", modality: str) -> int:
-        """The token whose positions in the text hold the features of `modality`."""
+        """The token whose positions in the text hold the features of `modality`, to count each sample's rows when
+        repeating them for beams. Models whose videos reuse the image token (GLM-4V, Nemotron-H Omni) override it."""
         return getattr(self.config, f"{modality}_token_id")
 
     def _expand_multimodal_outputs(
