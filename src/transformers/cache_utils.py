@@ -465,6 +465,7 @@ class DynamicCompressedLayer(DynamicLayer):
 
         k = min(budget if return_groups else budget // group_size, scores.shape[-1])
 
+        # NOTE: On tied scores, it's not deterministic which final selection is made
         top_scores, groups = scores.masked_fill(~visible, float("-inf")).topk(k, dim=-1)
         groups = groups.masked_fill(top_scores == float("-inf"), -1)
 
@@ -944,6 +945,7 @@ class StaticCompressedLayer(StaticLayer):
 
         k = min(budget if return_groups else budget // group_size, scores.shape[-1])
 
+        # NOTE: On tied scores, it's not deterministic which final selection is made
         top_scores, groups = scores.masked_fill(~visible, float("-inf")).topk(k, dim=-1)
         groups = groups.masked_fill(top_scores == float("-inf"), -1)
 
@@ -1388,6 +1390,20 @@ class LinearAttentionCacheLayerMixin(ABC):
             # recurrent_states can stay empty sometimes, see e.g. lfm2 which only uses the conv_states
             if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
+
+    def batch_repeat_interleave(self, repeats: int):
+        """Repeat the cached states along the batch dimension."""
+        for states in (self.conv_states, self.recurrent_states):
+            for i, state in states.items():
+                if state is not None:
+                    states[i] = state.repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        """Select the cached states along the batch dimension."""
+        for states in (self.conv_states, self.recurrent_states):
+            for i, state in states.items():
+                if state is not None:
+                    states[i] = state.index_select(0, indices.to(state.device))
 
     @property
     def is_croppable(self) -> bool:
