@@ -180,7 +180,8 @@ class ExpertsOffloadStore:
                 "Streaming experts on CUDA needs safetensors' prefetch loader: `pip install 'safetensors>=0.9'`"
             )
         self.cache_bytes = cache_bytes
-        self.lookahead = lookahead
+        # Experiment knob: sweep read-ahead depth without touching the loader.
+        self.lookahead = int(os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_LOOKAHEAD", lookahead))
         self.executor = ThreadPoolExecutor(io_threads, thread_name_prefix="experts-offload")
         self.layers: dict[str, nn.Module] = {}  # module name -> experts module, in forward order
         self.routers: dict[str, nn.Module | None] = {}  # module name -> its router, to guess its experts ahead
@@ -766,9 +767,16 @@ class _MPSHostRouter:
             npool = store.pool_of[nxt]
             self._stamps(npool)
             wanted = {(nxt, e) for e in guesses}
+            # Experiment: read-ahead for `nxt` may run while the GPU is in `nxt`'s pass 1. Evicting a
+            # resident `nxt` expert then overwrites a slot pass 1 may read (e6e0218 KeyError / silent
+            # wrong output). Keep every resident expert of `nxt` for this install.
+            if os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_PIN_AHEAD", "0") == "1":
+                keep = keep | wanted | {key for key in npool.cache if key[0] == nxt}
+            else:
+                keep = keep | wanted  # upstream behaviour: never evict an expert this pass wants
             absent = [e for e in dict.fromkeys(guesses) if (nxt, e) not in npool.cache]
             if absent:
-                self._install_many(npool, nxt, absent, keep | wanted)
+                self._install_many(npool, nxt, absent, keep)
                 self.ahead_reads += len(absent)
         self.work_seconds += time.perf_counter() - landed
         self.jobs_done += 1

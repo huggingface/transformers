@@ -20,6 +20,7 @@
 
 import itertools
 import math
+import os
 from collections.abc import Callable
 
 import torch
@@ -69,6 +70,7 @@ from ...vision_utils import (
 )
 from ..auto import AutoModel
 from .configuration_qwen4_exp import Qwen4ExpConfig, Qwen4ExpTextConfig, Qwen4ExpVisionConfig
+from .metal_router import router_topk
 
 
 class Qwen4ExpTextRotaryEmbedding(nn.Module):
@@ -942,12 +944,37 @@ class Qwen4ExpTextTopKRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self._metal_w32 = None
 
     def forward(self, hidden_states):
+        if (
+            os.environ.get("QWEN4_METAL_ROUTER", "1") != "0"
+            and hidden_states.device.type == "mps"
+            and hidden_states.shape[0] == 1
+            and not self.training
+            and not self.norm_topk_prob
+            and self.num_experts <= 512
+            and self.hidden_dim % 4 == 0
+            and hidden_states.dtype in (torch.bfloat16, torch.float16, torch.float32)
+            and os.environ.get("DETERMINISTIC_TOPK", "0") != "1"
+        ):
+            if self._metal_w32 is None:
+                self._metal_w32 = self.weight.detach().float().contiguous()
+            return router_topk(hidden_states, self._metal_w32, self.num_experts, self.hidden_dim, self.top_k)
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        if os.environ.get("DETERMINISTIC_TOPK", "0") == "1":
+            # Stable sort + id-ordered selected experts: the same top-k set and the same
+            # summation order on every run, independent of MPS topk tie-breaking.
+            order = torch.argsort(router_probs, dim=-1, descending=True, stable=True)
+            router_indices = order[..., : self.top_k]
+            router_top_value = torch.gather(router_probs, -1, router_indices)
+            by_id = torch.argsort(router_indices, dim=-1, stable=True)
+            router_indices = torch.gather(router_indices, -1, by_id)
+            router_top_value = torch.gather(router_top_value, -1, by_id)
+        else:
+            router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
