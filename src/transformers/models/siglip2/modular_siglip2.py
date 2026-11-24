@@ -303,6 +303,12 @@ class Siglip2TextModel(SiglipTextModel):
 
 
 class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
+    def __init__(self, config: Siglip2VisionConfig):
+        super().__init__(config)
+
+        self.config = config
+        self.num_heads = config.num_attention_heads
+
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
