@@ -4478,7 +4478,7 @@ def _repeat_flat_outputs(
         outputs.deepstack_features = [repeat(features) for features in deepstack_features]
 
     # The items follow their rows: find each item's sample from where its rows start, then repeat each sample's items
-    split_sizes = outputs.split_sizes.to(rows_per_sample.device)
+    split_sizes = cast(torch.LongTensor, outputs.split_sizes).to(rows_per_sample.device)
     item_sample = torch.searchsorted(rows_per_sample.cumsum(0), split_sizes.cumsum(0) - split_sizes, right=True)
     items_per_sample = torch.zeros_like(rows_per_sample).scatter_add_(0, item_sample, torch.ones_like(item_sample))
     outputs.split_sizes = split_sizes[_repeat_index(items_per_sample, repeats, len(split_sizes))]
