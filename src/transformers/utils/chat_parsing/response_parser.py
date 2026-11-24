@@ -173,8 +173,9 @@ class ResponseParser:
         self._opened: bool = False
         self._finalized: bool = False
         self.initial_events: list[dict] = []
-        self._decoder = TokenIdDecoder(tokenizer) if tokenizer is not None else None
-        if self._decoder is not None:
+        self._decoder = None
+        if tokenizer is not None:
+            self._decoder = TokenIdDecoder(tokenizer)
             if isinstance(prefix, str):
                 prefix = tokenizer.encode(prefix, add_special_tokens=False)
             prefix = self._decoder.feed(to_py_obj(prefix)) + self._decoder.flush(end_of_stream=False)
