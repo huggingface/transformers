@@ -921,7 +921,7 @@ jobs:
             --deselect 'tests/models/multimodal/pooling/test_siglip.py::test_models[float-google/siglip2-giant-opt-patch16-384]'
 
       # A few small language models that vLLM doesn't mark `cpu_model` (same transformers comparison as above). In one shard
-      # (only 3 models). The other models of this file run in "Test: language models generation (gpt2, 6-8B models)".
+      # (only 3 models). The other models of this file run in "Test: other language models generation".
       - name: "Test: more language models generation"
         if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: vllm
@@ -938,14 +938,15 @@ jobs:
         run: |
           pytest -v -s tests/samplers/test_beam_search.py::test_beam_search_single_input
 
-      # The other models of tests/models/language/generation/test_common.py that vLLM doesn't mark `cpu_model`, and Mistral-7B
-      # (test_mistral.py). Not included: MiniCPM4.1-8B and Apertus-8B (`large_gpu_mark`: skip on CPU). In one shard.
-      - name: "Test: language models generation (gpt2, 6-8B models)"
+      # The other models of tests/models/language/generation/test_common.py that vLLM doesn't mark `cpu_model` (up to 8B),
+      # and Mistral-7B (test_mistral.py). Not included: MiniCPM4.1-8B and HyperCLOVAX-SEED-Think-14B (`large_gpu_mark`:
+      # skip on CPU). In one shard.
+      - name: "Test: other language models generation"
         if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
           pytest -v -s tests/models/language/generation/test_common.py tests/models/language/generation/test_mistral.py::test_models \
-            -k "gpt2 or chatglm3-6b or Qwen3-8B or Mistral-7B"
+            -k "gpt2 or slovak-gpt-j-405M or tiny_starcoder_py or pythia-70m or chatglm3-6b or Qwen3-8B or starcoder2-3b or tiny-mixtral-30m or Apertus-8B or Domyn-Edge-Base or Mistral-7B"
 
       # State-space / hybrid models (Mamba, Falcon-Mamba, Jamba, Zamba2, Granite 4.0, Falcon-H1, LFM2, Qwen3-Next) vs
       # transformers. Not included: the tests of test_hybrid.py without a transformers reference (vLLM vs vLLM). In one shard.
