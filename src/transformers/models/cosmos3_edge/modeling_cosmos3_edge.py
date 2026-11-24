@@ -23,7 +23,6 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -51,7 +50,7 @@ from ...utils.generic import (
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens
+from ...vision_utils import get_vision_attention_seqlens, get_vision_interpolation_indices_and_weights
 from .configuration_cosmos3_edge import Cosmos3EdgeConfig, Cosmos3EdgeTextConfig, Cosmos3EdgeVisionConfig
 
 
@@ -357,74 +356,28 @@ class Cosmos3EdgeVisionEmbeddings(nn.Module):
         self.position_embedding_size = int(self.num_patches**0.5)
         self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
 
-    @staticmethod
-    def resize_positional_embeddings(
-        positional_embeddings: torch.Tensor,
-        grid_thw: torch.LongTensor,
-        spatial_merge_size: int,
-    ) -> torch.Tensor:
-        """Resize a learned reference grid independently for every packed image or video frame.
-
-        Args:
-            positional_embeddings (`torch.Tensor`):
-                Learned positional embeddings of shape `(height, width, hidden_size)`.
-            grid_thw (`torch.LongTensor`):
-                Temporal, height, and width patch-grid dimensions for every packed image or video.
-            spatial_merge_size (`int`):
-                Number of patches merged along each spatial axis by the projector.
-
-        Returns:
-            `torch.Tensor`: Positional embeddings packed in the same block-major order as the input patches.
-        """
-        # The checkpoint uses a learned square reference grid, interpolated independently for every packed frame.
-        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
-        source_dtype = positional_embeddings.dtype
-        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU.
-        if positional_embeddings.device.type == "cpu":
-            positional_embeddings = positional_embeddings.float()
-
-        position_chunks = []
-        for temporal, height, width in grid_thw.tolist():
-            resized_embeddings = F.interpolate(
-                positional_embeddings,
-                size=(height, width),
-                mode="bilinear",
-                align_corners=False,
-                antialias=True,
-            )
-            resized_embeddings = resized_embeddings.squeeze(0).permute(1, 2, 0).to(source_dtype)
-            resized_embeddings = resized_embeddings.reshape(
-                height // spatial_merge_size,
-                spatial_merge_size,
-                width // spatial_merge_size,
-                spatial_merge_size,
-                -1,
-            )
-            # Preserve the processor's block-major 2x2 patch order before the projector groups adjacent patches.
-            resized_embeddings = resized_embeddings.transpose(1, 2).reshape(height * width, -1)
-            position_chunks.append(resized_embeddings.repeat(temporal, 1))
-
-        return torch.cat(position_chunks, dim=0)
-
-    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor, **kwargs) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.Tensor`):
-                Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
-            spatial_shapes (`list[tuple[int, int]]`):
-                Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
+                Packed patches of shape (num_patches, num_channels * patch_size * patch_size)
+            grid_thw (`torch.LongTensor`):
+                The temporal, height and width patch grid of every packed image or video, of shape (num_grids, 3)
         """
         # Apply patch embeddings to already patchified pixel values.
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
-        # Get image-specific positional embeddings in the packed block-major order expected by the checkpoint.
-        positional_embeddings = self.position_embedding.weight.reshape(
-            self.position_embedding_size, self.position_embedding_size, -1
+        # The learned square table resized to every packed frame (antialiased bilinear), in the block-major patch order
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            self.position_embedding_size,
+            spatial_merge_size=self.config.spatial_merge_size,
+            antialias=True,
+            kwargs=kwargs,
         )
-        position_embeddings = self.resize_positional_embeddings(
-            positional_embeddings, grid_thw, self.config.spatial_merge_size
-        )
+        table = self.position_embedding.weight
+        position_embeddings = (table[interp_indices].float() * interp_weights[..., None]).sum(1).to(table.dtype)
         torch_compilable_check(
             patch_embeds.shape[0] == position_embeddings.shape[0],
             "The packed visual patch count does not match `grid_thw`.",
@@ -731,9 +684,20 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
         """What the forward derives from `grid_thw` with data-dependent ops: the attention's `cu_seqlens` and
-        `max_seqlen`."""
+        `max_seqlen`, and the position table's `interp_indices` and `interp_weights`."""
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
-        return {"cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw,
+            self.embeddings.position_embedding_size,
+            spatial_merge_size=self.config.spatial_merge_size,
+            antialias=True,
+        )
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+        }
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -743,7 +707,7 @@ class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height, and width patch-grid dimensions for each packed image or video.
         """
-        hidden_states = self.embeddings(pixel_values, grid_thw)
+        hidden_states = self.embeddings(pixel_values, grid_thw, **kwargs)
         hidden_states = self.encoder(hidden_states, grid_thw=grid_thw, **kwargs)
         last_hidden_state = self.post_layernorm(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state, pooler_output=last_hidden_state)

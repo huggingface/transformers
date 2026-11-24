@@ -300,7 +300,7 @@ class MusicFlamingoModel(AudioFlamingo3Model):
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -329,6 +329,7 @@ class MusicFlamingoModel(AudioFlamingo3Model):
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+        audio_output.split_sizes = post_lengths
 
         return audio_output
 
@@ -356,7 +357,7 @@ class MusicFlamingoModel(AudioFlamingo3Model):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(
+            audio_embeds = self.get_audio_embeddings(
                 input_features, input_features_mask, input_ids=input_ids, return_dict=True
             ).pooler_output
 
@@ -396,9 +397,6 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         super().__init__(config)
         self.model = MusicFlamingoModel(config)
         self.post_init()
-
-    def get_audio_features(self, input_features, input_features_mask, input_ids, **kwargs):
-        return self.model.get_audio_features(input_features, input_features_mask, input_ids, **kwargs)
 
 
 __getattr__ = deprecate_attr(__name__, rename={"MusicFlamingoProcessorKwargs": (ProcessingKwargs, "5.29.0")})

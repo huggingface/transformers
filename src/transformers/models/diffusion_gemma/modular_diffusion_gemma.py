@@ -850,25 +850,6 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
-        """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values,
-            pixel_position_ids=image_position_ids,
-            **kwargs,
-        )
-        last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        return vision_outputs
-
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
@@ -923,7 +904,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_position_ids,
                 return_dict=True,
@@ -972,7 +953,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
     def get_audio_features(self, *args, **kwargs):
         raise NotImplementedError("DiffusionGemma does not support audio inputs.")
 
-    def get_video_features(self, *args, **kwargs):
+    def get_video_embeddings(self, *args, **kwargs):
         raise NotImplementedError("DiffusionGemma does not support video inputs.")
 
     @staticmethod
@@ -1005,12 +986,6 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
             mask_kwargs["block_sequence_ids"] = block_sequence_ids
 
         return create_masks_for_generate(**mask_kwargs)
-
-    def get_video_embeddings(self):
-        raise AttributeError("Not needed")
-
-    def get_image_embeddings(self):
-        raise AttributeError("Not needed")
 
 
 class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):

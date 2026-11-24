@@ -128,7 +128,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel, MultimodalMixin):
         selected_image_feature = image_outputs.last_hidden_state
         image_features = self.multi_modal_projector(selected_image_feature)
         image_outputs.pooler_output = image_features
-
         image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
         return image_outputs
 

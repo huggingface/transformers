@@ -15,6 +15,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import nn
@@ -26,7 +27,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -37,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import accepts_precomputed_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
@@ -788,7 +789,48 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
         return inputs_embeds
 
+    def get_real_images_and_patch_mask(
+        self,
+        pixel_values: torch.Tensor,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        real_images_index: torch.LongTensor | None = None,
+    ) -> tuple[torch.LongTensor, torch.BoolTensor]:
+        """The indices of the real images in the flattened `(batch_size * num_images)` images, padding images being all
+        zeros, and their patch mask: whether each patch is fully inside the image."""
+        pixel_values = pixel_values.flatten(0, 1)
+        if real_images_index is None:
+            real_images_index = pixel_values.flatten(1).any(-1).nonzero().squeeze(-1)
+
+        if pixel_attention_mask is None:
+            pixel_attention_mask = torch.ones(
+                size=(real_images_index.shape[0], *pixel_values.shape[2:]),
+                dtype=torch.bool,
+                device=pixel_values.device,
+            )
+        else:
+            pixel_attention_mask = pixel_attention_mask.flatten(0, 1)[real_images_index]
+
+        patch_size = self.config.vision_config.patch_size
+        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
+        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
+        return real_images_index, patch_attention_mask
+
+    def get_data_dependent_inputs(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        pixel_attention_mask: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What `get_image_embeddings` derives from the pixels with data-dependent ops: the real images' indices,
+        prefixed `image_`."""
+        if pixel_values is None:
+            return {}
+        real_images_index, _ = self.get_real_images_and_patch_mask(pixel_values, pixel_attention_mask)
+        return {"image_real_images_index": real_images_index}
+
     @can_return_tuple
+    @accepts_precomputed_kwargs(modality="image")
     @auto_docstring(custom_intro="Skips the padding images.")
     def get_image_embeddings(
         self,
@@ -802,43 +844,25 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         pixel_attention_mask (`torch.LongTensor`, *optional*):
             The attention mask indicating padded regions in the image.
         """
-        batch_size, num_images, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
-        pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
+        batch_size, num_images = pixel_values.shape[:2]
+        real_images_index, patch_attention_mask = self.get_real_images_and_patch_mask(
+            pixel_values, pixel_attention_mask, kwargs.pop("real_images_index", None)
+        )
+        pixel_values = pixel_values.to(dtype=self.dtype).flatten(0, 1)[real_images_index]  # fp16 compatibility
 
-        # Remove padding images - padding images are full 0.
-        nb_values_per_image = pixel_values.shape[1:].numel()
-        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-        pixel_values = pixel_values[real_images_inds].contiguous()
-
-        # Handle the vision attention mask
-        if pixel_attention_mask is None:
-            pixel_attention_mask = torch.ones(
-                size=(pixel_values.size(0), pixel_values.size(2), pixel_values.size(3)),
-                dtype=torch.bool,
-                device=pixel_values.device,
-            )
-        else:
-            # Remove padding images from the mask/pP p
-            pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
-            pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
-
-        patch_size = self.config.vision_config.patch_size
-        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
-        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) == patch_size * patch_size).bool()
-        # Get sequence from the vision encoder
         image_outputs = self.vision_model(
             pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, **kwargs
         )
         image_hidden_states = image_outputs.last_hidden_state
 
         # Modality projection & resampling
-        image_features = self.connector(
-            image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
-        )
+        image_features = self.connector(image_hidden_states, attention_mask=patch_attention_mask.flatten(1))
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
-        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
+        images_per_sample = torch.zeros(batch_size, dtype=torch.long, device=real_images_index.device)
+        images_per_sample = images_per_sample.index_add(
+            0, real_images_index // num_images, torch.ones_like(real_images_index)
+        )
+        image_outputs.split_sizes = images_per_sample * image_features.shape[1]
         return image_outputs
 
     @can_return_tuple
@@ -855,6 +879,7 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         """
     )
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -899,7 +924,7 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         if (isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs.get("image")) or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
                 mm_encoder_outputs["image"] = self.get_image_embeddings(
-                    pixel_values, pixel_attention_mask, return_dict=True
+                    pixel_values, pixel_attention_mask, return_dict=True, **kwargs
                 )
             image_hidden_states = mm_encoder_outputs["image"].pooler_output
         elif isinstance(mm_encoder_outputs, torch.Tensor):
@@ -912,8 +937,6 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
             image_hidden_states = None
 
         if image_hidden_states is not None:
-            if isinstance(image_hidden_states, (list, tuple)):
-                image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
             # When we generate, we don't want to replace the potential image_token_id that we generated by images
             # that simply don't exist

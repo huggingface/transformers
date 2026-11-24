@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
+from typing import Any
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -35,9 +36,14 @@ from ...modeling_outputs import (
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import MultiModalData, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import accepts_precomputed_kwargs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
-from ...vision_utils import get_vision_pixel_shuffle_index
+from ...vision_utils import (
+    get_vision_attention_seqlens,
+    get_vision_interpolation_indices_and_weights,
+    get_vision_pixel_shuffle_index,
+)
 from ..ernie4_5.modeling_ernie4_5 import apply_rotary_pos_emb  # noqa: F401
 from ..hunyuan_vl.configuration_hunyuan_vl import HunYuanVLVisionConfig
 from ..hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
@@ -255,6 +261,24 @@ class HYV4VLVisionModel(HunYuanVLVisionTransformer):
     # Only the text attention (sinks + DSA) is restricted to eager
     _supports_sdpa = True
     _supports_flash_attn = True
+
+    def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
+        """What the forward derives from `grid_thw` with data-dependent ops: the attention's `cu_seqlens` and
+        `max_seqlen`, the position table's `interp_indices` and `interp_weights`, and the patch merger's
+        `pixel_shuffle_index` and `merger_layout_index` (without begin and end tokens)."""
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
+            grid_thw, self.embeddings.position_edge, mode=self.config.interpolate_mode
+        )
+        merge_size = self.config.spatial_merge_size
+        return {
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlen,
+            "interp_indices": interp_indices,
+            "interp_weights": interp_weights,
+            "pixel_shuffle_index": get_vision_pixel_shuffle_index(grid_thw, merge_size),
+            "merger_layout_index": get_vision_merger_layout_index(grid_thw, merge_size, begin_end=False),
+        }
 
 
 class HYV4VLRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
@@ -500,6 +524,7 @@ class HYV4VLModel(Qwen2VLModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(
@@ -516,6 +541,7 @@ class HYV4VLModel(Qwen2VLModel):
         vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_embeddings(

@@ -1841,15 +1841,20 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
 
     def get_data_dependent_inputs(
         self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         feature_attention_mask: torch.LongTensor | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
+        use_audio_in_video: bool | None = None,
+        video_second_per_grid: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        """The vision encoder's data-dependent inputs for the images and the videos, prefixed `image_` and `video_`,
-        and the audio encoder's (see [`Qwen3OmniMoeAudioEncoder.get_data_dependent_inputs`]) with the real mel
-        frames' `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them."""
+        """The M-RoPE `position_ids`, the vision encoder's data-dependent inputs for the images and the videos, prefixed
+        `image_` and `video_`, and the audio encoder's (see [`Qwen3OmniMoeAudioEncoder.get_data_dependent_inputs`])
+        with the real mel frames' `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them."""
         inputs = {}
         for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
             if grid_thw is not None:
@@ -1862,6 +1867,16 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
             if feature_attention_mask is not None:
                 audio_inputs["frame_indices"] = get_audio_frame_indices(feature_attention_mask)
             inputs.update({f"audio_{name}": value for name, value in audio_inputs.items()})
+        if position_ids is None and input_ids is not None and attention_mask is not None:
+            inputs["position_ids"], _ = self.get_rope_index(
+                input_ids,
+                image_grid_thw,
+                video_grid_thw,
+                attention_mask,
+                use_audio_in_video or False,
+                audio_feature_lengths,
+                video_second_per_grid,
+            )
         return inputs
 
     @accepts_precomputed_kwargs(modality="video")
@@ -1895,7 +1910,7 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
     @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         feature_attention_mask: torch.LongTensor | None = None,
@@ -1919,7 +1934,7 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
         audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, return_dict=True, **kwargs)
-
+        audio_outputs.split_sizes = _get_feat_extract_output_lengths(feature_lens, self.audio_tower.n_window)
         return audio_outputs
 
     def get_placeholder_mask(
@@ -2073,9 +2088,9 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
         image_mask, video_mask = None, None
         # 2. Merge text , audios , image and video
         if input_features is not None:
-            audio_features = self.get_audio_features(
+            audio_features = self.get_audio_embeddings(
                 input_features, feature_attention_mask, audio_feature_lengths, return_dict=True, **kwargs
-            ).last_hidden_state
+            ).pooler_output
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
@@ -2255,24 +2270,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         self.num_experts_per_tok = config.text_config.num_experts_per_tok
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.post_init()
-
-    @auto_docstring
-    def get_audio_features(
-        self,
-        input_features: torch.Tensor,
-        feature_attention_mask: torch.LongTensor | None = None,
-        audio_feature_lengths: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        input_features (`torch.Tensor`):
-            The tensors corresponding to the input audios.
-        feature_attention_mask (`torch.LongTensor`, *optional*):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-            The length of feature shape of each audio in LLM.
-        """
-        return self.model.get_audio_features(input_features, feature_attention_mask, audio_feature_lengths, **kwargs)
 
     @can_return_tuple
     @auto_docstring

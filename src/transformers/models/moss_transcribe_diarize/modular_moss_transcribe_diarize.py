@@ -396,7 +396,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         audio_chunk_mapping = torch.repeat_interleave(torch.arange(len(audio), dtype=torch.long), per_sample_windows)
 
         # Based on `WhisperEncoder._get_feat_extract_output_lengths` (conv stride 2 only), so the placeholder
-        # token count matches `get_audio_features` from the same mask.
+        # token count matches `get_audio_embeddings` from the same mask.
         audio_lengths = audio_inputs["input_features_mask"].sum(-1)
         audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_lengths, audio_chunk_mapping)
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
@@ -671,7 +671,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
     @auto_docstring(
         custom_intro="Extract MOSS audio embeddings from log-mel features, reassembling multi-chunk audio per sample."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -706,6 +706,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         hidden_size = valid_frames.shape[-1]
         merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
         audio_outputs.pooler_output = self.multi_modal_projector(merged_features)
+        audio_outputs.split_sizes = padded_lengths // merge_size
         return audio_outputs
 
     @can_return_tuple
@@ -739,7 +740,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(
+            audio_embeds = self.get_audio_embeddings(
                 input_features=input_features,
                 input_features_mask=input_features_mask,
                 padding_mask=padding_mask,

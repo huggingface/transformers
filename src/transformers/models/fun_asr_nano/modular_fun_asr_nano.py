@@ -503,7 +503,7 @@ class FunAsrNanoModel(AudioFlamingo3Model):
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features, meaning inferring the audio encoder and the adaptor."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -536,6 +536,7 @@ class FunAsrNanoModel(AudioFlamingo3Model):
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            split_sizes=input_features_mask.sum(-1),
         )
 
 
@@ -563,6 +564,9 @@ class FunAsrNanoForConditionalGeneration(Qwen3ASRForConditionalGeneration):
         >>> model = FunAsrNanoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         ```"""
         return super().forward(**super_kwargs)
+
+    def get_data_dependent_inputs(self):
+        raise AttributeError("FunAsrNano's encoder takes no precomputed inputs")
 
 
 __getattr__ = deprecate_attr(__name__, rename={"FunAsrNanoProcessorKwargs": (ProcessingKwargs, "5.29.0")})

@@ -30,6 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
@@ -200,7 +201,7 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
     without a language modeling head.
     """
 )
-class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
+class MusicFlamingoModel(MusicFlamingoPreTrainedModel, MultimodalMixin):
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
@@ -217,7 +218,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -246,6 +247,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+        audio_output.split_sizes = post_lengths
 
         return audio_output
 
@@ -297,7 +299,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(
+            audio_embeds = self.get_audio_embeddings(
                 input_features, input_features_mask, input_ids=input_ids, return_dict=True
             ).pooler_output
 
@@ -399,7 +401,7 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     The MusicFlamingo model which consists of a fine-tuned Whisper encoder, rotary time embedding, a multi-modal projector, and a Qwen2 language model.
     """
 )
-class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
+class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = None
 
     def __init__(self, config: MusicFlamingoConfig):
@@ -407,9 +409,6 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         self.model = MusicFlamingoModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_audio_features(self, input_features, input_features_mask, input_ids, **kwargs):
-        return self.model.get_audio_features(input_features, input_features_mask, input_ids, **kwargs)
 
     @can_return_tuple
     @auto_docstring

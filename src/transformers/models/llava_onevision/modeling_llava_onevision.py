@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import math
+from typing import Any
 
 import numpy as np
 import torch
@@ -42,6 +43,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilab
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import select_hidden_states
+from ...vision_utils import _interpolation_axis_taps_weights
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
 
@@ -223,6 +225,84 @@ def unpad_image(tensor, original_size):
     return unpadded_tensor
 
 
+def get_image_num_patches(
+    image_sizes: torch.Tensor, config: LlavaOnevisionConfig, batch_num_images: torch.LongTensor | None = None
+) -> list[int]:
+    """How many patches each image was cut into: an image alone in its sample is cut by its anyres grid, one of several
+    images is not."""
+    if batch_num_images is None:
+        need_patching = [True] * len(image_sizes)
+    else:
+        need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
+    return [
+        image_size_to_num_patches(image_size, config.image_grid_pinpoints, config.vision_config.image_size)
+        if should_patch
+        else 1
+        for image_size, should_patch in zip(image_sizes, need_patching)
+    ]
+
+
+def get_pack_taps_per_image(
+    image_sizes: torch.Tensor,
+    config: LlavaOnevisionConfig,
+    vision_aspect_ratio: str,
+    batch_num_images: torch.LongTensor | None = None,
+) -> list[tuple[torch.Tensor, torch.Tensor]]:
+    """For each image, its packed features as bilinear taps into all images' patch tokens, `image_newline` past them:
+    `(num_features, 4)` indices and weights. The unpadded grid of an image cut into patches is downscaled to about
+    `anyres_max_<n>` patches' worth of features, like `F.interpolate(mode="bilinear")`."""
+    grid_size = config.vision_config.image_size // config.vision_config.patch_size
+    tokens_per_patch = grid_size**2
+    image_num_patches = get_image_num_patches(image_sizes, config, batch_num_images)
+    newline_index = sum(image_num_patches) * tokens_per_patch
+    max_num_patches = int(vision_aspect_ratio.removeprefix("anyres_max_"))
+
+    def untouched(index):
+        weights = torch.zeros(*index.shape, 4)
+        weights[..., 0] = 1
+        return index[..., None].expand(*index.shape, 4), weights
+
+    pack_taps, offset = [], 0
+    for image_size, num_patches in zip(image_sizes, image_num_patches):
+        image_taps = [untouched(torch.arange(offset, offset + tokens_per_patch))]
+        if num_patches > 1:
+            num_patch_height, num_patch_width = get_anyres_image_grid_shape(
+                image_size, config.image_grid_pinpoints, config.vision_config.image_size
+            )
+            grid_index = torch.arange(offset + tokens_per_patch, offset + num_patches * tokens_per_patch)
+            grid_index = grid_index.view(num_patch_height, num_patch_width, grid_size, grid_size)
+            grid_index = grid_index.permute(0, 2, 1, 3).reshape(1, num_patch_height * grid_size, -1)
+            grid_index = unpad_image(grid_index, image_size)[0]
+            height, width = grid_index.shape
+            ratio = math.sqrt(height * width / (max_num_patches * grid_size**2))
+            if ratio > 1.1:
+                out_height, out_width = int(height // ratio), int(width // ratio)
+                height_taps, height_weights = _interpolation_axis_taps_weights(
+                    torch.arange(out_height), torch.tensor(out_height), height, mode="bilinear", align_corners=False
+                )
+                width_taps, width_weights = _interpolation_axis_taps_weights(
+                    torch.arange(out_width), torch.tensor(out_width), width, mode="bilinear", align_corners=False
+                )
+                grid_taps = grid_index[height_taps[:, None, :, None], width_taps[None, :, None, :]].flatten(-2)
+                grid_weights = (height_weights[:, None, :, None] * width_weights[None, :, None, :]).flatten(-2)
+            else:
+                grid_taps, grid_weights = untouched(grid_index)
+            newline_taps, newline_weights = untouched(torch.full((grid_taps.shape[0], 1), newline_index))
+            image_taps.append(
+                (
+                    torch.cat([grid_taps, newline_taps], dim=1).flatten(0, 1),
+                    torch.cat([grid_weights, newline_weights], dim=1).flatten(0, 1),
+                )
+            )
+        else:
+            image_taps.append(untouched(torch.tensor([newline_index])))
+        index = torch.cat([taps for taps, _ in image_taps]).to(image_sizes.device)
+        weights = torch.cat([weights for _, weights in image_taps]).to(image_sizes.device)
+        pack_taps.append((index, weights))
+        offset += num_patches * tokens_per_patch
+    return pack_taps
+
+
 @auto_docstring(
     custom_intro="""
     The Llava-Next model which consists of a vision backbone and a language model without language modeling head.
@@ -308,6 +388,37 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel, MultimodalMixin):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
 
+    def get_data_dependent_inputs(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        image_sizes: torch.Tensor | None = None,
+        vision_aspect_ratio: str | None = None,
+        batch_num_images: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        """What `get_image_embeddings` derives from `image_sizes` with data-dependent ops, prefixed `image_`: the
+        patches each image was cut into (`patch_index`), and its packed features as bilinear taps into them
+        (`pack_index`, `pack_weights`, `pack_sizes`)."""
+        if pixel_values is None or image_sizes is None:
+            return {}
+        vision_aspect_ratio = vision_aspect_ratio or self.config.vision_aspect_ratio
+        pack_taps = get_pack_taps_per_image(image_sizes, self.config, vision_aspect_ratio, batch_num_images)
+        inputs = {
+            "image_pack_index": torch.cat([index for index, _ in pack_taps]),
+            "image_pack_weights": torch.cat([weights for _, weights in pack_taps]),
+            "image_pack_sizes": torch.tensor([len(index) for index, _ in pack_taps], device=image_sizes.device),
+        }
+        if pixel_values.dim() == 5:
+            image_num_patches = get_image_num_patches(image_sizes, self.config, batch_num_images)
+            patch_slots = torch.arange(pixel_values.shape[1], device=pixel_values.device)
+            inputs["image_patch_index"] = torch.cat(
+                [
+                    patch_slots[:num_patches] + i * pixel_values.shape[1]
+                    for i, num_patches in enumerate(image_num_patches)
+                ]
+            )
+        return inputs
+
     @merge_with_config_defaults
     @can_return_tuple
     @select_hidden_states("vision_feature_layer")
@@ -332,26 +443,13 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel, MultimodalMixin):
         batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
         """
-        # ! infer image_num_patches from image_sizes
-        if batch_num_images is None:
-            # treat this as a single-image case for backward compatibility
-            need_patching = [True] * len(image_sizes)
-        else:
-            need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
-        image_num_patches = [
-            image_size_to_num_patches(
-                image_size=imsize,
-                grid_pinpoints=self.config.image_grid_pinpoints,
-                patch_size=self.config.vision_config.image_size,
-            )
-            if should_patch
-            else 1
-            for imsize, should_patch in zip(image_sizes, need_patching)
-        ]
+        if "image_pack_index" not in kwargs:
+            kwargs |= self.get_data_dependent_inputs(pixel_values, image_sizes, vision_aspect_ratio, batch_num_images)
+        pack_index, pack_weights = kwargs.pop("image_pack_index"), kwargs.pop("image_pack_weights")
+        split_sizes = kwargs.pop("image_pack_sizes")
         if pixel_values.dim() == 5:
             # stacked if input is (batch_size, num_patches, num_channels, height, width)
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
-            pixel_values = torch.cat(_pixel_values_list, dim=0)
+            pixel_values = pixel_values.flatten(0, 1)[kwargs.pop("image_patch_index")]
         elif pixel_values.dim() != 4:
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
@@ -371,17 +469,15 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel, MultimodalMixin):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        image_features = self.multi_modal_projector(selected_image_feature)
-        image_features = torch.split(image_features, image_num_patches, dim=0)
-
-        image_features, feature_lens = self.pack_image_features(
-            image_features,
-            image_sizes,
-            image_newline=self.image_newline,
-            vision_aspect_ratio=vision_aspect_ratio,
+        image_features = self.multi_modal_projector(selected_image_feature).flatten(0, 1)
+        image_newline = self.image_newline.to(image_features.device, image_features.dtype)
+        image_features = torch.cat([image_features, image_newline[None]])
+        pack_weights = pack_weights.to(image_features.device, torch.float32)
+        packed_features = (image_features[pack_index.to(image_features.device)].float() * pack_weights[..., None]).sum(
+            1
         )
-        image_outputs.pooler_output = torch.cat(image_features, dim=0)
-        image_outputs.split_sizes = feature_lens
+        image_outputs.pooler_output = packed_features.to(image_features.dtype)
+        image_outputs.split_sizes = split_sizes
 
         return image_outputs
 
@@ -477,7 +573,9 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel, MultimodalMixin):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 batch_num_images=batch_num_images,
+                vision_aspect_ratio=vision_aspect_ratio,
                 return_dict=True,
+                **kwargs,
             )
 
         if mm_encoder_outputs.get("image") is not None:
@@ -566,7 +664,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel, MultimodalMixin):
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
         image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
         vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
-
         vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 

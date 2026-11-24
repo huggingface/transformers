@@ -51,7 +51,13 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
@@ -1038,9 +1044,9 @@ class HYV4VLVisionModel(HYV4VLPreTrainedModel):
         self.post_init()
 
     def get_data_dependent_inputs(self, grid_thw: torch.Tensor, **kwargs) -> dict[str, Any]:
-        """What the forward derives from `grid_thw` with data-dependent ops: the attention's
-        `cu_seqlens` and `max_seqlen`, the position table's `interp_indices` and `interp_weights`, and the patch
-        merger's `pixel_shuffle_index` and `merger_layout_index`."""
+        """What the forward derives from `grid_thw` with data-dependent ops: the attention's `cu_seqlens` and
+        `max_seqlen`, the position table's `interp_indices` and `interp_weights`, and the patch merger's
+        `pixel_shuffle_index` and `merger_layout_index` (without begin and end tokens)."""
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         interp_indices, interp_weights = get_vision_interpolation_indices_and_weights(
             grid_thw, self.embeddings.position_edge, mode=self.config.interpolate_mode
@@ -1052,7 +1058,7 @@ class HYV4VLVisionModel(HYV4VLPreTrainedModel):
             "interp_indices": interp_indices,
             "interp_weights": interp_weights,
             "pixel_shuffle_index": get_vision_pixel_shuffle_index(grid_thw, merge_size),
-            "merger_layout_index": get_vision_merger_layout_index(grid_thw, merge_size),
+            "merger_layout_index": get_vision_merger_layout_index(grid_thw, merge_size, begin_end=False),
         }
 
     @capture_outputs
@@ -1416,6 +1422,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_embeddings(
@@ -1426,6 +1433,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
     ) -> tuple | BaseModelOutputWithPooling:
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_embeddings(

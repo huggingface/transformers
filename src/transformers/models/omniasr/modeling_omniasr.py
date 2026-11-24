@@ -30,6 +30,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -434,7 +435,7 @@ class OmniASRBaseModelOutputWithPast(BaseModelOutputWithPast):
     without a language modeling head.
     """
 )
-class OmniASRModel(OmniASRPreTrainedModel):
+class OmniASRModel(OmniASRPreTrainedModel, MultimodalMixin):
     config: OmniASRConfig
     main_input_name = "input_ids"
     input_modalities = ("audio", "text")
@@ -447,29 +448,30 @@ class OmniASRModel(OmniASRPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
-    def get_audio_features(
-        self,
-        input_values: torch.FloatTensor,
-        padding_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+    @auto_docstring(
+        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
+    )
+    def get_audio_embeddings(
+        self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
-            Float values of the raw audio waveform, as produced by [`OmniASRFeatureExtractor`].
-        padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
-            Mask to avoid running the speech encoder over padding samples of `input_values`. Values selected in
-            `[0, 1]`: 1 for samples that are **not** padding, 0 for padding.
+        input_features (`torch.Tensor`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
         """
-        audio_output = self.audio_tower(input_values, padding_mask=padding_mask, **kwargs)
-        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
-        frames_mask = audio_output.attention_mask
-        if frames_mask is None:
-            audio_embeds = audio_embeds.flatten(0, 1)
-        else:
-            audio_embeds = audio_embeds[frames_mask.to(audio_embeds.device).bool()]
-        audio_output.pooler_output = audio_embeds
-        return audio_output
+        audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
+        audio_hidden_states = audio_outputs.last_hidden_state
+        audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
+        audio_embeds = self.multi_modal_projector(audio_hidden_states)
+        audio_outputs.pooler_output = audio_embeds
+        # Each 30-second chunk of `input_features` gives the same number of rows
+        audio_outputs.split_sizes = audio_embeds.new_full(
+            input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
+        )
+        return audio_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor
@@ -529,13 +531,38 @@ class OmniASRModel(OmniASRPreTrainedModel):
         outputs = self.language_model(inputs_embeds=inputs_embeds, **kwargs)
         return OmniASRBaseModelOutputWithPast(audio_features=audio_features, **outputs)
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
+    def get_audio_features(
+        self,
+        input_values: torch.FloatTensor,
+        padding_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
+            Float values of the raw audio waveform, as produced by [`OmniASRFeatureExtractor`].
+        padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
+            Mask to avoid running the speech encoder over padding samples of `input_values`. Values selected in
+            `[0, 1]`: 1 for samples that are **not** padding, 0 for padding.
+        """
+        audio_output = self.audio_tower(input_values, padding_mask=padding_mask, **kwargs)
+        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
+        frames_mask = audio_output.attention_mask
+        if frames_mask is None:
+            audio_embeds = audio_embeds.flatten(0, 1)
+        else:
+            audio_embeds = audio_embeds[frames_mask.to(audio_embeds.device).bool()]
+        audio_output.pooler_output = audio_embeds
+        return audio_output
+
 
 @auto_docstring(
     custom_intro="""
     OmniASR model, which consists of a Wav2Vec2 encoder, a multi-modal projector and a LLama language model.
     """
 )
-class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
+class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, MultimodalMixin, GenerationMixin):
     config: OmniASRConfig
     main_input_name = "input_ids"
     input_modalities = ("audio", "text")
@@ -545,9 +572,6 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
         self.model = OmniASRModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_audio_features(self, *args, **kwargs):
-        return self.model.get_audio_features(*args, **kwargs)
 
     @can_return_tuple
     @auto_docstring

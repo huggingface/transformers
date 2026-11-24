@@ -31,6 +31,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, SizeDict, is_valid_image, make_nested_list_of_images
 from ...masking_utils import create_causal_mask
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
@@ -1122,6 +1123,7 @@ class GraniteDoclingModel(Idefics3Model):
         """
     )
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    @merge_mm_encoder_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

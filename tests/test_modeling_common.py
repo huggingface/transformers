@@ -712,6 +712,26 @@ def _deepspeed_zero3(ds_config):
         unset_hf_deepspeed_config()
 
 
+def get_packed_inputs_encoders(model: PreTrainedModel) -> set[str]:
+    """The sub-configs of `model` (`""` for the model itself) whose encoders take all their images (or audios) as one
+    packed sequence, delimited by `cu_seqlens`, rather than as a padded batch.
+
+    TODO: users have no official way to find this out yet, so we guess it from which (sub-)model owns a module taking
+    `cu_seqlens`.
+    """
+    config_names = {id(model.config): ""} | {
+        id(getattr(model.config, name)): name for name in model.config.sub_configs if getattr(model.config, name)
+    }
+    sub_models = {path: module for path, module in model.named_modules() if isinstance(module, PreTrainedModel)}
+    packed = set()
+    for path, module in model.named_modules():
+        if "cu_seqlens" in inspect.signature(module.forward).parameters:
+            # The innermost (sub-)model holding this module
+            owner = max((p for p in sub_models if p == "" or path == p or path.startswith(f"{p}.")), key=len)
+            packed.add(config_names.get(id(sub_models[owner].config)))
+    return packed - {None}
+
+
 def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
     backends = []
     if enable_flash:
@@ -4553,53 +4573,39 @@ class ModelTesterMixin(ExportTesterMixin):
     @require_torch_accelerator
     @mark.flash_attn_test
     @pytest.mark.torch_compile_test
-    def test_modality_embeddings_compile_fullgraph_with_data_dependent_inputs(self):
-        """Given `get_data_dependent_inputs`, each modality's encoder compiles with `fullgraph=True` and matches eager."""
-        tested = False
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        """Given `get_data_dependent_inputs`, the whole forward compiles with `fullgraph=True` and matches eager."""
         for model_class in self.all_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            try:
-                model = model_class._from_config(config, attn_implementation="flash_attention_2", dtype=torch.bfloat16)
-            except (ValueError, ImportError):
+            if not hasattr(model_class, "get_data_dependent_inputs"):
                 continue
-            model = model.to(torch_device).eval().base_model
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(torch_device, torch.bfloat16).eval()
             inputs = {
-                name: value.to(torch.bfloat16)
-                if isinstance(value, torch.Tensor) and value.is_floating_point()
+                name: value.to(torch_device, torch.bfloat16 if value.is_floating_point() else value.dtype)
+                if isinstance(value, torch.Tensor)
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-            if (get_data_dependent_inputs := getattr(model, "get_data_dependent_inputs", None)) is not None:
-                inputs.update(get_data_dependent_inputs(**inputs))
-            for modality in ("image", "video", "audio"):
-                encoder = getattr(model, f"get_{modality}_embeddings", None) or getattr(
-                    model, f"get_{modality}_features", None
+
+            # Packed encoders only trace with flash attention, since SDPA loops over their images on the host. The rest
+            # of the model keeps its default attention.
+            # TODO: with SDPA and packed inputs, models could call torch's own varlen attention instead of looping, which
+            # would make SDPA trace too.
+            packed = get_packed_inputs_encoders(model)
+            if "" in packed:
+                # The model under test is a packed encoder itself (e.g. a vision model test)
+                attn_implementation = "flash_attention_2"
+            else:
+                attn_implementation = {"": model.config._attn_implementation} | dict.fromkeys(
+                    packed, "flash_attention_2"
                 )
-                if encoder is None:
-                    continue
-                parameters = inspect.signature(encoder).parameters
-                takes_kwargs = any(parameter.kind is parameter.VAR_KEYWORD for parameter in parameters.values())
-                encoder_inputs = {
-                    name: value
-                    for name, value in inputs.items()
-                    if name in parameters or (takes_kwargs and name.startswith(f"{modality}_"))
-                }
-                missing_required = any(
-                    parameter.default is parameter.empty
-                    and parameter.kind is parameter.POSITIONAL_OR_KEYWORD
-                    and name not in encoder_inputs
-                    for name, parameter in parameters.items()
-                )
-                if not encoder_inputs or missing_required:
-                    continue
-                torch._dynamo.reset()
-                with torch.no_grad():
-                    expected = encoder(**copy.deepcopy(encoder_inputs))
-                    actual = torch.compile(encoder, fullgraph=True, backend="eager")(**copy.deepcopy(encoder_inputs))
-                torch.testing.assert_close(actual, expected)
-                tested = True
-        if not tested:
-            self.skipTest(reason="The model has no modality encoder taking these inputs")
+            model.set_attn_implementation(attn_implementation)
+            inputs |= model.get_data_dependent_inputs(**inputs)
+            torch.compiler.reset()
+            with torch.no_grad():
+                expected = model(**copy.deepcopy(inputs))
+                actual = torch.compile(model, fullgraph=True, backend="eager")(**copy.deepcopy(inputs))
+            torch.testing.assert_close(actual.to_tuple()[0], expected.to_tuple()[0], atol=1e-2, rtol=1e-2)
 
     @slow
     @require_torch_accelerator
@@ -5854,7 +5860,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5937,7 +5943,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
@@ -5979,7 +5985,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
-            if not hasattr(model_class, "get_audio_features"):
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()

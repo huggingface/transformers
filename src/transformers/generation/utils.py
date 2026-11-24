@@ -979,10 +979,6 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: we need a single entrypoint for multimodal/text encoder-decoder models because some VLMs need to pass
         `mm_encoder_output` to the text encoder backbone, before feeding it to text-decoder (e.g. Florence2)
         """
-        # A dict of our own: the decoding loop clears it after the prefill to free the encoder outputs, and a dict
-        # passed by the user is left as it is
-        if model_kwargs.get("mm_encoder_outputs") is not None:
-            model_kwargs["mm_encoder_outputs"] = dict(model_kwargs["mm_encoder_outputs"])
         if self.config.is_encoder_decoder and model_kwargs.get("encoder_outputs") is None:
             return self._prepare_text_encoder_decoder_kwargs_for_generation(
                 inputs_tensor=inputs_tensor,
@@ -1152,13 +1148,15 @@ class GenerationMixin(ContinuousMixin):
                 # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
                 return list(inputs) * repeat_times
 
+        # A dict of our own, as it may be the user's
+        mm_encoder_output = dict(mm_encoder_output)
         for modality in ["image", "video"]:
             modalily_outputs = mm_encoder_output.get(modality)
             if modalily_outputs is None:
                 continue
             pooler_output = getattr(modalily_outputs, "pooler_output", None)
             deepstack_features = getattr(modalily_outputs, "deepstack_features", None)
-            # Granite 4 Vision has only deepstack features
+            # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
             features = pooler_output if pooler_output is not None else (deepstack_features or [None])[0]
             is_flat = isinstance(features, torch.Tensor) and getattr(modalily_outputs, "split_sizes", None) is not None
             if not is_flat and pooler_output is None:
@@ -1181,8 +1179,8 @@ class GenerationMixin(ContinuousMixin):
                 )
                 continue
 
-            # Per-item outputs: GLM-Image's feature maps, and `get_*_features` outputs passed by users (generate itself
-            # encodes flat), only kept for backward compatibility
+            # Per-item outputs: GLM-Image's feature maps, or deprecated `get_*_features` outputs passed by users, which
+            # `split_sizes` marks (generate itself encodes flat)
             if getattr(modalily_outputs, "split_sizes", None) is not None:
                 logger.warning_once(
                     "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) to "
@@ -1286,12 +1284,6 @@ class GenerationMixin(ContinuousMixin):
         # Add the cache as input if present in outputs
         if "cache" in outputs:
             model_kwargs["cache"] = outputs["cache"]
-
-        # With a cache, only the prefill reads the encoder outputs: free them for the decoding steps
-        if model_kwargs.get("use_cache", True) and (
-            mm_encoder_outputs := model_kwargs.pop("mm_encoder_outputs", None)
-        ):
-            mm_encoder_outputs.clear()
 
         # update token_type_ids with last value
         if (token_type_ids := model_kwargs.get("token_type_ids")) is not None:
@@ -4468,24 +4460,21 @@ def _repeat_flat_outputs(
     """Repeats each sample's rows of flat `get_*_embeddings` outputs, as `input_ids.repeat_interleave` does its row."""
     pooler_output = outputs.pooler_output
     deepstack_features = getattr(outputs, "deepstack_features", None)
-    # Granite 4 Vision has only deepstack features
+    # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
     reference = pooler_output if isinstance(pooler_output, torch.Tensor) else deepstack_features[0]
     rows = _repeat_index(rows_per_sample.to(reference.device), repeats, reference.shape[0])
 
     def repeat(features: torch.Tensor) -> torch.Tensor:
         return features[rows.to(features.device)]
 
-    expanded = {}
-    if isinstance(pooler_output, torch.Tensor):
-        expanded["pooler_output"] = repeat(pooler_output)
-    if deepstack_features is not None:
-        expanded["deepstack_features"] = [repeat(features) for features in deepstack_features]
-    # Nothing reads the item boundaries of the expanded rows
-    expanded["split_sizes"] = None
     # A copy, as the outputs may be the user's (some getters set `split_sizes` on a vision tower's output class)
     outputs = copy.copy(outputs)
-    for key, value in expanded.items():
-        setattr(outputs, key, value)
+    if isinstance(pooler_output, torch.Tensor):
+        outputs.pooler_output = repeat(pooler_output)
+    if deepstack_features is not None:
+        outputs.deepstack_features = [repeat(features) for features in deepstack_features]
+    # Nothing reads the item boundaries of the expanded rows
+    outputs.split_sizes = None
     return outputs
 
 

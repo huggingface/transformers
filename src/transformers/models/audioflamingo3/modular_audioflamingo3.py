@@ -198,7 +198,7 @@ class AudioFlamingo3Model(VoxtralModel):
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -221,6 +221,7 @@ class AudioFlamingo3Model(VoxtralModel):
         _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_lengths)
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+        audio_output.split_sizes = post_lengths
 
         return audio_output
 
@@ -248,7 +249,9 @@ class AudioFlamingo3Model(VoxtralModel):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
+            audio_embeds = self.get_audio_embeddings(
+                input_features, input_features_mask, return_dict=True, **kwargs
+            ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             special_audio_mask = self.get_placeholder_mask(
@@ -289,9 +292,6 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         super().__init__(config)
         self.model = AudioFlamingo3Model(config)
         self.post_init()
-
-    def get_audio_features(self, input_features, input_features_mask, **kwargs):
-        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring

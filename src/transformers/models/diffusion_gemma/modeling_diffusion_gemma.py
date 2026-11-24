@@ -977,6 +977,17 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
         )
 
 
+@auto_docstring
+@dataclass
+class DiffusionGemmaAudioModelOutput(BaseModelOutputWithPooling):
+    r"""
+    attention_mask (`torch.BoolTensor`, *optional*):
+        A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
+    """
+
+    attention_mask: torch.BoolTensor | None = None
+
+
 def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: torch.device) -> torch.Tensor:
     mm_token_type_ids = mm_token_type_ids.to(device)
 
@@ -1016,6 +1027,30 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    def get_image_embeddings(
+        self,
+        pixel_values: torch.Tensor,
+        image_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        """
+        vision_outputs = self.vision_tower(
+            pixel_values=pixel_values,
+            pixel_position_ids=image_position_ids,
+            **kwargs,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+        output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
+        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
+        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -1075,7 +1110,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(
+            mm_encoder_outputs["image"] = self.get_image_embeddings(
                 pixel_values,
                 image_position_ids,
                 return_dict=True,
@@ -1127,27 +1162,36 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
     def set_per_layer_input_embeddings(self, value):
         self.language_model.embed_tokens_per_layer = value
 
-    def get_image_features(
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
+    def get_audio_embeddings(
         self,
-        pixel_values: torch.Tensor,
-        image_position_ids: torch.LongTensor | None = None,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | DiffusionGemmaAudioModelOutput:
         r"""
-        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
-            The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
+        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
+            The tensors corresponding to the input audio.
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
+            The attention mask for the input audio.
         """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values,
-            pixel_position_ids=image_position_ids,
-            **kwargs,
-        )
-        last_hidden_state = vision_outputs.last_hidden_state
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        return vision_outputs
+        if self.audio_tower is None:
+            raise ValueError(
+                "Audio features were requested, but the model was initialized without an audio_config. "
+                "Cannot process audio without an audio tower and audio embedder."
+            )
 
-    def get_video_features(self, *args, **kwargs):
-        raise NotImplementedError("DiffusionGemma does not support video inputs.")
+        audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        # Only the real audio soft tokens, as the vision encoder strips its padding (`attention_mask` is True on them)
+        valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
+        audio_outputs.pooler_output = audio_embeds[valid_mask]
+        audio_outputs.split_sizes = valid_mask.sum(-1)
+        return audio_outputs
+
+    def get_audio_features(self, *args, **kwargs):
+        raise NotImplementedError("DiffusionGemma does not support audio inputs.")
 
     @staticmethod
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

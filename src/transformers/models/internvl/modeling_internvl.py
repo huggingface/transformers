@@ -581,7 +581,6 @@ class InternVLModel(InternVLPreTrainedModel, MultimodalMixin):
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
         vision_outputs.pooler_output = vision_features
-
         vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
         return vision_outputs
 

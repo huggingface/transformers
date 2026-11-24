@@ -1938,6 +1938,7 @@ class Qwen4ExpVisionModel(Qwen4ExpPreTrainedModel):
         "attentions": Qwen4ExpVisionAttention,
     }
     _no_split_modules = ["Qwen4ExpVisionBlock"]
+    _supports_flash_attn = True
 
     def __init__(self, config: Qwen4ExpVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)

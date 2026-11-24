@@ -350,7 +350,7 @@ class GlmAsrModel(AudioFlamingo3Model):
     @auto_docstring(
         custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -371,6 +371,7 @@ class GlmAsrModel(AudioFlamingo3Model):
 
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+        audio_outputs.split_sizes = post_lengths
 
         return audio_outputs
 

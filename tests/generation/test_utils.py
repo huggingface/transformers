@@ -1620,6 +1620,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # Passing both, pre-computed inputs and raw pixels will raise an error
             inputs_dict_with_encoded_outputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
             mm_encoder_outputs = inputs_dict_with_encoded_outputs.pop("mm_encoder_outputs")
+            if not mm_encoder_outputs:
+                self.skipTest(reason="The tester's inputs hold no images or videos")
             with self.assertRaisesRegex(ValueError, "You cannot pass both: raw pixels and pre-computed embeddings"):
                 model.generate(
                     **original_inputs_dict,

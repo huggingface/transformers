@@ -449,6 +449,13 @@ class Qwen4ExpVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     test_torch_exportable = False  # QSA index selection has data-dependent control flow
 
+    @unittest.skip(
+        "The text attention's sparse-attention indexer selects visible keys position by position (`nonzero`), "
+        "which `fullgraph=True` can't trace"
+    )
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs = super().prepare_config_and_inputs_for_generate(batch_size)
         # Override as it's needed inside the model... But use a value way outside vocab to avoid using/generating it

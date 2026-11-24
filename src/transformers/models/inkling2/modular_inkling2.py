@@ -1222,7 +1222,7 @@ class Inkling2Model(InklingModel):
         image_outputs.split_sizes = image_grid_thw.prod(-1)
         return image_outputs
 
-    def get_audio_features(self):
+    def get_audio_embeddings(self):
         raise AttributeError("Not needed for Inkling2")
 
     @can_return_tuple

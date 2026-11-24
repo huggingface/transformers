@@ -717,13 +717,9 @@ class EmbeddingGemma2Model(Gemma4Model):
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
-            audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            audio_output = self.get_audio_embeddings(input_features, input_features_mask, return_dict=True)
             mm_encoder_outputs["audio"] = audio_output
             audio_features = audio_output.pooler_output
-            audio_mask_from_encoder = audio_output.attention_mask  # True = valid
-
-            # Keep only real audio soft tokens, mirroring the vision encoder's padding stripping.
-            audio_features = audio_features[audio_mask_from_encoder.to(audio_features.device)]
 
             n_audio_tokens = audio_mask.sum()
             audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)

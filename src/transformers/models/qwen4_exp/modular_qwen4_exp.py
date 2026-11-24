@@ -1039,6 +1039,7 @@ class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
 class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
     _no_split_modules = ["Qwen4ExpVisionBlock"]
     config: Qwen4ExpVisionConfig
+    _supports_flash_attn = True
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):

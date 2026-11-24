@@ -222,10 +222,15 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
 
 
 def get_pack_index_per_image(
-    image_sizes: torch.Tensor, config: LlavaNextConfig, vision_feature_select_strategy: str
+    image_sizes: torch.Tensor,
+    config: LlavaNextConfig,
+    vision_feature_select_strategy: str,
+    grid_size: int | None = None,
 ) -> list[torch.Tensor]:
-    """For each image, the indices of its packed features in all images' patch tokens, `image_newline` past them."""
-    grid_size = config.vision_config.image_size // config.vision_config.patch_size
+    """For each image, the indices of its packed features in all images' patch tokens, `image_newline` past them. A
+    patch's features are a `grid_size` x `grid_size` grid, the vision tower's patch grid by default."""
+    if grid_size is None:
+        grid_size = config.vision_config.image_size // config.vision_config.patch_size
     tokens_per_patch = grid_size**2 + (vision_feature_select_strategy == "full")
     image_num_patches = [
         image_size_to_num_patches(image_size, config.image_grid_pinpoints, config.vision_config.image_size)
@@ -253,21 +258,29 @@ def get_pack_index_per_image(
 
 
 def get_pack_index(
-    image_sizes: torch.Tensor, config: LlavaNextConfig, vision_feature_select_strategy: str, kwargs: dict | None = None
+    image_sizes: torch.Tensor,
+    config: LlavaNextConfig,
+    vision_feature_select_strategy: str,
+    kwargs: dict | None = None,
+    grid_size: int | None = None,
 ) -> torch.Tensor:
     """All images' packed feature indices, or pops `"pack_index"`."""
     if kwargs is not None and (pack_index := kwargs.pop("pack_index", None)) is not None:
         return pack_index
-    return torch.cat(get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy))
+    return torch.cat(get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy, grid_size))
 
 
 def get_pack_sizes(
-    image_sizes: torch.Tensor, config: LlavaNextConfig, vision_feature_select_strategy: str, kwargs: dict | None = None
+    image_sizes: torch.Tensor,
+    config: LlavaNextConfig,
+    vision_feature_select_strategy: str,
+    kwargs: dict | None = None,
+    grid_size: int | None = None,
 ) -> torch.Tensor:
     """Each image's number of packed features, or pops `"pack_sizes"`."""
     if kwargs is not None and (pack_sizes := kwargs.pop("pack_sizes", None)) is not None:
         return pack_sizes
-    pack_index = get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy)
+    pack_index = get_pack_index_per_image(image_sizes, config, vision_feature_select_strategy, grid_size)
     return torch.tensor([len(index) for index in pack_index], device=image_sizes.device)
 
 

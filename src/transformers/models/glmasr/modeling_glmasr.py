@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -350,7 +351,7 @@ class GlmAsrModelOutputWithPast(BaseModelOutputWithPast):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-class GlmAsrModel(GlmAsrPreTrainedModel):
+class GlmAsrModel(GlmAsrPreTrainedModel, MultimodalMixin):
     _tp_plan = None
     _pp_plan = None
     _keep_in_fp32_modules_strict = None
@@ -366,7 +367,7 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
     @auto_docstring(
         custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
     )
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
@@ -393,6 +394,7 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
 
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
+        audio_outputs.split_sizes = post_lengths
 
         return audio_outputs
 
@@ -444,7 +446,9 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
 
         audio_embeds = None
         if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
+            audio_embeds = self.get_audio_embeddings(
+                input_features, input_features_mask, return_dict=True, **kwargs
+            ).pooler_output
 
             # replace text-audio token placeholders with audio embeddings
             special_audio_mask = self.get_placeholder_mask(
@@ -503,7 +507,7 @@ class GlmAsrCausalLMOutputWithPast(ModelOutput):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
-class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
+class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, MultimodalMixin, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
@@ -512,9 +516,6 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         self.model = GlmAsrModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_audio_features(self, input_features, input_features_mask, **kwargs):
-        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
 
     @can_return_tuple
     @auto_docstring

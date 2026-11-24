@@ -166,7 +166,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio_chunk_mapping = torch.repeat_interleave(torch.arange(len(audio), dtype=torch.long), per_sample_windows)
 
         # Based on `WhisperEncoder._get_feat_extract_output_lengths` (conv stride 2 only), so the placeholder
-        # token count matches `get_audio_features` from the same mask.
+        # token count matches `get_audio_embeddings` from the same mask.
         audio_lengths = audio_inputs["input_features_mask"].sum(-1)
         audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_lengths, audio_chunk_mapping)
         audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
