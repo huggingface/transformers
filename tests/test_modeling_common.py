@@ -872,6 +872,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "MistralLarge4ModelTest": 4,  # need to test KV shared layer for both types: RoPE and NoPE
+            "Kolibri1_1ModelTest": 5,  # a sliding layer, plus sparse indexers and reindexers that produce or reuse K/V
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
@@ -4153,6 +4154,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 "parakeet_encoder",
                 "parakeet_ctc",
                 "pi0",
+                "pi05",
                 "pixtral",
                 "sam",
                 "sam_hq",

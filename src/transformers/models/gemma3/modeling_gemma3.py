@@ -747,7 +747,6 @@ def create_masks_for_vision_model(
 class Gemma3Model(Gemma3PreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
-
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: Gemma3Config):

@@ -112,6 +112,22 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         self.assertEqual(batched, single)
 
     @require_torch
+    @require_torchvision
+    def test_batched_generation_tokenizer_and_feature_extractor_on_different_sides(self):
+        # The Gemma 4 tokenizer pads on the left and its audio feature extractor on the right
+        pipe = pipeline("image-text-to-text", model="trl-internal-testing/tiny-Gemma4ForConditionalGeneration")
+        image = Image.new("RGB", (64, 64), color=(120, 30, 200))
+        messages = [
+            [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
+            for text in ("Describe.", "Describe the colors, the shapes and the overall layout of this picture.")
+        ]
+        kwargs = {"max_new_tokens": 6, "do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
+    @require_torch
     def test_return_tensors_with_chat_input(self):
         pipe = pipeline(
             "image-text-to-text",

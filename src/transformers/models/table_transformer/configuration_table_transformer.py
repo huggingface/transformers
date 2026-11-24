@@ -101,7 +101,7 @@ class TableTransformerConfig(PreTrainedConfig):
             and kwargs.pop("use_timm_backbone", True)
             and not kwargs.get("backbone_kwargs")
         ):
-            backbone_kwargs = kwargs.get("backbone_kwargs", {})
+            backbone_kwargs = kwargs.get("backbone_kwargs") or {}
             self.backbone_config = {
                 "model_type": "timm_backbone",
                 "backbone": kwargs.pop("backbone", None) or "resnet50",
