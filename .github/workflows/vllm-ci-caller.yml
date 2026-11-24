@@ -25,7 +25,6 @@ jobs:
     permissions:
       contents: read
     name: Test vLLM examples and weight mapping
-    if: false  # [Temporary] trial run
     # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
     # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
     runs-on:
@@ -198,7 +197,6 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -348,7 +346,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -564,7 +561,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -672,7 +668,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM tokenizers, chat templates and configs"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -817,7 +812,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -997,7 +991,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1106,7 +1099,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM structured output, detokenizer, parsers and video processing"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1265,7 +1257,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1393,13 +1384,14 @@ jobs:
 
   # More of vLLM's multimodal models vs transformers (`hf_runner`): the models of
   # `tests/models/multimodal/generation/test_common.py` that vLLM doesn't mark `cpu_model` (vLLM runs them on GPU only;
-  # the `cpu_model` ones run in `vllm-test-multimodal-hf-comparison`), up to ~4B parameters.
-  # Not included:
-  # - models of 7B or more (too slow on CPU): aria, glm4_1v(-video), kimi_vl, llama4, llava_next(-video), llava-broadcast,
-  #   llava_next-broadcast, minicpmv_25, minicpmv_26, minicpmo_26, molmo, moondream3, ovis1_6-gemma2, skywork_r1v.
-  # - qwen2_5_vl-transformers: skips itself on CPU (`large_gpu_mark(min_gb=32)`).
-  # - deepseek_vl_v2, h2ovl, ovis2, ovis2_5, phi3v, smolvlm: skip themselves with transformers main: their HF reference
-  #   needs an older transformers (`max_transformers_version` in vLLM's tests/models/registry.py).
+  # the `cpu_model` ones run in `vllm-test-multimodal-hf-comparison`).
+  # Not included (they all skip themselves on our runner):
+  # - aria, glm4_1v(-video), kimi_vl, moondream3, ovis1_6-gemma2, qwen2_5_vl-transformers, skywork_r1v: skip on CPU
+  #   (`large_gpu_mark(min_gb=...)`).
+  # - llama4, llava-broadcast, llava_next-broadcast: skip on CPU (`multi_gpu_marks`); llama4 (109B) wouldn't fit anyway.
+  # - deepseek_vl_v2, h2ovl, minicpmv_25, minicpmv_26, minicpmo_26, molmo, ovis2, ovis2_5, phi3v, smolvlm: skip with
+  #   transformers main: their HF reference needs an older transformers (`max_transformers_version` in vLLM's
+  #   tests/models/registry.py).
   # - granite4_vision: skips itself (`is_available_online=False` in vLLM's tests/models/registry.py).
   # - the entries vLLM marks `skip` (cosmos3, dots_ocr, glm4v, glm_ocr, intern_vl, intern_vl-video, isaac, pixtral_hf,
   #   intern_vl-diff-patches).
@@ -1416,7 +1408,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0]  # [Temporary] trial run
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
@@ -1499,7 +1491,8 @@ jobs:
           # `-k "[<model_type>-"`: the test IDs are `<test>[<model_type>-test_case<N>]`.
           pytest -v -s tests/models/multimodal/generation/test_common.py \
             -m "not cpu_model" \
-            -k "[llava_next- or [llava_next_video-"  # [Temporary] trial: 7B models only
+            -k "[blip2- or [gemma3- or [gemma4- or [granite_vision- or [idefics3- or [intern_vl-hf- or [llava_onevision- or [llava-onevision-transformers- or [llava_next-test or [llava_next_video- or [paddleocr_vl- or [paligemma- or [qianfan_ocr- or [qwen2_5_vl-windows-attention- or [qwen3_vl-" \
+            --num-shards=8 --shard-id=$SHARD_ID
 
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
@@ -1592,7 +1585,7 @@ jobs:
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
-            --slack-channel "#transformers-ci-dummy" \
+            --slack-channel "#transformers-ci-vllm" \
             --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
             --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
             --commit-date "vllm=$VLLM_COMMIT_DATE"
