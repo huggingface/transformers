@@ -406,6 +406,9 @@ def torch_chunk_gated_delta_rule(
     recurrent_state_shape = (batch_size, num_v_heads, k_head_dim, v_head_dim)
     padded_output_shape = (batch_size, num_v_heads, -1, v_head_dim)  # -1 is the padded sequence length
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
+    # Cannot be more than the number of tokens
+    if num_intermediate_recurrent_states is not None:
+        num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, sequence_length)
 
     # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
     if num_k_heads != num_v_heads:
@@ -797,6 +800,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 output_final_state=cache is not None,
                 use_qk_l2norm_in_kernel=True,
                 cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
+                num_intermediate_recurrent_states=10,
                 **kwargs,
             )
 
