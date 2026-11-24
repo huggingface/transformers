@@ -1668,6 +1668,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
+    @require_deterministic_for_xpu
     def test_continuous_batching_log_probs(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
         """Test that log probabilities match between continuous batching and regular generate."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
@@ -2263,6 +2264,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
+    @require_deterministic_for_xpu
     def test_per_request_logits_processors(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
         """Tests that per-request logits processor kwargs (temperature, top_k, top_p) work correctly in generation."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
@@ -2337,6 +2339,9 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         # Build logits processor with do_sample=True (so temperature is included), then set do_sample=False for
         # deterministic generation, which is the same trick that CB uses
         delta = 2e-5 if use_cuda_graph else 1e-5
+        # XPU deterministic kernels leave a fixed ~2e-5 gap between CB and generate
+        if torch_device == "xpu":
+            delta = 3e-5
         for i, req_id in enumerate([req0_id, req1_id]):
             tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
             gen_config = GenerationConfig(
