@@ -368,7 +368,7 @@ class Kolibri1_1Attention(nn.Module):
             value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Indexed-attention layers have no positional embeddings (NoPE)
-        if self.is_sliding:
+        if self.is_sliding and not self.is_kv_shared_layer:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
