@@ -25,7 +25,6 @@ jobs:
     permissions:
       contents: read
     name: Test vLLM examples and weight mapping
-    if: false  # [Temporary] trial run
     # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
     # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
     runs-on:
@@ -198,7 +197,6 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -348,7 +346,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -564,7 +561,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -672,7 +668,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM tokenizers, chat templates and configs"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -825,7 +820,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [3]  # [Temporary] trial run
+        shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
@@ -905,7 +900,7 @@ jobs:
         run: pip freeze
 
       - name: "Test: language models generation and pooling (shard ${{ matrix.shard }} / 4)"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
           # Not included from vLLM's CPU command: tests/v1/e2e/test_cpu_linear_attn_chunked_prefix.py (no transformers),
@@ -917,7 +912,7 @@ jobs:
 
       # Only ~5 tests: run them all in shard 0 (with `--num-shards`, a shard could get no test, and pytest fails then).
       - name: "Test: CLIP / SigLIP pooling"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
           # siglip2-giant-opt: vLLM's CPU attention kernel doesn't support its head_dim (72)
@@ -928,7 +923,7 @@ jobs:
       # A few small language models that vLLM doesn't mark `cpu_model` (same transformers comparison as above). In one shard
       # (only 3 models). The other models of this file run in "Test: other language models generation".
       - name: "Test: more language models generation"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: vllm
         run: |
           pytest -v -s tests/models/language/generation/test_common.py \
@@ -938,38 +933,54 @@ jobs:
       # transformers reference (e.g. test_beam_search_with_concurrency_limit compares vLLM with vLLM), and
       # test_beam_search_passes_multimodal_data (7B audio model; vLLM's CI excludes it too).
       - name: "Test: beam search"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
           pytest -v -s tests/samplers/test_beam_search.py::test_beam_search_single_input
 
       # The other models of tests/models/language/generation/test_common.py that vLLM doesn't mark `cpu_model` (up to 8B),
-      # and Mistral-7B (test_mistral.py). Not included: MiniCPM4.1-8B and HyperCLOVAX-SEED-Think-14B (`large_gpu_mark`:
-      # skip on CPU). In one shard.
-      - name: "Test: other language models generation"
+      # and Mistral-7B (test_mistral.py), on 2 shards. Not included: MiniCPM4.1-8B and HyperCLOVAX-SEED-Think-14B
+      # (`large_gpu_mark`: skip on CPU), chatglm3-6b (skips with transformers main: `max_transformers_version="4.48"` in
+      # vLLM's tests/models/registry.py).
+      - name: "Test: other language models generation (shard ${{ matrix.shard }} / 4)"
+        if: ${{ !cancelled() && (matrix.shard == 1 || matrix.shard == 2) }}
+        working-directory: vllm
+        run: |
+          case "$SHARD_ID" in
+            1)
+              pytest -v -s tests/models/language/generation/test_common.py tests/models/language/generation/test_mistral.py::test_models \
+                -k "gpt2 or Qwen3-8B or Mistral-7B"
+              ;;
+            2)
+              pytest -v -s tests/models/language/generation/test_common.py \
+                -k "slovak-gpt-j-405M or tiny_starcoder_py or pythia-70m or starcoder2-3b or tiny-mixtral-30m or Apertus-8B or Domyn-Edge-Base"
+              ;;
+          esac
+
+      # State-space / hybrid models (Zamba2, Granite 4.0, Falcon-H1, LFM2) vs transformers. In one shard. Not included:
+      # - the tests of test_hybrid.py without a transformers reference (vLLM vs vLLM).
+      # - Mamba, Falcon-Mamba, Jamba ("IndexError: Dimension out of range" in vLLM's `mamba_mixer` on CPU), Qwen3-Next ("No
+      #   Unquantized MoE backend supports the deployment configuration" on CPU), test_zaya_cca_state (vLLM's engine fails to
+      #   start on CPU): vLLM runs test_hybrid.py on GPU only.
+      # - test_models[Zamba2-1.2B-instruct]: ~26 min on CPU (too slow); Zamba2 is still compared with transformers in
+      #   test_full_cuda_graph and test_fp32_cache_state.
+      - name: "Test: hybrid and state-space models"
         if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
-          pytest -v -s tests/models/language/generation/test_common.py tests/models/language/generation/test_mistral.py::test_models \
-            -k "slovak-gpt-j-405M or tiny_starcoder_py or pythia-70m or starcoder2-3b or tiny-mixtral-30m or Apertus-8B or Domyn-Edge-Base"  # [Temporary] trial: only the 7 models added after the first trial
-
-      # State-space / hybrid models (Mamba, Falcon-Mamba, Jamba, Zamba2, Granite 4.0, Falcon-H1, LFM2, Qwen3-Next) vs
-      # transformers. Not included: the tests of test_hybrid.py without a transformers reference (vLLM vs vLLM). In one shard.
-      - name: "Test: hybrid and state-space models"
-        if: false  # [Temporary] trial run
-        working-directory: vllm
-        run: |
           pytest -v -s \
-            tests/models/language/generation/test_hybrid.py::test_models \
-            tests/models/language/generation/test_hybrid.py::test_full_cuda_graph \
-            tests/models/language/generation/test_hybrid.py::test_fp32_cache_state \
-            tests/models/language/generation/test_hybrid.py::test_zaya_cca_state
+            "tests/models/language/generation/test_hybrid.py::test_models[5-64-ibm-granite/granite-4.0-tiny-preview]" \
+            "tests/models/language/generation/test_hybrid.py::test_models[5-64-tiiuae/Falcon-H1-0.5B-Base]" \
+            "tests/models/language/generation/test_hybrid.py::test_models[5-64-LiquidAI/LFM2-1.2B]" \
+            "tests/models/language/generation/test_hybrid.py::test_full_cuda_graph[5-64-Zyphra/Zamba2-1.2B-instruct]" \
+            "tests/models/language/generation/test_hybrid.py::test_fp32_cache_state[mamba_ssm_cache_dtype-5-64-Zyphra/Zamba2-1.2B-instruct]" \
+            "tests/models/language/generation/test_hybrid.py::test_fp32_cache_state[mamba_cache_dtype-5-64-Zyphra/Zamba2-1.2B-instruct]"
 
       # vLLM's OpenAI-compatible server / `LLM` pooling APIs (embeddings, scores) vs transformers, and the logprobs of the
       # V1 sampler vs transformers. Only the tests that compare with the transformers reference (`hf_model` fixture). In one
       # shard.
       - name: "Test: pooling API and logprobs"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
           pytest -v -s \
@@ -991,7 +1002,7 @@ jobs:
       # More pooling models / features vs transformers (`hf_runner`): token classification, multi-label classification,
       # chunked prefill, prefix caching (models up to ~1.5B). In one shard.
       - name: "Test: more language pooling models"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
           # Not included:
@@ -1013,7 +1024,7 @@ jobs:
       # The tests / models of test_embedding.py and test_classification.py that vLLM doesn't mark `cpu_model` (the
       # `cpu_model` ones run in the step above), and multi-vector retrieval (bge-m3). In one shard.
       - name: "Test: more language embedding and classification models"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 2 }}
         working-directory: vllm
         run: |
           # Not included: the 2 LFM2 tests of test_embedding.py (vLLM's model only, no transformers reference).
@@ -1029,7 +1040,7 @@ jobs:
       # tests/models/language/pooling_mteb_test compare with a score stored in the test file (no transformers reference).
       # `model_info2` = jina-embeddings-v5-text-nano (3rd entry of EMBEDDING_MODELS). In one shard.
       - name: "Test: MTEB pooling (jina-embeddings-v5-text-nano)"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
           pytest -v -s 'tests/models/language/pooling_mteb_test/test_jina.py::test_embed_models_mteb[model_info2]'
@@ -1042,7 +1053,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1151,7 +1161,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM structured output, detokenizer, parsers and video processing"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1310,7 +1319,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1381,9 +1389,9 @@ jobs:
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
-          # For "Test: more multimodal model files": peft + backoff (Phi-4-multimodal remote code, Granite Speech LoRA),
-          # open-clip-torch + albumentations (Nemotron Parse remote code), mistral_common[audio] (Voxtral).
-          uv pip install tblib pqdm pytest-shard peft backoff open-clip-torch==2.32.0 albumentations==1.4.6 'mistral_common[audio]'
+          # For "Test: more multimodal model files": peft (Granite Speech LoRA), open-clip-torch + albumentations (Nemotron Parse
+          # remote code), mistral_common[audio] (Voxtral).
+          uv pip install tblib pqdm pytest-shard peft open-clip-torch==2.32.0 albumentations==1.4.6 'mistral_common[audio]'
           # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
           uv pip install --no-deps -e transformers/
           python -c "
@@ -1439,33 +1447,31 @@ jobs:
           esac
 
       # The per-model test files of tests/models/multimodal/generation that compare with transformers (`hf_runner`),
-      # 2 files per shard. Not included: the tests of these files without a transformers reference, test_phi4mm.py's
-      # test_multi_images_models (`large_gpu_test`: skips on CPU), test_whisper.py's test_models (already run with
-      # `cpu_model` above) and test_models_distributed (2 GPUs).
+      # one per shard. Not included:
+      # - the tests of these files without a transformers reference, test_whisper.py's test_models (already run with
+      #   `cpu_model` above) and test_models_distributed (2 GPUs).
+      # - test_mm_prefix_lm.py: vLLM's CPU attention backend doesn't support the multimodal prefix (bidirectional image
+      #   attention, `supports_mm_prefix()`): hidden states far from transformers (cosine 0.64); vLLM runs it on GPU only.
+      # - test_phi4mm.py: too slow on CPU (vLLM's `execute_model` call timed out); its test_multi_images_models needs a
+      #   large GPU anyway.
+      # - test_nemotron_parse.py with Nemotron-Parse-v1.2 (~35 min on CPU) and test_nemotron_parse_35.py (not done after
+      #   15 min): too slow.
       - name: "Test: more multimodal model files (shard ${{ matrix.shard }} / 4)"
         if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
           case "$SHARD_ID" in
             0)
-              pytest -v -s \
-                tests/models/multimodal/generation/test_granite_speech.py::test_models \
-                tests/models/multimodal/generation/test_whisper.py::test_beam_search_encoder_decoder
+              pytest -v -s tests/models/multimodal/generation/test_granite_speech.py::test_models
               ;;
             1)
-              pytest -v -s \
-                tests/models/multimodal/generation/test_voxtral.py::test_hf_reference \
-                tests/models/multimodal/generation/test_mm_prefix_lm.py::test_mm_prefix_lm_e2e
+              pytest -v -s tests/models/multimodal/generation/test_voxtral.py::test_hf_reference
               ;;
             2)
-              pytest -v -s \
-                tests/models/multimodal/generation/test_nemotron_parse.py::test_models \
-                tests/models/multimodal/generation/test_nemotron_parse_35.py::test_model
+              pytest -v -s tests/models/multimodal/generation/test_whisper.py::test_beam_search_encoder_decoder
               ;;
             3)
-              pytest -v -s \
-                tests/models/multimodal/generation/test_phi4mm.py::test_models \
-                tests/models/multimodal/generation/test_phi4mm.py::test_vision_speech_models
+              pytest -v -s "tests/models/multimodal/generation/test_nemotron_parse.py::test_models[5-bfloat16-nvidia/NVIDIA-Nemotron-Parse-2.0]"
               ;;
           esac
 
@@ -1487,7 +1493,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, more multimodal models (shard ${{ matrix.shard }} / 8)"
-    if: false  # [Temporary] trial run
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1673,7 +1678,7 @@ jobs:
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
-            --slack-channel "#transformers-ci-dummy" \
+            --slack-channel "#transformers-ci-vllm" \
             --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
             --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
             --commit-date "vllm=$VLLM_COMMIT_DATE"
