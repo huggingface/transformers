@@ -265,7 +265,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
-        self.codec_model = AutoModel.from_config(config.codec_config)
+        self.codec_model = AutoModel.from_config(config.codec_config).to(dtype=torch.float32)
 
         # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
         # yet the codec_model needs a generation config to initialize it's cache for streaming inference
