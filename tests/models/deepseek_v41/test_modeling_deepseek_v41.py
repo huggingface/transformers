@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import json
+import re
+import tempfile
 import unittest
+from pathlib import Path
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 from parameterized import parameterized
@@ -23,18 +27,36 @@ from transformers.testing_utils import require_accelerate, require_torch, torch_
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file, save_file
 
-    from transformers import DeepseekV41Config, DeepseekV41ForCausalLM, DeepseekV41Model, DeepseekV41TextConfig
+    from transformers import (
+        DeepseekV41Config,
+        DeepseekV41ForCausalLM,
+        DeepseekV41Model,
+        DeepseekV41TextConfig,
+        FineGrainedFP8Config,
+    )
+    from transformers.integrations import FP8Embedding, FP8Linear
     from transformers.models.deepseek_v41.modeling_deepseek_v41 import (
         DeepseekV41Compressor,
         DeepseekV41NgramHasher,
         fake_quantize,
         select_candidate_blocks,
     )
+    from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
+
+# The quantization config of deepseek-ai/DeepSeek-V4.1-Flash, as it is on the Hub
+CHECKPOINT_QUANTIZATION_CONFIG = {
+    "quant_method": "fp8",
+    "activation_scheme": "dynamic",
+    "weight_block_size": [32, 32],
+    "scale_fmt": "ue8m0",
+    "expert_dtype": "fp4",
+}
 
 INPUTS_EMBEDS_SKIP_REASON = (
     "The Engram layers hash n-grams of token ids, so the model needs `input_ids` and cannot run on `inputs_embeds` "
@@ -630,3 +652,110 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
             # ... and no patch attends to the other image
             self.assertEqual(layer_attention[:, :35, 35:].abs().max().item(), 0.0)
             self.assertEqual(layer_attention[:, 35:, :35].abs().max().item(), 0.0)
+
+    def test_fp8_quantizer_conversion(self):
+        """
+        The quantization config of the checkpoint only describes its FP8 linears. The model config adds the Engram
+        tables, which are stored in FP8 as well, and the linears that are stored in BF16.
+        """
+        config = self.model_tester.get_config().to_dict()
+        # A scale of an Engram table covers 32 values, so the rows have to be at least that wide
+        config["text_config"]["engram_head_dim"] = 32
+        config = DeepseekV41Config.from_dict({**config, "quantization_config": CHECKPOINT_QUANTIZATION_CONFIG})
+        with torch.device("meta"):
+            model = DeepseekV41ForCausalLM(config)
+        FineGrainedFP8HfQuantizer(FineGrainedFP8Config(**config.quantization_config)).preprocess_model(model)
+
+        bf16_linears = (
+            "lm_head",
+            "vision_tower",
+            "multi_modal_projector",
+            "compressor",
+            "indexer.k_proj",
+            "indexer.weights_proj",
+        )
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                is_bf16 = any(part in name for part in bf16_linears)
+                self.assertEqual(isinstance(module, FP8Linear), not is_bf16, name)
+        for layer_idx in config.text_config.engram_layer_ids:
+            table = model.model.language_model.layers[layer_idx].engram.embed
+            self.assertIsInstance(table, FP8Embedding)
+            # One scale per block of 32 values, and the rows are a single block wide here
+            self.assertEqual(table.weight_scale.shape, (table.num_embeddings, 1))
+        # The token embeddings are not a quantized table
+        self.assertIs(type(model.model.language_model.embed_tokens), torch.nn.Embedding)
+
+    @require_accelerate
+    def test_loading_the_quantized_checkpoint_layout(self):
+        """
+        The checkpoint stores its Engram tables and most of its linears in FP8, and its experts in FP4, each with
+        power-of-two scales next to it. Loading that layout with `dequantize=True` gives the model that those
+        tensors stand for, with the Engram tables still in FP8.
+        """
+        config = self.model_tester.get_config()
+        # A scale of an Engram table covers 32 values, so the rows have to be at least that wide
+        config.text_config.engram_head_dim = 32
+        torch.manual_seed(0)
+        model = DeepseekV41ForCausalLM(config)
+        fp4_values = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
+        # Extracts the linears that the checkpoint stores in FP8, by their names in the checkpoint
+        fp8_linears = re.compile(
+            r"\.(attn\.(indexer\.)?wq_b|attn\.(wq_a|wkv|wo_a|wo_b)|engram\.wkv|shared_experts\.w[123])\.weight$"
+        )
+
+        with tempfile.TemporaryDirectory() as quantized_dir, tempfile.TemporaryDirectory() as plain_dir:
+            # `save_pretrained` writes the names of the original checkpoint. We quantize the tensors that the
+            # checkpoint quantizes, and keep the values they stand for to build the model we compare with.
+            model.save_pretrained(quantized_dir)
+            model.save_pretrained(plain_dir)
+            quantized, dequantized = {}, {}
+            for name, tensor in load_file(f"{quantized_dir}/model.safetensors").items():
+                if ".ffn.experts." in name:
+                    # FP4 experts, with a scale for every 32 values of a row
+                    block_rows, max_value = 1, 6.0
+                elif ".engram.embed." in name:
+                    # FP8 tables, with a scale for every 32 values of a row too
+                    block_rows, max_value = 1, 448.0
+                elif fp8_linears.search(name):
+                    # FP8 linears, with a scale for every block of 32 x 32 values
+                    block_rows, max_value = 32, 448.0
+                else:
+                    # Everything else is stored as it is
+                    quantized[name] = dequantized[name] = tensor
+                    continue
+                blocks = tensor.abs().unflatten(0, (-1, block_rows)).unflatten(-1, (-1, 32))
+                scales = torch.exp2(torch.ceil(torch.log2(blocks.amax(dim=(1, 3)).clamp_min(1e-4) / max_value)))
+                scale_of_each_value = scales.repeat_interleave(block_rows, dim=0).repeat_interleave(32, dim=1)
+                scaled = tensor / scale_of_each_value
+                if max_value == 6.0:
+                    # FP4 has 8 magnitudes and a sign bit, and a byte holds two values, the first one in its low bits
+                    codes = (scaled.abs().unsqueeze(-1) - fp4_values).abs().argmin(-1)
+                    values = fp4_values[codes] * scaled.sign()
+                    codes = codes + 8 * (scaled < 0)
+                    quantized[name] = (codes[:, 0::2] | (codes[:, 1::2] << 4)).to(torch.uint8).view(torch.int8)
+                else:
+                    quantized[name] = scaled.to(torch.float8_e4m3fn)
+                    values = quantized[name].float()
+                quantized[name.removesuffix("weight") + "scale"] = scales.to(torch.float8_e8m0fnu)
+                dequantized[name] = values * scale_of_each_value
+            save_file(quantized, f"{quantized_dir}/model.safetensors", metadata={"format": "pt"})
+            save_file(dequantized, f"{plain_dir}/model.safetensors", metadata={"format": "pt"})
+            config_path = Path(quantized_dir, "config.json")
+            config_dict = json.loads(config_path.read_text(encoding="utf-8"))
+            config_dict["quantization_config"] = CHECKPOINT_QUANTIZATION_CONFIG
+            config_path.write_text(json.dumps(config_dict), encoding="utf-8")
+
+            expected_model = DeepseekV41ForCausalLM.from_pretrained(plain_dir).to(torch_device).eval()
+            loaded_model = DeepseekV41ForCausalLM.from_pretrained(
+                quantized_dir, quantization_config=FineGrainedFP8Config(dequantize=True)
+            )
+            loaded_model = loaded_model.to(torch_device).eval()
+
+        for layer_idx in config.text_config.engram_layer_ids:
+            self.assertIsInstance(loaded_model.model.language_model.layers[layer_idx].engram.embed, FP8Embedding)
+        input_ids = self.model_tester.prepare_text_ids(2, 9)
+        with torch.no_grad():
+            expected = expected_model(input_ids=input_ids).logits
+            logits = loaded_model(input_ids=input_ids).logits
+        torch.testing.assert_close(logits, expected)

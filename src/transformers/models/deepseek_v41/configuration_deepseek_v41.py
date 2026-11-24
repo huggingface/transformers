@@ -450,5 +450,33 @@ class DeepseekV41Config(PreTrainedConfig):
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 1
 
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+
+        # The quantization config of the checkpoint only describes its FP8 linears and its FP4 experts, so we fill
+        # in the rest here, like DeepSeek-V4 does for `expert_dtype`. Anything the config already sets is left alone.
+        # TODO: revisit after #50245. With a quantization plan, the tables can get an entry of their own
+        quantization_config = getattr(self, "quantization_config", None)
+        if isinstance(quantization_config, dict) and quantization_config.get("quant_method") == "fp8":
+            block_size = quantization_config.get("weight_block_size") or (128, 128)
+            defaults = {
+                # The Engram tables are stored in FP8 too, and they are far too big to dequantize. A block of a
+                # table is as wide as a block of a linear, but it never spans rows
+                "modules_to_convert": ["engram.embed"],
+                "embedding_block_size": block_size[1],
+                # These linears are stored in BF16. They have no scales, so the quantizer has to skip them
+                "modules_to_not_convert": [
+                    "lm_head",
+                    r".*vision_tower",
+                    r".*multi_modal_projector",
+                    "self_attn.compressor.kv_proj",
+                    "self_attn.compressor.gate_proj",
+                    "self_attn.indexer.k_proj",
+                    "self_attn.indexer.weights_proj",
+                ],
+            }
+            given = {key: value for key, value in quantization_config.items() if value is not None}
+            self.quantization_config = {**defaults, **given}
+
 
 __all__ = ["DeepseekV41Config", "DeepseekV41TextConfig", "DeepseekV41VisionConfig"]

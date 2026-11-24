@@ -117,6 +117,9 @@ print(processor.decode(outputs[0, inputs["input_ids"].shape[1] :]))
 - Like the original implementation, the model rounds its KV and attention output to FP8, and its index keys, index
   queries and compressed KV to FP4. That is how they were quantized in training, so it happens whatever dtype you load
   the model in. The rounded values keep that dtype, so this does not make the cache any smaller (yet!).
+- The checkpoint stores its experts in FP4, and its Engram tables and most of its linear layers in FP8. The Engram
+  tables stay in FP8 however you load the model, even with `FineGrainedFP8Config(dequantize=True)`, because they would
+  double in size otherwise. Their rows are rescaled as they are looked up, so this changes nothing about the outputs.
 - The DSpark draft layers of the checkpoint (`mtp.*`) are not loaded.
 - The image processor resizes with torchvision, while the original preprocessing uses PIL. Sizes and padding are the
   same, but resampling leaves a fraction of a percent of the pixel values off by one or two levels out of 255.

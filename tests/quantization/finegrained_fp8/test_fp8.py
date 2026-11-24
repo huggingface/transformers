@@ -556,6 +556,32 @@ class FP8EmbeddingTest(unittest.TestCase):
         error = (rows.float() - expected.float()).abs().max() / expected.float().abs().max()
         self.assertLess(error, 0.1)
 
+    def test_lookup_applies_the_block_scales(self):
+        """DeepSeek-V4.1's Engram tables have a scale for every block of a row, which a single scale cannot stand in for."""
+        from transformers.integrations import FP8Embedding
+
+        # Rows of very different sizes. With one scale for the table, the small ones would round to zero
+        table = torch.randn(64, 32) * torch.logspace(-3, 3, 64).unsqueeze(1)
+        blocks = table.unflatten(1, (2, 16))
+        # Power-of-two scales, which is all that `ue8m0` can store
+        scales = torch.exp2(torch.ceil(torch.log2(blocks.abs().amax(-1) / torch.finfo(torch.float8_e4m3fn).max)))
+        embedding = FP8Embedding(64, 32, block_size=16, scale_fmt="ue8m0")
+        self.assertEqual(embedding.weight_scale.shape, (64, 2))
+        self.assertEqual(embedding.weight_scale.dtype, torch.float8_e8m0fnu)
+        quantized = (blocks / scales.unsqueeze(-1)).flatten(1).to(torch.float8_e4m3fn)
+        embedding.weight = torch.nn.Parameter(quantized, requires_grad=False)
+        embedding.weight_scale = torch.nn.Parameter(scales.to(torch.float8_e8m0fnu), requires_grad=False)
+
+        ids = torch.randint(0, 64, (2, 5))
+        rows = embedding(ids)
+
+        # The lookup gives exactly the values that the FP8 table stands for ...
+        dequantized = (quantized.float().unflatten(1, (2, 16)) * scales.unsqueeze(-1)).flatten(1)
+        torch.testing.assert_close(rows, dequantized[ids], rtol=0, atol=0)
+        # ... and those are close to the original values in every row, however small the row is
+        error = (rows - table[ids]).abs().amax(-1) / table[ids].abs().amax(-1)
+        self.assertLess(error.max(), 0.1)
+
     def test_patterns_match_by_suffix_and_honour_the_skip_list(self):
         """Suffixes match whether or not the text model is nested under a multimodal wrapper."""
         from transformers.integrations import FP8Embedding, replace_with_fp8_embedding
