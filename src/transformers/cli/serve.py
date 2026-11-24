@@ -30,9 +30,6 @@ if TYPE_CHECKING:
     import socket
 
 
-logger = logging.get_logger(__name__)
-
-
 class ReasoningMode(str, enum.Enum):
     ON = "on"
     OFF = "off"
@@ -221,7 +218,7 @@ class Serve:
             chat_template_kwargs=self.chat_template_kwargs,
         )
 
-        transcription_handler = TranscriptionHandler(model_manager, self.generation_state)
+        transcription_handler = TranscriptionHandler(model_manager)
 
         systemone_handler = SystemOneHandler(
             model_manager=model_manager,

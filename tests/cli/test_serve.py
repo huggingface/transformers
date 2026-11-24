@@ -443,7 +443,6 @@ class TestGenerativeModelList(unittest.TestCase):
             patch("transformers.cli.serving.model_manager.get_gen_models", return_value=downloaded),
         ):
             model_manager = ModelManager()
-            self.addCleanup(model_manager.shutdown)
             # What loading `org/a` and a local checkpoint leaves in the manager.
             for name in ("org/a@main", local_path):
                 model_manager.engines[name] = MagicMock(running=True)
@@ -535,7 +534,6 @@ class TestBuildGenerationConfig(unittest.TestCase):
         result = self._make_handler()._build_generation_kwargs(
             {"generation_config": custom.to_json_string()}, GenerationConfig()
         )
-        # Should keep 10, not bump to 1024
         self.assertEqual(result["max_new_tokens"], 10)
 
     def test_default_bumps_short_max_new_tokens(self):
@@ -578,7 +576,7 @@ class TestValidation(unittest.TestCase):
 
 class TestGetEngine(unittest.TestCase):
     def _make_handler(self, force_model=None):
-        mm = ModelManager(MagicMock(), GenerationState())
+        mm = ModelManager(MagicMock())
         mm.force_model = force_model
         engine_client = patch(
             "transformers.cli.serving.model_manager.EngineClient",
@@ -619,7 +617,7 @@ class TestGetEngine(unittest.TestCase):
             return [event async for event in stream]
 
         async def run():
-            mm = ModelManager(MagicMock(), GenerationState())
+            mm = ModelManager(MagicMock())
             with patch.object(mm, "get_engine", return_value=engine):
                 first = mm.load_model_streaming("org/model")
                 await anext(first)  # the load is running
@@ -691,11 +689,10 @@ class TestProcessLifecycle(unittest.TestCase):
         self.addCleanup(_stop_serve, server)
         return server, f"http://localhost:{port}"
 
-    def _chat(self, base_url: str) -> str:
+    def _chat(self, base_url: str) -> None:
         body = {"model": self.MODEL, "messages": [{"role": "user", "content": "Say hi"}], "max_tokens": 5}
         response = httpx.post(f"{base_url}/v1/chat/completions", json=body, timeout=120)
         self.assertEqual(response.status_code, 200, response.text)
-        return response.json()["choices"][0]["message"]["content"]
 
     @staticmethod
     def _child_processes(server: multiprocessing.process.BaseProcess) -> list:
@@ -723,7 +720,7 @@ class TestProcessLifecycle(unittest.TestCase):
         }
         with httpx.stream("POST", f"{base_url}/v1/chat/completions", json=body, timeout=30) as response:
             lines = response.iter_lines()
-            received = [next(lines)]  # it's generating
+            received = [next(lines)]  # the request is in flight
             engine.kill()
             received.extend(lines)  # ends, without waiting for the timeout
         self.assertIn("crashed", received[-1] or received[-2])
@@ -765,6 +762,7 @@ class TestProcessLifecycle(unittest.TestCase):
         self.assertEqual(len(self._child_processes(server)), 1)
 
 
+@require_serve
 class TestChunkSSE(unittest.TestCase):
     def _make_handler(self):
         return ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState())
@@ -799,7 +797,6 @@ class TestChunkSSE(unittest.TestCase):
         self.assertEqual(result, "data: hello\n\n")
 
 
-@require_serve
 class _StopLogging(Exception):
     pass
 
@@ -1102,7 +1099,6 @@ class TestChatCompletion(ServeIntegrationTestCase):
                 stream_options={"include_usage": True},
             )
         )
-        # The usage comes last, in a chunk of its own without choices, and only there
         last = chunks[-1]
         self.assertEqual(last.choices, [])
         self.assertIsNotNone(last.usage)
@@ -1185,7 +1181,6 @@ class TestChatCompletion(ServeIntegrationTestCase):
                 if chunks_read >= 3:
                     break
 
-        # Server should still be healthy and serve subsequent requests
         resp = self.client.chat.completions.create(
             model=self.MODEL,
             messages=[{"role": "user", "content": "Say hi"}],
@@ -1287,7 +1282,6 @@ class TestCompletion(ServeIntegrationTestCase):
                 stream_options={"include_usage": True},
             )
         )
-        # The usage comes last, in a chunk of its own without choices, and only there
         last = chunks[-1]
         self.assertEqual(last.choices, [])
         self.assertTrue(all(chunk.usage is None for chunk in chunks[:-1]))
@@ -1695,7 +1689,7 @@ class TestLoadModel(ServeIntegrationTestCase):
 
     def setUp(self):
         super().setUp()
-        # Clear model cache so each test starts fresh
+        # Stop the model's process so each test loads it again
         httpx.post(f"{self.base_url}/reset", timeout=60)
 
     def _load_model(self, model: str):
@@ -2175,7 +2169,6 @@ class TestToolCallUnit(unittest.TestCase):
     def test_parse_assistant_message_tool_call(self):
         """parse_assistant_message extracts a single tool call from raw text."""
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
-        # Build a fake processor whose tokenizer applies the Qwen fallback template.
         template = next(v for k, v in _RESPONSE_TEMPLATE_FALLBACKS.items() if "qwen2" in k)
         tokenizer = MagicMock()
         tokenizer.response_template = None
@@ -2193,7 +2186,6 @@ class TestToolCallUnit(unittest.TestCase):
         self.assertEqual(len(tool_calls), 1)
         self.assertEqual(tool_calls[0].name, "get_weather")
         self.assertEqual(json.loads(tool_calls[0].arguments), {"city": "Paris"})
-        # The tokenizer.parse_response stub should have received the Qwen template.
         tokenizer.parse_response.assert_called_once()
         called_template = tokenizer.parse_response.call_args.args[1]
         self.assertIs(called_template, template)
@@ -2208,7 +2200,7 @@ class TestToolCallUnit(unittest.TestCase):
         tokenizer.parse_response.return_value = {"role": "assistant"}
 
         processor = MagicMock()
-        model = MagicMock()
+        config = MagicMock()
         processor.tokenizer = tokenizer
 
         tools = [
@@ -2220,14 +2212,14 @@ class TestToolCallUnit(unittest.TestCase):
 
         for schema in (None, tools):
             with self.subTest(tools=schema):
-                parse_assistant_message(processor, model, [2], [1], tools=schema)
+                parse_assistant_message(processor, config, [2], [1], tools=schema)
                 self.assertEqual(
                     tokenizer.parse_response.call_args.kwargs["tools"],
                     schema,
                 )
 
                 with patch("transformers.cli.serving.utils.ResponseParser") as parser:
-                    build_response_parser(processor, model, [1], tools=schema)
+                    build_response_parser(processor, config, [1], tools=schema)
                     self.assertEqual(
                         parser.call_args.kwargs["tools"],
                         schema,
@@ -2326,7 +2318,7 @@ class TestEngineDeadServerIntegration(unittest.TestCase):
         from fastapi.testclient import TestClient
 
         model_manager = ModelManager()
-        model_manager.engines["model@main"] = MagicMock(is_dead=True, fatal_error="CUDA illegal memory access")
+        model_manager.engines["model@main"] = MagicMock(is_dead=True)
 
         resp = TestClient(self._build_app(model_manager)).get("/health")
 
@@ -2340,7 +2332,7 @@ class TestEngineDeadServerIntegration(unittest.TestCase):
         chat_handler = MagicMock()
 
         async def handle_request(_body, _request_id):
-            raise EngineDeadError("CB worker is dead and cannot accept request: CUDA illegal memory access")
+            raise EngineDeadError("The model's process crashed: CUDA illegal memory access")
 
         chat_handler.handle_request = handle_request
 
@@ -2351,7 +2343,6 @@ class TestEngineDeadServerIntegration(unittest.TestCase):
         )
 
         self.assertEqual(resp.status_code, 503)
-        # Body carries the original cause so the client knows why the server is broken.
         self.assertIn("CUDA illegal memory access", resp.json()["error"])
 
 
@@ -3110,13 +3101,9 @@ class TestContinuousBatchingChatCompletion(ServeIntegrationTestCase):
     def test_request_cancellation(self):
         """Closing a stream early doesn't crash and the server stays healthy."""
 
-        request_id = "test-cb-cancel"
-
-        # Open a streaming request and close after a few chunks
         with httpx.stream(
             "POST",
             f"{self.base_url}/v1/chat/completions",
-            headers={"X-Request-ID": request_id},
             json={
                 "model": self.MODEL,
                 "stream": True,
@@ -3131,7 +3118,6 @@ class TestContinuousBatchingChatCompletion(ServeIntegrationTestCase):
                 if chunks_read >= 3:
                     break
 
-        # Server should still be healthy and serve subsequent requests
         resp = self.client.chat.completions.create(
             model=self.MODEL,
             messages=[{"role": "user", "content": "Say hi"}],
@@ -3201,12 +3187,9 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
     def test_request_cancellation(self):
         """Closing a stream early doesn't crash and the server stays healthy."""
 
-        request_id = "test-cb-resp-cancel"
-
         with httpx.stream(
             "POST",
             f"{self.base_url}/v1/responses",
-            headers={"X-Request-ID": request_id},
             json={
                 "model": self.MODEL,
                 "stream": True,
@@ -3223,7 +3206,6 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
                 if b"output_text.delta" in received:
                     break
 
-        # Server should still serve subsequent requests
         resp = self.client.responses.create(
             model=self.MODEL,
             input="Say hi",

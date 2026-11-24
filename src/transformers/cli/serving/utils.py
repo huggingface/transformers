@@ -73,9 +73,6 @@ request_logger = logging.get_logger("transformers.cli.serving.requests")
 
 
 # Model ids
-X_REQUEST_ID = "x-request-id"
-
-
 @lru_cache(maxsize=256)
 def parse_model_id(model_id: str) -> tuple[str, str | None, str | None]:
     """Split a model name, `repo[@revision][:file.gguf]`, into its repo, revision and GGUF file:
@@ -198,14 +195,6 @@ def set_torch_seed(seed: int) -> None:
     torch.manual_seed(seed)
 
 
-def reset_torch_cache() -> None:
-    """Empty the CUDA cache if a GPU is available."""
-    import torch
-
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-
 def exit_with_parent() -> None:
     """In a process the server spawned: exits once its parent does, even one killed without cleanup (`kill -9`), which
     would leave it running (a model's process holding its GPU memory, an API server its port)."""
@@ -214,7 +203,7 @@ def exit_with_parent() -> None:
         return
 
     def wait_and_exit() -> None:
-        parent.join()  # returns once the parent is gone
+        parent.join()
         os._exit(1)
 
     threading.Thread(target=wait_and_exit, name="exit-with-parent", daemon=True).start()
@@ -225,6 +214,9 @@ def freeze_garbage_collector() -> None:
     initialized (model loaded, server built), to reduce the collector's overhead from static objects while serving."""
     gc.collect()
     gc.freeze()
+
+
+X_REQUEST_ID = "x-request-id"
 
 
 class RequestIdMiddleware:
@@ -311,7 +303,7 @@ if is_serve_available():
 
 # Errors
 class ModelNotServedError(ValueError):
-    """A request named another model than the only one the server serves: a 400 for its client."""
+    """A request names no model, or another than the one the server serves: a 400 for its client."""
 
 
 class EngineDeadError(RuntimeError):
@@ -321,11 +313,11 @@ class EngineDeadError(RuntimeError):
 
 
 class _GenerationCancelled(Exception):
-    """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
+    """Raised in `_TokenStreamer.put` to stop `model.generate()` once its request is cancelled."""
 
 
 class _StreamError:
-    """Sentinel to signal an error from the generate thread."""
+    """Ends a stream's queue when its request failed, with the error."""
 
     def __init__(self, msg: str):
         self.msg = msg
@@ -627,7 +619,7 @@ def _normalize_tool_call(value: dict) -> ToolCall:
 def _decode_prefix(tokenizer, input_ids) -> str:
     """Decode ``input_ids`` to the chat prompt string the parser expects as ``prefix=``.
 
-    Serve always handles one request at a time, but the upstream shape varies:
+    Its shape varies:
     ``apply_chat_template(return_tensors="pt")`` hands us a 2D ``[1, N]`` tensor
     while continuous batching hands us a flat ``list[int]``. Both forms hold a
     single sequence; this helper unwraps it before decoding."""
@@ -904,7 +896,7 @@ class GenerateRunner:
                     self.count_tokens(generated=len(result))
             except _GenerationCancelled:
                 result = None
-            except ValueError as error:  # the request's fault: crosses as one, for a 400
+            except ValueError as error:  # the request's fault: crosses as a `ValueError`
                 result = ValueError(str(error))
             except Exception as error:
                 logger.exception("A request failed")
@@ -943,7 +935,6 @@ class CBGenerateRunner(GenerateRunner):
             self.active_requests[request_id] = [stream, 0]
         self.count_tokens(prompt=prompt_length(inputs))
         batching_kwargs = self._build_continuous_batching_kwargs(generation_kwargs)
-        # The batching manager's ids are strings
         self.manager.add_request(inputs["input_ids"], request_id=str(request_id), streaming=stream, **batching_kwargs)
 
     def cancel(self, request_id: int) -> None:
@@ -1112,10 +1103,7 @@ def answer_questions(
 # The server's generation settings
 class GenerationState:
     """
-    How the models generate, the same for all of them: with continuous batching or sequential ``model.generate()``
-    calls, the continuous batching settings, and ``torch.compile``. Handlers ask it whether a model generates with
-    continuous batching (`use_continuous_batching`), and each model's process reads its settings (see
-    `EngineClient.run_engine`).
+    How the models generate, the same for all of them. Each model's process reads it (see `EngineClient.run_engine`).
 
     Args:
         continuous_batching (`bool`, *optional*, defaults to `False`):
@@ -1156,16 +1144,15 @@ class GenerationState:
 
 # What the handlers share
 class BaseHandler:
-    """Shared logic for chat completion and responses handlers.
-
-    Provides model resolution, generation config building, and SSE formatting. Generation happens in the model's
-    process (see `ModelManager.get_engine`).
+    """What the endpoint handlers share: model resolution, generation settings, tokenizing and SSE formatting.
 
     Args:
         model_manager (`ModelManager`):
             The models the server runs.
         generation_state (`GenerationState`):
             How the models generate.
+        chat_template_kwargs (`dict`, *optional*):
+            The chat template's arguments for every request (a request's own override them).
     """
 
     _valid_params_class: type | None = None
@@ -1229,7 +1216,7 @@ class BaseHandler:
         while not queue.empty():
             items.append(queue.get_nowait())
         merged = []
-        for kind, group in itertools.groupby(items, key=type):  # the items in a row of the same type
+        for kind, group in itertools.groupby(items, key=type):
             if kind in (str, ReasoningText):
                 merged.append(kind("".join(group)))
             else:  # tool calls, the end of the stream (`None`), an error
@@ -1239,7 +1226,7 @@ class BaseHandler:
     def _get_engine(self, body: dict) -> "EngineClient":
         """The request's model's engine (see `ModelManager.get_engine`). Sets the body's model to the one served."""
         engine = self.model_manager.get_engine(body.get("model"))
-        # `<repo>:<file>.gguf` names both the repository and the weights to read out of it: the model's id keeps both
+        # Without its GGUF file, which `engine.model_id` keeps
         repo, revision, _ = parse_model_id(body.get("model") or self.model_manager.force_model)
         body["model"] = repo if revision is None else f"{repo}@{revision}"
         return engine
@@ -1271,9 +1258,9 @@ class BaseHandler:
     def _build_generation_kwargs(self, body: dict, default: "GenerationConfig") -> dict:
         """
         What the request generates with, on top of `default`, the model's generation config (see
-        `GenerateRunner.generate`). It always has ``max_new_tokens``, ``eos_token_id``, ``do_sample``,
-        ``temperature``, ``top_k`` and ``top_p``, the model's unless the request sets them. Here, the params the
-        endpoints share (temperature, top_p, seed, and `generation_config`, a JSON of generation settings).
+        `GenerateRunner.generate`). It always has ``max_new_tokens`` (at least 1024), ``eos_token_id``,
+        ``do_sample``, ``temperature``, ``top_k`` and ``top_p``. Here, the params all the endpoints take (temperature,
+        top_p, seed, and `generation_config`, a JSON of generation settings).
 
         Subclasses call ``super()._build_generation_kwargs(...)`` then add theirs (``max_tokens``, ``stop``, etc.).
         """
@@ -1299,7 +1286,6 @@ class BaseHandler:
         if body.get("seed") is not None:
             generation_kwargs["seed"] = int(body["seed"])  # set in the model's process, which generates
 
-        # --compile flag: use static cache + torch.compile for faster decode
         if self.generation_state._compile and default.cache_implementation is None:
             generation_kwargs["cache_implementation"] = "static"
 
@@ -1319,8 +1305,7 @@ class BaseHandler:
             for message in processor_inputs
             for part in (message.get("content") if isinstance(message.get("content"), list) else [])
         )
-        # 32 video frames (Gemma 4's default) unless the template's arguments say otherwise: some processors load
-        # them all otherwise
+        # 32 video frames (Gemma 4's default) unless the template's arguments set it: some processors load them all
         kwargs: dict = {"num_frames": 32} if has_video else {}
         kwargs.update(self._chat_template_kwargs(body))
         return engine.processor.apply_chat_template(

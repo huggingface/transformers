@@ -23,7 +23,6 @@ import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
 
@@ -53,6 +52,7 @@ from .utils import (
     _StreamError,
     build_response_parser,
     parse_assistant_message,
+    prompt_length,
 )
 
 
@@ -68,9 +68,7 @@ class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreamin
     chat_template_kwargs: dict
 
 
-# Fields accepted by the OpenAI schema but not yet supported.
-# Receiving these raises an error to avoid silent misbehaviour.
-# NOTE: "stop" is NOT in this set — we map it to stop_strings.
+# Fields of the OpenAI schema that are ignored, with a warning
 UNUSED_CHAT_COMPLETION_FIELDS = {
     "audio",
     "function_call",
@@ -91,9 +89,6 @@ UNUSED_CHAT_COMPLETION_FIELDS = {
     "user",
     "web_search_options",
 }
-
-
-logger = logging.get_logger(__name__)
 
 
 class ChatCompletionHandler(BaseHandler):
@@ -146,9 +141,7 @@ class ChatCompletionHandler(BaseHandler):
         processor, model_id = engine.processor, engine.model_id
         response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
         queue, streamer = engine.generate_streaming(inputs, generation_kwargs, response_parser=response_parser)
-        input_ids = inputs["input_ids"]
-        # CB returns plain lists, regular path returns tensors
-        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        input_len = prompt_length(inputs)
         created = int(time.time())
         content_template = self.sse_template(
             self._build_chunk_sse(request_id, model=model_id, created=created, content="<text>"), content="<text>"
@@ -221,7 +214,6 @@ class ChatCompletionHandler(BaseHandler):
                     )
                     yield self._build_chunk_sse(request_id, model=model_id, usage=usage, created=created)
             except (GeneratorExit, asyncio.CancelledError):
-                # Client disconnected — abort generation to free GPU.
                 # Re-raise is mandatory: Python raises RuntimeError if GeneratorExit is swallowed.
                 streamer.cancel()
                 raise

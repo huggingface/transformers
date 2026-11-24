@@ -25,7 +25,6 @@ import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
 
@@ -36,7 +35,7 @@ if is_serve_available():
     from openai.types.completion_create_params import CompletionCreateParamsBase
 
 
-from .utils import BaseHandler, EventStream, _StreamError
+from .utils import BaseHandler, EventStream, _StreamError, prompt_length
 
 
 if TYPE_CHECKING:
@@ -60,9 +59,6 @@ UNUSED_LEGACY_COMPLETION_FIELDS = {
     "presence_penalty",
     "user",
 }
-
-
-logger = logging.get_logger(__name__)
 
 
 class CompletionHandler(BaseHandler):
@@ -121,8 +117,7 @@ class CompletionHandler(BaseHandler):
         include_usage = bool(stream_options and stream_options.get("include_usage"))
         model_id = engine.model_id
         queue, streamer = engine.generate_streaming(inputs, generation_kwargs)
-        input_ids = inputs["input_ids"]
-        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        input_len = prompt_length(inputs)
         text_template = self.sse_template(self._build_chunk_sse(request_id, model_id, text="<text>"), text="<text>")
 
         async def sse_gen() -> AsyncGenerator[str, None]:

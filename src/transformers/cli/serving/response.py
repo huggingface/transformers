@@ -64,6 +64,7 @@ from .utils import (
     _StreamError,
     build_response_parser,
     parse_assistant_message,
+    prompt_length,
 )
 
 
@@ -391,7 +392,6 @@ class ResponseHandler(BaseHandler):
         self._validate_request(body)
 
         engine = self._get_engine(body)
-        # The Responses API's input (a string, items, instructions) as chat messages, then rendered like a chat's
         inputs = await self.run_in_thread(self.render_messages, engine, self._normalize_input(body), body)
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
         streaming = body.get("stream", False)
@@ -439,7 +439,6 @@ class ResponseHandler(BaseHandler):
         else:
             raise HTTPException(status_code=422, detail="'input' must be a string or list")
 
-        # Prepend instructions as a system message
         if instructions:
             if messages and messages[0]["role"] == "system":
                 messages[0]["content"] = instructions
@@ -514,16 +513,14 @@ class ResponseHandler(BaseHandler):
         tools = self._normalize_tools(body.get("tools"))
         response_parser = build_response_parser(processor, engine.model_config, inputs["input_ids"], tools=tools)
         queue, streamer = engine.generate_streaming(inputs, generation_kwargs, response_parser=response_parser)
-        input_ids = inputs["input_ids"]
-        # CB returns plain lists, regular path returns tensors
-        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        input_len = prompt_length(inputs)
 
         response_defaults = {
             "id": f"resp_{request_id}",
             "created_at": time.time(),
             "model": model_id,
             "object": "response",
-            # Required by pydantic but not used — echo request config back
+            # Required by pydantic
             "tools": [],
             "parallel_tool_calls": body.get("parallel_tool_calls", False),
             "tool_choice": "auto",
@@ -584,7 +581,6 @@ class ResponseHandler(BaseHandler):
 
                 yield "".join(builder.completed(compute_usage(input_len, streamer.total_tokens)))
             except (GeneratorExit, asyncio.CancelledError):
-                # Client disconnected — abort generation to free GPU.
                 # Re-raise is mandatory: Python raises RuntimeError if GeneratorExit is swallowed.
                 streamer.cancel()
                 raise
@@ -660,7 +656,7 @@ class ResponseHandler(BaseHandler):
             output=output_items,
             object="response",
             usage=usage,
-            # Required by pydantic but not used — echo request config back
+            # Required by pydantic
             tools=[],
             parallel_tool_calls=body.get("parallel_tool_calls", False),
             tool_choice="auto",

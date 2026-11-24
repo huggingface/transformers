@@ -161,7 +161,6 @@ class EngineClient:
         if process is None:  # not started, stopped already, or managed externally
             return
 
-        # The client: it has no running engine any more, and its requests in progress fail
         self.managed_process = None
         self._shutdown_requested.set()
         self.requests.cancel_join_thread()
@@ -175,7 +174,6 @@ class EngineClient:
         if self._loop is not None and not self._loop.is_closed():  # on the event loop, where their futures belong
             self._loop.call_soon_threadsafe(fail_all_requests)
 
-        # Shutdown the process
         self._lock.acquire()
         process.terminate()
 
@@ -372,7 +370,7 @@ class EngineClient:
             set_torch_seed(generation_state.seed)
 
         def send_results(ids: list[int], tokens: list[int], finished: list[tuple[int, Any]]) -> None:
-            if len(results) == 1:  # one API server: it's all for it
+            if len(results) == 1:
                 results[0].put((ids, tokens, finished))
                 return
             for api_server, results_queue in enumerate(results):
@@ -431,7 +429,7 @@ class ModelManager:
         self.loader = loader or ModelLoader()
         self.generation_state = generation_state or GenerationState()
         self.force_model = force_model
-        self.model_timeout = model_timeout if force_model is None else -1
+        self.model_timeout = model_timeout
         self.engines: dict[str, EngineClient] = {}
 
         # for /load_model
@@ -479,7 +477,7 @@ class ModelManager:
         """Load a model and stream progress as SSE events.
 
         Handles three cases:
-        1. Model already cached -> single ``ready`` event
+        1. Model loaded (its process running) -> single ``ready`` event
         2. Load already in progress -> join existing subscriber stream
         3. First request -> start loading, broadcast to all subscribers
 
@@ -497,12 +495,11 @@ class ModelManager:
             return
         model_id = engine.model_id
 
-        # Case 1: already loaded, its process running
         if engine.running:
             yield f"data: {json.dumps({'status': 'ready', 'model': model_id, 'cached': True})}\n\n"
             return
 
-        # Case 3: first request -- start the load. A request arriving while it runs (case 2) only subscribes below
+        # A request arriving while the load runs only subscribes below
         if model_id not in self._loading_tasks:
             self._loading_subscribers[model_id] = []
             loop = asyncio.get_running_loop()
@@ -533,7 +530,6 @@ class ModelManager:
 
             self._loading_tasks[model_id] = asyncio.create_task(run_load())
 
-        # Stream the load's events to this request, and unsubscribe when it ends or the client disconnects
         queue: asyncio.Queue[str | None] = asyncio.Queue()
         self._loading_subscribers[model_id].append(queue)
         try:
@@ -570,7 +566,6 @@ class ModelManager:
             `list[dict]`: OpenAI-compatible model list entries with ``id``, ``object``, etc., and a ``status``
             telling whether the model is loaded.
         """
-        # The models whose process is running
         loaded = [model_id for model_id, engine in self.engines.items() if engine.running]
 
         if self.force_model is not None:
@@ -639,7 +634,7 @@ class ModelLoader:
         quantization: str | None = None,
         continuous_batching: bool = False,
     ):
-        # Convert numeric device strings (e.g. "0") to int so device_map works correctly
+        # A GPU index, as `device_map` takes it
         self.device = int(device) if device.isdigit() else device
         self.dtype = self._resolve_dtype(dtype)
         self.trust_remote_code = trust_remote_code

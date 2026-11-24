@@ -29,7 +29,7 @@ if is_serve_available():
     from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
 
 from .model_manager import ModelManager
-from .utils import GenerationState, _StreamError, transcribe
+from .utils import _StreamError, transcribe
 
 
 if TYPE_CHECKING:
@@ -63,18 +63,16 @@ class TranscriptionHandler:
     runs speech-to-text, and returns an OpenAI-compatible Transcription response.
 
     Standalone (does not extend :class:`BaseHandler`) because audio requests use
-    multipart form data, not JSON bodies, and don't need generation config or
-    validation. The model runs in its own process (see `ModelManager.get_engine`).
+    multipart form data, not JSON bodies. The model runs in its own process (see
+    `ModelManager.get_engine`).
     """
 
-    def __init__(self, model_manager: ModelManager, generation_state: GenerationState):
+    def __init__(self, model_manager: ModelManager):
         """
         Args:
             model_manager (`ModelManager`): The models the server runs.
-            generation_state (`GenerationState`): How the models generate.
         """
         self.model_manager = model_manager
-        self.generation_state = generation_state
 
     def _validate_request(self, form_keys: set[str]) -> None:
         """Validate transcription request fields."""
@@ -146,7 +144,7 @@ class TranscriptionHandler:
                         yield f'data: {{"error": "{text.msg}"}}\n\n'
                         return
                     yield f"data: {text}\n\n"
-            finally:  # the client left: stop transcribing
+            finally:  # stops the transcription if the client left
                 streamer.cancel()
 
         return StreamingResponse(sse_gen(), media_type="text/event-stream")
