@@ -567,6 +567,10 @@ class ContinuousBatchingIOs:
         mtp_shift_ids, mtp_src, mtp_has_draft, mtp_prev_draft = [], [], [], []
         mtp_num_rows = self._get_num_sequences(use_padding=use_padding)  # logits rows of the step, padding included
 
+        # A host table is filled through numpy: a torch view per request was most of the step's host time at hundreds
+        # of requests
+        block_table = self.block_table.numpy() if self.block_table.device.type == "cpu" else self.block_table
+
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
             # First we retrieve the lengths related to the request
@@ -600,7 +604,7 @@ class ContinuousBatchingIOs:
             if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
                 pass  # uploaded once for the whole batch after the loop
             elif self.use_block_table:
-                self.cache.fill_block_table(state.request_id, past_length, query_length, self.block_table[:, i])
+                self.cache.fill_block_table(state.request_id, past_length, query_length, block_table[:, i])
             else:
                 self.cache.extend_read_and_write_indices(
                     state.request_id, past_length, query_length, host_read_index, write_index
