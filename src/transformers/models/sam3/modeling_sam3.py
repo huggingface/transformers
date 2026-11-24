@@ -2368,40 +2368,39 @@ class Sam3Model(Sam3PreTrainedModel):
 
         text_features = text_embeds.pooler_output
         text_mask = attention_mask.bool() if attention_mask is not None else None
-        has_geometry_prompts = input_boxes is not None and input_boxes.numel() > 0
-
-        geometry_prompt_features = None
-        geometry_prompt_mask = None
-
-        if has_geometry_prompts:
-            if input_boxes is not None and input_boxes.numel() > 0:
-                box_embeddings = input_boxes  # [batch_size, num_boxes, 4]
-                box_labels = (
-                    input_boxes_labels
-                    if input_boxes_labels is not None
-                    else torch.ones_like(box_embeddings[..., 0], dtype=torch.long)
-                )
-                box_mask = (
-                    (input_boxes_labels != -10)
-                    if input_boxes_labels is not None
-                    else torch.ones(batch_size, input_boxes.shape[1], dtype=torch.bool, device=device)
-                )
-                box_labels = torch.where(box_labels == -10, 0, box_labels)
-            else:
-                box_embeddings = torch.zeros(batch_size, 0, 4, dtype=text_features.dtype, device=device)
-                box_labels = torch.zeros(batch_size, 0, dtype=torch.long, device=device)
-                box_mask = torch.zeros(batch_size, 0, dtype=torch.bool, device=device)
-
-            geometry_outputs = self.geometry_encoder(
-                box_embeddings=box_embeddings,
-                box_mask=box_mask,
-                box_labels=box_labels,
-                img_feats=fpn_hidden_states,
-                img_pos_embeds=fpn_position_encoding,
+        # The geometry encoder is always invoked, even for text-only prompts. Meta's reference
+        # implementation always concatenates a learned "CLS" prompt token to the text features
+        # (regardless of whether geometric prompts are provided), and the downstream DETR
+        # encoder/decoder expects this extra token. Skipping the call for text-only prompts
+        # produces a different prompt structure than the pretrained checkpoint was trained with.
+        if input_boxes is not None and input_boxes.numel() > 0:
+            box_embeddings = input_boxes  # [batch_size, num_boxes, 4]
+            box_labels = (
+                input_boxes_labels
+                if input_boxes_labels is not None
+                else torch.ones_like(box_embeddings[..., 0], dtype=torch.long)
             )
+            box_mask = (
+                (input_boxes_labels != -10)
+                if input_boxes_labels is not None
+                else torch.ones(batch_size, input_boxes.shape[1], dtype=torch.bool, device=device)
+            )
+            box_labels = torch.where(box_labels == -10, 0, box_labels)
+        else:
+            box_embeddings = torch.zeros(batch_size, 0, 4, dtype=text_features.dtype, device=device)
+            box_labels = torch.zeros(batch_size, 0, dtype=torch.long, device=device)
+            box_mask = torch.zeros(batch_size, 0, dtype=torch.bool, device=device)
 
-            geometry_prompt_features = geometry_outputs.last_hidden_state
-            geometry_prompt_mask = geometry_outputs.attention_mask
+        geometry_outputs = self.geometry_encoder(
+            box_embeddings=box_embeddings,
+            box_mask=box_mask,
+            box_labels=box_labels,
+            img_feats=fpn_hidden_states,
+            img_pos_embeds=fpn_position_encoding,
+        )
+
+        geometry_prompt_features = geometry_outputs.last_hidden_state
+        geometry_prompt_mask = geometry_outputs.attention_mask
 
         if geometry_prompt_features is not None:
             # Repeat text_features for all geometry prompts

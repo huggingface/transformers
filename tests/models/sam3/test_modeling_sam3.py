@@ -934,6 +934,30 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
                 )
 
+    def test_text_only_prompt_includes_cls_token(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values, input_ids, attention_mask = config_and_inputs
+        model = Sam3Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        geo_calls = []
+        detr_prompt_lens = []
+
+        model.geometry_encoder.register_forward_hook(lambda m, a, o: geo_calls.append(1))
+        model.detr_encoder.register_forward_pre_hook(
+            lambda m, a, kw: detr_prompt_lens.append(kw["text_features"].shape[1]),
+            with_kwargs=True,
+        )
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask)
+
+        # Geometry encoder must run even for text-only prompts to provide the learned CLS token
+        self.assertEqual(len(geo_calls), 1)
+        self.assertEqual(detr_prompt_lens[0], input_ids.shape[1] + 1)
+        self.assertIsNotNone(outputs.pred_masks)
+
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         """Override to ensure input_ids and attention_mask are always present for Sam3Model."""
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
