@@ -27,7 +27,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
@@ -242,7 +242,10 @@ class ModernVBertModel(ModernVBertPreTrainedModel, MultimodalMixin):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_features)
+        image_outputs.split_sizes = image_features.new_full(
+            (image_features.shape[0],), image_features.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_features.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple

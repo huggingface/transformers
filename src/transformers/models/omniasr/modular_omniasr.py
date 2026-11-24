@@ -20,7 +20,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import (
@@ -264,7 +263,8 @@ class OmniASRModel(VoxtralModel):
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
         frames_mask = audio_output.attention_mask
         if frames_mask is None:
-            audio_embeds, split_sizes = flatten_items(audio_embeds)
+            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            audio_embeds = audio_embeds.flatten(0, 1)
         else:
             frames_mask = frames_mask.to(audio_embeds.device).bool()
             audio_embeds, split_sizes = audio_embeds[frames_mask], frames_mask.sum(-1)

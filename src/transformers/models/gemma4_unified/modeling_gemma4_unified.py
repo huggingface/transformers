@@ -39,7 +39,7 @@ from ...masking_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -1270,7 +1270,8 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
             input_features_mask = input_features_mask.to(audio_embeds.device)
             pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
         else:
-            pooler_output, split_sizes = flatten_items(audio_embeds)
+            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            pooler_output = audio_embeds.flatten(0, 1)
         return Gemma4UnifiedAudioModelOutput(
             pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
         )

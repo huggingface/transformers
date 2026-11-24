@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -876,7 +876,10 @@ class ChameleonModel(ChameleonPreTrainedModel, MultimodalMixin):
         vqmodel_outputs: ChameleonVQVAEModelOutput = self.vqmodel.encode(pixel_values, return_dict=True, **kwargs)
         bpe_tokens = self.vocabulary_mapping.convert_img2bpe(vqmodel_outputs.image_tokens).view(batch_size, -1)
         vqmodel_outputs.pooler_output = self.get_input_embeddings()(bpe_tokens)
-        vqmodel_outputs.pooler_output, vqmodel_outputs.split_sizes = flatten_items(vqmodel_outputs.pooler_output)
+        vqmodel_outputs.split_sizes = vqmodel_outputs.pooler_output.new_full(
+            (vqmodel_outputs.pooler_output.shape[0],), vqmodel_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vqmodel_outputs.pooler_output = vqmodel_outputs.pooler_output.flatten(0, 1)
         return vqmodel_outputs
 
     def get_placeholder_mask(

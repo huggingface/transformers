@@ -32,7 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -1498,8 +1498,10 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
             token_mask = positions[None, :] < num_tokens[:, None]
             audio_features, split_sizes = audio_features[token_mask], num_tokens
         else:
-            audio_features, split_sizes = flatten_items(audio_features)
-
+            split_sizes = audio_features.new_full(
+                (audio_features.shape[0],), audio_features.shape[1], dtype=torch.long
+            )
+            audio_features = audio_features.flatten(0, 1)
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,

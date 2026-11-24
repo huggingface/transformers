@@ -22,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -376,7 +376,10 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel, MultimodalMixin):
             audio_outputs.pooler_output = projected_embeds[input_features_mask]
             audio_outputs.split_sizes = input_features_mask.sum(-1)
         else:
-            audio_outputs.pooler_output, audio_outputs.split_sizes = flatten_items(projected_embeds)
+            audio_outputs.split_sizes = projected_embeds.new_full(
+                (projected_embeds.shape[0],), projected_embeds.shape[1], dtype=torch.long
+            )
+            audio_outputs.pooler_output = projected_embeds.flatten(0, 1)
         return audio_outputs
 
     def get_placeholder_mask(

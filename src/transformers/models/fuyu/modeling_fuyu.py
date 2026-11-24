@@ -18,7 +18,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.auto.modeling_auto import AutoModel
@@ -119,7 +119,8 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
         patch_embeddings = self.vision_embed_tokens(pixel_values)
         # A batch of images' patches, or a single image's
         images_patches = patch_embeddings if patch_embeddings.ndim == 3 else patch_embeddings[None]
-        pooler_output, split_sizes = flatten_items(images_patches)
+        split_sizes = images_patches.new_full((images_patches.shape[0],), images_patches.shape[1], dtype=torch.long)
+        pooler_output = images_patches.flatten(0, 1)
         return BaseModelOutputWithPooling(
             last_hidden_state=patch_embeddings, pooler_output=pooler_output, split_sizes=split_sizes
         )

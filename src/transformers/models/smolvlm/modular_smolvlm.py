@@ -21,7 +21,7 @@ from torch import nn
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -185,7 +185,10 @@ class SmolVLMModel(Idefics3Model):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_features)
+        image_outputs.split_sizes = image_features.new_full(
+            (image_features.shape[0],), image_features.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_features.flatten(0, 1)
         return image_outputs
 
     @merge_with_config_defaults

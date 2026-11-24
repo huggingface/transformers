@@ -34,7 +34,6 @@ from ...image_utils import (
 )
 from ...integrations import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalMoeBaseModelOutputWithPast,
@@ -836,7 +835,10 @@ class AriaModel(LlavaModel):
 
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
+            (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

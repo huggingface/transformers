@@ -19,7 +19,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalCausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -276,8 +276,8 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
             audio_embeds = audio_embeds[valid_mask]
             split_sizes = valid_mask.sum(-1)
         else:
-            audio_embeds, split_sizes = flatten_items(audio_embeds)
-
+            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            audio_embeds = audio_embeds.flatten(0, 1)
         return BaseModelOutputWithPooling(
             last_hidden_state=audio_outputs.last_hidden_state,
             pooler_output=audio_embeds,

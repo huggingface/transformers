@@ -21,7 +21,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
+from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -289,7 +289,10 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel, MultimodalMixin):
             padding_mask = (positions < num_audio_tokens[:, None]).cpu()
             combined_features, split_sizes = combined_features[padding_mask], num_audio_tokens
         else:
-            combined_features, split_sizes = flatten_items(combined_features)
+            split_sizes = combined_features.new_full(
+                (combined_features.shape[0],), combined_features.shape[1], dtype=torch.long
+            )
+            combined_features = combined_features.flatten(0, 1)
         return BaseModelOutputWithPooling(
             last_hidden_state=acoustic_latents, pooler_output=combined_features, split_sizes=split_sizes
         )

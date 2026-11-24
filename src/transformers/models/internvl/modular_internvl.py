@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -533,7 +533,10 @@ class InternVLModel(LlavaModel):
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
         vision_outputs.pooler_output = vision_features
-        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     @can_return_tuple

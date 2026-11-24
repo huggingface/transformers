@@ -26,7 +26,6 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
-from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
@@ -1103,7 +1102,8 @@ class Gemma4UnifiedModel(Gemma4Model):
             input_features_mask = input_features_mask.to(audio_embeds.device)
             pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
         else:
-            pooler_output, split_sizes = flatten_items(audio_embeds)
+            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            pooler_output = audio_embeds.flatten(0, 1)
         return Gemma4UnifiedAudioModelOutput(
             pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
         )

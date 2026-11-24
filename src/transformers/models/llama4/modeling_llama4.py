@@ -29,7 +29,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -1181,7 +1181,10 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
-        image_features, image_outputs.split_sizes = flatten_items(image_outputs.last_hidden_state)
+        image_outputs.split_sizes = image_outputs.last_hidden_state.new_full(
+            (image_outputs.last_hidden_state.shape[0],), image_outputs.last_hidden_state.shape[1], dtype=torch.long
+        )
+        image_features = image_outputs.last_hidden_state.flatten(0, 1)
         image_outputs.pooler_output = self.multi_modal_projector(image_features)
         return image_outputs
 

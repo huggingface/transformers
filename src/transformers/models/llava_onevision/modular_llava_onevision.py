@@ -33,7 +33,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -611,7 +611,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
         image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
         vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
-        vision_outputs.pooler_output, vision_outputs.split_sizes = flatten_items(vision_outputs.pooler_output)
+        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
+            (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
+        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs
 
     @merge_with_config_defaults

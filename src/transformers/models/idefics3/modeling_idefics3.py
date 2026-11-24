@@ -25,7 +25,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -581,8 +581,10 @@ class Idefics3Model(Idefics3PreTrainedModel, MultimodalMixin):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_features)
-
+        image_outputs.split_sizes = image_features.new_full(
+            (image_features.shape[0],), image_features.shape[1], dtype=torch.long
+        )
+        image_outputs.pooler_output = image_features.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple
