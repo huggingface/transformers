@@ -46,11 +46,12 @@ jobs:
       contents: read
       actions: read
       pull-requests: write
-    uses: huggingface/transformers-ci/.github/workflows/pr-ci_record_mic.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/pr-ci_record_mic.yml@220b2c4bfb9db12668df32b13143f4e08b450936 # EXPERIMENT mic-stack-experiment, revert before merge
     with:
       pr: ${{ github.event.issue.number || inputs.pr }}
       request: "${{ github.event.comment.body || format('record-mic: {0}', inputs.models) }}"
       requested_by: ${{ github.event.comment.user.login || github.actor }}
       requested_at: ${{ github.event.comment.created_at }}
+      ci_sha: 220b2c4bfb9db12668df32b13143f4e08b450936
     secrets:
       mic_write_token: ${{ secrets.MIC_RECORD_WRITE_TOKEN }}
