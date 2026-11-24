@@ -34,7 +34,7 @@ class MiniCPMV2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @staticmethod
     def prepare_processor_dict():
-        # The converted checkpoint's chat template: each image item becomes `<image_id>N</image_id><unk>`
+        # Renders images like the converted checkpoints' chat templates: `<image_id>N</image_id><unk>`
         chat_template = (
             "{%- set ns = namespace(image_count=0) -%}"
             "{%- for message in messages -%}"
