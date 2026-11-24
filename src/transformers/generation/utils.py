@@ -47,8 +47,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
-from ..modeling_multimodal_utils import placeholder_features
-from ..modeling_outputs import BaseModelOutputWithPooling
+from ..modeling_multimodal_utils import map_features, placeholder_features
 from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
@@ -1147,6 +1146,16 @@ class GenerationMixin(ContinuousMixin):
                 # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
                 return list(inputs) * repeat_times
 
+        def repeat_groups(counts: torch.LongTensor, total: int) -> torch.LongTensor:
+            # Index repeating each group of `counts` contiguous entries `expand_size` times in a row, without a host
+            # sync, as `input_ids.repeat_interleave` repeats each sample's row
+            sizes = counts * expand_size
+            group = torch.repeat_interleave(
+                torch.arange(len(counts), device=counts.device), sizes, output_size=total * expand_size
+            )
+            offset = torch.arange(total * expand_size, device=counts.device) - (sizes.cumsum(0) - sizes)[group]
+            return (counts.cumsum(0) - counts)[group] + offset % counts[group]
+
         # Our own dict and outputs, as they may be the user's
         mm_encoder_output = dict(mm_encoder_output)
         for modality in ["image", "video"]:
@@ -1176,17 +1185,24 @@ class GenerationMixin(ContinuousMixin):
 
             # Flat outputs from `get_*_embeddings`: each sample's rows are contiguous, one gather repeats them
             if is_flat:
-                mm_encoder_output[modality] = _repeat_flat_outputs(
-                    modality_outputs, num_image_tokens_in_text, expand_size
+                rows = repeat_groups(num_image_tokens_in_text.to(features.device), features.shape[0])
+                map_features(modality_outputs, lambda features: features[rows.to(features.device)])
+                # The items follow their rows: find each item's sample from where its rows start, then repeat them
+                split_sizes = cast(torch.LongTensor, modality_outputs.split_sizes).to(features.device)
+                item_start = split_sizes.cumsum(0) - split_sizes
+                item_sample = torch.searchsorted(num_image_tokens_in_text.cumsum(0), item_start, right=True)
+                items_per_sample = torch.zeros_like(num_image_tokens_in_text).scatter_add_(
+                    0, item_sample, torch.ones_like(item_sample)
                 )
+                modality_outputs.split_sizes = split_sizes[repeat_groups(items_per_sample, len(split_sizes))]
                 continue
 
             # Per-item outputs, passed by users: from `get_*_features` (deprecated, they keep their `split_sizes`) or
             # their own encoder
             if getattr(modality_outputs, "split_sizes", None) is not None:
                 logger.warning_once(
-                    "Passing per-item `mm_encoder_outputs` (from `get_*_features`) to `generate` is deprecated and will "
-                    "be removed in v5.29: pass the flat outputs of `get_*_embeddings` (`get_image_embeddings`, ...)."
+                    f"Passing per-item `mm_encoder_outputs['{modality}']` (from `get_{modality}_features`) to `generate` "
+                    f"is deprecated and will be removed in v5.29: pass the flat outputs of `get_{modality}_embeddings`."
                 )
             num_image_tokens_in_vision = [len(out) for out in modality_outputs.pooler_output]
             num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
@@ -4445,41 +4461,6 @@ class GenerationMixin(ContinuousMixin):
 
             # Latest outputs contain next token logits
             return outputs
-
-
-def _repeat_index(counts: torch.LongTensor, repeats: int, total: int) -> torch.LongTensor:
-    """Index repeating each group of `counts` contiguous entries `repeats` times in a row, without a host sync."""
-    sizes = counts * repeats
-    group = torch.repeat_interleave(
-        torch.arange(len(counts), device=counts.device), sizes, output_size=total * repeats
-    )
-    offset = torch.arange(total * repeats, device=counts.device) - (sizes.cumsum(0) - sizes)[group]
-    return (counts.cumsum(0) - counts)[group] + offset % counts[group]
-
-
-def _repeat_flat_outputs(
-    outputs: BaseModelOutputWithPooling, rows_per_sample: torch.LongTensor, repeats: int
-) -> BaseModelOutputWithPooling:
-    """Repeats each sample's rows of flat `get_*_embeddings` outputs, as `input_ids.repeat_interleave` does its row."""
-    pooler_output = outputs.pooler_output
-    deepstack_features = getattr(outputs, "deepstack_features", None)
-    reference = placeholder_features(outputs)
-    rows = _repeat_index(rows_per_sample.to(reference.device), repeats, reference.shape[0])
-
-    def repeat(features: torch.Tensor) -> torch.Tensor:
-        return features[rows.to(features.device)]
-
-    if isinstance(pooler_output, torch.Tensor):
-        outputs.pooler_output = repeat(pooler_output)
-    if deepstack_features is not None:
-        outputs.deepstack_features = [repeat(features) for features in deepstack_features]
-
-    # The items follow their rows: find each item's sample from where its rows start, then repeat each sample's items
-    split_sizes = cast(torch.LongTensor, outputs.split_sizes).to(rows_per_sample.device)
-    item_sample = torch.searchsorted(rows_per_sample.cumsum(0), split_sizes.cumsum(0) - split_sizes, right=True)
-    items_per_sample = torch.zeros_like(rows_per_sample).scatter_add_(0, item_sample, torch.ones_like(item_sample))
-    outputs.split_sizes = split_sizes[_repeat_index(items_per_sample, repeats, len(split_sizes))]
-    return outputs
 
 
 def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:

@@ -1600,7 +1600,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest(reason="Won't fix: old model that adds image placeholders during `forward`")
 
             # TODO: audio too, once audio models' forwards read pre-encoded `mm_encoder_outputs["audio"]` and generate
-            # encodes it with `get_audio_embeddings`
+            # encodes it with `get_audio_embeddings` (https://github.com/huggingface/transformers/issues/50946)
             if not any(
                 modality in model_class.input_modalities and hasattr(model_class, f"get_{modality}_features")
                 for modality in ["image", "video"]
@@ -1625,7 +1625,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             inputs_dict_with_encoded_outputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
             mm_encoder_outputs = inputs_dict_with_encoded_outputs.pop("mm_encoder_outputs")
             if not mm_encoder_outputs:
-                self.skipTest(reason="The tester's inputs hold no images or videos")
+                self.skipTest(reason="The tester's inputs give no multimodal outputs")
             with self.assertRaisesRegex(ValueError, "You cannot pass both: raw pixels and pre-computed embeddings"):
                 model.generate(
                     **original_inputs_dict,
