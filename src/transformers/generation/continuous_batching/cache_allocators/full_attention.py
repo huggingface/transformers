@@ -187,8 +187,11 @@ class FullAttentionCacheAllocator(CacheAllocator):
         """Fills the request's row of the kernel block table."""
         block_ids = self.block_table[request_id]
         pages_stride = self.block_physical_stride // self.tokens_per_page
-        entries = torch.tensor(block_ids, dtype=block_table.dtype) * pages_stride
-        block_table[: len(block_ids)].copy_(entries, non_blocking=True)
+        # Written through numpy into the host table: a torch tensor per request took most of the step's host time at
+        # hundreds of requests
+        row = block_table.numpy()[: len(block_ids)]
+        row[:] = block_ids
+        row *= pages_stride
 
     # ________________________________________________ RUNTIME UPDATE ________________________________________________ #
 
