@@ -1146,12 +1146,13 @@ class GenerationMixin(ContinuousMixin):
                 # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
                 return list(inputs) * repeat_times
 
-        # A dict of our own, as it may be the user's
+        # Our own dict and outputs, as they may be the user's
         mm_encoder_output = dict(mm_encoder_output)
         for modality in ["image", "video"]:
             modality_outputs = mm_encoder_output.get(modality)
             if modality_outputs is None:
                 continue
+            modality_outputs = mm_encoder_output[modality] = copy.copy(modality_outputs)
             pooler_output = getattr(modality_outputs, "pooler_output", None)
             deepstack_features = getattr(modality_outputs, "deepstack_features", None)
             # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
@@ -1189,8 +1190,6 @@ class GenerationMixin(ContinuousMixin):
                     "Passing per-item `mm_encoder_outputs` (from `get_*_features`) to `generate` is deprecated and will "
                     "be removed in v5.29: pass the flat outputs of `get_*_embeddings` (`get_image_embeddings`, ...)."
                 )
-            # A copy, as the outputs may be the user's
-            modality_outputs = mm_encoder_output[modality] = copy.copy(modality_outputs)
             num_image_tokens_in_vision = [len(out) for out in modality_outputs.pooler_output]
             num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
             num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
@@ -4473,8 +4472,6 @@ def _repeat_flat_outputs(
     def repeat(features: torch.Tensor) -> torch.Tensor:
         return features[rows.to(features.device)]
 
-    # A copy, as the outputs may be the user's (some getters set `split_sizes` on a vision tower's output class)
-    outputs = copy.copy(outputs)
     if isinstance(pooler_output, torch.Tensor):
         outputs.pooler_output = repeat(pooler_output)
     if deepstack_features is not None:
