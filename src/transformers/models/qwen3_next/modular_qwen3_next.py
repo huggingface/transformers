@@ -296,8 +296,8 @@ def torch_chunk_gated_delta_rule(
 
     # Apply beta to K and V, which is the "learning rate" of the recurrent state for a given token, ie. how much the new
     # state influence the old state. Beta is often normalized to (0, 1) where 0 = no update; 1 = overwrite old state.
-    v_beta = chunked_value * beta.unsqueeze(-1)
-    k_beta = chunked_key * beta.unsqueeze(-1)
+    v_beta = chunked_value * chunked_beta.unsqueeze(-1)
+    k_beta = chunked_key * chunked_beta.unsqueeze(-1)
 
     # Reshape all tensors to chunk the sequence dimension (adds a new dimension of size chunk_size)
     chunked_query, chunked_key, k_beta, v_beta = [
@@ -379,7 +379,7 @@ def torch_chunk_gated_delta_rule(
         decay_t = sequential_decay[:, :, i].exp()[..., None, None]
         last_recurrent_state = last_recurrent_state * decay_t
         # Update the recurrent state with the current token
-        beta_t = beta[:, :, i].unsqueeze(-1)
+        beta_t = sequential_beta[:, :, i].unsqueeze(-1)
         kv_mem = (last_recurrent_state * k_t.unsqueeze(-1)).sum(dim=-2)
         delta = (v_t - kv_mem) * beta_t
         last_recurrent_state = last_recurrent_state + k_t.unsqueeze(-1) * delta.unsqueeze(-2)

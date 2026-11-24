@@ -1206,7 +1206,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
     def lazy_initialization(
         self,
         conv_states: torch.Tensor | None = None,
-        recurrent_states: torch.Tensor | None = None,
+        recurrent_states: torch.Tensor | list[torch.Tensor] | None = None,
         state_idx: int = 0,
         conv_kernel_size: int | None = None,
     ) -> None:
@@ -1230,7 +1230,9 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
 
         if recurrent_states is not None:
             # The shape is always static, so we init as such
-            self.recurrent_states[state_idx] = torch.zeros_like(recurrent_states)
+            self.recurrent_states[state_idx] = torch.zeros_like(
+                recurrent_states if isinstance(recurrent_states, torch.Tensor) else recurrent_states[0]
+            )
             # Mark as static address to be able to use cudagraphs
             if not is_torchdynamo_compiling():
                 torch._dynamo.mark_static_address(self.recurrent_states[state_idx])
