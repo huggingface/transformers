@@ -313,220 +313,211 @@ class DynamicSlidingWindowLayer(DynamicLayer):
             self.cumulative_length = self.keys.shape[-2]
 
 
-class DynamicIndexedLayer(DynamicLayer):
-    """Dynamic indexed cache for compressed groups and unfinished raw tokens."""
+class DynamicCompressedLayer(DynamicLayer):
+    """
+    Dynamic KV cache with compressed state streams. Note that a state is not necessarily only the key but
+    also anything needed to compress the groups afterwards, e.g. qwen4's RoPE cos/sin, glm 5 next's gates, etc.
 
-    is_croppable = False
+    Each stream can have compressed states, and the remaining tail. On subsequent updates, the tail can become
+    new groups and we create a new (empty) tail.
+
+    Example with group_size=4:
+        Tokens:      A B C D E F
+        Compressed:  [pool(ABCD), pool(EF00)]
+        Tail:        [E, F, 0, 0]
+
+    With overlap_groups=1 (dsv4):
+        Tail:        [A, B, C, D, E, F, 0, 0]
+
+    Note that an incomplete pool as in the first case will not be selected at the end.
+    """
+
+    is_croppable = False  # compression makes this impossible or we would need to track full raw states
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.indexer_pools = None
-        self.indexer_tail = None
-        self.indexer_counts = None
-        self.indexer_first_slot = None
-        self.indexer_length = 0
+        self.compressed_states = {}
+        self.compression_tails = {}
 
-        # Metadata for the current prepare/update/select cycle.
-        self._indexer_group_size = 1
-        self._indexer_complete_count = None
-        self._indexer_query_counts = None
-        self._indexer_query_valid = None
-
-
-    def update_groups(
+    def prepare_compression_groups(
         self,
         states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
         group_size: int = 1,
-        pool_dim: int | None = None,
+        overlap_groups: int = 0,
+        name: str = "indexer",
     ) -> torch.Tensor:
-        """Pack valid tokens into groups and retain selection metadata."""
-        batch, length, dim = states.shape
-        pool_dim = dim if pool_dim is None else pool_dim
+        """
+        Combine unfinished history with incoming valid tokens.
 
-        if self.indexer_pools is None:
-            self.indexer_pools = states.new_empty(batch, 0, pool_dim)
-            self.indexer_tail = states.new_zeros(batch, group_size - 1, dim)
-            self.indexer_counts = torch.zeros(batch, dtype=torch.long, device=states.device)
-            self.indexer_first_slot = torch.full((batch,), -1, dtype=torch.long, device=states.device)
+        Example with group_size=4:
+            Previous tail: [E, F, 0, 0]
+            Incoming:      [G, H, I]
+            Candidate:     [E, F, G, H]
+            Next tail:     [I, 0, 0, 0]
+        """
+        batch_size, seq_length, dim = states.shape
+        device = states.device
 
-        valid = attention_mask[:, -length:].bool() if attention_mask is not None else torch.ones(
-            batch, length, dtype=torch.bool, device=states.device
+        counts = attention_mask[:, -(seq_length + 1) :]
+        history_length = (1 + overlap_groups) * group_size
+
+        past_groups = counts[:, :1] // group_size
+        new_groups = counts[:, -1:] // group_size - past_groups
+        num_candidates = (seq_length + group_size - 1) // group_size
+
+        tail = self.compression_tails.get(name)
+
+        if tail is None:
+            window = states.new_zeros(batch_size, history_length + num_candidates * group_size, dim)
+        else:
+            window = torch.nn.functional.pad(tail, (0, 0, 0, num_candidates * group_size))
+
+        # Append valid tokens without overwriting retained history
+        slots = (counts[:, 1:] - 1 - (past_groups - overlap_groups) * group_size).clamp_min(0)
+        valid = counts.diff(dim=1) > 0
+
+        window.scatter_add_(
+            1,
+            slots[..., None].expand_as(states),
+            states.masked_fill(~valid[..., None], 0),
         )
 
-        old_counts = self.indexer_counts
-        old_tail_count = old_counts % group_size
-        new_counts = old_counts + valid.long().sum(-1)
+        # Ordinary and overlapping compression differ only in window width
+        groups = window.unfold(1, history_length, group_size).transpose(-1, -2)
 
-        packed = states.new_zeros(batch, group_size - 1 + length, dim)
-        if group_size > 1:
-            packed[:, :group_size - 1] = self.indexer_tail
+        batch_indices = torch.arange(batch_size, device=device)
+        self.compression_tails[name] = groups[batch_indices, new_groups.squeeze(1)]
 
-        write_slots = old_tail_count[:, None] + valid.long().cumsum(-1) - 1
-        packed.scatter_add_(
-            1, write_slots.clamp(min=0)[..., None].expand(-1, -1, dim), states * valid[..., None]
-        )
+        return groups[:, :-1]
 
-        counts = old_counts[:, None] + valid.long().cumsum(-1)
-        complete_count = (old_tail_count + valid.long().sum(-1)) // group_size
-        group_count = (group_size - 1 + length) // group_size
-        groups = packed[:, :group_count * group_size].reshape(batch, group_count, group_size, dim)
+    def update_compressed_states(
+        self,
+        states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        query_length: int,
+        group_size: int = 1,
+        name: str = "indexer",
+    ) -> torch.Tensor:
+        """
+        Store compressed candidates after the previously completed groups.
 
-        if group_size > 1:
-            offsets = torch.arange(group_size - 1, device=states.device)
-            pending_size = new_counts % group_size
-            start = complete_count * group_size
-            pending = packed.gather(
-                1,
-                (start[:, None] + offsets).clamp(max=packed.shape[1] - 1)[..., None].expand(-1, -1, dim),
-            )
-            self.indexer_tail = pending * (offsets[None, :] < pending_size[:, None])[..., None]
+        Example:
+            Previous keys: [ABCD, EF00]
+            New keys:      [EFGH]
+            Updated keys:  [ABCD, EFGH]
 
-        self.indexer_first_slot = torch.where(
-            (old_counts == 0) & valid.any(-1),
-            self.indexer_length + valid.long().argmax(-1),
-            self.indexer_first_slot,
-        )
-        self.indexer_counts = new_counts
-        self.indexer_length += length
+        Note that an already completed group would never be overwritten.
+        """
+        compressed = self.compressed_states.get(name)
 
-        self._indexer_group_size = group_size
-        self._indexer_complete_count = complete_count
-        self._indexer_query_counts = counts
-        self._indexer_query_valid = valid
-        return groups
+        if compressed is None:
+            self.compressed_states[name] = states.contiguous()
+            self.device = states.device
+            return self.compressed_states[name]
 
-    def update_keys(self, new_pools: torch.Tensor) -> torch.Tensor:
-        """Store newly completed compressed groups."""
-        batch, groups, dim = new_pools.shape
-        group_size = self._indexer_group_size
-        complete_count = self._indexer_complete_count
+        capacity = (attention_mask.shape[1] + group_size - 2) // group_size
 
-        capacity = self.indexer_length // group_size
-        extra = capacity - self.indexer_pools.shape[1]
-        if extra > 0:
-            self.indexer_pools = torch.cat(
-                (self.indexer_pools, new_pools.new_zeros(batch, extra, dim)), dim=1
-            )
+        # Pre-allocate storage for next groups
+        if capacity > compressed.shape[1]:
+            compressed = torch.nn.functional.pad(compressed, (0, 0, 0, capacity - compressed.shape[1]))
 
-        if groups and capacity:
-            old_group_counts = self.indexer_counts // group_size - complete_count
-            offsets = torch.arange(groups, device=new_pools.device)
-            destinations = (old_group_counts[:, None] + offsets).clamp(max=capacity - 1)
-            completed = offsets[None, :] < complete_count[:, None]
-            self.indexer_pools.scatter_add_(
-                1, destinations[..., None].expand_as(new_pools), new_pools * completed[..., None]
-            )
+        past_groups = attention_mask[:, -(query_length + 1) : -query_length] // group_size
 
-        return self.indexer_pools
+        batch_indices = torch.arange(states.shape[0], device=states.device)[:, None]
+        group_indices = past_groups + torch.arange(states.shape[1], device=states.device)
 
-    def select_indices(self, scores: torch.Tensor, budget: int, tail: bool = False) -> torch.Tensor:
-        """Select completed groups and optionally the unfinished tail."""
-        group_size = self._indexer_group_size
-        counts = self._indexer_query_counts
-        query_valid = self._indexer_query_valid
-        first_slot = self.indexer_first_slot
+        compressed[batch_indices, group_indices] = states
+        self.compressed_states[name] = compressed
 
-        _, _, groups = scores.shape
+        return compressed
+
+    def select_indices(
+        self,
+        scores: torch.Tensor,
+        attention_mask: torch.Tensor,
+        budget: int,
+        group_size: int = 1,
+        include_tail: bool = False,
+        return_groups: bool = False,
+    ) -> torch.Tensor:
+        """
+        Select complete causal groups.
+
+        By default, the budget counts tokens and selected groups are expanded
+        into physical KV indices. With `return_groups=True`, the budget counts
+        compressed entries instead (see dsv4 for example).
+
+        Example with group_size=2 and five visible tokens:
+            Selected group: 1
+            Token indices:  [2, 3]
+            With tail:      [2, 3, 4]
+
+        Note that the tail is not included in the budget.
+        Finally, to keep consistent shapes, we pad with -1 (which will be filtered).
+        """
+        counts = attention_mask[:, -(scores.shape[-2] + 1) :]
+        query_counts = counts[:, 1:].masked_fill(counts.diff(dim=1) == 0, 0)
+        complete_groups = query_counts[..., None] // group_size
+
+        group_ids = torch.arange(scores.shape[-1], device=scores.device)
+        visible = group_ids < complete_groups
+
+        k = min(budget if return_groups else budget // group_size, scores.shape[-1])
+
+        top_scores, groups = scores.masked_fill(~visible, float("-inf")).topk(k, dim=-1)
+        groups = groups.masked_fill(top_scores == float("-inf"), -1)
+
+        if return_groups:
+            return groups
+
+        # Expand selected groups while preserving invalid selections
         offsets = torch.arange(group_size, device=scores.device)
-        complete = counts[..., None] >= (torch.arange(1, groups + 1, device=scores.device) * group_size)
-        complete &= query_valid[..., None]
+        indices = (groups[..., None] * group_size + offsets).clamp_min(-1).flatten(-2)
 
-        topk = min(budget // group_size, groups)
-        top = scores.masked_fill(~complete, torch.finfo(scores.dtype).min).topk(topk, dim=-1).indices
+        # Keeps uniform shapes to be tensor friendly
+        if indices.shape[-1] < budget:
+            indices = torch.nn.functional.pad(indices, (0, budget - indices.shape[-1]), value=-1)
 
-        chosen = first_slot[:, None, None, None] + top[..., None] * group_size + offsets
-        chosen = chosen.masked_fill(~complete.gather(-1, top)[..., None], -1)
-        chosen = torch.nn.functional.pad(chosen.flatten(-2), (0, budget - topk * group_size), value=-1)
+        if include_tail:
+            tail = complete_groups * group_size + offsets[:-1]
+            tail = tail.masked_fill(tail >= query_counts[..., None], -1)
+            indices = torch.cat((indices, tail), dim=-1)
 
-        if tail and group_size > 1:
-            tail_size = counts % group_size
-            tail_offsets = offsets[:-1]
-            tail_slots = first_slot[:, None, None] + (counts - tail_size)[..., None] + tail_offsets
-            tail_slots = tail_slots.masked_fill(tail_offsets >= tail_size[..., None], -1)
-            chosen = torch.cat((chosen, tail_slots), dim=-1)
-
-        return chosen.masked_fill(~query_valid[..., None], -1).to(torch.int32)
-
-    def offload(self):
-        super().offload()
-        if self.indexer_pools is not None:
-            for name in (
-                "indexer_pools",
-                "indexer_tail",
-                "indexer_counts",
-                "indexer_first_slot",
-            ):
-                setattr(
-                    self, name,
-                    getattr(self, name).to("cpu", non_blocking=True),
-                )
-
-    def prefetch(self):
-        super().prefetch()
-        if self.indexer_pools is not None:
-            for name in (
-                "indexer_pools",
-                "indexer_tail",
-                "indexer_counts",
-                "indexer_first_slot",
-            ):
-                setattr(
-                    self, name,
-                    getattr(self, name).to(self.device, non_blocking=True),
-                )
+        # Conversion selected groups (and tail) to the actual selected tokens
+        return (
+            torch.searchsorted(attention_mask, indices.flatten(1), right=True, out_int32=True).reshape_as(indices) - 1  # -1 for the boundary
+        )
 
     def reset(self):
         super().reset()
-        self.indexer_pools = self.indexer_tail = None
-        self.indexer_counts = self.indexer_first_slot = None
-        self.indexer_length = 0
-        self._indexer_group_size = 1
-        self._indexer_complete_count = None
-        self._indexer_query_counts = None
-        self._indexer_query_valid = None
-
-    def crop(self, tokens_to_remove):
-        if tokens_to_remove:
-            raise RuntimeError(
-                "Compressed indexer caches cannot roll back completed groups"
-            )
+        self.compressed_states.clear()
+        self.compression_tails.clear()
 
     def reorder_cache(self, beam_idx):
         super().reorder_cache(beam_idx)
-        if self.indexer_pools is not None:
-            for name in (
-                "indexer_pools",
-                "indexer_tail",
-                "indexer_counts",
-                "indexer_first_slot",
-            ):
-                x = getattr(self, name)
-                setattr(self, name, x.index_select(0, beam_idx.to(x.device)))
+
+        for stream in (self.compressed_states, self.compression_tails):
+            for name, tensor in stream.items():
+                stream[name] = tensor.index_select(0, beam_idx.to(tensor.device))
 
     def batch_repeat_interleave(self, repeats):
         super().batch_repeat_interleave(repeats)
-        if self.indexer_pools is not None:
-            for name in (
-                "indexer_pools",
-                "indexer_tail",
-                "indexer_counts",
-                "indexer_first_slot",
-            ):
-                x = getattr(self, name)
-                setattr(self, name, x.repeat_interleave(repeats, dim=0))
+
+        for stream in (self.compressed_states, self.compression_tails):
+            for name, tensor in stream.items():
+                stream[name] = tensor.repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices):
         super().batch_select_indices(indices)
-        if self.indexer_pools is not None:
-            for name in (
-                "indexer_pools",
-                "indexer_tail",
-                "indexer_counts",
-                "indexer_first_slot",
-            ):
-                x = getattr(self, name)
-                setattr(self, name, x.index_select(0, indices.to(x.device)))
+
+        for stream in (self.compressed_states, self.compression_tails):
+            for name, tensor in stream.items():
+                stream[name] = tensor[indices]
+
+
+class DynamicSlidingWindowCompressedLayer(DynamicCompressedLayer, DynamicSlidingWindowLayer):
+    """Sliding-window KV storage with full-context compressed streams."""
 
 
 class StaticLayer(CacheLayerMixin):
@@ -796,209 +787,212 @@ class StaticSlidingWindowLayer(StaticLayer):
         return self._is_croppable
 
 
-class StaticIndexedLayer(StaticLayer):
-    """Fixed-address indexed cache for compressed groups and unfinished raw tokens."""
+class StaticCompressedLayer(StaticLayer):
+    """
+    Static KV cache with compressed state streams. Note that a state is not necessarily only the key but
+    also anything needed to compress the groups afterwards, e.g. qwen4's RoPE cos/sin, glm 5 next's gates, etc.
 
-    is_croppable = False
+    Each stream can have compressed states, and the remaining tail. On subsequent updates, the tail can become
+    new groups and we create a new tail.
 
-    def __init__(self, max_cache_len, **kwargs):
-        super().__init__(max_cache_len=max_cache_len, **kwargs)
-        self.indexer_pools = None
-        self.indexer_tail = None
-        self.indexer_counts = None
-        self.indexer_first_slot = None
-        self.indexer_length = None
+    Unlike the dynamic cache, compressed states and tails are allocated once and updated in-place to preserve
+    their storage addresses.
 
-        # Metadata for the current prepare/update/select cycle.
-        self._indexer_group_size = 1
-        self._indexer_complete_count = None
-        self._indexer_query_counts = None
-        self._indexer_query_valid = None
+    Example with capacity=128 and group_size=4:
+        Compressed capacity: 32
+        Tail capacity:       4
 
-    def update_groups(
+    With overlap_groups=1 (dsv4):
+        Tail capacity:       8
+
+    Note that incomplete pools and unoccupied entries will not be selected at the end.
+    """
+
+    is_croppable = False  # compression makes this impossible or we would need to track full raw states
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.compressed_states = {}
+        self.compression_tails = {}
+
+    def prepare_compression_groups(
         self,
         states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
         group_size: int = 1,
-        pool_dim: int | None = None,
+        overlap_groups: int = 0,
+        name: str = "indexer",
     ) -> torch.Tensor:
-        """Pack valid tokens into groups and retain selection metadata."""
-        batch, length, dim = states.shape
-        pool_dim = dim if pool_dim is None else pool_dim
+        """
+        Combine unfinished history with incoming valid tokens.
 
-        if self.indexer_pools is None:
-            self.indexer_pools = states.new_zeros(batch, self.max_cache_len // group_size, pool_dim)
-            self.indexer_tail = states.new_zeros(batch, group_size - 1, dim)
-            self.indexer_counts = torch.zeros(batch, dtype=torch.long, device=states.device)
-            self.indexer_first_slot = torch.full((batch,), -1, dtype=torch.long, device=states.device)
-            self.indexer_length = torch.zeros((), dtype=torch.long, device=states.device)
+        Example with group_size=4:
+            Previous tail: [E, F, 0, 0]
+            Incoming:      [G, H, I]
+            Candidate:     [E, F, G, H]
+            Next tail:     [I, 0, 0, 0]
+        """
+        batch_size, seq_length, dim = states.shape
+        device = states.device
+
+        counts = attention_mask[:, -(seq_length + 1) :]
+        history_length = (1 + overlap_groups) * group_size
+
+        past_groups = counts[:, :1] // group_size
+        new_groups = counts[:, -1:] // group_size - past_groups
+        num_candidates = (seq_length + group_size - 1) // group_size
+
+        tail = self.compression_tails.get(name)
+
+        if tail is None:
+            tail = states.new_zeros(batch_size, history_length, dim)
+            self.compression_tails[name] = tail
 
             if not is_torchdynamo_compiling():
-                for name in (
-                    "indexer_pools", "indexer_tail", "indexer_counts",
-                    "indexer_first_slot", "indexer_length",
-                ):
-                    torch._dynamo.mark_static_address(getattr(self, name))
+                torch._dynamo.mark_static_address(tail)
 
-        valid = attention_mask[:, -length:].bool() if attention_mask is not None else torch.ones(
-            batch, length, dtype=torch.bool, device=states.device
+        window = torch.nn.functional.pad(tail, (0, 0, 0, num_candidates * group_size))
+
+        # Append valid tokens without overwriting retained history
+        slots = (counts[:, 1:] - 1 - (past_groups - overlap_groups) * group_size).clamp_min(0)
+        valid = counts.diff(dim=1) > 0
+
+        window.scatter_add_(
+            1,
+            slots[..., None].expand_as(states),
+            states.masked_fill(~valid[..., None], 0),
         )
 
-        old_counts = self.indexer_counts
-        old_tail_count = old_counts % group_size
-        new_counts = old_counts + valid.long().sum(-1)
+        # Ordinary and overlapping compression differ only in window width
+        groups = window.unfold(1, history_length, group_size).transpose(-1, -2)
 
-        packed = states.new_zeros(batch, group_size - 1 + length, dim)
-        if group_size > 1:
-            packed[:, :group_size - 1] = self.indexer_tail
+        batch_indices = torch.arange(batch_size, device=device)
+        tail.copy_(groups[batch_indices, new_groups.squeeze(1)])
 
-        write_slots = old_tail_count[:, None] + valid.long().cumsum(-1) - 1
-        packed.scatter_add_(
-            1, write_slots.clamp(min=0)[..., None].expand(-1, -1, dim), states * valid[..., None]
-        )
+        return groups[:, :-1]
 
-        counts = old_counts[:, None] + valid.long().cumsum(-1)
-        complete_count = (old_tail_count + valid.long().sum(-1)) // group_size
-        group_count = (group_size - 1 + length) // group_size
-        groups = packed[:, :group_count * group_size].reshape(batch, group_count, group_size, dim)
+    def update_compressed_states(
+        self,
+        states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        query_length: int,
+        group_size: int = 1,
+        name: str = "indexer",
+    ) -> torch.Tensor:
+        """
+        Store compressed candidates after the previously completed groups.
 
-        if group_size > 1:
-            offsets = torch.arange(group_size - 1, device=states.device)
-            pending_size = new_counts % group_size
-            start = complete_count * group_size
-            pending = packed.gather(
-                1,
-                (start[:, None] + offsets).clamp(max=packed.shape[1] - 1)[..., None].expand(-1, -1, dim),
-            )
-            pending = pending * (offsets[None, :] < pending_size[:, None])[..., None]
-            self.indexer_tail.copy_(pending)
+        Example:
+            Previous keys: [ABCD, EF00, 0, ...]
+            New keys:      [EFGH]
+            Updated keys:  [ABCD, EFGH, 0, ...]
 
-        first_slot = torch.where(
-            (old_counts == 0) & valid.any(-1),
-            self.indexer_length + valid.long().argmax(-1),
-            self.indexer_first_slot,
-        )
-        self.indexer_first_slot.copy_(first_slot)
-        self.indexer_counts.copy_(new_counts)
-        self.indexer_length.add_(length)
+        Note that a completed group is never overwritten.
+        """
+        compressed = self.compressed_states.get(name)
 
-        self._indexer_group_size = group_size
-        self._indexer_complete_count = complete_count
-        self._indexer_query_counts = counts
-        self._indexer_query_valid = valid
-        return groups
+        if compressed is None:
+            capacity = (attention_mask.shape[1] + group_size - 2) // group_size
 
-    def update_keys(self, new_pools: torch.Tensor) -> torch.Tensor:
-        """Write completed compressed groups without reallocating storage."""
-        groups = new_pools.shape[1]
-        capacity = self.indexer_pools.shape[1]
-        group_size = self._indexer_group_size
-        complete_count = self._indexer_complete_count
+            # Pre-allocate storage for next groups
+            compressed = states.new_zeros(states.shape[0], capacity, states.shape[-1])
+            self.compressed_states[name] = compressed
+            self.device = states.device
 
-        if groups and capacity:
-            old_group_counts = self.indexer_counts // group_size - complete_count
-            offsets = torch.arange(groups, device=new_pools.device)
-            destinations = (old_group_counts[:, None] + offsets).clamp(max=capacity - 1)
-            completed = offsets[None, :] < complete_count[:, None]
-            self.indexer_pools.scatter_add_(
-                1, destinations[..., None].expand_as(new_pools), new_pools * completed[..., None]
-            )
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(compressed)
 
-        return self.indexer_pools
+        past_groups = attention_mask[:, -(query_length + 1) : -query_length] // group_size
 
-    def select_indices(self, scores: torch.Tensor, budget: int, tail: bool = False) -> torch.Tensor:
-        """Select completed groups and optionally the unfinished tail."""
-        group_size = self._indexer_group_size
-        counts = self._indexer_query_counts
-        query_valid = self._indexer_query_valid
-        first_slot = self.indexer_first_slot
+        batch_indices = torch.arange(states.shape[0], device=states.device)[:, None]
+        group_indices = past_groups + torch.arange(states.shape[1], device=states.device)
 
-        _, _, groups = scores.shape
+        compressed[batch_indices, group_indices] = states
+
+        return compressed
+
+    def select_indices(
+        self,
+        scores: torch.Tensor,
+        attention_mask: torch.Tensor,
+        budget: int,
+        group_size: int = 1,
+        include_tail: bool = False,
+        return_groups: bool = False,
+    ) -> torch.Tensor:
+        """
+        Select complete causal groups.
+
+        By default, the budget counts tokens and selected groups are expanded
+        into physical KV indices. With `return_groups=True`, the budget counts
+        compressed entries instead (see dsv4 for example).
+
+        Example with group_size=2 and five visible tokens:
+            Selected group: 1
+            Token indices:  [2, 3]
+            With tail:      [2, 3, 4]
+
+        Note that the tail is not included in the budget.
+        Finally, to keep consistent shapes, we pad with -1 (which will be filtered).
+        """
+        counts = attention_mask[:, -(scores.shape[-2] + 1) :]
+        query_counts = counts[:, 1:].masked_fill(counts.diff(dim=1) == 0, 0)
+        complete_groups = query_counts[..., None] // group_size
+
+        group_ids = torch.arange(scores.shape[-1], device=scores.device)
+        visible = group_ids < complete_groups
+
+        k = min(budget if return_groups else budget // group_size, scores.shape[-1])
+
+        top_scores, groups = scores.masked_fill(~visible, float("-inf")).topk(k, dim=-1)
+        groups = groups.masked_fill(top_scores == float("-inf"), -1)
+
+        if return_groups:
+            return groups
+
+        # Expand selected groups while preserving invalid selections
         offsets = torch.arange(group_size, device=scores.device)
-        complete = counts[..., None] >= (torch.arange(1, groups + 1, device=scores.device) * group_size)
-        complete &= query_valid[..., None]
+        indices = (groups[..., None] * group_size + offsets).clamp_min(-1).flatten(-2)
 
-        topk = min(budget // group_size, groups)
-        top = scores.masked_fill(~complete, torch.finfo(scores.dtype).min).topk(topk, dim=-1).indices
+        # Keeps uniform shapes to be tensor friendly
+        if indices.shape[-1] < budget:
+            indices = torch.nn.functional.pad(indices, (0, budget - indices.shape[-1]), value=-1)
 
-        chosen = first_slot[:, None, None, None] + top[..., None] * group_size + offsets
-        chosen = chosen.masked_fill(~complete.gather(-1, top)[..., None], -1)
-        chosen = torch.nn.functional.pad(chosen.flatten(-2), (0, budget - topk * group_size), value=-1)
+        if include_tail:
+            tail = complete_groups * group_size + offsets[:-1]
+            tail = tail.masked_fill(tail >= query_counts[..., None], -1)
+            indices = torch.cat((indices, tail), dim=-1)
 
-        if tail and group_size > 1:
-            tail_size = counts % group_size
-            tail_offsets = offsets[:-1]
-            tail_slots = first_slot[:, None, None] + (counts - tail_size)[..., None] + tail_offsets
-            tail_slots = tail_slots.masked_fill(tail_offsets >= tail_size[..., None], -1)
-            chosen = torch.cat((chosen, tail_slots), dim=-1)
-
-        return chosen.masked_fill(~query_valid[..., None], -1).to(torch.int32)
-
-    def offload(self):
-        super().offload()
-        if self.indexer_pools is not None:
-            for name in (
-                "indexer_pools",
-                "indexer_tail",
-                "indexer_counts",
-                "indexer_first_slot",
-                "indexer_length",
-            ):
-                setattr(
-                    self, name,
-                    getattr(self, name).to("cpu", non_blocking=True),
-                )
-
-    def prefetch(self):
-        super().prefetch()
-        if self.indexer_pools is not None:
-            for name in (
-                "indexer_pools",
-                "indexer_tail",
-                "indexer_counts",
-                "indexer_first_slot",
-                "indexer_length",
-            ):
-                setattr(
-                    self, name,
-                    getattr(self, name).to(self.device, non_blocking=True),
-                )
+        # Conversion selected groups (and tail) to the actual selected tokens
+        return (
+            torch.searchsorted(attention_mask, indices.flatten(1), right=True, out_int32=True).reshape_as(indices)
+            - 1  # boundary
+            + attention_mask[0, 0]  # negative prefix
+        )
 
     def reset(self):
         super().reset()
-        if self.indexer_pools is not None:
-            self.indexer_pools.zero_()
-            self.indexer_tail.zero_()
-            self.indexer_counts.zero_()
-            self.indexer_first_slot.fill_(-1)
-            self.indexer_length.zero_()
 
-        self._indexer_group_size = 1
-        self._indexer_complete_count = None
-        self._indexer_query_counts = None
-        self._indexer_query_valid = None
-
-    def crop(self, tokens_to_remove):
-        if tokens_to_remove:
-            raise RuntimeError(
-                "Compressed indexer caches cannot roll back completed groups"
-            )
+        for stream in (self.compressed_states, self.compression_tails):
+            for tensor in stream.values():
+                tensor.zero_()
 
     def reorder_cache(self, beam_idx):
         if self.is_initialized:
-            idx = beam_idx.to(self.keys.device)
-            self.keys.copy_(self.keys.index_select(0, idx))
-            self.values.copy_(self.values.index_select(0, idx))
+            self.keys.copy_(self.keys.index_select(0, beam_idx.to(self.keys.device)))
+            self.values.copy_(self.values.index_select(0, beam_idx.to(self.values.device)))
 
-        if self.indexer_pools is not None:
-            for name in (
-                "indexer_pools",
-                "indexer_tail",
-                "indexer_counts",
-                "indexer_first_slot",
-            ):
-                x = getattr(self, name)
-                x.copy_(x.index_select(0, beam_idx.to(x.device)))
+        for stream in (self.compressed_states, self.compression_tails):
+            for tensor in stream.values():
+                tensor.copy_(tensor.index_select(0, beam_idx.to(tensor.device)))
+
+
+class StaticSlidingWindowCompressedLayer(StaticCompressedLayer, StaticSlidingWindowLayer):
+    """Fixed-capacity sliding KV and full-context compressed streams."""
+
+    def __init__(self, max_cache_len, **kwargs):
+        super().__init__(max_cache_len=max_cache_len, **kwargs)
+        self.max_compression_len = max_cache_len
 
 
 class BaseQuantizedLayer(DynamicLayer):
@@ -1720,7 +1714,9 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": DynamicSlidingWindowLayer,
     "chunked_attention": DynamicSlidingWindowLayer,
-    "indexed_attention": DynamicIndexedLayer,
+    "indexed_attention": DynamicCompressedLayer,
+    "compressed_sparse_attention": DynamicSlidingWindowCompressedLayer,
+    "heavily_compressed_attention": DynamicSlidingWindowCompressedLayer,
     # Linear-attention-shaped placeholders (no per-token KV; recurrent state only).
     # "conv" reuses the same cache shape as linear attention but stores a conv state buffer rather than recurrent SSM state
     "conv": LinearAttentionLayer,
@@ -1737,7 +1733,9 @@ STATIC_LAYER_TYPE_MAPPING = {
     # From a cache point of view, sliding and chunked are the same in how they should behave, only the mask differs
     "sliding_attention": StaticSlidingWindowLayer,
     "chunked_attention": StaticSlidingWindowLayer,
-    "indexed_attention": StaticIndexedLayer,
+    "indexed_attention": StaticCompressedLayer,
+    "compressed_sparse_attention": StaticSlidingWindowCompressedLayer,
+    "heavily_compressed_attention": StaticSlidingWindowCompressedLayer,
     # LinearAttention layers are considered both static and dynamic (they are static, but are used as-is for any cache type)
     "conv": LinearAttentionLayer,
     "linear_attention": LinearAttentionLayer,
@@ -2220,13 +2218,16 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     per_layer_kwargs = []
     for layer_type, layer_config in zip(layer_types, layer_configs):
         layer_kwargs = {}
-        if layer_type in ("sliding_attention", "hybrid_sliding", "reference_sliding_attention"):
+        if layer_type in (
+            "sliding_attention",
+            "hybrid_sliding",
+            "reference_sliding_attention",
+            "compressed_sparse_attention",
+            "heavily_compressed_attention",
+        ):
             layer_kwargs["sliding_window"] = layer_config.sliding_window
         elif layer_type == "chunked_attention":
             layer_kwargs["sliding_window"] = layer_config.attention_chunk_size
-        # In this case, we need to pass the config as well to properly __init__ the layer classes
-        elif layer_type in ("heavily_compressed_attention", "compressed_sparse_attention"):
-            layer_kwargs["config"] = layer_config
         # We may need more than 1 conv/recurrent state
         if layer_type in ("conv", "linear_attention", "hybrid", "hybrid_sliding"):
             layer_kwargs["number_of_states"] = getattr(layer_config, "number_of_conv_states", 1)

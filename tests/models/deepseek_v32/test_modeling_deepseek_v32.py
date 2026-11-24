@@ -22,10 +22,6 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_modeling_common import (
-    TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
-    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
-)
 
 
 if is_torch_available():
@@ -133,6 +129,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    is_indexer_based = True
     test_all_params_have_gradient = False
     model_tester_class = DeepseekV32ModelTester
     model_split_percents = [0.5, 0.7, 0.8]
@@ -149,35 +146,14 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
         if hasattr(torch.compiler.config, "force_cudagraph_gc"):
             self.enterContext(torch.compiler.config.patch(force_cudagraph_gc=True))
 
-    @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
-    def test_model_rope_scaling_frequencies(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("DeepseekV32 applies RoPE to qk_rope_head_dim; generic rope scaling tests assume config.head_dim")
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("DeepseekV32 uses MLA so it is not compatible with assisted decoding")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     @unittest.skip("DeepseekV32 uses MLA so it is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        pass
-
-    @unittest.skip("DeepseekV32 uses MLA so it is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("DeepseekV32 uses MLA so it is not compatible with the standard cache format")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("DeepseekV32 uses MLA so it is not compatible with the standard cache format")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
+       pass
 
     @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims")
     def test_sdpa_can_dispatch_on_flash(self):
@@ -186,20 +162,6 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Dynamic control flow in MoE")
     @pytest.mark.torch_compile_test
     def test_torch_compile_for_training(self):
-        pass
-
-    # DeepSeek Sparse Attention selects tokens with a hard top-k, which is discontinuous: a tiny numerical
-    # difference in the indexer scores (attention backend, padding, batching, sequence packing) can flip
-    # which tokens are selected and thus change the output. These exact cross-backend / padding-equivalence
-    # tests therefore do not hold for DSA (dense models like DeepSeek-V3 pass them).
-    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across backends.")
-    def test_eager_matches_sdpa_inference(self, *args, **kwargs):
-        pass
-
-    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
-    @unittest.skip("DSA hard top-k selection is sensitive to tiny numerical differences across batching.")
-    def test_eager_matches_batched_and_grouped_inference(self, *args, **kwargs):
         pass
 
     @unittest.skip("DSA hard top-k selection is sensitive to sequence packing (selection can flip).")

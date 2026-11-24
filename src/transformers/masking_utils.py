@@ -1523,14 +1523,81 @@ def create_recurrent_attention_mask(
     return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()
 
 
+def create_compression_mask(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    cache: Cache | None = None,
+    layer_idx: int | None = None,
+    **kwargs,
+) -> torch.Tensor:
+    """
+    Create right-aligned cumulative valid-token counts.
+
+    Example with five tokens:
+        Padding mask: [0, 0, 1, 1, 1]
+        Dynamic:      [0, 0, 0, 1, 2, 3]
+        Static (8):   [-3, -2, -1, 0, 0, 0, 1, 2, 3]
+
+    The last query_length (+1) entries describe the current query boundaries.
+    NOTE: Negative entries represent unused static capacity.
+    """
+    batch_size, query_length = inputs_embeds.shape[:2]
+    device = inputs_embeds.device
+
+    past_length = 0
+    kv_length = query_length
+    if cache is not None:
+        if layer_idx is None:
+            compressed_layer_types = [
+                "indexed_attention",
+                "minimax_m3_sparse",
+                "compressed_sparse_attention",
+                "heavily_compressed_attention",
+            ]
+            layer_idx = next(
+                i
+                for i, layer_type in enumerate(config.get_text_config().layer_types)
+                if layer_type in compressed_layer_types
+            )
+
+        past_length = cache.get_seq_length(layer_idx)
+        past_length = past_length.to(device) if isinstance(past_length, torch.Tensor) else past_length
+        kv_length = past_length + query_length
+
+        if layer_idx < len(cache.layers):
+            layer = cache.layers[layer_idx]
+
+            # Static cache case
+            if layer.is_compileable:
+                kv_length = getattr(layer, "max_compression_len", layer.get_max_length())
+
+    positions = torch.arange(-kv_length, 1, device=device) + past_length + query_length
+
+    if attention_mask is None:
+        return positions.expand(batch_size, -1).contiguous()
+
+    if attention_mask.ndim != 2:
+        raise ValueError("Expected a full-history 2D binary padding mask.")
+
+    prefix = F.pad(attention_mask.to(device=device).cumsum(-1, dtype=torch.long), (1, 0))
+    return torch.where(positions < 0, positions, prefix.index_select(1, positions.clamp_min(0)))
+
+
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "full_attention": create_causal_mask,
     "sliding_attention": create_sliding_window_causal_mask,
     "chunked_attention": create_chunked_causal_mask,
-    "compressed_sparse_attention": create_sliding_window_causal_mask,
-    "heavily_compressed_attention": create_sliding_window_causal_mask,
+    "compressed_sparse_attention": {
+        "sliding_attention": create_sliding_window_causal_mask,
+        "compression": create_compression_mask,
+    },
+    "heavily_compressed_attention": {
+        "sliding_attention": create_sliding_window_causal_mask,
+        "compression": create_compression_mask,
+    },
     "minimax_m3_sparse": create_causal_mask,
-    "indexed_attention": create_recurrent_attention_mask,
+    "indexed_attention": create_compression_mask,
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
     "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},

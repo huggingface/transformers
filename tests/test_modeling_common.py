@@ -762,6 +762,8 @@ class ModelTesterMixin(ExportTesterMixin):
     # Models added before 2023 skip `test_can_init_all_missing_weights` unless they set this once their `_init_weights` is fixed
     test_can_init_all_missing_weights_before_2023 = False
     is_encoder_decoder = False
+    # DSA or compressed variations of it
+    is_indexer_based = False
     has_attentions = True
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]

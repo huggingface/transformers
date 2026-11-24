@@ -2501,6 +2501,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
     def test_custom_4d_attention_mask(self):
+        if self.is_indexer_based:
+            self.skipTest(reason="Model architecture does not support 4d masks")
+
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 

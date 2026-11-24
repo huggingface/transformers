@@ -27,10 +27,10 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicIndexedLayer
+from ...cache_utils import Cache, DynamicCache, DynamicCompressedLayer
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
-from ...masking_utils import create_recurrent_attention_mask
+from ...masking_utils import create_compression_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -172,9 +172,10 @@ class DeepseekV32Indexer(nn.Module):
         hidden_states: torch.Tensor,
         q_resid: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor,
         cache: Cache | None = None,
     ) -> torch.Tensor:
+        layer = DynamicCompressedLayer() if cache is None else cache.layers[self.layer_idx]
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
 
@@ -189,16 +190,23 @@ class DeepseekV32Indexer(nn.Module):
         q = torch.cat([q_rot, q_pass], dim=-1)
         k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)
 
-        layer = DynamicIndexedLayer() if cache is None else cache.layers[self.layer_idx]
-        groups = layer.update_groups(k, attention_mask=attention_mask)
-        k = layer.update_keys(groups.squeeze(2))
+        # Get pools (here it's each token as groups of size 1)
+        k = layer.prepare_compression_groups(k, attention_mask).squeeze(2)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
-        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        # No compression, as each token is taken raw
+        if cache is not None:
+            k = layer.update_compressed_states(k, attention_mask, seq_len)
 
-        return layer.select_indices(index_scores, budget=self.index_topk)
+        # Score each token
+        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
+        scores = F.relu(scores * self.softmax_scale)
+
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float()
+        weights = weights * self.n_heads**-0.5
+        scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+
+        # Remap selected group mapping to actual tokens
+        return layer.select_indices(scores, attention_mask, self.index_topk)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -705,7 +713,7 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            attention_mask = create_recurrent_attention_mask(
+            attention_mask = create_compression_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
