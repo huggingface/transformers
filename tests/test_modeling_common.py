@@ -876,6 +876,7 @@ class ModelTesterMixin(ExportTesterMixin):
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
             "Lfm3ModelTest": 3,  # One layer per operator type: ["full_attention", "sliding_attention", "conv"]
+            "Inkling2LoopTextModelTest": 4,  # need to test all layer types (before loop, loop, after loop). 2 layers for loop because of sliding and full attention layers.
             "LaraMiniModelTest": 3,  # One layer per token mixer: ["linear_attention", "sliding_attention", "full_attention"]
         }
         target_num_hidden_layers = exceptional_num_hidden_layers.get(type(self).__name__, 2)
@@ -1780,8 +1781,12 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
 
                 checkpointing_layer = next(m for m in model.modules() if isinstance(m, GradientCheckpointingLayer))
-                pre_hook_mock = unittest.mock.Mock(return_value=None)
-                checkpointing_layer.register_forward_pre_hook(pre_hook_mock)
+                # record whether gradients are on at each call of the layer: only those calls are checkpointed (HrmText
+                # runs some of its layers under `torch.no_grad()`)
+                grad_enabled_calls = []
+                checkpointing_layer.register_forward_pre_hook(
+                    lambda *_: grad_enabled_calls.append(torch.is_grad_enabled())
+                )
                 # count the runs of the forward that the layer hands to the checkpoint function
                 checkpoint_func = checkpointing_layer._gradient_checkpointing_func
                 forward_mock = unittest.mock.Mock()
@@ -1802,7 +1807,7 @@ class ModelTesterMixin(ExportTesterMixin):
                     # test that gradient checkpointing is active as it would call the gradient checkpointing layer's
                     # forward more than once.
                     self.assertGreater(forward_mock.call_count, 1)
-                    self.assertEqual(pre_hook_mock.call_count, checkpoint_mock.call_count)
+                    self.assertEqual(sum(grad_enabled_calls), checkpoint_mock.call_count)
 
                 # check that all the parameters that had non-zero gradients before, have non-zero grads with gradient
                 # checkpointing. divergence indicates a different forward-pass environment that needs special handling.
@@ -4287,13 +4292,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname, dtype=dtype)
 
-                sub_models_supporting_fa = [
-                    module._supports_flash_attn
-                    for name, module in model.named_modules()
-                    if isinstance(module, PreTrainedModel) and name != ""
-                ]
-                supports_fa_all_modules = (
-                    all(sub_models_supporting_fa) if len(sub_models_supporting_fa) > 0 else model._supports_flash_attn
+                supports_fa_all_modules = all(
+                    module._supports_flash_attn for module in model.modules() if isinstance(module, PreTrainedModel)
                 )
                 if not supports_fa_all_modules:
                     with self.assertRaises(ValueError):
