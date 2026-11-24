@@ -39,6 +39,8 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
+    from . import cuda_affine_moe
+
 
 logger = logging.get_logger(__name__)
 
@@ -267,6 +269,9 @@ class MetalExperts(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor):
         num_tokens, top_k = top_k_index.shape
+        # CUDA decode: the moe-affine kernel reads the packed codes directly
+        if num_tokens <= 16 and cuda_affine_moe.supported(self, hidden_states):
+            return cuda_affine_moe.experts_forward(self, hidden_states, top_k_index, top_k_weights)
         ids = top_k_index.reshape(-1)
         # Sentinels (expert parallel, streamed misses) get weight 0; their clamped slot holds finite values (a pool's
         # unfilled slots are zeros), so the product is 0

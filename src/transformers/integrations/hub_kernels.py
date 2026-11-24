@@ -1011,6 +1011,31 @@ def metal_kernel(name: str):
         return None
 
 
+# CUDA kernels for affine 4-bit (`MetalExperts` layout) MoE decode, pinned; the published build targets sm_100 (B200)
+_CUDA_KERNELS = {
+    "moe-affine": ("ArthurZ/moe-affine", "bb5c0529306933a41e47f0d8239f607283aa89b7", ((10, 0),)),
+}
+
+
+@functools.cache
+def cuda_kernel(name: str, device: "torch.device | None" = None):
+    """The pinned hub kernel `name` of `_CUDA_KERNELS`, or None where it does not load (no `kernels`, no CUDA, a GPU
+    without a build)."""
+    if not (is_kernels_available() and torch.cuda.is_available()):
+        return None
+    repo_id, revision, capabilities = _CUDA_KERNELS[name]
+    if torch.cuda.get_device_capability(device) not in capabilities:
+        return None
+    # the library's own `get_kernel`: pinned revision, a trusted non-community repo
+    from kernels import get_kernel as get_hub_kernel
+
+    try:
+        return get_hub_kernel(repo_id, revision=revision, trust_remote_code=True)
+    except Exception as error:  # noqa: BLE001
+        logger.warning_once(f"Could not load the CUDA kernel {repo_id}: {error}")
+        return None
+
+
 # Linear-attention ops the Metal kernel implements, by the name of the function they replace
 _METAL_LINEAR_ATTENTION = {
     "causal_conv1d_fn": "causal_conv1d_fn",
