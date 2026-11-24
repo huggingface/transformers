@@ -34,6 +34,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils.generic import is_flash_attention_requested
 from .utils.import_utils import _package_distribution_mapping, is_tracing
 
 
@@ -828,6 +829,26 @@ def _flash_attention_forward(
     # padded tail of the queries belongs to no sequence (cu_seq_lens_q plateaus) and max_length_q is the padded size
     if is_fa_with_paged_kwargs and cache_seqlens is not None:
         q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
+        # FA2's paged call takes one query token per sequence: the new K/V are written to the pages first, then decode
+        # steps use the paged call and the others the varlen call, which reads the pages through the block table
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2):
+            from .integrations._proto_paged_kv_write import paged_kv_write
+
+            seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
+            if max_length_q == 1:
+                num_sequences = block_table.size(0)
+                flash_kwargs = flash_kwargs_fn(max_seqlen_q=1, block_table=block_table, cache_seqlens=seqused)
+                out = torch.empty_like(q)
+                out[:num_sequences] = flash_kvcache_fn(q[:num_sequences, None], k_cache, v_cache, **flash_kwargs)[:, 0]
+            else:
+                cu_seqlens_k = F.pad(seqused.cumsum(0, dtype=torch.int32), (1, 0))
+                max_seqlen_k = block_table.size(1) * k_cache.size(1)
+                flash_kwargs = partial(process_flash_kwargs_fn, **flash_kwargs_fn.keywords)(block_table=block_table)
+                out = flash_varlen_fn(
+                    q, k_cache, v_cache, cu_seq_lens_q, cu_seqlens_k, max_length_q, max_seqlen_k, **flash_kwargs
+                )
+            out = out[0] if isinstance(out, tuple) else out
+            return out.view(batch_size, -1, *out.shape[-2:])
         if _PROTO_KV_WRITE:  # [scratch] write the new K/V first, then a plain paged call
             from .integrations._proto_paged_kv_write import paged_kv_write
 
