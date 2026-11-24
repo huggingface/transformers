@@ -1471,6 +1471,30 @@ class PreTrainedModel(
         """
         return getattr(self, self.base_model_prefix, self)
 
+    def named_pretrained_modules(self) -> list[tuple[str, "PreTrainedModel"]]:
+        """
+        Return every sub-:class:`~transformers.PreTrainedModel` reachable from this model as
+        ``(module_name, submodule)`` pairs. The top-level model itself is *not* included.
+        """
+        return [
+            (name, module) for name, module in self.named_modules() if name and isinstance(module, PreTrainedModel)
+        ]
+
+    def get_pretrained_module_for_weight_name(self, weight_name: str) -> "PreTrainedModel":
+        """
+        Return the sub-:class:`~transformers.PreTrainedModel` whose parameter namespace most
+        specifically contains ``weight_name``, falling back to ``self`` for top-level weights.
+        """
+        best_module = self
+        best_prefix_len = -1
+        for name, module in self.named_pretrained_modules():
+            prefix_len = len(name)
+            # Ensure `name` is a full namespace boundary: either the whole string or followed by a dot.
+            if prefix_len > best_prefix_len and (len(weight_name) == prefix_len or weight_name.startswith(f"{name}.")):
+                best_module = module
+                best_prefix_len = prefix_len
+        return best_module
+
     @classmethod
     def can_generate(cls) -> bool:
         """
@@ -2027,9 +2051,9 @@ class PreTrainedModel(
         # Apply it to all submodels as well. The top-level config was already handled above, and it may be shared by
         # submodels (e.g. ForCausalLM has a Model inside, which is the same "actual model"), so no need to check it again
         handled_config_ids = {id(self.config)}
-        for submodule in self.modules():
+        for _, submodule in self.named_pretrained_modules():
             # We found a submodel with a config that was not handled yet (several submodels may share the same config)
-            if isinstance(submodule, PreTrainedModel) and id(submodule.config) not in handled_config_ids:
+            if id(submodule.config) not in handled_config_ids:
                 # In this case, warn and skip
                 if not submodule._can_set_attn_implementation():
                     logger.warning(
@@ -2121,13 +2145,11 @@ class PreTrainedModel(
                 self.config._experts_implementation_internal = requested_implementation
 
         # Apply it to all submodels as well
-        for submodule in self.modules():
-            # We found a submodel (which is not self) with a different config (otherwise, it may be the same "actual model",
+        for _, submodule in self.named_pretrained_modules():
+            # We found a submodel with a different config (otherwise, it may be the same "actual model",
             # e.g. ForCausalLM has a Model inside, but no need to check it again)
             if (
-                submodule is not self
-                and isinstance(submodule, PreTrainedModel)
-                and submodule.config.__class__ != self.config.__class__
+                submodule.config.__class__ != self.config.__class__
                 and submodule._can_set_experts_implementation()  # avoids bugs when text_model has MoEs but encoder no
             ):
                 # Set the experts on the submodule
@@ -2157,8 +2179,8 @@ class PreTrainedModel(
         seen_modules = set()
         found_embeddings = False
 
-        for module in self.modules():
-            if not (isinstance(module, PreTrainedModel) and hasattr(module, "get_input_embeddings")):
+        for _, module in self.named_pretrained_modules():
+            if not hasattr(module, "get_input_embeddings"):
                 continue
 
             try:
@@ -2474,15 +2496,14 @@ class PreTrainedModel(
         """
         if all_submodels:
             expanded_tied_weights = {}
-            for prefix, submodule in self.named_modules(remove_duplicate=False):
-                if isinstance(submodule, PreTrainedModel):
-                    # Will dynamically check the config if it has changed
-                    submodel_tied_weights = submodule.get_expanded_tied_weights_keys(all_submodels=False)
-                    if prefix != "":
-                        submodel_tied_weights = {
-                            f"{prefix}.{k}": f"{prefix}.{v}" for k, v in submodel_tied_weights.items()
-                        }
-                    expanded_tied_weights.update(submodel_tied_weights)
+            for prefix, submodule in self.named_pretrained_modules():
+                # Will dynamically check the config if it has changed
+                submodel_tied_weights = submodule.get_expanded_tied_weights_keys(all_submodels=False)
+                if prefix != "":
+                    submodel_tied_weights = {
+                        f"{prefix}.{k}": f"{prefix}.{v}" for k, v in submodel_tied_weights.items()
+                    }
+                expanded_tied_weights.update(submodel_tied_weights)
             return expanded_tied_weights
 
         tied_mapping = self._tied_weights_keys
