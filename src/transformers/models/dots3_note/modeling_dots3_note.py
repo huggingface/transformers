@@ -305,7 +305,7 @@ class Dots3NoteTextTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -677,7 +677,7 @@ class Dots3NotePreTrainedModel(PreTrainedModel):
         "attentions": Dots3NoteTextAttention,
         "router_logits": OutputRecorder(Dots3NoteTextTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [
         r"^model\.(language_model\.)?layers\.46\.",
         r"^model\.(language_model\.)?mtp\.",
@@ -1300,7 +1300,7 @@ class Dots3NoteVisionTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.router_scaling_factor = config.router_scaling_factor
 
     def forward(
@@ -1331,7 +1331,7 @@ class Dots3NoteVisionMoE(nn.Module):
         layer_config = config.per_layer_config[layer_idx]
         self.experts = Dots3NoteExperts(layer_config)
         self.gate = Dots3NoteVisionTopKRouter(layer_config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(layer_config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
@@ -1501,7 +1501,7 @@ class Dots3NoteVisionPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     main_input_name = "pixel_values"
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
 
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)

@@ -20,6 +20,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
+from ...modeling_multimodal_utils import flatten_items
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import (
@@ -27,6 +28,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..parakeet.modeling_parakeet import ParakeetEncoderModelOutput, ParakeetPreTrainedModel
@@ -184,6 +186,7 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
         output_mask = None
         if padding_mask is not None:
             output_mask = self._get_output_attention_mask(padding_mask, target_length=hidden_states.shape[1])
+            output_mask = output_mask.to(hidden_states.device)
             # make sure padded tokens output 0
             hidden_states = hidden_states.masked_fill(~output_mask[..., None], 0.0)
 
@@ -244,7 +247,7 @@ class OmniASRModel(VoxtralModel):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_values: torch.FloatTensor,
         padding_mask: torch.Tensor | None = None,
@@ -261,10 +264,12 @@ class OmniASRModel(VoxtralModel):
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
         frames_mask = audio_output.attention_mask
         if frames_mask is None:
-            audio_embeds = audio_embeds.flatten(0, 1)
+            audio_embeds, split_sizes = flatten_items(audio_embeds)
         else:
-            audio_embeds = audio_embeds[frames_mask.to(audio_embeds.device).bool()]
+            frames_mask = frames_mask.to(audio_embeds.device).bool()
+            audio_embeds, split_sizes = audio_embeds[frames_mask], frames_mask.sum(-1)
         audio_output.pooler_output = audio_embeds
+        audio_output.split_sizes = split_sizes
         return audio_output
 
     @can_return_tuple
@@ -286,7 +291,7 @@ class OmniASRModel(VoxtralModel):
 
         audio_features = None
         if input_values is not None:
-            audio_outputs = self.get_audio_features(input_values, padding_mask)
+            audio_outputs = self.get_audio_embeddings(input_values, padding_mask)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
 
@@ -313,6 +318,7 @@ class OmniASRForConditionalGeneration(VoxtralForConditionalGeneration):
     input_modalities = ("audio", "text")
     _keep_in_fp32_modules_strict = AttributeError()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(

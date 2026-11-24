@@ -62,6 +62,8 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     >>> configuration = model.config
     ```"""
 
+    model_type = "smolvlm_vision"
+
 
 class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
     pass
@@ -88,6 +90,8 @@ class SmolVLMConfig(Idefics3Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
+    model_type = "smolvlm"
 
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):

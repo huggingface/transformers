@@ -93,7 +93,6 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
     ```"""
 
     model_type = "video_llama_3_vision"
-    base_config_key = "vision_config"
     default_rope_type = "axial"
 
     image_size = AttributeError()
@@ -716,7 +715,6 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -786,7 +784,6 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",

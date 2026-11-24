@@ -613,6 +613,12 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["lm_head"]
 
+    def __init__(self, config: HYV4VLConfig):
+        super().__init__(config)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,

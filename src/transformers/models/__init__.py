@@ -248,6 +248,7 @@ if TYPE_CHECKING:
     from .informer import *
     from .inkling import *
     from .inkling2 import *
+    from .inkling2_loop import *
     from .instructblip import *
     from .instructblipvideo import *
     from .internlm3 import *
@@ -262,6 +263,7 @@ if TYPE_CHECKING:
     from .kimi_k25 import *
     from .kimi_linear import *
     from .kolibri1 import *
+    from .kolibri1_1 import *
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
@@ -401,6 +403,7 @@ if TYPE_CHECKING:
     from .phimoe import *
     from .phobert import *
     from .pi0 import *
+    from .pi05 import *
     from .pix2struct import *
     from .pixio import *
     from .pixtral import *
@@ -472,6 +475,7 @@ if TYPE_CHECKING:
     from .sam_hq import *
     from .sapiens2 import *
     from .sarvam_mla import *
+    from .sarvam_moe import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .seed_oss import *

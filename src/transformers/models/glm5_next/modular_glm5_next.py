@@ -363,7 +363,11 @@ class Glm5NextTextMoE(DeepseekV3MoE):
 
 
 class Glm5NextTextHyperConnection(DeepseekV4HyperConnection):
-    pass
+    def __init__(self, config: Glm5NextTextConfig):
+        super().__init__(config)
+        concatenated_weights_size = (2 + self.hc_mult) * self.hc_mult
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.empty(3, dtype=torch.float32))
 
 
 class Glm5NextTextHyperHead(nn.Module):
@@ -382,8 +386,8 @@ class Glm5NextTextForgetGate(nn.Module):
 
         self.f_a_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.f_b_proj = nn.Linear(self.head_dim, self.qkv_dim, bias=False)
-        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim))
-        self.A_log = nn.Parameter(torch.empty(self.num_heads))
+        self.dt_bias = nn.Parameter(torch.empty(self.qkv_dim, dtype=torch.float32))
+        self.A_log = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
 
         self.safe_gate_lower_bound = config.linear_lower_bound
 
@@ -627,6 +631,7 @@ class Glm5NextTextLinearAttention(nn.Module):
             kernel_size=self.conv_kernel_size,
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
+            dtype=torch.float32,
         )
 
         self.forget_gate = Glm5NextTextForgetGate(config)
@@ -1235,6 +1240,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "conv1d",
         "dt_bias",
         "A_log",

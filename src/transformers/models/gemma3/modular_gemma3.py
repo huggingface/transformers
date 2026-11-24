@@ -248,8 +248,7 @@ class Gemma3MLP(Gemma2MLP):
 
 
 class Gemma3RMSNorm(Gemma2RMSNorm):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__(dim=dim, eps=eps)
+    pass
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
@@ -420,7 +419,6 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
@@ -656,9 +654,6 @@ def create_masks_for_vision_model(
 
 
 class Gemma3Model(PaliGemmaModel):
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    accepts_loss_kwargs = False
-
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: Gemma3Config):

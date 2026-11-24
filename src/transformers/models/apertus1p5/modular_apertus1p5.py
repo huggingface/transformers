@@ -656,8 +656,8 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
-        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
-        self.audio_tokenizer = AutoModel.from_config(config.audio_config)
+        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config).to(dtype=torch.float32)
+        self.audio_tokenizer = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
         self.post_init()
 
     def get_image_tokens(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:
