@@ -26,10 +26,10 @@ def JevaForDecisionLoss(
 ) -> torch.Tensor:
     """Jeva's candidate cross-entropy plus coverage loss for nullable decisions.
 
-    Source: LiQiiiii/Jeva@e2104e0720100f979f2cdd456a1cbbee96da0abd, src/jeva/finetune.py, supervised_loss.
+    Source: https://github.com/LiQiiiii/Jeva/blob/e2104e0720100f979f2cdd456a1cbbee96da0abd/src/jeva/finetune.py#L218-L231
     """
     candidates = labels[:, 1:].to(device=logits.device, dtype=torch.float32)
-    log_probabilities = logits.float().masked_fill(~option_mask, 0.0)
+    log_probabilities = logits.masked_fill(~option_mask, 0.0).float()
     losses = -(candidates * log_probabilities).sum(-1)
 
     if allow_null is not None:
