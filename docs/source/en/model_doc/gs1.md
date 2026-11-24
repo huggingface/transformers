@@ -20,12 +20,12 @@ rendered properly in your Markdown viewer.
 
 # GS1
 
-GS1 is a family of pretrained models from BIGAI for structured decision tasks. Given a state and a question, GS1
-scores the available candidates for Choice, Noul, and Score questions instead of generating a text answer.
+GS1 is a family of pretrained models from [BIGAI](https://gs1.mybigai.ac.cn) for structured decision tasks. Given a state
+and a question, GS1 scores each candidate answer. It supports `choice`, `score`, and `noul` (yes/no) questions.
 
-The models use a Qwen3.5 hybrid text/vision backbone with GS1-specific bidirectional decision-context processing,
-attention-residual routing, and a cross-attention decision head. The head reads the question and candidate spans from
-the compiled request and returns one score per candidate.
+GS1 uses a Qwen3.5 text model and a Qwen3.5 vision encoder as its backbone. It includes GS1-specific bidirectional
+decision-context processing, attention-residual routing, and a cross-attention decision head. The head reads the
+question and option spans from the rendered prompt and returns one logit per option.
 
 | Model | Checkpoint |
 |---|---|
@@ -34,8 +34,31 @@ the compiled request and returns one score per candidate.
 | GS1-4B | [bigai/GS1-4B](https://huggingface.co/bigai/GS1-4B) |
 | GS1-9B | [bigai/GS1-9B](https://huggingface.co/bigai/GS1-9B) |
 
-GS1 is developed by [BIGAI](https://gs1.mybigai.ac.cn). See the [open-source implementation](https://github.com/bigai-nlco/GS1)
+See the [open-source implementation](https://github.com/bigai-nlco/GS1)
 for the model and inference reference.
+
+## Usage
+
+Use the [decision pipeline](../main_classes/pipelines#transformers.DecisionPipeline) to score options for a request.
+
+```python
+from transformers import pipeline
+
+decide = pipeline("decision", model="bigai/GS1-0.8B")
+answers = decide(
+    {
+        "state": "My package arrived damaged. Please send a replacement.",
+        "questions": {
+            "resolution": {
+                "type": "choice",
+                "instructions": "What does the customer want?",
+                "criteria": {"refund": "A refund", "replacement": "A replacement"},
+            },
+        },
+    }
+)
+print(answers["resolution"]["choice"])
+```
 
 ## GS1Config
 

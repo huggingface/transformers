@@ -54,11 +54,12 @@ class DecisionMixin:
             if head_config is None and config is not None:
                 raise ValueError(f"{pretrained_model_name_or_path} has no {cls.__name__} head next to its weights.")
             config = head_config or config
-        model = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
+        result = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
+        model = result[0] if isinstance(result, tuple) else result
         if decision_config is None:  # the decision config of the repo, read now like `generation_config`
             decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path, **_hub_kwargs(kwargs))
         model.decision_config = decision_config
-        return model
+        return result
 
     @classmethod
     def checkpoint_config(
@@ -120,6 +121,8 @@ class DecisionMixin:
             question_type_ids=torch.tensor([question_types], device=self.device),
             **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
         )
+        if not isinstance(scores, torch.Tensor):
+            scores = scores.logits
         return process_scores(
             decision_config, inputs["input_ids"], marks, decision_questions, scores.split(num_options[0].tolist())
         )

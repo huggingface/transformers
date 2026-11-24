@@ -78,6 +78,8 @@ class GS1Config(PreTrainedConfig):
     decision_brier_weight: float = 1.0
 
     def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_5":
+            self.vision_config = {**self.vision_config, "model_type": "qwen3_5_vision"}
         super().__post_init__(**kwargs)
         self.decision = {**GS1_DEFAULTS, **(self.decision or {})}
         self.calibration = {"mode": "identity", "log_temperature_bound": math.log(20), **self.calibration}

@@ -16,8 +16,9 @@ import unittest
 
 import torch
 
-from transformers import GS1Config, GS1ForDecision
+from transformers import GS1Config, GS1ForDecision, pipeline
 from transformers.loss.loss_gs1 import GS1ForDecisionLoss
+from transformers.testing_utils import slow, torch_device
 
 
 class GS1DecisionLossTest(unittest.TestCase):
@@ -81,6 +82,31 @@ class GS1DecisionLossTest(unittest.TestCase):
 
         loss.backward()
         self.assertTrue(torch.isfinite(logits.grad).all())
+
+
+class GS1IntegrationTest(unittest.TestCase):
+    @slow
+    def test_published_checkpoint_decision_pipeline(self):
+        checkpoint = "bigai/GS1-0.8B"
+        model, loading_info = GS1ForDecision.from_pretrained(checkpoint, output_loading_info=True)
+        for name in ("missing_keys", "unexpected_keys", "mismatched_keys"):
+            self.assertFalse(loading_info[name])
+        decide = pipeline("decision", model=model, tokenizer=checkpoint, device=torch_device)
+        answers = decide(
+            {
+                "state": "My package arrived damaged. Please send a replacement.",
+                "questions": {
+                    "resolution": {
+                        "type": "choice",
+                        "instructions": "What does the customer want?",
+                        "criteria": {"refund": "A refund", "replacement": "A replacement"},
+                    },
+                    "damage": {"type": "noul", "instructions": "Was the package damaged?"},
+                },
+            }
+        )
+        self.assertEqual(answers["resolution"]["choice"], "replacement")
+        self.assertGreater(answers["damage"]["noul"], 0.5)
 
 
 if __name__ == "__main__":

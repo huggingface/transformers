@@ -95,7 +95,7 @@ class GS1DecisionHead(nn.Module):
         self.bf16_compute = config.head_compute_dtype == "bfloat16"
 
     def forward(self, state, question, decision, options):
-        dtype = self.memory_projection.weight.dtype
+        dtype = torch.bfloat16 if self.bf16_compute else self.memory_projection.weight.dtype
         with torch.autocast(device_type=state.device.type, dtype=torch.bfloat16, enabled=self.bf16_compute):
             state, question, decision, options = (value.to(dtype) for value in (state, question, decision, options))
             memory = self.memory_projection(self.memory_norm(state)).unsqueeze(0)
@@ -122,7 +122,8 @@ class GS1DecisionHead(nn.Module):
                 routed = output_norm(updated + ffn_out(F.gelu(ffn_in(updated))))
             query = self.query_norm(self.query_mlp_out(F.gelu(self.query_mlp_in(context))))
             keys = self.key_norm(self.key_mlp_out(F.gelu(self.key_mlp_in(routed))))
-        return (keys.float() @ query.float()) / math.sqrt(self.projection_size)
+        with torch.autocast(device_type=state.device.type, enabled=False):
+            return (keys.float() @ query.float()) / math.sqrt(self.projection_size)
 
 
 class FADepthRouter(nn.Module):
@@ -244,7 +245,6 @@ class GS1PreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
     _can_record_outputs = {"hidden_states": GS1DecoderLayer, "attentions": "self_attn"}
     _is_stateful = True
-    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -261,21 +261,26 @@ GS1_TEMPLATE = r"""{%- macro text(x) -%}
 {{- value | replace('&', '&amp;') | replace('<', '&lt;') | replace('>', '&gt;') -}}
 {%- endmacro -%}
 {{- '<|im_start|>user\n<state>\n' -}}
-{%- if state is sequence and state is not string and state is not mapping -%}
+{%- set has_images = state is sequence and state is not string and state is not mapping
+    and state | selectattr('type', 'defined') | selectattr('type', 'equalto', 'image') | list -%}
+{%- if has_images -%}
     {%- for part in state -%}
         {%- if part.type == 'text' -%}{{- text(part.text) -}}
         {%- elif part.type == 'image' -%}{{- '<|vision_start|><|image_pad|><|vision_end|>' -}}
         {%- else -%}{{- raise_exception('Unsupported GS1 state item') -}}{%- endif -%}
     {%- endfor -%}
 {%- else -%}{{- text(state) -}}{%- endif -%}
-{{- '\n</state>\n<question>\n' ~ text(question.instructions or 'Choose the best matching option.') ~ '\n</question>' -}}
+{{- '\n</state>\n<question>\n' ~ text(question.instructions if question.instructions is not none else '') ~ '\n</question>' -}}
 {%- for option in question.options -%}
     {{- '\n<option>\n' -}}
+    {%- set description = question.descriptions[loop.index0] -%}
     {%- if question.type == 'choice' -%}
-        {{- text(option) -}}
-        {%- set description = question.descriptions[loop.index0] -%}
-        {%- if description is not none and description != option -%}{{- ': ' ~ text(description) -}}{%- endif -%}
-    {%- else -%}{{- text(question.descriptions[loop.index0]) -}}{%- endif -%}
+        {{- text(option) ~ ': ' ~ text(description if description is not none else option) -}}
+    {%- elif question.type == 'noul' and description is none -%}
+        {{- "The proposition is " ~ option ~ " under the question's stated semantics." -}}
+    {%- else -%}
+        {{- text(description) -}}
+    {%- endif -%}
     {{- '\n</option>' -}}
 {%- endfor -%}
 {{- '<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n<|decide|><|mark|>' -}}
@@ -333,7 +338,10 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
             if not option_starts or len(option_starts) != len(option_ends):
                 raise ValueError("GS1 prompt candidate markers are incomplete")
             q0, q1, decision = question_starts[0], question_ends[0], decisions[0]
-            if not state_starts[0] < state_ends[0] < q0 < q1 < option_starts[0] < decision:
+            markers = [state_starts[0], state_ends[0], q0, q1]
+            markers.extend(pos for pair in zip(option_starts, option_ends, strict=True) for pos in pair)
+            markers.append(decision)
+            if any(left >= right for left, right in zip(markers, markers[1:])):
                 raise ValueError("GS1 prompt markers are out of order")
             roles = torch.full_like(values, -1)
             roles[:q0], roles[q0 : option_starts[0]], roles[option_starts[0] : decision], roles[decision] = 0, 1, 2, 3
@@ -349,6 +357,7 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
             metadata.append(
                 (
                     begin,
+                    state_starts[0],
                     q0,
                     q1,
                     decision,
@@ -436,7 +445,7 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
             position_ids = self._vision_positions(input_ids, mm_token_type_ids, image_grid_thw)
         hidden = self.language_model(hidden, position_ids, roles, attention_mask)
         logits = []
-        for row, (begin, q0, q1, decision_position, qspan, starts, ends, spans) in enumerate(metadata):
+        for row, (begin, state_start, q0, q1, decision_position, qspan, starts, ends, spans) in enumerate(metadata):
             sequence = hidden[row, begin:]
             question = self._pool_span(sequence, q0, q1, qspan)
             options = torch.stack(
@@ -445,11 +454,11 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
                     for start, end, span in zip(starts, ends, spans, strict=True)
                 ]
             )
-            logits.append(self.decision_head(sequence[:q0], question, sequence[decision_position], options))
+            logits.append(self.decision_head(sequence[state_start:q0], question, sequence[decision_position], options))
         logits = torch.cat(logits)
         loss = None
         if labels is not None:
-            option_counts = torch.tensor([len(row[5]) for row in metadata], device=logits.device)
+            option_counts = torch.tensor([len(row[-1]) for row in metadata], device=logits.device)
             loss = self.loss_function(
                 logits=logits,
                 labels=labels,
@@ -468,13 +477,18 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
-        model = super().from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+        result = super().from_pretrained(pretrained_model_name_or_path, *args, **kwargs)
+        model = result[0] if isinstance(result, tuple) else result
         from ... import AutoTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(
+            pretrained_model_name_or_path, **decision.modeling_utils._hub_kwargs(kwargs)
+        )
         model._newline_token_ids = tuple(tokenizer.encode("\n", add_special_tokens=False))
-        model.decision_config.noul_options = ["false", "true"]
-        return model
+        if model.decision_config.chat_template is None:
+            model.decision_config.chat_template = GS1_TEMPLATE
+            model.decision_config.noul_options = ["false", "true"]
+        return result
 
 
 __all__ = ["GS1PreTrainedModel", "GS1ForDecision"]

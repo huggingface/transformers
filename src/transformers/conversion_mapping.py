@@ -161,6 +161,13 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "gs1": [
+            WeightRenaming(r"^decision_head\.routing_ffn\.(\d+)\.0\.", r"decision_head.routing_ffn_in.\1."),
+            WeightRenaming(r"^decision_head\.routing_ffn\.(\d+)\.2\.", r"decision_head.routing_ffn_out.\1."),
+            WeightRenaming(r"^decision_head\.(query|key)_mlp\.0\.", r"decision_head.\1_mlp_in."),
+            WeightRenaming(r"^decision_head\.(query|key)_mlp\.2\.", r"decision_head.\1_mlp_out."),
+            WeightRenaming(r"^calibrator\.beta", "calibration_beta"),
+        ],
         # Dory checkpoints store each decoder layer as an attention block followed by an mlp block
         "dory": [
             LayerPairCollapse(),
