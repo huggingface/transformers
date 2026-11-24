@@ -1148,18 +1148,18 @@ class GenerationMixin(ContinuousMixin):
         # A dict of our own, as it may be the user's
         mm_encoder_output = dict(mm_encoder_output)
         for modality in ["image", "video"]:
-            modalily_outputs = mm_encoder_output.get(modality)
-            if modalily_outputs is None:
+            modality_outputs = mm_encoder_output.get(modality)
+            if modality_outputs is None:
                 continue
-            pooler_output = getattr(modalily_outputs, "pooler_output", None)
-            deepstack_features = getattr(modalily_outputs, "deepstack_features", None)
+            pooler_output = getattr(modality_outputs, "pooler_output", None)
+            deepstack_features = getattr(modality_outputs, "deepstack_features", None)
             # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
             features = pooler_output if pooler_output is not None else (deepstack_features or [None])[0]
-            is_flat = isinstance(features, torch.Tensor) and getattr(modalily_outputs, "split_sizes", None) is not None
+            is_flat = isinstance(features, torch.Tensor) and getattr(modality_outputs, "split_sizes", None) is not None
             if not is_flat and pooler_output is None:
                 continue
 
-            # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
+            # 1. compute cumulative number of placeholder tokens per sample and per each encoded mm-data
             token_id = self._placeholder_token_id(modality)
             if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -1172,19 +1172,21 @@ class GenerationMixin(ContinuousMixin):
             # Flat outputs from `get_*_embeddings`: each sample's rows are contiguous, one gather repeats them
             if is_flat:
                 mm_encoder_output[modality] = _repeat_flat_outputs(
-                    modalily_outputs, num_image_tokens_in_text, expand_size
+                    modality_outputs, num_image_tokens_in_text, expand_size
                 )
                 continue
 
-            # Per-item outputs: GLM-Image's feature maps, or deprecated `get_*_features` outputs passed by users, which
-            # `split_sizes` marks (generate itself encodes flat)
-            if getattr(modalily_outputs, "split_sizes", None) is not None:
+            # Per-item outputs. GLM-Image's image-tokenizer feature maps come per image by design. Outputs of
+            # `get_*_features` passed by users also come per item, and keep their `split_sizes`: those are deprecated
+            if getattr(modality_outputs, "split_sizes", None) is not None:
                 logger.warning_once(
                     "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) to "
                     "`generate` is deprecated and will be removed: pass the flat outputs of `get_image_embeddings` / "
                     "`get_video_embeddings`."
                 )
-            num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
+            # A copy, as the outputs may be the user's
+            modality_outputs = mm_encoder_output[modality] = copy.copy(modality_outputs)
+            num_image_tokens_in_vision = [len(out) for out in modality_outputs.pooler_output]
             num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
             num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
 
@@ -1194,27 +1196,27 @@ class GenerationMixin(ContinuousMixin):
             offsets = [0] + [
                 i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
             ]
-            is_split_images = not isinstance(modalily_outputs.pooler_output, torch.Tensor)
-            modalily_outputs.pooler_output = [
+            is_split_images = not isinstance(modality_outputs.pooler_output, torch.Tensor)
+            modality_outputs.pooler_output = [
                 out
                 for start, end in zip(offsets[:-1], offsets[1:])
-                for out in repeat_tensor_or_list(modalily_outputs.pooler_output[start:end], expand_size)
+                for out in repeat_tensor_or_list(modality_outputs.pooler_output[start:end], expand_size)
             ]
 
             # 3. if `pooler_output` was a tensor, cat it back to follow model expectations
             if not is_split_images:
-                modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
+                modality_outputs.pooler_output = torch.stack(modality_outputs.pooler_output, dim=0)
 
             # 4. If there are deepstack features, expand them as well: per layer, each feature is a `list[torch.Tensor]`
-            if getattr(modalily_outputs, "deepstack_features", None) is not None:
+            if getattr(modality_outputs, "deepstack_features", None) is not None:
                 # Each deepstack feat is `(total_image_len, dim)` tensor
-                modalily_outputs.deepstack_features = [
+                modality_outputs.deepstack_features = [
                     [
                         expanded_feats
                         for start, end in zip(offsets[:-1], offsets[1:])
                         for expanded_feats in repeat_tensor_or_list(feature_list[start:end], expand_size)
                     ]
-                    for feature_list in modalily_outputs.deepstack_features
+                    for feature_list in modality_outputs.deepstack_features
                 ]
 
         return mm_encoder_output
