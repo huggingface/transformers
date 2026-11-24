@@ -118,6 +118,8 @@ else:
             ("lw_detr", {"torchvision": "DeformableDetrImageProcessor", "pil": "DeformableDetrImageProcessorPil"}),
             ("metaclip_2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("mgp-str", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
+            ("minicpmv2_6", {"pil": "MiniCPMV2_5ImageProcessorPil", "torchvision": "MiniCPMV2_5ImageProcessor"}),
+            ("minicpmv4_5", {"pil": "MiniCPMV2_5ImageProcessorPil", "torchvision": "MiniCPMV2_5ImageProcessor"}),
             ("minicpmv4_7", {"pil": "MiniCPMV4_6ImageProcessorPil", "torchvision": "MiniCPMV4_6ImageProcessor"}),
             ("mistral3", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
             ("mistral_large4", {"torchvision": "PixtralImageProcessor", "pil": "PixtralImageProcessorPil"}),
