@@ -4591,14 +4591,9 @@ class ModelTesterMixin(ExportTesterMixin):
             # of the model keeps its default attention.
             # TODO: with SDPA and packed inputs, models could call torch's own varlen attention instead of looping, which
             # would make SDPA trace too.
+            # `""` among them is the model under test itself, when it is a packed encoder (e.g. a vision model test)
             packed = get_packed_inputs_encoders(model)
-            if "" in packed:
-                # The model under test is a packed encoder itself (e.g. a vision model test)
-                attn_implementation = "flash_attention_2"
-            else:
-                attn_implementation = {"": model.config._attn_implementation} | dict.fromkeys(
-                    packed, "flash_attention_2"
-                )
+            attn_implementation = {"": model.config._attn_implementation} | dict.fromkeys(packed, "flash_attention_2")
             model.set_attn_implementation(attn_implementation)
             inputs |= model.get_data_dependent_inputs(**inputs)
             torch.compiler.reset()
