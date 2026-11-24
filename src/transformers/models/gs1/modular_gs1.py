@@ -14,6 +14,7 @@
 
 import math
 from dataclasses import dataclass, field
+from itertools import groupby
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -25,9 +26,9 @@ from torch.utils.checkpoint import checkpoint
 from ... import decision
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from ..auto import AutoConfig, AutoModel
-from ..qwen3_5.modeling_qwen3_5 import Qwen3_5PreTrainedModel
 
 
 GS1_DEFAULTS = {
@@ -114,8 +115,6 @@ class GS1Config(PreTrainedConfig):
             raise ValueError("cross_attention_heads must divide the text hidden size")
         self.tie_word_embeddings = False
         self.text_config.use_cache = False
-        self.text_config._attn_implementation = "sdpa"
-        self.vision_config._attn_implementation = "sdpa"
         self.text_config._attn_implementation = "sdpa"
         self.vision_config._attn_implementation = "sdpa"
 
@@ -246,7 +245,6 @@ class GS1TextModel(nn.Module):
         self.full_layers = tuple(i for i, kind in enumerate(text.layer_types) if kind == "full_attention")
         backbone = AutoModel.from_config(text)
         self.layers = nn.ModuleList(GS1DecoderLayer(layer) for layer in backbone.layers)
-        del backbone.layers
         self.embed_tokens = backbone.embed_tokens
         self.norm = backbone.norm
         self.rotary_emb = backbone.rotary_emb
@@ -303,7 +301,7 @@ class GS1TextModel(nn.Module):
                 if str(index) not in self.attnres_routers
                 else self.attnres_routers[str(index)](hidden, bank if partial is None else (*bank, partial))
             )
-            mask = masks[bidirectional and index in selected]
+            mask = masks.get(bidirectional and index in selected)
             if self.training and self.gradient_checkpointing:
                 hidden, mixed, ffn = self._gradient_checkpointing_func(
                     self._run_layer, layer, hidden, positional, mask, read, valid
@@ -319,10 +317,17 @@ class GS1TextModel(nn.Module):
 
 
 @auto_docstring
-class GS1PreTrainedModel(Qwen3_5PreTrainedModel):
+class GS1PreTrainedModel(PreTrainedModel):
     config: GS1Config
     base_model_prefix = "language_model"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["GS1DecoderLayer"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _keys_to_ignore_on_load_unexpected = [r"^mtp.*"]
+    _can_record_outputs = {"hidden_states": GS1DecoderLayer, "attentions": "self_attn"}
+    _is_stateful = True
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -336,7 +341,6 @@ class GS1PreTrainedModel(Qwen3_5PreTrainedModel):
 
 @auto_docstring(checkpoint="bigai/GS1-9B")
 class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
-    supports_gradient_checkpointing = True
     accepts_loss_kwargs = False
 
     def __init__(self, config: GS1Config):
@@ -348,10 +352,6 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
         if config.calibration["mode"] == "scalar_temperature":
             self.calibration_beta = nn.Parameter(torch.zeros(()))
         self.post_init()
-
-    def _set_gradient_checkpointing(self, enable=True, gradient_checkpointing_func=checkpoint):
-        self.language_model.gradient_checkpointing = enable
-        self.language_model._gradient_checkpointing_func = gradient_checkpointing_func
 
     def get_input_embeddings(self):
         return self.language_model.embed_tokens
@@ -366,7 +366,7 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
         except (TypeError, KeyError) as error:
             raise ValueError("GS1 config must define all seven structural token IDs") from error
         metadata, role_rows = [], []
-        newline = getattr(self, "_newline_token_ids", ())
+        newline = self._newline_token_ids
         for row, ids in enumerate(input_ids):
             begin = int((~attention_mask[row].bool()).sum())
             values = ids[begin:]
@@ -418,17 +418,18 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
             role_rows.append(F.pad(roles, (begin, 0), value=-1))
         return metadata, torch.stack(role_rows)
 
+    @staticmethod
+    def _pool_span(sequence, start, end, span):
+        return torch.stack((sequence[start], sequence[span[0] : span[1]].mean(0), sequence[end])).mean(0)
+
     def _vision_positions(self, input_ids, token_types, image_grid_thw):
         positions = torch.zeros(3, *input_ids.shape, device=input_ids.device, dtype=torch.long)
         grids = iter(image_grid_thw)
         merge = self.config.vision_config.spatial_merge_size
         for row in range(input_ids.shape[0]):
-            begin, offset = 0, 0
-            while begin < input_ids.shape[1]:
-                kind = int(token_types[row, begin])
-                end = begin + 1
-                while end < input_ids.shape[1] and int(token_types[row, end]) == kind:
-                    end += 1
+            begin = offset = 0
+            for kind, group in groupby(token_types[row].tolist()):
+                end = begin + sum(1 for _ in group)
                 if kind == 0:
                     part = torch.arange(end - begin, device=input_ids.device)[None].expand(3, -1) + offset
                     offset += end - begin
@@ -493,27 +494,15 @@ class GS1ForDecision(decision.DecisionMixin, GS1PreTrainedModel):
         hidden = self.language_model(hidden, position_ids, roles, attention_mask)
         logits = []
         for row, (begin, q0, q1, decision_position, qspan, starts, ends, spans) in enumerate(metadata):
-            question = torch.stack(
-                (
-                    hidden[row, begin + q0],
-                    hidden[row, begin + qspan[0] : begin + qspan[1]].mean(0),
-                    hidden[row, begin + q1],
-                )
-            ).mean(0)
+            sequence = hidden[row, begin:]
+            question = self._pool_span(sequence, q0, q1, qspan)
             options = torch.stack(
                 [
-                    torch.stack(
-                        (
-                            hidden[row, begin + start],
-                            hidden[row, begin + span[0] : begin + span[1]].mean(0),
-                            hidden[row, begin + end],
-                        )
-                    ).mean(0)
+                    self._pool_span(sequence, start, end, span)
                     for start, end, span in zip(starts, ends, spans, strict=True)
                 ]
             )
-            state = hidden[row, begin : begin + q0]
-            logits.append(self.decision_head(state, question, hidden[row, begin + decision_position], options))
+            logits.append(self.decision_head(sequence[:q0], question, sequence[decision_position], options))
         logits = torch.cat(logits)
         loss = None
         if labels is not None:

@@ -89,8 +89,6 @@ class GS1Config(PreTrainedConfig):
         self.text_config.use_cache = False
         self.text_config._attn_implementation = "sdpa"
         self.vision_config._attn_implementation = "sdpa"
-        self.text_config._attn_implementation = "sdpa"
-        self.vision_config._attn_implementation = "sdpa"
 
 
 __all__ = ["GS1Config"]
