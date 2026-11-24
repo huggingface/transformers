@@ -63,11 +63,11 @@ def resolve_continuous_batching_config(
     # Same for cuda graphs, if the user signals they want CUDA graphs via any padding/cached-graph parameter
     cuda_graph_requested = any([cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size])
 
-    # FA3's paged kernel takes any page size, FA2's needs multiples of 256. MLA models (latent cache, their own kernels)
-    # keep 256 until measured. Must happen before anything counts pages.
+    # FA3's and FA4's paged kernels take any page size, FA2's needs multiples of 256. MLA models (latent cache, their
+    # own kernels) keep 256 until measured. Must happen before anything counts pages.
     if cb_config.page_size is None:
         is_mla = getattr(config, "kv_lora_rank", None) is not None
-        cb_config.page_size = 32 if is_flash_attention_requested(config, version=3) and not is_mla else 256
+        cb_config.page_size = 32 if is_flash_attention_requested(config, version=[3, 4]) and not is_mla else 256
 
     # Resolve missing attributes for which we have hints. Must happen before no-hints resolve.
     resolve_using_hints(cb_config, workload_hints)
@@ -160,7 +160,10 @@ def ensure_decode_fast_path_is_available(
         # XPU support is given through its kernel variation `kernels-community/flash-attn2`
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
-        if fa_cuda or fa_xpu:  # Block table is only supported on these
+        # FA4 reads the pages through its varlen function (`page_table`), it has no `flash_attn_with_kvcache`
+        if is_flash_attention_requested(config, version=4) and cuda_available:
+            pass
+        elif fa_cuda or fa_xpu:  # Block table is only supported on these
             flash_attn_with_kvcache = lazy_import_flash_attention(config._attn_implementation)[0][2]
             # Throw a warning only if the decode fast path was requested by the user
             if flash_attn_with_kvcache is None:

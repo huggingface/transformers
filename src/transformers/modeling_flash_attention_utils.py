@@ -80,7 +80,7 @@ FLASH_ATTN_KERNEL_VERSIONS = {
     "kernels-community/flash-attn3": 1,
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
-    "kernels-community/flash-attn4": 0,
+    "kernels-community/flash-attn4": 1,
     "kernels-community/metal-flash-sdpa": 2,
 }
 
@@ -220,6 +220,11 @@ def _lazy_imports(
         flash_attn_func = getattr(kernel, "flash_attn_func", None)
         flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
         flash_attn_with_kvcache = getattr(kernel, "flash_attn_with_kvcache", None)
+        # FA4 is a CuTe DSL kernel called from Python, which dynamo can't trace
+        if kernel_repo == FLASH_ATTN_KERNEL_FALLBACK["flash_attention_4"]:
+            flash_attn_func, flash_attn_varlen_func = (
+                torch.compiler.disable(fn) if fn is not None else None for fn in (flash_attn_func, flash_attn_varlen_func)
+            )
         # Some kernels, like the MSA kernel from minimax, ship their own attention entry point rather than a varlen
         # function, so no need to check if it is None
         if flash_attn_varlen_func is None and (
@@ -829,6 +834,17 @@ def _flash_attention_forward(
     # padded tail of the queries belongs to no sequence (cu_seq_lens_q plateaus) and max_length_q is the padded size
     if is_fa_with_paged_kwargs and cache_seqlens is not None:
         q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
+        # FA4 has no paged call: the new K/V are written to the pages, then its varlen call reads them through the table
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=4):
+            from .integrations._proto_paged_kv_write import paged_kv_write
+
+            seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
+            flash_kwargs = partial(process_flash_kwargs_fn, **flash_kwargs_fn.keywords)(
+                max_seqlen_q=max_length_q, max_seqlen_k=block_table.size(1) * k_cache.size(1), block_table=block_table
+            )
+            out = flash_varlen_fn(q, k_cache, v_cache, cu_seqlens_q=cu_seq_lens_q, seqused_k=seqused, **flash_kwargs)
+            out = out[0] if isinstance(out, tuple) else out
+            return out.view(batch_size, -1, *out.shape[-2:])
         # FA2's paged call takes one query token per sequence: the new K/V are written to the pages first, then decode
         # steps use the paged call and the others the varlen call, which reads the pages through the block table
         if is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2):

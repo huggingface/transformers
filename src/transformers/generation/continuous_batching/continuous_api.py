@@ -34,7 +34,12 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.generic import is_flash_attention_requested
-from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available, is_torch_greater_or_equal
+from ...utils.import_utils import (
+    is_flash_attn_2_available,
+    is_flash_attn_3_available,
+    is_flash_attn_4_available,
+    is_torch_greater_or_equal,
+)
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
@@ -1005,12 +1010,14 @@ class ContinuousBatchingManager:
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
         is_paged = target_implem == "paged|eager"
         if not is_flash and not is_paged and model._supports_flash_attn and auto_switch_to_flash:
-            # Try to use FA3, then FA2, then give up. Both regular package or kernels is fine.
+            # Try to use FA3 (Hopper), then FA4 (Blackwell), then FA2, then give up. Both regular package or kernels is fine.
+            is_blackwell = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
             if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
+            elif is_blackwell and is_flash_attn_4_available(kernels_fallback_ok=True):
+                version = 4
             elif is_flash_attn_2_available(kernels_fallback_ok=True):
                 version = 2
-            # TODO: add FA4 to this list
             else:
                 version = None
             # Change and warn
