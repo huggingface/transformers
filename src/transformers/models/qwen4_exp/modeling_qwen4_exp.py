@@ -735,7 +735,16 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
 
         return self._select_tokens(hidden_states, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs)
 
-    def _select_tokens(self, hidden_states, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs) -> torch.Tensor:
+    def _select_tokens(
+        self,
+        hidden_states: torch.Tensor,
+        q: torch.Tensor,
+        raw_keys: torch.Tensor,
+        full_cos: torch.Tensor,
+        full_sin: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs,
+    ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
         # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
