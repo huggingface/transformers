@@ -22,6 +22,7 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_torchcodec_usable,
 )
 
 
@@ -334,6 +335,48 @@ def test_broken_torchaudio_does_not_break_import():
 
 @require_torch
 @run_test_using_subprocess
+def test_broken_torchaudio_does_not_break_model_import():
+    """
+    ``audio_utils`` is imported by ``processing_utils``, which every model imports through ``modeling_layers``, so it
+    must not import torchaudio at module scope either (see ``test_broken_torchaudio_does_not_break_import``). A
+    torchaudio built for a different CUDA version than torch raises ``RuntimeError`` on import, which would otherwise
+    make even text-only models fail to import. torchaudio is imported lazily inside ``load_audio`` instead.
+    """
+    import builtins
+    import importlib
+
+    from transformers import utils
+
+    real_import = builtins.__import__
+
+    def failing_import(name, *args, **kwargs):
+        if name == "torchaudio" or name.startswith("torchaudio."):
+            raise RuntimeError("Detected that PyTorch and TorchAudio were compiled with different CUDA versions.")
+        return real_import(name, *args, **kwargs)
+
+    reimported = (
+        "transformers.audio_utils",
+        "transformers.processing_utils",
+        "transformers.modeling_layers",
+        "transformers.models.llama.modeling_llama",
+    )
+    for name in list(sys.modules):
+        if name in reimported or name == "torchaudio" or name.startswith("torchaudio."):
+            del sys.modules[name]
+
+    # Report torchaudio as installed so that a module-scope import would be attempted (and fail).
+    with (
+        patch.object(utils, "is_torchaudio_available", return_value=True),
+        patch.object(builtins, "__import__", failing_import),
+    ):
+        audio_utils = importlib.import_module("transformers.audio_utils")
+        importlib.import_module("transformers.models.llama.modeling_llama")
+
+    assert not hasattr(audio_utils, "torchaudio"), "torchaudio must be imported lazily, not at module scope"
+
+
+@require_torch
+@run_test_using_subprocess
 def test_import_without_torch_distributed():
     """
     Checks that Transformers can still be imported and used when PyTorch was built with USE_DISTRIBUTED=0
@@ -487,3 +530,62 @@ def test_legacy_fast_image_processor_module_alias():
     # Only paths that actually existed are aliased.
     with pytest.raises(ModuleNotFoundError):
         import transformers.models.aria.image_processing_pil_aria_fast  # noqa: F401
+
+
+@contextmanager
+def mock_torchcodec_env(load_error=None, ffmpeg_major_version=7):
+    """
+    Mocks an installed torchcodec that fails to load its native library because of `load_error`, or that loaded
+    FFmpeg `ffmpeg_major_version` (`None`: FFmpeg not found).
+    """
+    fake_torchcodec = ModuleType("torchcodec")
+    fake_torchcodec.ffmpeg_major_version = ffmpeg_major_version
+    real_import = __import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "torchcodec" and load_error is not None:
+            # Like torchcodec: a generic error wrapping the real cause
+            raise OSError("Could not load this library: libtorchcodec_core.so") from OSError(load_error)
+        return real_import(name, *args, **kwargs)
+
+    is_torchcodec_usable.cache_clear()
+    logging.warning_once.cache_clear()
+    try:
+        with (
+            patch("transformers.utils.import_utils.is_torchcodec_available", return_value=True),
+            patch("transformers.utils.import_utils.is_torchcodec_greater_or_equal", return_value=True),
+            patch.dict(sys.modules, {"torchcodec": fake_torchcodec}),
+            patch("builtins.__import__", side_effect=fake_import),
+        ):
+            yield
+    finally:
+        is_torchcodec_usable.cache_clear()
+
+
+@parameterized.expand(
+    [
+        # (case, mock_torchcodec_env kwargs, expected usable, expected ffmpeg_usable, expected warning)
+        (
+            "build_mismatch",
+            {"load_error": "libnvrtc.so.13: cannot open shared object file"},
+            False,
+            False,
+            "libnvrtc.so.13",
+        ),
+        ("no_ffmpeg", {"ffmpeg_major_version": None}, True, False, "could not load FFmpeg"),
+        ("with_ffmpeg", {"ffmpeg_major_version": 7}, True, True, None),
+    ]
+)
+def test_torchcodec_usability(_, env, usable, ffmpeg_usable, warning):
+    logger = logging.get_logger("transformers.utils.import_utils")
+    with mock_torchcodec_env(**env), CaptureLogger(logger) as captured_logs:
+        for _ in range(2):  # results are cached: the second round must not warn again
+            assert is_torchcodec_usable(decode="image") == usable
+            assert is_torchcodec_usable(decode="audio") == ffmpeg_usable
+            assert is_torchcodec_usable(decode="video") == ffmpeg_usable
+
+    if warning is None:
+        assert captured_logs.out == ""
+    else:
+        assert warning in captured_logs.out  # for a failed load, the innermost cause, not the generic wrapper
+        assert captured_logs.out.count("torchcodec#installing-torchcodec") == 1

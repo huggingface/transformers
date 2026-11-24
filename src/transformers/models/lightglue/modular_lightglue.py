@@ -25,9 +25,8 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.generic import no_inherit_decorator
-from ...utils.import_utils import requires
 from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
@@ -118,37 +117,37 @@ class LightGlueConfig(PreTrainedConfig):
 @dataclass
 class LightGlueKeypointMatchingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Loss computed during training.
-    matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matches (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Index of keypoint matched in the other image.
-    matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Scores of predicted matches.
-    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+    keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
         Absolute (x, y) coordinates of predicted keypoints in a given image.
     prune (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
         Pruning mask indicating which keypoints are removed and at which layer.
     mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
         Mask indicating which values in matches, matching_scores, keypoints and prune are keypoint matching
         information.
-    hidden_states (`Tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
+    hidden_states (`Tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
         num_keypoints)` returned when `output_hidden_states=True` is passed or when
         `config.output_hidden_states=True`
-    attentions (`Tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
+    attentions (`Tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
         num_keypoints)` returned when `output_attentions=True` is passed or when
         `config.output_attentions=True`
     """
 
-    loss: torch.FloatTensor | None = None
-    matches: torch.FloatTensor | None = None
-    matching_scores: torch.FloatTensor | None = None
-    keypoints: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    matches: torch.Tensor | None = None
+    matching_scores: torch.Tensor | None = None
+    keypoints: torch.Tensor | None = None
     prune: torch.IntTensor | None = None
-    mask: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    mask: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class LightGlueImageProcessorKwargs(SuperGlueImageProcessorKwargs):
@@ -156,24 +155,11 @@ class LightGlueImageProcessorKwargs(SuperGlueImageProcessorKwargs):
 
 
 class LightGlueImageProcessor(SuperGlueImageProcessor):
-    def post_process_keypoint_matching(
-        self,
-        outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: TensorType | list[tuple],
-        threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
-        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
+    pass
 
 
 class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
-    @requires(backends=("torch",))
-    def post_process_keypoint_matching(
-        self,
-        outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: TensorType | list[tuple],
-        threshold: float = 0.0,
-    ) -> list[dict[str, "torch.Tensor"]]:
-        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
+    pass
 
 
 class LightGluePositionalEncoder(nn.Module):
@@ -865,7 +851,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,

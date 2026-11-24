@@ -29,7 +29,7 @@ from transformers.image_utils import (
     make_list_of_images,
     make_nested_list_of_images,
 )
-from transformers.testing_utils import is_flaky, require_torch, require_torchvision, require_vision
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
 
 if is_torch_available():
@@ -723,9 +723,9 @@ class LoadImageTester(unittest.TestCase):
 
         self.assertEqual(img_arr.shape, (1200, 900, 3))
 
-    @is_flaky()
     def test_load_img_url_timeout(self):
-        with self.assertRaises(httpx.ConnectTimeout):
+        # The connection may complete within the timeout (e.g. through a local proxy), giving a `ReadTimeout`
+        with self.assertRaises(httpx.TimeoutException):
             load_image(INVOICE_URL, timeout=0.001)
 
     def test_load_img_local(self):
@@ -859,6 +859,14 @@ class UtilFunctionTester(unittest.TestCase):
         # Test the channel dimension can be overridden
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
+
+    @require_vision
+    def test_get_image_size_pil(self):
+        # Test we can infer the size and channel dimension of a PIL image.
+        image = get_random_image(32, 64)
+        self.assertEqual(get_image_size(image), (32, 64))
+        # Channel dimension is ignored for PIL images
+        self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (32, 64))
 
     def test_infer_channel_dimension(self):
         # Test we fail with invalid input

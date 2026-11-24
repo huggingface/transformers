@@ -92,13 +92,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.6]
     model_tester_class = GptOssModelTester
 
-    @unittest.skip(
-        reason="The experts are stored transposed with biases: an intra-expert TP plan would add the down "
-        "projection's bias once per rank. It comes with the untransposed expert layout."
-    )
-    def test_moe_parallel_plans_shard_experts(self):
-        pass
-
     @require_kernels
     @require_torch_accelerator
     def test_kernels_can_load_without_crashing(self):
@@ -132,8 +125,14 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         expected_kernel = _FA3_KERNEL
-        # `kernels>=0.15` requires an explicit version/revision pin on `get_kernel(...)`.
-        flash = get_kernel(expected_kernel, version=get_attn_kernel_version(expected_kernel))
+
+        try:
+            flash = get_kernel(expected_kernel, version=get_attn_kernel_version(expected_kernel))
+        except RuntimeError as e:
+            if "does not support the current device" in str(e):
+                self.skipTest("FA3 kernel is not supported on this device")
+            raise
+
         if flash is None:
             self.skipTest(f"{expected_kernel} is not available, skipping auto-correction test.")
 

@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available
 
 from ... import test_modeling_common
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -61,41 +62,36 @@ if is_torch_available():
     from transformers.image_utils import load_image_as_tensor
 
 
-class Tipsv2VisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,
-        image_size=28,
-        patch_size=14,
-        num_channels=3,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        mlp_ratio=2,
-        num_register_tokens=1,
-        initializer_range=0.02,
-        is_training=True,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.num_register_tokens = num_register_tokens
-        self.initializer_range = initializer_range
-        self.is_training = is_training
-        self.scope = scope
+class Tipsv2VisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 4,
+        "image_size": 28,
+        "patch_size": 14,
+        "num_channels": 3,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "mlp_ratio": 2,
+        "num_register_tokens": 1,
+        "initializer_range": 0.02,
+        "is_training": True,
+        "scope": None,
+    }
 
-        self.num_patches = (image_size // patch_size) ** 2
-        self.seq_length = self.num_patches + 1 + num_register_tokens
-        self.mask_length = self.num_patches
-        self.num_masks = max(1, self.num_patches // 2)
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_patches"] = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = values["num_patches"] + 1 + values["num_register_tokens"]
+        values["mask_length"] = values["num_patches"]
+        values["num_masks"] = max(1, values["num_patches"] // 2)
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Tipsv2VisionConfig(
@@ -137,6 +133,8 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     TIPSv2VisionModel is a DINOv2-with-registers vision tower. It does not use token input ids, token embeddings, or
     text attention masks.
     """
+
+    model_tester_class = Tipsv2VisionModelTester
 
     all_model_classes = (Tipsv2VisionModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": Tipsv2VisionModel} if is_torch_available() else {}
@@ -210,6 +208,8 @@ class Tipsv2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
 @require_torch
 class Tipsv2VisionBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = Tipsv2VisionModelTester
+
     all_model_classes = (Tipsv2VisionBackbone,) if is_torch_available() else ()
     config_class = Tipsv2VisionConfig
 
@@ -219,36 +219,27 @@ class Tipsv2VisionBackboneTest(unittest.TestCase, BackboneTesterMixin):
         self.model_tester = Tipsv2VisionModelTester(self)
 
 
-class Tipsv2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=4,
-        seq_length=7,
-        vocab_size=99,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=32,
-        max_position_embeddings=16,
-        initializer_range=0.02,
-        is_training=True,
-        use_input_mask=True,
-        scope=None,
-    ):
+class Tipsv2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 4,
+        "seq_length": 7,
+        "vocab_size": 99,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 32,
+        "max_position_embeddings": 16,
+        "initializer_range": 0.02,
+        "is_training": True,
+        "use_input_mask": True,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Tipsv2TextConfig(
@@ -294,6 +285,8 @@ class Tipsv2TextModelTester:
 
 @require_torch
 class Tipsv2TextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Tipsv2TextModelTester
+
     all_model_classes = (Tipsv2TextModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -311,20 +304,28 @@ class Tipsv2TextModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
 
-class Tipsv2ModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class Tipsv2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_values = Tipsv2TextModelTester.get_small_config_defaults(**(text_kwargs or {}))
+        for key in ("batch_size", "hidden_size", "num_hidden_layers", "num_attention_heads", "seq_length"):
+            values[key] = text_values[key]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         text_kwargs = {} if text_kwargs is None else text_kwargs
         vision_kwargs = {} if vision_kwargs is None else vision_kwargs
-
         self.parent = parent
+        for key, value in self.get_small_config_defaults(text_kwargs=text_kwargs, **kwargs).items():
+            setattr(self, key, value)
         self.text_model_tester = Tipsv2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Tipsv2VisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size
-        self.hidden_size = self.text_model_tester.hidden_size
-        self.num_hidden_layers = self.text_model_tester.num_hidden_layers
-        self.num_attention_heads = self.text_model_tester.num_attention_heads
-        self.seq_length = self.text_model_tester.seq_length
-        self.is_training = is_training
 
     def get_config(self):
         return Tipsv2Config(
@@ -367,6 +368,8 @@ class Tipsv2ModelTester:
 
 @require_torch
 class Tipsv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Tipsv2ModelTester
+
     all_model_classes = (Tipsv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": Tipsv2Model} if is_torch_available() else {}
     additional_model_inputs = ["pixel_values", "attention_mask", "return_loss"]

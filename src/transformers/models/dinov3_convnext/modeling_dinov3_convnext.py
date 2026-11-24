@@ -184,7 +184,6 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["DINOv3ConvNextLayer"]
     _can_record_outputs = {"hidden_states": DINOv3ConvNextStage}
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -225,7 +224,7 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutputWithPoolingAndNoAttention:
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
 
         output = self.model(hidden_states, **kwargs)
@@ -268,7 +267,7 @@ class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
     @can_return_tuple
     @filter_output_hidden_states
     @auto_docstring
-    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BackboneOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> BackboneOutput:
         kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         output = self.model(pixel_values, **kwargs)
 

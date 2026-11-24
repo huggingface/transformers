@@ -59,7 +59,6 @@ class FuyuConfig(PreTrainedConfig):
             },
         ),
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 25000.0
 
     image_size: int | None = 300

@@ -22,8 +22,8 @@ from transformers import (
     MuseGlimmerModel,
     is_torch_available,
 )
-from transformers.models.muse_glimmer.configuration_muse_glimmer import MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from transformers.testing_utils import (
+    Expectations,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -43,36 +43,34 @@ if is_torch_available():
 class MuseGlimmerVision2TextModelTester(VLMModelTester):
     base_model_class = MuseGlimmerModel
     config_class = MuseGlimmerConfig
-    text_config_class = MuseGlimmerTextConfig
-    vision_config_class = MuseGlimmerVisionConfig
+
     conditional_generation_class = MuseGlimmerForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("video_token_id", 4)
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("patch_size", 2)
-        kwargs.setdefault("patch_temporal", 2)
-        kwargs.setdefault("merge_size", 1)
-        kwargs.setdefault("layer_types", ["full_attention", "sliding_attention"])
-        kwargs.setdefault("pos_emb_height", 4)
-        kwargs.setdefault("pos_emb_width", 4)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("projector_hidden_size", 32)
-        super().__init__(parent, **kwargs)
-        self.image_grid_thw = (1, 1, 1)
-        self.out_hidden_size = self.hidden_size * self.merge_size**2
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "num_image_tokens": 4,
+        "patch_size": 2,
+        "patch_temporal": 2,
+        "merge_size": 1,
+        "layer_types": ["full_attention", "sliding_attention"],
+        "vision_layer_types": ["window_attention", "full_attention"],
+        "pos_emb_height": 4,
+        "pos_emb_width": 4,
+        "intermediate_size": 37,
+        "projector_hidden_size": 32,
+        "image_grid_thw": (1, 2, 2),
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["out_hidden_size"] = values["hidden_size"] * values["merge_size"] ** 2
+        return values
 
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {self.video_token_id}
-
-    def get_vision_config(self):
-        # `layer_types` is shared with the text config by name, but the vision tower uses
-        # "window_attention" instead of "sliding_attention".
-        config = super().get_vision_config()
-        config.layer_types = ["window_attention"] * (config.num_hidden_layers - 1) + ["full_attention"]
-        return config
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -141,8 +139,24 @@ class MuseGlimmerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # never checked. 24 leaves margin for a different token split without paying for tokens nobody reads --
         # which is not free: on a single-accelerator runner every decoded token restreams the CPU-offloaded
         # weights across PCIe.
-        output = model.generate(input_ids=input_ids, max_new_tokens=24, do_sample=False)
-        completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
+        output = model.generate(
+            input_ids=input_ids,
+            max_new_tokens=24,
+            do_sample=False,
+            return_dict_in_generate=True,
+            output_logits=True,
+        )
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 8): [-9.625, -10.125, -10.375, -10.25, -9.125],
+                ("cuda", 10): [-9.625, -10.25, -10.5625, -10.25, -9.25],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
+
+        completion = tokenizer.decode(output.sequences[0, input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(completion[: len(self.EXPECTED_TEXT_PREFIX)], self.EXPECTED_TEXT_PREFIX)
 
     def test_image_generation_matches_reference(self):
@@ -171,6 +185,18 @@ class MuseGlimmerIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             # further tokens this used to generate were never compared against anything.
             max_new_tokens=12,
             do_sample=False,
+            return_dict_in_generate=True,
+            output_logits=True,
         )
-        completion = tokenizer.decode(output[0, input_ids.shape[1] :], skip_special_tokens=True)
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("cuda", 8): [-10.875, -11.3125, -11.1875, -10.3125, -10.5625],
+                ("cuda", 10): [-10.9375, -11.375, -11.1875, -10.375, -10.5625],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
+        torch.testing.assert_close(output.logits[0][0, :5].float(), expected_logits, atol=1e-4, rtol=1e-4)
+
+        completion = tokenizer.decode(output.sequences[0, input_ids.shape[1] :], skip_special_tokens=True)
         self.assertEqual(completion[: len(self.EXPECTED_IMAGE_PREFIX)], self.EXPECTED_IMAGE_PREFIX)

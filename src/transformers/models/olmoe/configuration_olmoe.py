@@ -41,7 +41,6 @@ class OlmoeConfig(PreTrainedConfig):
     """
 
     model_type = "olmoe"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_local_experts": "num_experts"}
 
     # Default tensor parallel plan for base model `Olmoe`
@@ -50,9 +49,6 @@ class OlmoeConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise_gather_output",  # due to the norm, we have to gather
         "layers.*.self_attn.v_proj": "colwise_gather_output",  # due to the norm, we have to gather
         "layers.*.self_attn.o_proj": "rowwise_split_input",  # due to the norm, we have to gather
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",

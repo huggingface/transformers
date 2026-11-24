@@ -238,7 +238,6 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["PoolFormerLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -269,7 +268,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
@@ -338,7 +337,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,

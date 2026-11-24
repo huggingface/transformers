@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     require_deterministic_for_xpu,
     require_torch,
+    require_torchvision,
     require_vision,
     slow,
 )
@@ -46,6 +47,106 @@ else:
 @require_vision
 class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
+
+    @require_torch
+    def test_string_assistant_prefill_full_text(self):
+        import copy
+
+        pipe = pipeline(
+            "image-text-to-text",
+            model="hf-internal-testing/tiny-random-Qwen2VLForConditionalGeneration",
+        )
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "Hello!"}]},
+            {"role": "assistant", "content": "My answer is"},
+        ]
+        original = copy.deepcopy(messages)
+
+        new_text = pipe(
+            text=messages,
+            return_full_text=False,
+            continue_final_message=True,
+            generate_kwargs={"max_new_tokens": 2, "do_sample": False},
+        )[0]["generated_text"]
+
+        full_text = pipe(
+            text=messages,
+            return_full_text=True,
+            continue_final_message=True,
+            generate_kwargs={"max_new_tokens": 2, "do_sample": False},
+        )[0]["generated_text"]
+
+        self.assertEqual(full_text[-1]["role"], "assistant")
+        self.assertEqual(full_text[-1]["content"], "My answer is" + new_text)
+        self.assertEqual(messages, original)
+
+    @require_torch
+    def test_multiple_candidates_tiny_model(self):
+        pipe = pipeline(
+            "image-text-to-text",
+            model="trl-internal-testing/tiny-LlavaForConditionalGeneration",
+            max_new_tokens=2,
+        )
+        kwargs = {"num_beams": 2, "num_return_sequences": 2, "do_sample": False}
+
+        single = pipe(text="Hello", generate_kwargs=kwargs)
+        batched = pipe(text=["Hello", "World"], batch_size=2, generate_kwargs=kwargs)
+
+        self.assertEqual(len(single), 2)
+        self.assertEqual([len(group) for group in batched], [2, 2])
+
+    @require_torch
+    @require_torchvision
+    def test_batched_generation_left_pads_decoder_only_model(self):
+        # The Qwen2.5-VL tokenizer pads on the right by default, which breaks batched decoder-only generation
+        pipe = pipeline("image-text-to-text", model="trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration")
+        image = Image.new("RGB", (64, 64), color=(120, 30, 200))
+        messages = [
+            [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
+            for text in ("Describe.", "Describe the colors, the shapes and the overall layout of this picture.")
+        ]
+        kwargs = {"max_new_tokens": 6, "do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
+    @require_torch
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "image-text-to-text",
+            model="trl-internal-testing/tiny-LlavaForConditionalGeneration",
+            max_new_tokens=2,
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
+                    {"type": "text", "text": "What is this?"},
+                ],
+            }
+        ]
+
+        outputs = pipe(text=messages, return_tensors=True)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
+
+    def test_generate_kwargs_not_mutated_tiny_llava(self):
+        pipe = pipeline(
+            "image-text-to-text",
+            model="trl-internal-testing/tiny-LlavaForConditionalGeneration",
+        )
+        generate_kwargs = {"do_sample": False}
+
+        # Reuse the exact same caller-owned dictionary across calls.
+        for max_new_tokens in (2, 3):
+            pipe(
+                text="Hello",
+                generate_kwargs=generate_kwargs,
+                max_new_tokens=max_new_tokens,
+            )
+            self.assertEqual(generate_kwargs, {"do_sample": False})
 
     def get_test_pipeline(self, model, tokenizer, processor, image_processor, dtype="float32"):
         pipe = ImageTextToTextPipeline(model=model, processor=processor, dtype=dtype, max_new_tokens=10)

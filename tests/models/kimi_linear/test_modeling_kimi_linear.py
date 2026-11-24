@@ -45,38 +45,38 @@ class KimiLinearModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = KimiLinearModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # NOTE: must be 0.0 for TP backward tests. In train mode, non-zero dropout causes different RNG
         # states between the non-TP and TP model forward passes, leading to mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
-        self.hidden_act = "silu"
+        "attention_probs_dropout_prob": 0.0,
+        "hidden_act": "silu",
         # Two layers covering all four branches: a KDA layer with a dense MLP, and an MLA layer with a MoE
         # block. Anything less would leave one of the decoder-layer paths untested.
-        self.num_hidden_layers = 2
-        self.layer_types = ["linear_attention", "full_attention"]
-        self.mlp_layer_types = ["dense", "sparse"]
+        "num_hidden_layers": 2,
+        "layer_types": ["linear_attention", "full_attention"],
+        "mlp_layer_types": ["dense", "sparse"],
         # KDA (linear attention) layers
-        self.linear_conv_kernel_dim = 2
-        self.linear_head_dim = 16
-        self.linear_num_heads = 4
+        "linear_conv_kernel_dim": 2,
+        "linear_head_dim": 16,
+        "linear_num_heads": 4,
         # MLA (full attention) layers. The released checkpoints have no query LoRA, so keep `q_lora_rank`
         # unset to exercise the same `q_proj` branch they take.
-        self.q_lora_rank = None
-        self.kv_lora_rank = 16
-        self.qk_nope_head_dim = 32
-        self.qk_rope_head_dim = 16
-        self.v_head_dim = 32
+        "q_lora_rank": None,
+        "kv_lora_rank": 16,
+        "qk_nope_head_dim": 32,
+        "qk_rope_head_dim": 16,
+        "v_head_dim": 32,
         # MoE
-        self.moe_intermediate_size = 16
+        "moe_intermediate_size": 16,
         # Must override the config default (256) with a small value: with 256 experts the MoE layer
         # dominates ~94% of model size, making accelerate unable to split it across GPU/CPU in
         # test_cpu_offload (infer_auto_device_map puts everything on CPU → no dispatch → no hf_device_map).
-        self.num_local_experts = 4
-        self.n_shared_experts = 1
-        self.num_experts_per_tok = 2
-        self.n_group = 1
-        self.topk_group = 1
+        "num_local_experts": 4,
+        "n_shared_experts": 1,
+        "num_experts_per_tok": 2,
+        "n_group": 1,
+        "topk_group": 1,
+    }
 
 
 @require_torch
@@ -177,8 +177,8 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         # Reference: prefill, then forward the next token alone against the populated cache.
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         # Under test: same prefill, then forward [next_token, *distractors] in one call. The first position
@@ -186,8 +186,8 @@ class KimiLinearModelTest(CausalLMModelTest, unittest.TestCase):
         distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=torch.cat([next_token, distractors], dim=1), past_key_values=cache_multi)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=torch.cat([next_token, distractors], dim=1), cache=cache_multi)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         # The FLA kernels run their matmuls in TF32, so the chunked and the recurrent kernels drift apart by ~1e-4 on

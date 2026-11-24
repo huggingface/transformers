@@ -26,6 +26,7 @@ from transformers import (
 )
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -43,38 +44,35 @@ if is_torch_available():
     )
 
 
-class PocketTTSAudioTokenizerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        num_frames=5,
-        latent_dim=8,
-        hidden_size=32,
-        num_filters=4,
-        upsampling_ratios=[4, 2],
-        latent_stride=8,
-        num_hidden_layers=1,
-        num_attention_heads=2,
-        intermediate_size=64,
-        max_position_embeddings=512,
-        is_training=False,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_frames = num_frames
-        self.latent_dim = latent_dim
-        self.hidden_size = hidden_size
-        self.num_filters = num_filters
-        self.upsampling_ratios = upsampling_ratios
-        self.latent_stride = latent_stride
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.is_training = is_training
+class PocketTTSAudioTokenizerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "num_frames": 5,
+        "latent_dim": 8,
+        "hidden_size": 32,
+        "num_filters": 4,
+        "upsampling_ratios": [4, 2],
+        "latent_stride": 8,
+        "num_hidden_layers": 1,
+        "num_attention_heads": 2,
+        "intermediate_size": 64,
+        "max_position_embeddings": 512,
+        "is_training": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # the transformers run at the SEANet rate: `latent_stride` positions per latent frame
-        self.seq_length = num_frames * latent_stride
+        values["seq_length"] = values["num_frames"] * values["latent_stride"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return PocketTTSAudioTokenizerConfig(
@@ -122,6 +120,8 @@ class PocketTTSAudioTokenizerModelTester:
 
 @require_torch
 class PocketTTSAudioTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = PocketTTSAudioTokenizerModelTester
+
     all_model_classes = (PocketTTSAudioTokenizerModel,) if is_torch_available() else ()
     test_resize_embeddings = False
     test_torch_exportable = False  # data-dependent guard in Mimi's conv padding (`u0 + u1 + 320 < 7`)
@@ -138,6 +138,11 @@ class PocketTTSAudioTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    # On CPU (fp32), a few `audio_values` elements differ by up to ~2.3e-5 between batched and single-row runs, which
+    # makes the default `atol=1e-5` flaky.
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @unittest.skip(reason="The audio tokenizer has no token embeddings.")
     def test_model_get_set_embeddings(self):

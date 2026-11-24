@@ -190,7 +190,8 @@ from transformers import AutoProcessor, MusicFlamingoForConditionalGeneration
 
 
 model_id = "nvidia/music-flamingo-2601-hf"
-processor = AutoProcessor.from_pretrained(model_id)
+# NOTE: the revision must be used until the chat template marking the assistant turn (for training) is merged
+processor = AutoProcessor.from_pretrained(model_id, revision="refs/pr/6")
 model = MusicFlamingoForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 
@@ -230,13 +231,17 @@ conversation = [
 inputs = processor.apply_chat_template(
     conversation,
     tokenize=True,
-    add_generation_prompt=True,
     return_dict=True,
+    # only train on the assistant outputs: mask the labels outside the assistant turns
+    return_assistant_tokens_mask=True,
+    return_tensors="pt",
     processor_kwargs={"output_labels": True},
 ).to(model.device)
+inputs["labels"][inputs.pop("assistant_masks") == 0] = -100
 inputs["input_features"] = inputs["input_features"].to(model.dtype)
 
 loss = model(**inputs).loss
+print("Loss:", loss.item())
 loss.backward()
 ```
 

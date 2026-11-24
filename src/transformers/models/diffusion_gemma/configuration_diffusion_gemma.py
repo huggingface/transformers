@@ -45,7 +45,6 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
     """
 
     model_type = "diffusion_gemma_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -56,19 +55,15 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.experts.gate_up_proj": "packed_colwise",
-        "layers.*.experts.down_proj": "rowwise",
-        "layers.*.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
         # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.router": "ep_router",
         "layers.*.experts.gate_up_proj": "grouped_gemm",
         "layers.*.experts.down_proj": "grouped_gemm",
-        "layers.*.experts": "moe_tp_experts",
+        "layers.*.experts": "ep_dispatch_experts",
     }
 
     base_model_pp_plan = {
@@ -120,7 +115,7 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
             )
             self.layer_types[-1] = "full_attention"
 
-        default_rope_params: dict[Literal["full_attention", "sliding_attention"] : dict[str, Any]] = {
+        default_rope_params: dict[Literal["full_attention", "sliding_attention"], dict[str, Any]] = {
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0},
             "full_attention": {"rope_type": "proportional", "partial_rotary_factor": 0.25, "rope_theta": 1_000_000.0},
         }

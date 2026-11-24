@@ -47,11 +47,13 @@ class Lfm2MoeConfig(PreTrainedConfig):
     """
 
     model_type = "lfm2_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.feed_forward.experts.gate_up_proj": "packed_colwise",
-        "layers.*.feed_forward.experts.down_proj": "rowwise",
-        "layers.*.feed_forward.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.q_layernorm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.k_layernorm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.out_proj": "rowwise",
     }
     base_model_ep_plan = {
         "layers.*.feed_forward.experts.gate_up_proj": "grouped_gemm",

@@ -16,41 +16,63 @@ rendered properly in your Markdown viewer.
 
 # FBGEMM
 
-[FBGEMM (Facebook GEneral Matrix Multiplication)](https://github.com/pytorch/FBGEMM) is a low-precision matrix multiplication library for small batch sizes and support for accuracy-loss minimizing techniques such as row-wise quantization and outlier-aware quantization. With FBGEMM, quantize a models weights to 8-bits/channel and the activations to 8-bits/token (also known as fp8 or w8a8).
+[FBGEMM (Facebook GEneral Matrix Multiplication)](https://github.com/pytorch/FBGEMM) FP8 quantization stores weights in FP8 with one scale per output channel, and quantizes activations to FP8 with one scale per token at runtime (W8A8). The matmul runs on FBGEMM's row-wise FP8 kernel. Use it for FP8 weight and activation quantization on Hopper or newer NVIDIA GPUs, or on Intel XPUs, without calibration data.
 
-> [!TIP]
-> You need a GPU with [compute capability 9+](https://developer.nvidia.com/cuda-gpus#collapseOne) like a H100.
+The table below summarizes what FBGEMM supports in Transformers.
 
-Install the FBGEMM_GPU package with the command below to ensure you have the latest version.
+| | |
+|---|---|
+| Config | [`FbgemmFp8Config`] |
+| `quant_method` | `fbgemm_fp8` |
+| Workflow | Quantize while loading |
+| Bits | 8 |
+| Hardware | CUDA (compute capability 9.0+), XPU |
+| Save | ✅ |
+| Fine-tune | ❌ |
+| Auto-compile | ❌ |
+
+## Install FBGEMM
+
+On a CUDA GPU, install the fbgemm-gpu and [Accelerate](https://huggingface.co/docs/accelerate/index) libraries. If you have installation issues, try the fbgemm-gpu [nightly release](https://docs.pytorch.org/FBGEMM/fbgemm_gpu/development/InstallationInstructions.html#fbgemm-gpu-install-libraries).
 
 ```bash
-pip install --upgrade accelerate fbgemm-gpu torch
+pip install -U fbgemm-gpu accelerate
 ```
 
-If you're having installation issues, try installing the [nightly release](https://pytorch.org/FBGEMM/fbgemm_gpu-development/InstallationInstructions.html#fbgemm-gpu-install-libraries:~:text=found%20here.-,Install%20the%20FBGEMM_GPU%20Package,-Install%20through%20PyTorch).
+On an XPU, Transformers downloads the FP8 quantization kernel from the [kernels-community/fp8-fbgemm](https://huggingface.co/kernels-community/fp8-fbgemm) repository on the Hub instead. Install the [kernels](https://huggingface.co/docs/kernels/index) and Accelerate libraries.
 
-Create a [`FbgemmFp8Config`] and pass it to [`~PreTrainedModel.from_pretrained`] to quantize a model to fp8.
+```bash
+pip install -U "transformers[kernels]" accelerate
+```
+
+## Quantize a model with FBGEMM
+
+Create a [`FbgemmFp8Config`] and pass it to [`~PreTrainedModel.from_pretrained`].
 
 ```py
-from transformers import FbgemmFp8Config, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, FbgemmFp8Config
 
 quantization_config = FbgemmFp8Config()
-quantized_model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Meta-Llama-3-8B",
-    dtype="auto",
-    device_map="auto",
-    quantization_config=quantization_config
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B",
+    quantization_config=quantization_config,
+    device_map="cuda",
 )
 ```
 
-[`~PreTrainedModel.save_pretrained`] and [`~PreTrainedModel.from_pretrained`] enable saving and loading a quantized model.
+FBGEMM always loads the model in bf16. If you pass a different `dtype`, Transformers logs a warning and switches it to `torch.bfloat16`.
 
-```py
-quant_path = "/path/to/save/quantized/model"
-quantized_model.save_pretrained(quant_path)
-model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
-```
+`activation_scale_ub` caps the per-token activation scale when activations are quantized at runtime. It defaults to `1200.0`, and you can change it when you load a pre-quantized checkpoint.
+
+## Limitations
+
+- FBGEMM needs a CUDA GPU or an XPU. Loading without one raises an `ImportError`.
+- On CUDA, FBGEMM needs compute capability 9.0 or higher, like an H100. An older GPU raises a `ValueError`.
+- Quantizing while loading can't offload to the CPU or disk. A `device_map` that includes `"cpu"` or `"disk"` raises a `ValueError`. A pre-quantized checkpoint can offload.
+- FBGEMM quantizes `nn.Linear` layers and Llama 4 text experts. Fused expert modules in other mixture-of-experts models stay unquantized.
+- FBGEMM-quantized models can't be fine-tuned.
 
 ## Resources
 
-Read the [Open-sourcing FBGEMM for state-of-the-art server-side inference](https://engineering.fb.com/2018/11/07/ml-applications/fbgemm/) blog post for more details on FBGEMM.
+- [FBGEMM](https://github.com/pytorch/FBGEMM) repository
+- [Open-sourcing FBGEMM for state-of-the-art server-side inference](https://engineering.fb.com/2018/11/07/ml-applications/fbgemm/) blog post

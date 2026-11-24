@@ -19,7 +19,6 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -28,6 +27,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
@@ -39,7 +39,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     eager_attention_forward,
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
-from ..mixtral.modeling_mixtral import MixtralTopKRouter
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralTopKRouter
 from .configuration_longcat_flash import LongcatFlashConfig
 
 
@@ -84,75 +84,46 @@ class LongcatFlashTopkRouter(MixtralTopKRouter):
         return router_logits, topk_weights.to(router_logits.dtype), topk_indices
 
 
-class LongcatFlashExperts(nn.Module):
+class LongcatFlashExperts(MixtralExperts):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_experts = config.n_routed_experts
+        self.intermediate_dim = config.expert_ffn_hidden_size
+
+
+class LongcatFlashMoE(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
-        self.hidden_size = config.hidden_size
+        # Used for 0 routing
         self.num_routed_experts = config.n_routed_experts
         self.zero_expert_num = config.zero_expert_num or 0
-        self.total_experts = self.num_routed_experts + self.zero_expert_num
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.identity_expert = nn.Identity()
 
-        if self.num_routed_experts > 0:
-            self.gate_up_proj = nn.Parameter(
-                torch.empty(self.total_experts, 2 * self.intermediate_size, self.hidden_size)
-            )
-            self.down_proj = nn.Parameter(
-                torch.empty(self.num_routed_experts, self.hidden_size, self.intermediate_size)
-            )
-        else:
-            self.register_parameter("gate_up_proj", None)
-            self.register_parameter("down_proj", None)
-
-    def forward(self, hidden_states, top_k_index, top_k_weights):
-        final_hidden_states = torch.zeros_like(hidden_states)
-        if top_k_index.numel() == 0:
-            return final_hidden_states
-
-        expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.total_experts).permute(2, 1, 0)
-
-        expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False)
-        for expert_idx_tensor in expert_hit:
-            expert_idx = int(expert_idx_tensor.item())
-            selection_idx, token_idx = torch.where(expert_mask[expert_idx].squeeze(0))
-            if token_idx.numel() == 0:
-                continue
-            current_state = hidden_states[token_idx]
-
-            if expert_idx >= self.num_routed_experts or self.gate_up_proj is None:
-                current_hidden_states = self.identity_expert(current_state)
-            else:
-                gate, up = F.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-                current_hidden_states = self.act_fn(gate) * up
-                current_hidden_states = F.linear(current_hidden_states, self.down_proj[expert_idx])
-
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, selection_idx, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(hidden_states.dtype))
-        return final_hidden_states
-
-
-# remap config key expert_ffn_hidden_size -> moe_intermediate_size
-class LongcatFlashMoE(nn.Module):
-    """
-    A mixed expert module containing zero compute (identity) experts.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
-        self.config = config
         self.experts = LongcatFlashExperts(config)
-
         self.router = LongcatFlashTopkRouter(config)
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
+
         _, topk_weights, topk_indices = self.router(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        return hidden_states
+
+        # Special case for longcat not routing any weights
+        if self.zero_expert_num:
+            identity_mask = topk_indices >= self.num_routed_experts
+            identity_weights = topk_weights.masked_fill(~identity_mask, 0.0).sum(dim=-1, keepdim=True)
+            identity_output = hidden_states * identity_weights
+
+            # Spread across the full range of experts to minimize comms costs on one rank
+            dummy_indices = (topk_indices - self.num_routed_experts) * self.num_routed_experts // self.zero_expert_num
+            topk_indices = torch.where(identity_mask, dummy_indices, topk_indices)
+            topk_weights = topk_weights.masked_fill(identity_mask, 0.0)
+
+        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+
+        if self.zero_expert_num:
+            hidden_states = hidden_states + identity_output.to(hidden_states.dtype)
+
+        return hidden_states.reshape(*orig_shape)
 
 
 class LongcatFlashMLA(DeepseekV32Attention):
@@ -165,12 +136,13 @@ class LongcatFlashMLA(DeepseekV32Attention):
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
@@ -197,8 +169,8 @@ class LongcatFlashMLA(DeepseekV32Attention):
         q_rot, k_rot = apply_rotary_pos_emb_interleave(q_rot, k_rot, cos, sin)
 
         # Cache read / write is performed while the latent KV is still compressed
-        if past_key_values is not None:
-            k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
+        if cache is not None:
+            k_pass, k_rot = cache.update(k_pass, k_rot, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
@@ -250,12 +222,13 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
             [LongcatFlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps) for _ in [0, 1]]
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -267,7 +240,7 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -289,7 +262,7 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             position_embeddings=position_embeddings,
             **kwargs,
@@ -311,14 +284,14 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LongcatFlashDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": LongcatFlashDecoderLayer,
+        # Each decoder layer holds two attention sublayers, so `num_hidden_layers` is `2 * num_layers`
+        "hidden_states": OutputRecorder(LongcatFlashDecoderLayer, num_hidden_layers_key="num_layers"),
         "attentions": LongcatFlashMLA,
         "router_logits": OutputRecorder(LongcatFlashTopkRouter, index=0),
     }
@@ -327,7 +300,6 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
         "classifier.weight"
     ]  # TODO let's make sure original code base has this, for now it fixes quantization
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, LongcatFlashTopkRouter):
@@ -353,13 +325,14 @@ class LongcatFlashModel(DeepseekV3Model):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
@@ -369,11 +342,11 @@ class LongcatFlashModel(DeepseekV3Model):
         if inputs_embeds is None:
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -381,7 +354,7 @@ class LongcatFlashModel(DeepseekV3Model):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -393,7 +366,7 @@ class LongcatFlashModel(DeepseekV3Model):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
@@ -401,7 +374,7 @@ class LongcatFlashModel(DeepseekV3Model):
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
             hidden_states=None,
             attentions=None,
         )
