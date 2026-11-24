@@ -59,6 +59,8 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "qwen3_moe",
     "glm_moe_dsa",
     "dots3_note_text",
+    "axk1",
+    "deepseek_v3",
     "deepseek_v4",
     "glm4_moe_lite",
     "glm4_moe",
