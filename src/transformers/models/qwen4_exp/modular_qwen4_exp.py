@@ -418,10 +418,10 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         if cache is not None:
             raw_keys = cache.update_indexer(raw_keys, self.layer_idx)
 
-        return self._select_tokens(q, raw_keys, full_cos, full_sin, attention_mask, **kwargs)
+        return self._select_tokens(hidden_states, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs)
 
-    def _select_tokens(self, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs) -> torch.Tensor:
-        batch_size, seq_length = q.shape[:2]
+    def _select_tokens(self, hidden_states, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs) -> torch.Tensor:
+        batch_size, seq_length, _ = hidden_states.shape
         # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
         # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
         visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
@@ -430,7 +430,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
             (batch_size, seq_length, self.token_budget + self.compress_ratio - 1),
             -1,
             dtype=torch.int32,
-            device=q.device,
+            device=hidden_states.device,
         )
         for batch_idx in range(batch_size):
             for query_idx in range(seq_length):
@@ -464,7 +464,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                     # Remap the indices of the blocks to the indices of individual tokens
                     selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
                 else:
-                    selected_tokens = torch.tensor([], device=q.device)
+                    selected_tokens = torch.tensor([], device=hidden_states.device)
                 tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
