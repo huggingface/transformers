@@ -712,25 +712,24 @@ def _deepspeed_zero3(ds_config):
         unset_hf_deepspeed_config()
 
 
-def is_packed_inputs_modality_encoder(model: PreTrainedModel, config: PreTrainedConfig) -> bool:
-    """Whether the (sub-)model of `model` with this `config` is an encoder that takes all its images (or audios) as one
-    packed sequence, delimited by `cu_seqlens`, rather than as a padded batch. Only its own modules count, not those of
-    the sub-models it holds.
+def get_packed_inputs_encoders(model: PreTrainedModel) -> set[str]:
+    """The sub-configs of `model` (`""` for the model itself) whose encoders take all their images (or audios) as one
+    packed sequence, delimited by `cu_seqlens`, rather than as a padded batch.
 
-    TODO: users have no official way to find this out yet, so we guess it from whether one of its modules takes
+    TODO: users have no official way to find this out yet, so we guess it from which (sub-)model owns a module taking
     `cu_seqlens`.
     """
-
-    def own_modules(module):
-        yield module
-        for child in module.children():
-            if not (isinstance(child, PreTrainedModel) and child.config is not config):
-                yield from own_modules(child)
-
-    owner = next((m for m in model.modules() if isinstance(m, PreTrainedModel) and m.config is config), None)
-    if owner is None:
-        return False
-    return any("cu_seqlens" in inspect.signature(module.forward).parameters for module in own_modules(owner))
+    config_names = {id(model.config): ""} | {
+        id(getattr(model.config, name)): name for name in model.config.sub_configs if getattr(model.config, name)
+    }
+    sub_models = {path: module for path, module in model.named_modules() if isinstance(module, PreTrainedModel)}
+    packed = set()
+    for path, module in model.named_modules():
+        if "cu_seqlens" in inspect.signature(module.forward).parameters:
+            # The innermost (sub-)model holding this module
+            owner = max((p for p in sub_models if p == "" or path == p or path.startswith(f"{p}.")), key=len)
+            packed.add(config_names.get(id(sub_models[owner].config)))
+    return packed - {None}
 
 
 def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
@@ -4592,15 +4591,14 @@ class ModelTesterMixin(ExportTesterMixin):
             # of the model keeps its default attention.
             # TODO: with SDPA and packed inputs, models could call torch's own varlen attention instead of looping, which
             # would make SDPA trace too.
-            if is_packed_inputs_modality_encoder(model, model.config):
+            packed = get_packed_inputs_encoders(model)
+            if "" in packed:
+                # The model under test is a packed encoder itself (e.g. a vision model test)
                 attn_implementation = "flash_attention_2"
             else:
-                attn_implementation = {"": model.config._attn_implementation} | {
-                    name: "flash_attention_2"
-                    for name in model.config.sub_configs
-                    if is_packed_inputs_modality_encoder(model, getattr(model.config, name))
-                }
-
+                attn_implementation = {"": model.config._attn_implementation} | dict.fromkeys(
+                    packed, "flash_attention_2"
+                )
             model.set_attn_implementation(attn_implementation)
             inputs |= model.get_data_dependent_inputs(**inputs)
             torch.compiler.reset()
