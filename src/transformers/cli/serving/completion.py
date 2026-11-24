@@ -94,6 +94,7 @@ class CompletionHandler(BaseHandler):
 
         suffix = body.get("suffix")
         streaming = body.get("stream")
+        self._check_prompt_length(engine, inputs)
         self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
 
         if streaming:

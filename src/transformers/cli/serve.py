@@ -89,6 +89,12 @@ class Serve:
         model_timeout: Annotated[
             int, typer.Option(help="Seconds before idle model is unloaded. Ignored when force_model is set.")
         ] = 300,
+        max_model_len: Annotated[
+            int | None,
+            typer.Option(
+                help="The longest a request can be, prompt and answer, in tokens. Defaults to the model's context length."
+            ),
+        ] = None,
         # Continuous batching tuning
         cb_block_size: Annotated[
             int | None, typer.Option(help="KV cache block size in tokens for continuous batching.")
@@ -154,6 +160,7 @@ class Serve:
             compile=compile,
             cb_config=ContinuousBatchingConfig(**cb_options) if cb_set else None,
             seed=default_seed,
+            max_model_len=max_model_len,
         )
 
         self.loader = ModelLoader(

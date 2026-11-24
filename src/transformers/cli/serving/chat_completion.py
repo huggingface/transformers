@@ -116,6 +116,7 @@ class ChatCompletionHandler(BaseHandler):
         generation_kwargs = self._build_generation_kwargs(body, engine.generation_config)
 
         streaming = body.get("stream")
+        self._check_prompt_length(engine, inputs)
         self._log_request(request_id, engine, inputs, generation_kwargs, streaming, body)
         if streaming:
             tools, stream_options = body.get("tools"), body.get("stream_options")

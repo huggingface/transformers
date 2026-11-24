@@ -1931,6 +1931,8 @@ If a model's process dies (a crash, or the system killing it for lack of memory)
 transformers serve --model-timeout 400
 ```
 
+A request can be as long as the model's context, prompt and answer: a longer prompt gets a 400. Set `--max-model-len` to lower it, which saves memory with models of a very long context.
+
 ### Loading examples
 
 The examples below show responses for a freshly downloaded model, a model loaded from your local cache (skips the download stage), and a model already in memory.

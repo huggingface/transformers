@@ -384,8 +384,9 @@ class EngineClient:
         try:
             model, processor = load(on_progress=writer.send if report_progress else None)
             set_torch_threads_for_serving(model.device)  # after loading, which uses them all
+            context_length = generation_state.context_length(model.config)  # fails on a `--max-model-len` too long
             if generation_state.use_continuous_batching(model.config, processor):
-                runner = CBGenerateRunner(model, processor, send_results, generation_state.cb_config)
+                runner = CBGenerateRunner(model, processor, send_results, generation_state.cb_config, context_length)
             else:
                 runner = GenerateRunner(model, processor, send_results)
         except Exception as error:

@@ -942,10 +942,11 @@ class CBGenerateRunner(GenerateRunner):
         processor: Any,
         send_results: Callable,
         cb_config: "ContinuousBatchingConfig | None",
+        context_length: int | None = None,
     ):
         super().__init__(model, processor, send_results)
         self.active_requests: dict[int, list] = {}
-        self.manager = self._start_continuous_batching(model, cb_config)
+        self.manager = self._start_continuous_batching(model, cb_config, context_length)
 
     def generate(self, request_id: int, inputs: dict, generation_kwargs: dict, stream: bool) -> None:
         seed = generation_kwargs.pop("seed", None)  # the request's: continuous batching shares the random numbers
@@ -1006,15 +1007,17 @@ class CBGenerateRunner(GenerateRunner):
         return True
 
     def _start_continuous_batching(
-        self, model: "PreTrainedModel", cb_config: "ContinuousBatchingConfig | None"
+        self, model: "PreTrainedModel", cb_config: "ContinuousBatchingConfig | None", context_length: int | None
     ) -> "ContinuousBatchingManager":
         """Starts the batching manager, and the thread sending its outputs."""
         from transformers import ContinuousBatchingConfig
+        from transformers.generation.continuous_batching.utils import WorkloadHints
 
         if cb_config is None:
             cb_config = ContinuousBatchingConfig()
         cb_config.per_request_processors = True  # each request sets its own temperature, top-k and top-p
-        manager = model.init_continuous_batching(continuous_batching_config=cb_config)
+        hints = WorkloadHints(max_prompt_length=context_length) if context_length else None
+        manager = model.init_continuous_batching(continuous_batching_config=cb_config, workload_hints=hints)
         manager.warmup()
         manager.start()
 
@@ -1137,6 +1140,8 @@ class GenerationState:
             The continuous batching settings.
         seed (`int`, *optional*):
             The torch seed each model's process sets as it starts.
+        max_model_len (`int`, *optional*):
+            The longest a request can be, prompt and answer, in tokens. Defaults to the model's context length.
     """
 
     def __init__(
@@ -1145,11 +1150,26 @@ class GenerationState:
         compile: bool = False,
         cb_config: "ContinuousBatchingConfig | None" = None,
         seed: int | None = None,
+        max_model_len: int | None = None,
     ):
         self._continuous_batching = continuous_batching
         self._compile = compile
         self.cb_config = cb_config
         self.seed = seed
+        self.max_model_len = max_model_len
+
+    def context_length(self, config: "PretrainedConfig") -> int | None:
+        """The longest a request to the model of `config` can be: `max_model_len` if set, else the model's context
+        length, if its config gives one."""
+        model_length = getattr(config.get_text_config(), "max_position_embeddings", None)
+        if self.max_model_len is None:
+            return model_length
+        if model_length is not None and self.max_model_len > model_length:
+            raise ValueError(
+                f"`--max-model-len` ({self.max_model_len}) is longer than the model's context ({model_length}): "
+                "past it, the model's answers are wrong."
+            )
+        return self.max_model_len
 
     def use_continuous_batching(self, config: "PretrainedConfig", processor: Any) -> bool:
         """Whether a model generates text with continuous batching: if it's enabled, and the model is an LLM."""
@@ -1244,6 +1264,16 @@ class BaseHandler:
             else:  # tool calls, the end of the stream (`None`), an error
                 merged.extend(group)
         return merged
+
+    def _check_prompt_length(self, engine: "EngineClient", inputs: dict) -> None:
+        """Rejects a prompt that leaves no room for an answer in the model's context (or `--max-model-len`)."""
+        limit = self.generation_state.context_length(engine.model_config)
+        length = prompt_length(inputs)
+        if limit is not None and length >= limit:
+            raise ValueError(
+                f"The prompt has {length} tokens, but the model takes at most {limit}, prompt and answer "
+                "(`--max-model-len`)."
+            )
 
     @staticmethod
     def _get_finish_reason(generation_kwargs: dict, completion_tokens: int, tool_calls: bool = False) -> str:
