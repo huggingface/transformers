@@ -117,7 +117,31 @@ def _lfm2_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     }
 
 
+def _qwen3_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
+    """Qwen3: full rotary, per-head q/k norms, no hybrid layers."""
+    key = lambda name: metadata[f"qwen3.{name}"]  # noqa: E731
+    return {
+        "model_type": "qwen3",
+        "architectures": ["Qwen3ForCausalLM"],
+        "max_position_embeddings": key("context_length"),
+        "hidden_size": key("embedding_length"),
+        "num_attention_heads": key("attention.head_count"),
+        "num_key_value_heads": key("attention.head_count_kv"),
+        "head_dim": key("attention.key_length"),
+        "intermediate_size": key("feed_forward_length"),
+        "num_hidden_layers": key("block_count"),
+        "rms_norm_eps": key("attention.layer_norm_rms_epsilon"),
+        "rope_parameters": {"rope_type": "default", "rope_theta": key("rope.freq_base")},
+        "vocab_size": metadata["tokenizer.ggml.tokens"],
+        "tie_word_embeddings": "output.weight" not in tensor_names,
+        "eos_token_id": metadata.get("tokenizer.ggml.eos_token_id"),
+        "bos_token_id": metadata.get("tokenizer.ggml.bos_token_id"),
+        "pad_token_id": metadata.get("tokenizer.ggml.padding_token_id"),
+    }
+
+
 GGUF_CONFIG_ARCHS = {
+    "qwen3": _qwen3_config,
     "qwen35": _qwen35_config,
     "qwen35moe": _qwen35moe_config,
     "lfm2": _lfm2_config,
