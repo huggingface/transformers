@@ -247,8 +247,7 @@ class Gemma3MLP(Gemma2MLP):
 
 
 class Gemma3RMSNorm(Gemma2RMSNorm):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__(dim=dim, eps=eps)
+    pass
 
 
 class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
@@ -419,7 +418,6 @@ GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
@@ -655,9 +653,6 @@ def create_masks_for_vision_model(
 
 
 class Gemma3Model(PaliGemmaModel):
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    accepts_loss_kwargs = False
-
     _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
 
     def __init__(self, config: Gemma3Config):
@@ -750,13 +745,7 @@ class Gemma3Model(PaliGemmaModel):
             **kwargs,
         )
 
-        return Gemma3ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return Gemma3ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
@@ -856,7 +845,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
     def _update_model_kwargs_for_generation(self, **super_kwargs):

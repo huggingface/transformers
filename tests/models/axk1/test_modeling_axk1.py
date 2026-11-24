@@ -43,36 +43,21 @@ class AXK1ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = AXK1Model
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        num_local_experts=8,
-        n_shared_experts=1,
-        n_group=2,
-        topk_group=1,
-        num_experts_per_tok=2,
-        moe_intermediate_size=16,
-        kv_lora_rank=16,
-        q_lora_rank=32,
-        qk_nope_head_dim=16,
-        qk_rope_head_dim=32,
-        v_head_dim=32,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.num_local_experts = num_local_experts
-        self.n_shared_experts = n_shared_experts
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.num_experts_per_tok = num_experts_per_tok
-        self.mlp_layer_types = ["dense", "sparse"]
-        self.moe_intermediate_size = moe_intermediate_size
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "num_local_experts": 8,
+        "n_shared_experts": 1,
+        "n_group": 2,
+        "topk_group": 1,
+        "num_experts_per_tok": 2,
+        "mlp_layer_types": ["dense", "sparse"],
+        "moe_intermediate_size": 16,
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_nope_head_dim": 16,
+        "qk_rope_head_dim": 32,
+        "v_head_dim": 32,
+    }
 
 
 @require_torch

@@ -190,7 +190,6 @@ class Molmo2TextConfig(PreTrainedConfig):
 
     model_type = "molmo2_text"
     base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {"qkv_bias": "attention_bias", "layer_norm_eps": "rms_norm_eps"}
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -1643,13 +1642,7 @@ class Molmo2Model(LlavaModel):
             **kwargs,
         )
 
-        return Molmo2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features,
-        )
+        return Molmo2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring(
@@ -1777,7 +1770,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
