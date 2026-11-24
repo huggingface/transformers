@@ -884,7 +884,8 @@ jobs:
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           # sentence-transformers: reference models of the pooling tests (tests/conftest.py)
           # mteb: the MTEB pooling test; peft: remote code of jina-embeddings-v5 (both listed in vLLM's requirements/test/cuda.in)
-          uv pip install tblib pqdm pytest-shard sentence-transformers 'mteb[bm25s]>=2,<3' peft
+          # pytest-asyncio: the async tests of tests/entrypoints/pooling
+          uv pip install tblib pqdm pytest-shard sentence-transformers 'mteb[bm25s]>=2,<3' peft pytest-asyncio
           # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
           uv pip install --no-deps -e transformers/
           python -c "
@@ -920,7 +921,7 @@ jobs:
             --deselect 'tests/models/multimodal/pooling/test_siglip.py::test_models[float-google/siglip2-giant-opt-patch16-384]'
 
       # A few small language models that vLLM doesn't mark `cpu_model` (same transformers comparison as above). In one shard
-      # (only 3 models). Not included: gpt2 (marked `flaky` in vLLM) and the 6-8B models of this file.
+      # (only 3 models). The other models of this file run in "Test: language models generation (gpt2, 6-8B models)".
       - name: "Test: more language models generation"
         if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: vllm
@@ -936,6 +937,50 @@ jobs:
         working-directory: vllm
         run: |
           pytest -v -s tests/samplers/test_beam_search.py::test_beam_search_single_input
+
+      # The other models of tests/models/language/generation/test_common.py that vLLM doesn't mark `cpu_model`, and Mistral-7B
+      # (test_mistral.py). Not included: MiniCPM4.1-8B and Apertus-8B (`large_gpu_mark`: skip on CPU). In one shard.
+      - name: "Test: language models generation (gpt2, 6-8B models)"
+        if: ${{ !cancelled() && matrix.shard == 3 }}
+        working-directory: vllm
+        run: |
+          pytest -v -s tests/models/language/generation/test_common.py tests/models/language/generation/test_mistral.py::test_models \
+            -k "gpt2 or chatglm3-6b or Qwen3-8B or Mistral-7B"
+
+      # State-space / hybrid models (Mamba, Falcon-Mamba, Jamba, Zamba2, Granite 4.0, Falcon-H1, LFM2, Qwen3-Next) vs
+      # transformers. Not included: the tests of test_hybrid.py without a transformers reference (vLLM vs vLLM). In one shard.
+      - name: "Test: hybrid and state-space models"
+        if: ${{ !cancelled() && matrix.shard == 2 }}
+        working-directory: vllm
+        run: |
+          pytest -v -s \
+            tests/models/language/generation/test_hybrid.py::test_models \
+            tests/models/language/generation/test_hybrid.py::test_full_cuda_graph \
+            tests/models/language/generation/test_hybrid.py::test_fp32_cache_state \
+            tests/models/language/generation/test_hybrid.py::test_zaya_cca_state
+
+      # vLLM's OpenAI-compatible server / `LLM` pooling APIs (embeddings, scores) vs transformers, and the logprobs of the
+      # V1 sampler vs transformers. Only the tests that compare with the transformers reference (`hf_model` fixture). In one
+      # shard.
+      - name: "Test: pooling API and logprobs"
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        working-directory: vllm
+        run: |
+          pytest -v -s \
+            tests/entrypoints/pooling/embed/test_online.py::test_completion_request \
+            tests/entrypoints/pooling/embed/test_online.py::test_completion_request_batched \
+            tests/entrypoints/pooling/embed/test_online.py::test_base64_embedding \
+            tests/entrypoints/pooling/embed/test_online_dimensions.py::test_matryoshka \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_offline.py::test_1_to_1 \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_offline.py::test_1_to_n \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_offline.py::test_n_to_n \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_online.py::test_score_api_queries_str_1_documents_str_1 \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_online.py::test_score_api_queries_str_1_documents_str_n \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_online.py::test_score_api_queries_str_n_documents_str_n \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_online.py::test_score_api_queries_vs_items \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_online.py::test_score_api_text_1_vs_text_2 \
+            tests/entrypoints/pooling/scoring/test_cross_encoder_online.py::test_score_api_data_1_vs_data_2 \
+            tests/v1/sample/test_logprobs.py::test_get_logprobs_and_prompt_logprobs
 
       # More pooling models / features vs transformers (`hf_runner`): token classification, multi-label classification,
       # chunked prefill, prefix caching (models up to ~1.5B). In one shard.
@@ -1327,7 +1372,9 @@ jobs:
           uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
-          uv pip install tblib pqdm pytest-shard
+          # For "Test: more multimodal model files": peft + backoff (Phi-4-multimodal remote code, Granite Speech LoRA),
+          # open-clip-torch + albumentations (Nemotron Parse remote code), mistral_common[audio] (Voxtral).
+          uv pip install tblib pqdm pytest-shard peft backoff open-clip-torch==2.32.0 albumentations==1.4.6 'mistral_common[audio]'
           # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
           uv pip install --no-deps -e transformers/
           python -c "
@@ -1379,6 +1426,37 @@ jobs:
               pytest -v -s \
                 tests/models/multimodal/pooling/test_phi3v.py::test_models_text \
                 tests/models/multimodal/pooling/test_phi3v.py::test_models_image
+              ;;
+          esac
+
+      # The per-model test files of tests/models/multimodal/generation that compare with transformers (`hf_runner`),
+      # 2 files per shard. Not included: the tests of these files without a transformers reference, test_phi4mm.py's
+      # test_multi_images_models (`large_gpu_test`: skips on CPU), test_whisper.py's test_models (already run with
+      # `cpu_model` above) and test_models_distributed (2 GPUs).
+      - name: "Test: more multimodal model files (shard ${{ matrix.shard }} / 4)"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          case "$SHARD_ID" in
+            0)
+              pytest -v -s \
+                tests/models/multimodal/generation/test_granite_speech.py::test_models \
+                tests/models/multimodal/generation/test_whisper.py::test_beam_search_encoder_decoder
+              ;;
+            1)
+              pytest -v -s \
+                tests/models/multimodal/generation/test_voxtral.py::test_hf_reference \
+                tests/models/multimodal/generation/test_mm_prefix_lm.py::test_mm_prefix_lm_e2e
+              ;;
+            2)
+              pytest -v -s \
+                tests/models/multimodal/generation/test_nemotron_parse.py::test_models \
+                tests/models/multimodal/generation/test_nemotron_parse_35.py::test_model
+              ;;
+            3)
+              pytest -v -s \
+                tests/models/multimodal/generation/test_phi4mm.py::test_models \
+                tests/models/multimodal/generation/test_phi4mm.py::test_vision_speech_models
               ;;
           esac
 
