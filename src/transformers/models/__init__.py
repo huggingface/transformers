@@ -313,6 +313,7 @@ if TYPE_CHECKING:
     from .minicpm_ocr import *
     from .minicpmv2_5 import *
     from .minicpmv2_6 import *
+    from .minicpmv4_5 import *
     from .minicpmv4_6 import *
     from .minicpmv4_7 import *
     from .minimax import *

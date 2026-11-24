@@ -1505,6 +1505,8 @@
         title: MiniCPM-V
       - local: model_doc/minicpmv2_6
         title: MiniCPM-V 2.6
+      - local: model_doc/minicpmv4_5
+        title: MiniCPM-V 4.5
       - local: model_doc/minicpmv4_7
         title: MiniCPM-V 4.7
       - local: model_doc/mistral_large4
