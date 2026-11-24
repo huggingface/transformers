@@ -29,9 +29,9 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPooling,
-    MaskedLMOutput,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
@@ -45,65 +45,31 @@ from .configuration_ultravbert import UltraVBertConfig
 
 @auto_docstring
 @dataclass
-class UltraVBertBaseModelOutput(BaseModelOutput):
-    """
-    Base class for UltraVBert model's outputs.
-    Args:
-        last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`tuple(torch.Tensor)`, *optional*):
-            Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder
-    """
-
-    last_hidden_state: torch.Tensor = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: tuple[torch.Tensor] | None = None
-
-
-@auto_docstring
-@dataclass
-class UltraVBertMaskedLMOutput(MaskedLMOutput):
-    """
-    Base class for UltraVBert model's outputs with masked language modeling loss.
-    Args:
-        loss (`torch.Tensor`, *optional*, returned when `labels` is provided):
-            Masked language modeling (MLM) loss.
-        logits (`torch.Tensor`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_hidden_states (`tuple(torch.Tensor)`, *optional*):
-            Tuple of `torch.Tensor` (one for the output of the image embeddings, `(batch_size, num_images,
-            sequence_length, hidden_size)`.
-            image_hidden_states of the model produced by the vision encoder
+class UltraVBertMaskedLMOutput(MultimodalModelOutput):
+    r"""
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Masked language modeling (MLM) loss.
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
+        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+        heads.
+    image_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+        `None` if no images were processed.
     """
 
     loss: torch.Tensor | None = None
-    logits: torch.Tensor = None
+    logits: torch.Tensor | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
-    image_hidden_states: torch.Tensor | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -175,14 +141,12 @@ class UltraVBertPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = []
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _keys_to_ignore_on_load_unexpected = [r"vision_model\.head\."]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
@@ -314,7 +278,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
         pixel_attention_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | UltraVBertBaseModelOutput:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         r"""
         pixel_attention_mask (`torch.BoolTensor` of shape `(batch_size, num_images, image_size, image_size)`, *optional*):
             Mask over the real pixels of each image tile.
@@ -326,10 +290,12 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
         # Images processing
+        image_outputs = None
         if pixel_values is not None:
-            image_hidden_states = self.get_image_features(
-                pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
-            ).pooler_output
+            image_outputs = self.get_image_features(
+                pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, return_dict=True
+            )
+            image_hidden_states = image_outputs.pooler_output
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
@@ -348,12 +314,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel):
             **kwargs,
         )
 
-        return UltraVBertBaseModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
-        )
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=image_outputs)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -394,6 +355,7 @@ class UltraVBertPredictionHead(nn.Module):
 @auto_docstring
 class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: UltraVBertConfig):
         super().__init__(config)
@@ -458,7 +420,7 @@ class UltraVBertForMaskedLM(UltraVBertPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

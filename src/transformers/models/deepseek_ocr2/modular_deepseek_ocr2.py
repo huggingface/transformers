@@ -40,8 +40,10 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseMo
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2DecoderLayer,
@@ -58,10 +60,8 @@ from ..got_ocr2.image_processing_got_ocr2 import (
 from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from ..llava_next.modeling_llava_next import (
-    LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
-    LlavaNextModelOutputWithPast,
     LlavaNextPreTrainedModel,
 )
 from ..qwen2.configuration_qwen2 import Qwen2Config
@@ -573,9 +573,6 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -637,12 +634,10 @@ class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
     local_attentions: torch.Tensor | None = None
 
 
-class DeepseekOcr2ModelOutputWithPast(LlavaNextModelOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class DeepseekOcr2ModelOutputWithPast(AriaModelOutputWithPast): ...
 
 
-class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    router_logits: tuple[torch.Tensor] | None = None
+class DeepseekOcr2CausalLMOutputWithPast(AriaCausalLMOutputWithPast): ...
 
 
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
@@ -656,7 +651,6 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     # SAM doesn't support flex attention
     _supports_flex_attn = False
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekOcr2SamVisionAttention):
@@ -718,6 +712,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 
 class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2SamVisionConfig
     _input_embed_layer = "patch_embed"
     config: DeepseekOcr2SamVisionConfig
 
@@ -785,13 +780,13 @@ class DeepseekOcr2VisionEncoderLayer(Qwen2DecoderLayer):
 
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2VisionEncoderConfig
     _can_record_outputs = {
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
-    config: DeepseekOcr2VisionConfig
 
-    def __init__(self, config: DeepseekOcr2VisionConfig):
+    def __init__(self, config: DeepseekOcr2VisionEncoderConfig):
         super().__init__(config)
         del self.embed_tokens
         self.layers = nn.ModuleList(
@@ -823,7 +818,7 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=None,
-            past_key_values=None,
+            cache=None,
             block_sequence_ids=block_sequence_ids,
         )
 
@@ -998,6 +993,7 @@ class DeepseekOcr2Model(LlavaNextModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1006,7 +1002,7 @@ class DeepseekOcr2Model(LlavaNextModel):
         num_local_patches: list[int] | torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -1041,19 +1037,12 @@ class DeepseekOcr2Model(LlavaNextModel):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
-        return DeepseekOcr2ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            router_logits=outputs.router_logits,
-        )
+        return DeepseekOcr2ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 @auto_docstring
@@ -1087,6 +1076,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1095,7 +1085,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
         num_local_patches: list[int] | torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1116,7 +1106,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
             num_local_patches=num_local_patches,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -1139,10 +1129,10 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
         return DeepseekOcr2CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

@@ -56,6 +56,7 @@ class Sam3LiteTextDETREncoderConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_lite_text_detr_encoder"
+    attribute_map = {"num_hidden_layers": "num_layers"}
 
     hidden_size: int = 256
     num_layers: int = 6
@@ -77,6 +78,7 @@ class Sam3LiteTextDETRDecoderConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_lite_text_detr_decoder"
+    attribute_map = {"num_hidden_layers": "num_layers"}
 
     hidden_size: int = 256
     num_layers: int = 6

@@ -20,6 +20,7 @@ from transformers import Sapiens2Config, Sapiens2HeadConfig
 from transformers.testing_utils import Expectations, require_cv2, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -48,53 +49,42 @@ if is_torch_available():
     )
 
 
-class Sapiens2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=False,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        num_register_tokens=2,
-        mask_ratio=0.5,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_register_tokens = num_register_tokens
-        self.scope = scope
+class Sapiens2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": False,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "num_register_tokens": 2,
+        "mask_ratio": 0.5,
+        "scope": None,
+    }
 
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1 + self.num_register_tokens
-        self.mask_ratio = mask_ratio
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.mask_length = num_patches
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1 + values["num_register_tokens"]
+        values["num_masks"] = int(values["mask_ratio"] * values["seq_length"])
+        values["mask_length"] = num_patches
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -310,6 +300,8 @@ class Sapiens2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     Here we also overwrite some of the tests of test_modeling_common.py, as Sapiens2 does not use input_ids,
     inputs_embeds, attention_mask and seq_length.
     """
+
+    model_tester_class = Sapiens2ModelTester
 
     all_model_classes = (
         (
@@ -900,6 +892,8 @@ class Sapiens2ModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class Sapiens2BackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = Sapiens2ModelTester
+
     all_model_classes = (Sapiens2Backbone,) if is_torch_available() else ()
     config_class = Sapiens2Config
 

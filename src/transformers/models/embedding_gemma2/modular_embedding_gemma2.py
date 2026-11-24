@@ -28,9 +28,15 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MultimodalBaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import AudioKwargs, OmniModalProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import (
+    AudioKwargs,
+    OmniModalProcessingKwargs,
+    OmniModalProcessorMixin,
+    ProcessingKwargs,
+    Unpack,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TransformersKwargs,
@@ -39,6 +45,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import AutoConfig
@@ -53,7 +60,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextScaledWordEmbedding,
     eager_attention_forward,
 )
-from ..gemma4.processing_gemma4 import Gemma4Processor, Gemma4ProcessorKwargs
+from ..gemma4.processing_gemma4 import Gemma4Processor
 from ..gemma4.video_processing_gemma4 import (
     Gemma4VideoProcessor,
     Gemma4VideoProcessorKwargs,
@@ -408,10 +415,7 @@ class EmbeddingGemma2EncoderLayer(Gemma3DecoderLayer):
 class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     config: EmbeddingGemma2Config
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
-    # Deletes the inherited attribute: both entries were KV-cache related, which we do not have.
-    _skip_keys_device_placement = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EmbeddingGemma2RotaryEmbedding):
@@ -532,25 +536,24 @@ class EmbeddingGemma2AudioModelOutput(Gemma4AudioModelOutput):
     pass
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for EmbeddingGemma2 outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class EmbeddingGemma2ModelOutput(BaseModelOutput):
-    r"""
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    """
+class EmbeddingGemma2ModelOutput(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
 
 
 @auto_docstring(
@@ -568,6 +571,8 @@ class EmbeddingGemma2Model(Gemma4Model):
         r"(^|\.)audio_tower\.",
         r"(^|\.)embed_audio\.",
     ]
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike Gemma4
 
     def __init__(self, config: EmbeddingGemma2Config):
         super().__init__(config)
@@ -664,6 +669,7 @@ class EmbeddingGemma2Model(Gemma4Model):
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
         multimodal_mask = image_mask | video_mask | audio_mask
+        mm_encoder_outputs = {}
 
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if inputs_embeds is None:
@@ -672,8 +678,11 @@ class EmbeddingGemma2Model(Gemma4Model):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            mm_encoder_outputs["image"] = image_outputs
+            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -689,10 +698,13 @@ class EmbeddingGemma2Model(Gemma4Model):
             )
 
         if pixel_values_videos is not None:
-            video_features = self.get_video_features(
+            video_outputs = self.get_video_features(
                 pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
-            ).pooler_output
-            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+            mm_encoder_outputs["video"] = video_outputs
+            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -710,6 +722,7 @@ class EmbeddingGemma2Model(Gemma4Model):
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            mm_encoder_outputs["audio"] = audio_output
             audio_features = audio_output.pooler_output
             audio_mask_from_encoder = audio_output.attention_mask  # True = valid
 
@@ -737,11 +750,7 @@ class EmbeddingGemma2Model(Gemma4Model):
         )
 
         return EmbeddingGemma2ModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=mm_encoder_outputs.get("audio")
         )
 
 
@@ -766,6 +775,7 @@ class EmbeddingGemma2VideoProcessorKwargs(Gemma4VideoProcessorKwargs):
         Can be set only to "uniform" or "truncate". Applied after FPS-based sampling, and on its
         own when FPS-based sampling is off or not applicable.
     load_audio_from_video (`bool`, *optional*):
+        Deprecated, use [`OmniModalProcessingKwargs.load_audio_from_video`] instead.
         Whether to load the audio track of an input video or not.
     """
 
@@ -843,17 +853,8 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
         return indices
 
 
-class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {"padding": True},
-        "images_kwargs": {"do_convert_rgb": True},
-        "audio_kwargs": {},
-        "videos_kwargs": {"return_metadata": True},
-    }
-
-
 class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
-    valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
+    return_mm_token_type_ids = AttributeError()
 
     def model_input_names(self):
         raise AttributeError("Deleted: Gemma 4 appended `mm_token_type_ids`, which we no longer produce.")
@@ -928,9 +929,9 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
-        **kwargs: Unpack[EmbeddingGemma2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
-        OmniModalProcessorMixin.validate_inputs(self, images=images, text=text, **kwargs)
+        OmniModalProcessorMixin.validate_inputs(self, images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         # Unlike Gemma 4, any single modality on its own is a valid embedding input.
         if text is None and images is None and videos is None and audio is None:
@@ -939,50 +940,14 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         if audio is not None and (self.audio_token is None or self.boa_token is None or self.eoa_token is None):
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
 
-        if text is not None:
+        if text is not None and images is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                if len(images) != len(text):
-                    raise ValueError(
-                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-                    )
-
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif any(n_images_in_text):
+            n_images_in_images = [len(sublist) for sublist in images]
+            if n_images_in_text != n_images_in_images:
                 raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    f"The number of {self.image_token} tokens in each prompt should be the same as the number of images passed."
+                    f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                 )
-
-            n_videos_in_text = [sample.count(self.video_token) for sample in text]
-            if videos is not None:
-                if sum(n_videos_in_text) != len(videos):
-                    raise ValueError(
-                        f"The total number of {self.video_token} tokens in the prompts should be the same as the number of videos passed."
-                        f" Found {sum(n_videos_in_text)} {self.video_token} tokens and {len(videos)} videos."
-                    )
-            elif any(n_videos_in_text):
-                raise ValueError(
-                    f"Found {sum(n_videos_in_text)} {self.video_token} tokens in the text but no videos were passed."
-                )
-
-            if self.audio_token is not None:
-                n_audio_in_text = [sample.count(self.audio_token) for sample in text]
-                if audio is not None:
-                    n_audio_passed = len(audio) if isinstance(audio, (list, tuple)) else 1
-                    if sum(n_audio_in_text) != n_audio_passed:
-                        raise ValueError(
-                            f"The total number of {self.audio_token} tokens in the prompts should be the same as the number of audio inputs passed."
-                            f" Found {sum(n_audio_in_text)} {self.audio_token} tokens and {n_audio_passed} audio inputs."
-                        )
-                elif any(n_audio_in_text):
-                    raise ValueError(
-                        f"Found {sum(n_audio_in_text)} {self.audio_token} tokens in the text but no audio inputs were passed."
-                    )
 
     @staticmethod
     def timestamp_fmt(sec: int | float) -> str:
@@ -996,7 +961,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         video_idx: int,
         processed_audio: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: VideosKwargs,
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ) -> str:
         # When `load_audio_from_video` -> format is `mm:ss, vision_tokens, audio_tokens, mm:ss, vision_tokens, audio_tokens [...]`
         metadata = video_inputs["video_metadata"][video_idx]
@@ -1048,14 +1013,14 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         video_idx: int,
         processed_audio: dict | None = None,
         video_to_audio_indices: list | None = None,
-        **kwargs: VideosKwargs,
+        **kwargs: Unpack[OmniModalProcessingKwargs],
     ) -> str:
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]
-        add_timestamps = kwargs.get("add_timestamps", self.video_processor.add_timestamps)
+        add_timestamps = kwargs["videos_kwargs"].get("add_timestamps", self.video_processor.add_timestamps)
 
         # Visual-only mode: one block per frame, no timestamps
         if not add_timestamps:
-            if kwargs.get("load_audio_from_video"):
+            if kwargs["load_audio_from_video"]:
                 raise ValueError("You must allow adding timestamps when `load_audio_from_video=True`!")
 
             # `pixel_values_videos` is a flat frame sequence, so its leading axis indexes frames, not videos
@@ -1072,7 +1037,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
             )
 
         # When loading audio from video and if current video has an associated audio, i.e. no silent
-        if kwargs.get("load_audio_from_video") and video_to_audio_indices[video_idx] is not None:
+        if kwargs["load_audio_from_video"] and video_to_audio_indices[video_idx] is not None:
             return self.replace_video_with_audio_token(
                 video_inputs, video_idx, processed_audio, video_to_audio_indices, **kwargs
             )
@@ -1153,6 +1118,8 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
             ]
         return int(mask_or_len.sum())
 
+
+__getattr__ = deprecate_attr(__name__, rename={"EmbeddingGemma2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "EmbeddingGemma2Config",

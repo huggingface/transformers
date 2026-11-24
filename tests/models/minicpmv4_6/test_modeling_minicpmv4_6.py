@@ -20,7 +20,6 @@ from transformers import (
     MiniCPMV4_6Config,
     is_torch_available,
 )
-from transformers.models.minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6VisionConfig
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -39,50 +38,48 @@ if is_torch_available():
     import torch
 
     from transformers import MiniCPMV4_6ForConditionalGeneration, MiniCPMV4_6Model
-    from transformers.models.qwen3_5.configuration_qwen3_5 import Qwen3_5TextConfig
 
 
 class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniCPMV4_6Model
     config_class = MiniCPMV4_6Config
-    text_config_class = Qwen3_5TextConfig
-    vision_config_class = MiniCPMV4_6VisionConfig
+
     conditional_generation_class = MiniCPMV4_6ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("image_token_id", 100)
+    small_config_overrides = {
+        "batch_size": 2,
+        "image_token_id": 100,
         # patch_size=8, image_size=32 → 4×4 grid → vit_merger [2×2] → merger [1×1] = 1 token
-        kwargs.setdefault("image_size", 32)
-        kwargs.setdefault("patch_size", 8)
-        kwargs.setdefault("num_image_tokens", 1)
-        kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("head_dim", 32)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("rope_parameters", {"type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1]})
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("bos_token_id", 0)
-        kwargs.setdefault("eos_token_id", 1)
-        kwargs.setdefault("pad_token_id", 2)
+        "image_size": 64,
+        "patch_size": 8,
+        "num_image_tokens": 4,
+        "vocab_size": 256,
+        "hidden_size": 64,
+        "intermediate_size": 37,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 32,
+        "hidden_act": "silu",
+        "max_position_embeddings": 512,
+        "rope_parameters": {"type": "default", "rope_theta": 10_000, "mrope_section": [2, 1, 1]},
+        "tie_word_embeddings": True,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": 2,
         # Qwen3.5 hybrid attention
-        kwargs.setdefault("layer_types", ["full_attention", "linear_attention"])
-        kwargs.setdefault("linear_conv_kernel_dim", 2)
-        kwargs.setdefault("linear_key_head_dim", 16)
-        kwargs.setdefault("linear_value_head_dim", 16)
-        kwargs.setdefault("linear_num_key_heads", 4)
-        kwargs.setdefault("linear_num_value_heads", 8)
+        "layer_types": ["full_attention", "linear_attention"],
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
         # Vision config overrides
-        kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
-        kwargs.setdefault("vision_intermediate_size", 128)
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "vision_intermediate_size": 128,
         # MiniCPM-V 4.6 specific
-        kwargs.setdefault("insert_layer_id", 0)
-        super().__init__(parent, **kwargs)
+        "insert_layer_id": 0,
+    }
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -100,49 +97,6 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
         w_patches = self.image_size // self.patch_size
         target_sizes = torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32, device=torch_device)
         return {"target_sizes": target_sizes}
-
-    def get_config(self):
-        text_config = {
-            "model_type": "qwen3_5_text",
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "head_dim": self.head_dim,
-            "intermediate_size": self.intermediate_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "hidden_act": "silu",
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_parameters": self.rope_parameters,
-            "tie_word_embeddings": self.tie_word_embeddings,
-            "bos_token_id": self.bos_token_id,
-            "eos_token_id": self.eos_token_id,
-            "pad_token_id": self.pad_token_id,
-            "layer_types": self.layer_types,
-            "linear_conv_kernel_dim": self.linear_conv_kernel_dim,
-            "linear_key_head_dim": self.linear_key_head_dim,
-            "linear_value_head_dim": self.linear_value_head_dim,
-            "linear_num_key_heads": self.linear_num_key_heads,
-            "linear_num_value_heads": self.linear_num_value_heads,
-        }
-        vision_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "intermediate_size": self.vision_intermediate_size,
-            "image_size": self.image_size,
-            "patch_size": self.patch_size,
-            "num_channels": self.num_channels,
-            "hidden_act": self.vision_hidden_act,
-        }
-        return MiniCPMV4_6Config(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=self.image_token_id,
-            image_size=self.image_size,
-            drop_vision_last_layer=False,
-            insert_layer_id=self.insert_layer_id,
-        )
 
 
 @require_torch
@@ -378,7 +332,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "The video shows two tennis players engaged in a match or practice session on an indoor tennis court. The player in the foreground is positioned at the net,",
+                ("cuda", (8, 6)): "The video shows two tennis players engaged in a match or practice session inside an indoor tennis court. The player in the foreground is positioned at the net,",
                 ("rocm", (9, 4)): "The video shows two tennis players engaged in a match or practice session inside an indoor tennis court. The player in the foreground is positioned at the net,",
             }
         )  # fmt: skip
@@ -479,7 +433,7 @@ class MiniCPMV4_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 6)): [
-                    "The animal in the image is a Pystylus, also known as the Eurasian pystylus or snow leopard cat. It's a",
+                    "The animal in the image is a Pystylus, also known as a Eurasian pystylus or snow leopard cat. It's a",
                     "I'm a model from the MiniCPM series, developed by Modelbest and OpenBMB. For more details, you can visit https://github",
                 ],
                 ("cuda", (10, 0)): [

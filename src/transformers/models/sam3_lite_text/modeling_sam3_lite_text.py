@@ -351,7 +351,6 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Sam3LiteTextTextPositionEmbedding):

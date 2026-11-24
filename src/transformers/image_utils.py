@@ -29,6 +29,7 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_torchcodec_greater_or_equal,
+    is_torchcodec_usable,
     is_torchvision_available,
     is_torchvision_greater_or_equal,
     is_vision_available,
@@ -365,7 +366,7 @@ def get_image_size(
         A tuple of the image's height and width.
     """
     if isinstance(image, PIL.Image.Image):
-        return image.size
+        return (image.height, image.width)
 
     if channel_dim is None:
         channel_dim = infer_channel_dimension_format(image)
@@ -535,7 +536,7 @@ def load_image_as_tensor(
     """
     import torch
 
-    if is_torchcodec_greater_or_equal("0.16.0"):
+    if is_torchcodec_greater_or_equal("0.16.0") and is_torchcodec_usable(decode="image"):
         # Try with torchcodec first and warn only if torchvision is used
         from torchcodec.decoders import ImageReadMode, decode_image
     else:

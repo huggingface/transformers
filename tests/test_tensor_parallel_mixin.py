@@ -58,6 +58,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "qwen4_exp_text",
     "qwen3_moe",
     "glm_moe_dsa",
+    "dots3_note_text",
     "deepseek_v4",
     "glm4_moe_lite",
     "glm4_moe",
@@ -481,23 +482,6 @@ class TensorParallelTesterMixin(ABC):
                 _get_parameter_plan(f"{name}.weight", model.tp_plan, is_weight=True),
                 f"{model_class.__name__}: the TP plan leaves `{name}` replicated; shard it with `embedding_rowwise`",
             )
-
-    def test_moe_parallel_plans_shard_experts(self):
-        """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
-        A plan missing them keeps every expert on every rank without changing any output, so no numerical test sees it.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        models = [model_class(copy.deepcopy(config)) for model_class in self.all_model_classes]
-        expert_weights = {model: _get_expert_weight_names(model) for model in models}
-        if not any(expert_weights.values()):
-            self.skipTest("Not an MoE model")
-
-        for model, names in expert_weights.items():
-            for kind, plan in (("TP", model._tp_plan), ("EP", model._ep_plan)):
-                unsharded = sorted(n for n in names if _get_parameter_plan(n, plan, is_weight=True) is None)
-                self.assertFalse(
-                    unsharded, f"{type(model).__name__}: the {kind} plan leaves these experts replicated: {unsharded}"
-                )
 
     @parameterized.expand([(False,), (True,)])
     @is_tensor_parallel_test

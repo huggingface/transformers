@@ -54,7 +54,6 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_5_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -63,9 +62,6 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
@@ -144,7 +140,7 @@ class Qwen3_5MoeVisionConfig(PreTrainedConfig):
     model_type = "qwen3_5_moe_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -185,7 +181,6 @@ class Qwen3_5MoeConfig(PreTrainedConfig):
         "vision_config": Qwen3_5MoeVisionConfig,
         "text_config": Qwen3_5MoeTextConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None

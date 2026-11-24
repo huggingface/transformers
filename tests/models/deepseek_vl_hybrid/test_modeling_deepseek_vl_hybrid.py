@@ -32,24 +32,25 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 from ...test_processing_common import url_to_local_path
 
 
-class DeepseekVLHybridModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=25,
-        num_channels=3,
-        initializer_range=0.02,
-        is_training=True,
-        use_cache=False,
-        image_token_id=3,
-        text_config={
+class DeepseekVLHybridModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 25,
+        "num_channels": 3,
+        "initializer_range": 0.02,
+        "is_training": True,
+        "use_cache": False,
+        "image_token_id": 3,
+        "text_config": {
             "num_hidden_layers": 2,
             "vocab_size": 99,
             "hidden_size": 16,
@@ -58,7 +59,7 @@ class DeepseekVLHybridModelTester:
             "num_attention_heads": 4,
             "pad_token_id": 1,
         },
-        vision_config={
+        "vision_config": {
             "num_hidden_layers": 1,
             "hidden_size": 16,
             "intermediate_size": 37,
@@ -68,7 +69,7 @@ class DeepseekVLHybridModelTester:
             "vision_use_head": False,
             "num_attention_heads": 4,
         },
-        high_res_vision_config={
+        "high_res_vision_config": {
             "num_hidden_layers": 2,
             "global_attn_indexes": [0],
             "hidden_size": 16,
@@ -79,30 +80,28 @@ class DeepseekVLHybridModelTester:
             "patch_size": 32,
             "num_attention_heads": 4,
         },
-    ):
+        "num_image_tokens": 16,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["vision_config"]["num_channels"] = values["num_channels"]
+        values["high_res_vision_config"]["num_channels"] = values["num_channels"]
+
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["high_res_image_size"] = values["high_res_vision_config"]["image_size"]
+        values["image_size"] = values["vision_config"]["image_size"]
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.num_channels = num_channels
-        self.initializer_range = initializer_range
-        self.is_training = is_training
-        self.use_cache = use_cache
-
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.high_res_vision_config = high_res_vision_config
-        self.vision_config["num_channels"] = self.num_channels
-        self.high_res_vision_config["num_channels"] = self.num_channels
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.high_res_image_size = high_res_vision_config["image_size"]
-        self.image_size = vision_config["image_size"]
-        self.num_image_tokens = 16
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = image_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return DeepseekVLHybridConfig(
@@ -154,6 +153,7 @@ class DeepseekVLHybridModelTester:
 
 @require_torch
 class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DeepseekVLHybridModelTester
     all_model_classes = (
         (DeepseekVLHybridModel, DeepseekVLHybridForConditionalGeneration) if is_torch_available() else ()
     )
@@ -238,15 +238,13 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
 @require_torch
 @require_torch_accelerator
 @slow
-class DeepseekVLHybridIntegrationTest(unittest.TestCase):
+class DeepseekVLHybridIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
+        super().setUp()
         self.model_id = "deepseek-community/deepseek-vl-7b-chat"
 
     def test_model_text_generation(self):
-        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
-        model.to(torch_device)
+        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(self.model_id, dtype="auto").to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -279,10 +277,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         )
 
     def test_model_text_generation_batched(self):
-        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
-        model.to(torch_device)
+        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(self.model_id, dtype="auto").to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 
@@ -317,12 +312,18 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
             ],
         ]
         EXPECTED_TEXT = [
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:\nThe image depicts a fluffy, light brown animal with a white face and black markings around its eyes",  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:The image depicts a fluffy, light brown animal with a white face and black markings on its face and",  # fmt: skip
             "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a large, furry animal that appears to be a type of bear.The ",  # fmt: skip
         ]
 
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            padding=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding_side="left",
         )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -331,10 +332,7 @@ class DeepseekVLHybridIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, text)
 
     def test_model_text_generation_with_multi_image(self):
-        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
-            self.model_id, dtype="auto", device_map="auto"
-        )
-        model.to(torch_device)
+        model = DeepseekVLHybridForConditionalGeneration.from_pretrained(self.model_id, dtype="auto").to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
 

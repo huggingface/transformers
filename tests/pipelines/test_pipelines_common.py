@@ -482,6 +482,8 @@ class PipelinePadTest(unittest.TestCase):
                 torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
             )
         )
+        empty = [{"input_ids": torch.LongTensor([[]])}, {"input_ids": torch.LongTensor([[1, 2]])}]
+        self.assertTrue(torch.equal(_pad(empty, "input_ids", 10, "left"), torch.LongTensor([[10, 10], [1, 2]])))
         self.assertTrue(
             torch.allclose(
                 _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
@@ -721,6 +723,14 @@ class PipelineUtilsTest(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             pipe = pipeline("text-generation", model=model, device="cpu", tokenizer=tokenizer)
+
+    @require_torch_accelerator
+    def test_pipeline_single_device_device_map(self):
+        # A single-device `device_map` must not be overridden by the pipeline's fallback to device 0
+        import torch
+
+        pipe = pipeline("text-generation", model="hf-internal-testing/tiny-random-bert", device_map="cpu")
+        self.assertEqual(pipe.model.device, torch.device("cpu"))
 
     @require_torch_multi_accelerator
     def test_pipeline_device_not_equal_model_device(self):

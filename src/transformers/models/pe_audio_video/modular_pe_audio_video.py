@@ -312,7 +312,6 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PeAudioVideoEncoderLayer", "TimmWrapperForImageClassification"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -552,7 +551,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         r"audio_model\.text_model\.(?!rotary_emb)": r"^text_model\.(?!rotary_emb)",
         r"video_model\.text_model\.(?!rotary_emb)": r"^text_model\.(?!rotary_emb)",
         r"audio_video_encoder\.embedder\.audio_encoder\.(?!rotary_emb)": r"audio_model\.audio_encoder\.(?!rotary_emb)",
-        r"audio_video_encoder\.embedder\.video_encoder\.(?!rotary_emb|.*\.rope\.pos_embed)": r"video_model\.video_encoder\.(?!rotary_emb|.*\.rope\.pos_embed)",
+        r"audio_video_encoder\.embedder\.video_encoder\.(?!rotary_emb|.*\.rope\.(?:pos_embed|bands))": r"video_model\.video_encoder\.(?!rotary_emb|.*\.rope\.(?:pos_embed|bands))",
     }
 
     def __init__(self, config: PeAudioVideoConfig):
@@ -601,7 +600,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True,
+            output_hidden_states=-1,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -657,7 +656,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True,
+            output_hidden_states=-1,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -680,7 +679,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_hidden_states=True,
+            output_hidden_states=-1,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -778,7 +777,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
                 audio_video_loss=audio_video_loss,
             )
 
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         text_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
         text_embeds = text_outputs.hidden_states[-1][:, 0]
         audio_plus_text_embeds = torch.cat([audio_video_outputs.audio_model_output.pooler_output, text_embeds], dim=-1)

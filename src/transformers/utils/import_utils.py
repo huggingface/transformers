@@ -34,7 +34,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import packaging.version
 from packaging import version
@@ -174,7 +174,7 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.18.0"
+KERNELS_MIN_VERSION = "0.18.2"
 KERNELS_MAX_VERSION = "0.19.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
@@ -640,12 +640,27 @@ def is_torch_tpu_available(check_device: bool = False) -> bool:
 
 @lru_cache
 @_make_compile_constant
+def is_torch_supa_available(check_device: bool = False) -> bool:
+    """Check whether the current PyTorch accelerator is an available Biren  SUPA device."""
+    if not is_torch_available() or not _is_package_available("torch_supa")[0]:
+        return False
+
+    import torch
+
+    accelerator = get_current_accelerator()
+    return accelerator is not None and accelerator.type == "supa" and torch.accelerator.is_available()
+
+
+@lru_cache
+@_make_compile_constant
 def is_torch_bf16_gpu_available() -> bool:
     if not is_torch_available():
         return False
 
     import torch
 
+    if is_torch_supa_available():
+        return torch.supa.is_bf16_supported()
     if torch.cuda.is_available():
         return torch.cuda.is_bf16_supported()
     if is_torch_xpu_available():
@@ -730,6 +745,8 @@ def is_torch_tf32_available() -> bool:
         if f"{device_info.major}{device_info.minor}" >= "22":
             return True
         return False
+    if is_torch_supa_available():
+        return is_torch_greater_or_equal("2.9")
     torch_version = getattr(torch, "version")
     if not torch.cuda.is_available() or torch_version.cuda is None:
         return False
@@ -934,7 +951,8 @@ def is_soynlp_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_multipart_available() -> bool:
-    return _is_package_available("multipart")[0]
+    # `python-multipart` >= 0.0.13 ships `python_multipart` and deprecates the legacy `multipart` import shim.
+    return _is_package_available("python_multipart")[0] or _is_package_available("multipart")[0]
 
 
 @lru_cache
@@ -1070,14 +1088,30 @@ def is_openvino_available() -> bool:
 
 
 @lru_cache
+def is_openvino_greater_or_equal(library_version: str, accept_dev: bool = False) -> bool:
+    """
+    Accepts a library version and returns True if the current version of the library is greater than or equal to the
+    given version. If `accept_dev` is True, it will also accept development versions (e.g. 2026.5.0.dev20260901
+    matches 2026.5.0).
+    """
+    available, openvino_version = _is_package_available("openvino", return_version=True)
+    if not available:
+        return False
+    if accept_dev:
+        return version.parse(version.parse(openvino_version).base_version) >= version.parse(library_version)
+    return version.parse(openvino_version) >= version.parse(library_version)
+
+
+@lru_cache
 def is_nncf_available() -> bool:
     return _is_package_available("nncf")[0]
 
 
 @lru_cache
 @_make_compile_constant
-def is_onnxruntime_available() -> bool:
-    return _is_package_available("onnxruntime")[0] or _is_package_available("onnxruntime-gpu")[0]
+def is_onnxruntime_available(min_version: str | None = None) -> bool:
+    available, onnxruntime_version = _is_package_available("onnxruntime", return_version=True)
+    return available and (min_version is None or version.parse(onnxruntime_version) >= version.parse(min_version))
 
 
 @lru_cache
@@ -1196,6 +1230,47 @@ def is_decord_available() -> bool:
 @_make_compile_constant
 def is_torchcodec_available() -> bool:
     return _is_package_available("torchcodec")[0]
+
+
+@lru_cache
+@_make_compile_constant
+def is_torchcodec_usable(decode: Literal["image", "audio", "video"]) -> bool:
+    """
+    Checks if torchcodec can decode the given modality: its native libraries must load (they must match the installed
+    torch, which pip doesn't enforce) and, for audio and video, it must have found FFmpeg.
+
+    Only use it when transformers picks torchcodec as a default backend (e.g. `load_audio(backend="auto")`), so a
+    broken install falls back to another backend instead of failing users who never asked for torchcodec. When
+    torchcodec is explicitly requested, import it directly to surface its own error.
+
+    Args:
+        decode (`str`):
+            The modality to decode, one of `"image"`, `"audio"` or `"video"`.
+    """
+    if not is_torchcodec_available():
+        return False
+
+    try:
+        import torchcodec
+    except Exception as error:
+        while error.__cause__ is not None:  # "Could not load this library" hides the missing library / symbol
+            error = error.__cause__
+        logger.warning_once(
+            f"torchcodec is installed but failed to load ({error}), so it will not be used. Check its requirements "
+            "(e.g. a build matching the installed torch): see "
+            "https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+        )
+        return False
+
+    # Since 0.16, torchcodec imports even when FFmpeg can't be loaded (its image decoders don't need it) and sets
+    # `ffmpeg_major_version` to None. Older versions fail to import instead.
+    if decode != "image" and is_torchcodec_greater_or_equal("0.16") and torchcodec.ffmpeg_major_version is None:
+        logger.warning_once(
+            "torchcodec loaded but could not load FFmpeg, so it will not be used to decode audio or video. Install a "
+            "supported FFmpeg: https://github.com/meta-pytorch/torchcodec#installing-torchcodec."
+        )
+        return False
+    return True
 
 
 @lru_cache
@@ -1559,7 +1634,13 @@ def is_soundfile_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_timm_available() -> bool:
-    return is_vision_available() and is_torch_available() and _is_package_available("timm")[0]
+    # timm requires PIL/torchvision under the hood so we check all of deps here once
+    return (
+        is_vision_available()
+        and is_torchvision_available()
+        and is_torch_available()
+        and _is_package_available("timm")[0]
+    )
 
 
 @lru_cache
@@ -1598,6 +1679,19 @@ def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
         return False
     is_available, torchao_version = _is_package_available("torchao", return_version=True)
     return is_available and version.parse(torchao_version) >= version.parse(min_version)
+
+
+@lru_cache
+@_make_compile_constant
+def is_soxr_available() -> bool:
+    return _is_package_available("soxr")[0]
+
+
+@lru_cache
+@_make_compile_constant
+def is_audio_available() -> bool:
+    """The audio core's dependencies, installed with `transformers[audio]`: soundfile to decode, soxr to resample."""
+    return is_soundfile_available() and is_soxr_available()
 
 
 @lru_cache
@@ -1991,6 +2085,12 @@ def is_training_run_on_sagemaker() -> bool:
 
 
 # docstyle-ignore
+AUDIO_IMPORT_ERROR = """
+{0} requires soundfile and soxr, which were not found in your environment. You can install them with pip:
+`pip install transformers[audio]`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
 ```
@@ -2017,10 +2117,7 @@ Please note that you may need to restart your runtime after installation.
 """
 
 TORCHCODEC_IMPORT_ERROR = """
-{0} requires the TorchCodec (https://github.com/pytorch/torchcodec) library, but it was not found in your environment. You can install it with:
-```
-pip install torchcodec
-```
+{0} requires the TorchCodec library, but it was not found in your environment. See https://github.com/meta-pytorch/torchcodec#installing-torchcodec to install it.
 Please note that you may need to restart your runtime after installation.
 """
 
@@ -2160,6 +2257,13 @@ runtime.
 """
 
 # docstyle-ignore
+SOXR_IMPORT_ERROR = """
+{0} requires the soxr library but it was not found in your environment. You can install it with pip:
+`pip install transformers[audio]`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PANDAS_IMPORT_ERROR = """
 {0} requires the pandas library but it was not found in your environment. You can install it with pip as
 explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
@@ -2170,7 +2274,8 @@ Please note that you may need to restart your runtime after installation.
 # docstyle-ignore
 PHONEMIZER_IMPORT_ERROR = """
 {0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
-`pip install phonemizer`. Please note that you may need to restart your runtime after installation.
+`pip install phonemizer`. phonemizer also needs the `espeak-ng` system library, which pip cannot install (e.g.
+`apt install espeak-ng` on Debian/Ubuntu, `brew install espeak-ng` on macOS).
 """
 # docstyle-ignore
 UROMAN_IMPORT_ERROR = """
@@ -2340,6 +2445,7 @@ MISTRAL_COMMON_IMPORT_ERROR = """
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("audio", (is_audio_available, AUDIO_IMPORT_ERROR)),
         ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
@@ -2364,6 +2470,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
+        ("soxr", (is_soxr_available, SOXR_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
         ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),

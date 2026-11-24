@@ -20,7 +20,6 @@ import numpy as np
 import torch
 
 from transformers import (
-    AutoProcessor,
     AutoTokenizer,
     VibeVoiceAcousticTokenizerFeatureExtractor,
     VibeVoiceAsrProcessor,
@@ -35,25 +34,6 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     audio_input_name = "input_values"
     # Tiny processor created with make_tiny_processor.py from "microsoft/VibeVoice-ASR-HF"
     tiny_model_id = "hf-internal-testing/tiny-processor-vibevoice_asr"
-
-    @classmethod
-    @require_torch
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = VibeVoiceAsrProcessor.from_pretrained(cls.tiny_model_id)
-        processor.save_pretrained(cls.tmpdirname)
-
-    @require_torch
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    @require_torch
-    def get_feature_extractor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
-
-    @require_torch
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):
