@@ -723,8 +723,7 @@ class FP8Experts(nn.Module):
         has_bias: bool = False,
         has_gate: bool = True,
         expert_dtype: str = "fp8",
-        limit: float | None = None,
-        limit_after_act: bool = False,
+        layer_idx: int | None = None,
     ):
         super().__init__()
 
@@ -743,8 +742,13 @@ class FP8Experts(nn.Module):
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
         self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
-        self.limit_after_act = limit_after_act
-        self.limit = limit
+        self.limit_after_act = getattr(config, "limit_after_act", False)
+        self.limit = None
+        if self.limit_after_act:
+            limits = getattr(config, "swiglu_limits", None)
+            if limits is not None and layer_idx is None:
+                raise ValueError("Per-layer SwiGLU limits require a layer index.")
+            self.limit = (limits[layer_idx] if limits is not None else self.swiglu_limit) or float("inf")
         self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
         self.up_softcap = getattr(config, "mlp_up_softcap", None)
 
@@ -806,10 +810,8 @@ class FP8Experts(nn.Module):
             glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
             return (up + 1.0) * glu
         elif self.limit_after_act:
-            gate = self.act_fn(gate)
-            if self.limit is not None and self.limit > 0:
-                gate = gate.clamp(max=self.limit)
-                up = up.clamp(min=-self.limit, max=self.limit)
+            gate = self.act_fn(gate).clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
             return gate * up
         elif self.swiglu_limit is not None:
             gate = gate.clamp(max=self.swiglu_limit)
@@ -971,6 +973,7 @@ def replace_with_fp8_linear(
             if module_name.endswith(".experts"):
                 has_gate = getattr(module, "has_gate", True)
                 has_bias = getattr(module, "has_bias", False)
+                layer_idx = getattr(module, "layer_idx", None)
                 config = getattr(module, "config", model.config.get_text_config())
                 new_class = use_experts_implementation(
                     experts_class=FP8Experts,
@@ -986,8 +989,7 @@ def replace_with_fp8_linear(
                     has_bias=has_bias,
                     has_gate=has_gate,
                     expert_dtype=quantization_config.expert_dtype,
-                    limit=getattr(module, "limit", None),
-                    limit_after_act=getattr(module, "limit_after_act", False),
+                    layer_idx=layer_idx,
                 )
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FP8Linear swap.

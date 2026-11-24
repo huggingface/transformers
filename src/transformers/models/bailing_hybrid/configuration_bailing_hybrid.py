@@ -91,8 +91,8 @@ class BailingHybridConfig(PreTrainedConfig):
         "num_experts_per_tok": "num_experts_per_token",
         "n_shared_experts": "num_shared_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
-        "experts_swiglu_limits": "expert_swiglu_limit_list",
-        "shared_experts_swiglu_limits": "share_expert_swiglu_limit_list",
+        "swiglu_limits": "expert_swiglu_limit_list",
+        "swiglu_limits_shared": "share_expert_swiglu_limit_list",
     }
 
     vocab_size: int = 157184
@@ -169,12 +169,17 @@ class BailingHybridConfig(PreTrainedConfig):
         self.head_dim = self.qk_rope_head_dim
         super().__post_init__(**kwargs)
 
-        for name in ("experts_swiglu_limits", "shared_experts_swiglu_limits"):
+        for name in ("swiglu_limits", "swiglu_limits_shared"):
             limits = getattr(self, name)
             if limits is None:
                 setattr(self, name, [0] * self.num_hidden_layers)
             elif len(limits) != self.num_hidden_layers:
                 raise ValueError(f"`{name}` must contain one limit per decoder layer.")
+
+    @property
+    def limit_after_act(self) -> bool:
+        """Clipping order is fixed by the architecture and is not serialized."""
+        return True
 
 
 __all__ = ["BailingHybridConfig"]

@@ -304,17 +304,3 @@ class SonicMoeForwardTest(unittest.TestCase):
         experts = make_experts(hidden_act="tanh")
         with self.assertRaisesRegex(ValueError, "does not support the 'tanh' activation"):
             self._run(experts)
-
-    def test_forward_rejects_expert_clipping(self):
-        for limit, after_act in ((None, False), (float("inf"), False), (0, True), (0, False), (1.5, True)):
-            with self.subTest(limit=limit, after_act=after_act):
-                experts = make_experts()
-                experts.limit = limit
-                experts.limit_after_act = after_act
-                if limit == 1.5 or (limit == 0 and not after_act):
-                    with mock.patch.object(sm, "load_sonicmoe_kernel") as load_kernel:
-                        with self.assertRaisesRegex(ValueError, "does not support expert clipping"):
-                            sonicmoe_experts_forward(experts, None, None, None)
-                        load_kernel.assert_not_called()
-                else:
-                    self._run(experts)

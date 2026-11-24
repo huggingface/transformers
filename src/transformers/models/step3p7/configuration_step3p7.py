@@ -309,6 +309,11 @@ class Step3p7TextConfig(PreTrainedConfig):
             if rope_scaling and "full_attention" in self.rope_parameters:
                 self.rope_parameters["full_attention"].update(rope_scaling)
 
+    @property
+    def limit_after_act(self) -> bool:
+        """Clipping order is fixed by the architecture and is not serialized."""
+        return True
+
 
 @auto_docstring(checkpoint="stepfun-ai/Step-3.7-Flash")
 @strict

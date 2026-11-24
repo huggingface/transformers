@@ -142,7 +142,7 @@ class BailingHybridRotaryEmbedding(nn.Module):
 class BailingHybridExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config, swiglu_limit=0):
+    def __init__(self, config, layer_idx):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
@@ -150,9 +150,10 @@ class BailingHybridExperts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = swiglu_limit
-        # Declare the clipping order for replacement expert implementations.
-        self.limit_after_act = True
+        self.limit = (config.swiglu_limits[layer_idx] if config.swiglu_limits else None) or float("inf")
+        self.config = config
+        self.layer_idx = layer_idx
+        self.limit_after_act = config.limit_after_act
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -173,15 +174,15 @@ class BailingHybridExperts(nn.Module):
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = self.act_fn(gate)
-        if self.limit is not None and self.limit > 0:
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+        gate = self.act_fn(gate).clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
         return gate * up
 
 
 class BailingHybridMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    """Ling's shared experts use the same post-activation clipping as Step3p7."""
+
+    def __init__(self, config, intermediate_size=None, layer_idx=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -190,14 +191,14 @@ class BailingHybridMLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.limit = 0
+        # Zero or a missing per-layer limit disables clipping.
+        self.limit = (
+            config.swiglu_limits_shared[layer_idx] if layer_idx is not None and config.swiglu_limits_shared else None
+        ) or float("inf")
 
-    def forward(self, x):
-        gate = self.act_fn(self.gate_proj(x))
-        up = self.up_proj(x)
-        if self.limit is not None and self.limit > 0:
-            gate = gate.clamp(max=self.limit)
-            up = up.clamp(min=-self.limit, max=self.limit)
+    def forward(self, x) -> torch.Tensor:
+        gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
+        up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
         return self.down_proj(gate * up)
 
 
@@ -837,13 +838,11 @@ class BailingHybridMoE(nn.Module):
     def __init__(self, config: BailingHybridConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.experts = BailingHybridExperts(config)
+        self.experts = BailingHybridExperts(config, layer_idx)
         self.gate = BailingHybridTopkRouter(config)
         self.shared_experts = BailingHybridMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+            config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts, layer_idx=layer_idx
         )
-        self.experts.limit = config.experts_swiglu_limits[layer_idx]
-        self.shared_experts.limit = config.shared_experts_swiglu_limits[layer_idx]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
