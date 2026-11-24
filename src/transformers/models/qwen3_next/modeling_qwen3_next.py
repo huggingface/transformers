@@ -407,8 +407,9 @@ def torch_chunk_gated_delta_rule(
     padded_output_shape = (batch_size, num_v_heads, -1, v_head_dim)  # -1 is the padded sequence length
     decay = g  # rename for clarity: argument name must stay "g" to match flash_linear_attention's API
     # Cannot be more than the number of tokens
-    if num_intermediate_recurrent_states is not None:
-        num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, sequence_length)
+    num_intermediate_recurrent_states = (
+        min(num_intermediate_recurrent_states, sequence_length) if num_intermediate_recurrent_states is not None else 0
+    )
 
     # Grouped value attention: each query/key head serves num_v_heads // num_k_heads consecutive value heads
     if num_k_heads != num_v_heads:
@@ -428,12 +429,8 @@ def torch_chunk_gated_delta_rule(
     scaling = query.shape[-1] ** -0.5
     query = query * scaling
 
-    # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks
-    effective_sequence_length = (
-        sequence_length - num_intermediate_recurrent_states
-        if num_intermediate_recurrent_states is not None
-        else sequence_length
-    )
+    # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+    effective_sequence_length = sequence_length - num_intermediate_recurrent_states
     chunked_query, sequential_query = torch.tensor_split(query, [effective_sequence_length], dim=2)
     chunked_key, sequential_key = torch.tensor_split(key, [effective_sequence_length], dim=2)
     chunked_value, sequential_value = torch.tensor_split(value, [effective_sequence_length], dim=2)
@@ -507,7 +504,7 @@ def torch_chunk_gated_delta_rule(
     # Apply decay once rather than in each chunk
     chunked_query = chunked_query * cum_decay.exp().unsqueeze(-1)
     chunked_key = chunked_key * (cum_decay[..., -1:] - cum_decay).exp().unsqueeze(-1)
-    chunk_decay = cum_decay[..., -1].exp()[..., None, None]
+    chunked_decay = cum_decay[..., -1].exp()[..., None, None]
 
     # Second phase: the sequential scan over chunks
     chunked_core_attn_out = torch.zeros_like(new_values)
@@ -519,12 +516,12 @@ def torch_chunk_gated_delta_rule(
         chunked_core_attn_out[:, :, i] = inter_chunk_attn + intra_chunk_attn[:, :, i] @ v_new
         # Update the recurrent state: new recurrent state (S_t+1) = decayed old state (S_t * (I-βkk^T)) + update (βvk^T)
         last_recurrent_state = (
-            last_recurrent_state * chunk_decay[:, :, i] + chunked_key[:, :, i].transpose(-1, -2) @ v_new
+            last_recurrent_state * chunked_decay[:, :, i] + chunked_key[:, :, i].transpose(-1, -2) @ v_new
         )
 
     # Reshape the output to the orignal shape: flatten the chunk dimension, then drop padding
     chunked_core_attn_out = chunked_core_attn_out.reshape(padded_output_shape)
-    chunked_core_attn_out = chunked_core_attn_out[:, :, :sequence_length]
+    chunked_core_attn_out = chunked_core_attn_out[:, :, :effective_sequence_length]
 
     # If we needed to return intermediate recurrent state, compute them now after the chunks
     sequential_core_attn_out = torch.zeros_like(sequential_value)
