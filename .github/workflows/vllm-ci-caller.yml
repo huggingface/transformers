@@ -918,6 +918,25 @@ jobs:
           pytest -v -s tests/models/multimodal/pooling/test_clip.py tests/models/multimodal/pooling/test_siglip.py \
             --deselect 'tests/models/multimodal/pooling/test_siglip.py::test_models[float-google/siglip2-giant-opt-patch16-384]'
 
+      # A few small language models that vLLM doesn't mark `cpu_model` (same transformers comparison as above). In one shard
+      # (only 3 models). Not included: gpt2 (marked `flaky` in vLLM) and the 6-8B models of this file.
+      - name: "Test: more language models generation"
+        if: ${{ !cancelled() && matrix.shard == 1 }}
+        working-directory: vllm
+        run: |
+          pytest -v -s tests/models/language/generation/test_common.py \
+            -k "opt-350m or phi-2 or stablelm-3b"
+
+      # HF `generate(num_beams=...)` vs vLLM's beam search. In one shard (only 2 tests). Not included: the tests without a
+      # transformers reference, and test_beam_search_passes_multimodal_data (7B audio model; vLLM's CI excludes it too).
+      - name: "Test: beam search"
+        if: ${{ !cancelled() && matrix.shard == 3 }}
+        working-directory: vllm
+        run: |
+          pytest -v -s \
+            tests/samplers/test_beam_search.py::test_beam_search_single_input \
+            tests/samplers/test_beam_search.py::test_beam_search_with_concurrency_limit
+
   # Multimodal generation with vLLM's Transformers modeling backend, compared with transformers (`hf_runner`): the
   # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
   # file (only ~12 tests in total, so `--num-shards` could leave a shard without tests).
@@ -1164,6 +1183,25 @@ jobs:
             tests/tool_parsers/test_gigachat3_tool_parser.py \
             tests/tool_parsers/test_granite4_tool_parser.py \
             tests/tool_parsers/test_lfm2_tool_parser.py
+
+      - name: "Test: engine output processing"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # The v1 engine's output processing (incremental detokenization, logprobs, stop tokens / strings) with a real HF
+          # tokenizer (the `dummy_test_vectors` fixture). Not included: the tests of vLLM's request bookkeeping in the same
+          # file, and test_logprobs_processor.py (no tokenizer).
+          pytest -v -s \
+            tests/v1/engine/test_fast_incdec_prefix_err.py \
+            tests/v1/engine/test_output_processor.py::test_incremental_detokenization \
+            tests/v1/engine/test_output_processor.py::test_request_stream_interval_raises_but_not_below_engine_default \
+            tests/v1/engine/test_output_processor.py::test_logprobs_processor \
+            tests/v1/engine/test_output_processor.py::test_stop_token \
+            tests/v1/engine/test_output_processor.py::test_stop_string \
+            tests/v1/engine/test_output_processor.py::test_iteration_stats \
+            tests/v1/engine/test_output_processor.py::test_watermark_status_partitions_finished_requests \
+            tests/v1/engine/test_output_processor.py::test_lora_request_tracking \
+            tests/v1/engine/test_output_processor.py::test_abort_requests
 
   # vLLM's own multimodal models vs transformers (`hf_runner`): the `cpu_model` tests of
   # `tests/models/multimodal/generation` (vLLM's CPU CI: "CPU-Multi-Modal Model Tests"), the multimodal counterpart of
