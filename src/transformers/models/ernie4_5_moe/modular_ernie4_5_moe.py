@@ -190,7 +190,7 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
         "hidden_states": Ernie4_5_MoeDecoderLayer,
         "attentions": Ernie4_5_MoeAttention,
     }
-    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
+    _keep_in_fp32_modules_strict = ["gate.weight", "e_score_correction_bias"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)

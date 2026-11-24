@@ -128,12 +128,6 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.text_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.text_moe.experts.down_proj": "rowwise",
-        "layers.*.mlp.text_moe.experts": "moe_tp_experts",
-        "layers.*.mlp.vision_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.vision_moe.experts.down_proj": "rowwise",
-        "layers.*.mlp.vision_moe.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -521,7 +515,7 @@ class Ernie4_5_VLMoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
         "hidden_states": Ernie4_5_VLMoeDecoderLayer,
         "attentions": Ernie4_5_VLMoeTextAttention,
     }
-    _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
+    _keep_in_fp32_modules_strict = ["gate.weight", "e_score_correction_bias"]
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
