@@ -17,10 +17,8 @@
 
 import unittest
 
-import pytest
-
 from transformers import AutoTokenizer, EuroBertConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -215,13 +213,7 @@ class EuroBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = EuroBertForMaskedLM if is_torch_available() else None
-
-    @slow
-    @require_torch_accelerator
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_for_training(self):
-        self.model_tester.attention_probs_dropout_prob = 0.0
-        super().test_torch_compile_for_training()
+    _torch_compile_train_attention_dropout = 0.0
 
     def setUp(self):
         self.model_tester = EuroBertModelTester(self)
