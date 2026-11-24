@@ -665,6 +665,8 @@ class Llama4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`image_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
+        if self.image_outputs is None:
+            return None
         return self.image_outputs.pooler_output
 
 
@@ -1319,7 +1321,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_outputs=outputs.image_outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
             router_logits=outputs.router_logits,
         )
 
