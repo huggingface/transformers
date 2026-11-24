@@ -191,6 +191,7 @@ class DeepseekVLHybridImageProcessor(TorchvisionBackend):
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         high_res_resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
+            stacked_high_res_images = stacked_images
             if do_resize:
                 stacked_high_res_images = self.resize(
                     image=stacked_images, size=high_res_size, min_size=min_size, resample=high_res_resample
@@ -210,7 +211,7 @@ class DeepseekVLHybridImageProcessor(TorchvisionBackend):
                 stacked_high_res_images = self.pad_to_square(
                     stacked_high_res_images, background_color=self.high_res_background_color
                 )
-                high_res_padded_images[shape] = stacked_high_res_images
+            high_res_padded_images[shape] = stacked_high_res_images
             # Fused rescale and normalize
             stacked_high_res_images = self.rescale_and_normalize(
                 stacked_high_res_images,
@@ -225,6 +226,7 @@ class DeepseekVLHybridImageProcessor(TorchvisionBackend):
 
         resized_images_grouped = {}
         for shape, stacked_high_res_padded_images in high_res_padded_images.items():
+            stacked_images = stacked_high_res_padded_images
             if do_resize:
                 stacked_images = self.resize(
                     image=stacked_high_res_padded_images, size=size, min_size=min_size, resample=resample
