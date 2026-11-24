@@ -21,6 +21,7 @@ import tempfile
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
@@ -359,6 +360,57 @@ class TokenizerUtilsTest(unittest.TestCase):
             # The repository's own vocab must win; the injected out-of-repo file must not be read.
             self.assertIn("benign_repo_token", vocab)
             self.assertNotIn("secret_leaked_token", vocab)
+
+    @require_tokenizers
+    @parameterized.expand(
+        [
+            # `TemplateProcessing` post-processor that adds BOS only
+            ("hf-internal-testing/llama-tokenizer",),
+            # `Sequence` (`ByteLevel` + `TemplateProcessing`) post-processor that adds BOS only. Its tokenizer_config.json
+            # also sets `add_eos_token: true`, which is ignored: when tokenizer.json exists, it decides what is added
+            ("hf-internal-testing/tiny-random-Idefics3ForConditionalGeneration",),
+        ]
+    )
+    def test_add_eos_token_keeps_bos_from_post_processor(self, repo):
+        # tokenizer.json sets add_bos_token in post-processor, setting add_eos_token must keep it
+        tokenizer = AutoTokenizer.from_pretrained(repo)
+        bos, eos = tokenizer.bos_token_id, tokenizer.eos_token_id
+
+        self.assertTrue(tokenizer.add_bos_token)
+        self.assertFalse(tokenizer.add_eos_token)
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertNotEqual(input_ids[-1], eos)
+
+        tokenizer.add_eos_token = True
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertEqual(input_ids[-1], eos)
+
+        tokenizer.add_eos_token = False
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertNotEqual(input_ids[-1], eos)
+
+        tokenizer = AutoTokenizer.from_pretrained(repo, add_eos_token=False)
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertNotEqual(input_ids[-1], eos)
+
+        tokenizer = AutoTokenizer.from_pretrained(repo, add_eos_token=True)
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertEqual(input_ids[-1], eos)
+
+        # the saved post-processor adds BOS and EOS, so both flags are inferred from it on reload
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+        self.assertTrue(tokenizer.add_bos_token)
+        self.assertTrue(tokenizer.add_eos_token)
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], bos)
+        self.assertEqual(input_ids[-1], eos)
 
     def test_additional_special_tokens_are_preserved_when_extra_tokens_are_configured(self):
         for empty_container in [{}, []]:
