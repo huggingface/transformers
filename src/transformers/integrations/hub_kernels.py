@@ -132,9 +132,7 @@ if is_kernels_available():
             return LayerRepository(repo_id=f"kernels-community/{repo_id}", **kwargs)
 
         def for_devices_and_modes(devices, modes, repo):
-            return {
-                device: {mode: repo for mode in (Mode.TRAINING, Mode.INFERENCE) if modes & mode} for device in devices
-            }
+            return {device: dict.fromkeys(modes, repo) for device in devices}
 
         def add_kernels_community_layers(repo_id: str, version: int, entries):
             for name, layer_name, devices, modes in entries:
@@ -187,18 +185,18 @@ if is_kernels_available():
             "fla",
             version=2,
             entries=[
-                ("chunk_gated_delta_rule", "chunk_gated_delta_rule", ("cuda", "xpu"), Mode.TRAINING | Mode.INFERENCE),
-                ("fused_recurrent_gated_delta_rule", "recurrent_gated_delta_rule", ("cuda", "xpu"), Mode.INFERENCE),
-                ("fused_recurrent_kda", "recurrent_kimi_delta_attention", ("cuda", "xpu"), Mode.INFERENCE),
-                ("RMSNormGated", "FusedRMSNormGated", ("cuda", "xpu"), Mode.TRAINING | Mode.INFERENCE),
+                ("chunk_gated_delta_rule", "chunk_gated_delta_rule", ("cuda", "xpu"), (Mode.TRAINING, Mode.INFERENCE)),
+                ("fused_recurrent_gated_delta_rule", "recurrent_gated_delta_rule", ("cuda", "xpu"), (Mode.INFERENCE,)),
+                ("fused_recurrent_kda", "recurrent_kimi_delta_attention", ("cuda", "xpu"), (Mode.INFERENCE,)),
+                ("RMSNormGated", "FusedRMSNormGated", ("cuda", "xpu"), (Mode.TRAINING, Mode.INFERENCE)),
             ],
         )
 
         # XPU `chunk_kda` bwd relies on unsupported Intel 2D block-read intrinsics
         kda = build_kernels_community_layer("fla", layer_name="chunk_kimi_delta_attention", version=2)
         _KERNEL_MAPPING["chunk_kda"] = {
-            **for_devices_and_modes(("cuda",), Mode.TRAINING | Mode.INFERENCE, kda),
-            **for_devices_and_modes(("xpu",), Mode.INFERENCE, kda),
+            **for_devices_and_modes(("cuda",), (Mode.TRAINING, Mode.INFERENCE), kda),
+            **for_devices_and_modes(("xpu",), (Mode.INFERENCE,), kda),
         }
 
         # Mamba: linear attn mamba modules
@@ -206,7 +204,7 @@ if is_kernels_available():
             "mamba-ssm",
             version=5,
             entries=[
-                (name, name, ("cuda", "xpu"), Mode.TRAINING | Mode.INFERENCE)
+                (name, name, ("cuda", "xpu"), (Mode.TRAINING, Mode.INFERENCE))
                 for name in (
                     "causal_conv1d_fn",
                     "causal_conv1d_update",
@@ -224,7 +222,7 @@ if is_kernels_available():
             "liger-kernels",
             version=4,
             entries=[
-                ("RMSNorm", "LigerRMSNorm", ("cuda", "rocm"), Mode.TRAINING | Mode.INFERENCE),
+                ("RMSNorm", "LigerRMSNorm", ("cuda", "rocm"), (Mode.TRAINING, Mode.INFERENCE)),
             ],
         )
 
@@ -233,12 +231,12 @@ if is_kernels_available():
             "activation",
             version=1,
             entries=[
-                ("FastGELU", "FastGELU", ("cuda", "xpu"), Mode.INFERENCE),
-                ("QuickGELU", "QuickGELU", ("cuda", "xpu"), Mode.INFERENCE),
-                ("NewGELU", "NewGELU", ("cuda", "xpu"), Mode.INFERENCE),
-                ("SiLU", "Silu", ("cuda", "xpu"), Mode.INFERENCE),
-                ("GeLU", "Gelu", ("cuda", "xpu"), Mode.INFERENCE),
-                ("GeluTanh", "GeluTanh", ("cuda", "xpu"), Mode.INFERENCE),
+                ("FastGELU", "FastGELU", ("cuda", "xpu"), (Mode.INFERENCE,)),
+                ("QuickGELU", "QuickGELU", ("cuda", "xpu"), (Mode.INFERENCE,)),
+                ("NewGELU", "NewGELU", ("cuda", "xpu"), (Mode.INFERENCE,)),
+                ("SiLU", "Silu", ("cuda", "xpu"), (Mode.INFERENCE,)),
+                ("GeLU", "Gelu", ("cuda", "xpu"), (Mode.INFERENCE,)),
+                ("GeluTanh", "GeluTanh", ("cuda", "xpu"), (Mode.INFERENCE,)),
             ],
         )
 
@@ -246,8 +244,8 @@ if is_kernels_available():
         rope = build_kernels_community_layer("rotary", layer_name="apply_rotary_transformers", version=2)
         aiter_rope = build_kernels_community_layer("aiter-rope", layer_name="apply_rotary_transformers", version=3)
         _KERNEL_MAPPING["rotary_pos_emb"] = {
-            **for_devices_and_modes(("cuda", "xpu"), Mode.INFERENCE, rope),
-            **for_devices_and_modes(("rocm",), Mode.INFERENCE, aiter_rope),
+            **for_devices_and_modes(("cuda", "xpu"), (Mode.INFERENCE,), rope),
+            **for_devices_and_modes(("rocm",), (Mode.INFERENCE,), aiter_rope),
         }
 
         # Deformable Attention
