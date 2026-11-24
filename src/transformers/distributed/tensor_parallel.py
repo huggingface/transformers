@@ -93,11 +93,6 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
-def _head_dim(config):
-    """The size of one attention head, used by the unit styles to count the units of a projection."""
-    return getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-
 class TensorParallelLayer:
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
@@ -240,7 +235,8 @@ class UnitColwiseParallel(ColwiseParallel):
         if meta is None:
             return
         weight = module._parameters["weight"]
-        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[0] // _head_dim(config))
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[0] // head_dim)
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, module._unit_mesh, [Shard(meta.ndim - 2), Replicate()], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -336,10 +332,14 @@ class RowwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.to_local()
         return (input_tensor,) + args[1:], kwargs
 
+    @contextlib.contextmanager
     def context_around_forward(self, module, mesh):
         if not self.should_use_local_tensors(module):
             yield
         else:
+            # A rowwise local forward must produce only its partial matmul. If we don't hide
+            # the bias, we will be adding the bias x world_size times which is not correct.
+            # We should add it once after the all_reduce (redistribute).
             bias = module._parameters.get("bias")
             if bias is not None:
                 module._parameters["bias"] = None
@@ -386,7 +386,8 @@ class UnitRowwiseParallel(RowwiseParallel):
         if meta is None:
             return
         weight = module._parameters["weight"]
-        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[-1] // _head_dim(config))
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[-1] // head_dim)
         # bias is added once after the reduce, so it stays replicated
         placements = [Replicate(), Replicate()] if param == "bias" else [Shard(meta.ndim - 1), Replicate()]
         module._parameters[param] = torch.nn.Parameter(
@@ -762,7 +763,8 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())
 
-    context = {"config": model.config.get_text_config(), "mesh_manager": model._mesh_manager}
+    config = model.config.get_text_config()
+    mesh_manager = model._mesh_manager
     for name, style_name in tp_plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
         is_param = name in parameters
@@ -770,9 +772,9 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
         module = modules[module_name]
         if is_param:
             style.validate_param(module, param_name, tp_mesh, parameter_name=name)
-            style.shard_param(module, param_name, tp_mesh, **context)
+            style.shard_param(module, param_name, config=config, mesh_manager=mesh_manager)
         else:
-            style.install_forward(module, tp_mesh, **context)
+            style.install_forward(module, tp_mesh, config=config, mesh_manager=mesh_manager)
         module._is_hooked = True
 
     return model
