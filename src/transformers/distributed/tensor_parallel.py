@@ -93,10 +93,12 @@ def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], t
     return num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
 
 
-class TensorParallelLayer:
-    # Styles that read `module.config` and `module._mesh_manager` (set by `apply_tensor_parallelism`)
-    needs_config = False
+def _head_dim(config):
+    """The size of one attention head, used by the unit styles to count the units of a projection."""
+    return getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
+
+class TensorParallelLayer:
     def should_use_local_tensors(self, module):
         """Whether this module's forward requires local inputs and parameters."""
         return False
@@ -105,7 +107,7 @@ class TensorParallelLayer:
         """Validate a parameter before applying this TP style."""
         pass
 
-    def shard_param(self, module, param, mesh):
+    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         """Wrap ONE parameter as a DTensor placeholder. Default: no-op."""
         pass
 
@@ -117,7 +119,7 @@ class TensorParallelLayer:
             return _use_local_dtensor_params(module)
         return contextlib.nullcontext()
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         return output
 
     @staticmethod
@@ -129,7 +131,7 @@ class TensorParallelLayer:
             local, mesh, [Shard(-1)], run_check=False, shape=shape, stride=torch.empty(shape, device="meta").stride()
         )
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, config=None, mesh_manager=None):
         """Install pre / around / post transforms by replacing module.forward."""
         original_forward = module.forward
 
@@ -137,7 +139,7 @@ class TensorParallelLayer:
             args, kwargs = self.transform_inputs_pre_forward(module, args, kwargs, mesh)
             with self.context_around_forward(module, mesh):
                 output = original_forward(*args, **kwargs)
-            return self.transform_output_post_forward(module, output, mesh)
+            return self.transform_output_post_forward(module, output, mesh, config=config)
 
         module.forward = tp_forward
         return module
@@ -158,10 +160,10 @@ class ColwiseParallel(TensorParallelLayer):
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
         return use_local_quantized_path or uses_local_inference_kernel
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, config=None, mesh_manager=None):
         if not hasattr(module, "out_features"):
             raise ValueError(f"{type(module).__name__} has no `out_features`: colwise shards linear layers.")
-        return super().install_forward(module, mesh)
+        return super().install_forward(module, mesh, config=config, mesh_manager=mesh_manager)
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -199,7 +201,7 @@ class ColwiseParallel(TensorParallelLayer):
             input_tensor = input_tensor.to_local(grad_placements=[Partial()])
         return (input_tensor,) + args[1:], kwargs
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         # The local forward produced this rank's shard of the output features (last dim).
         output_is_local_shard = (
             not isinstance(output, DTensor)
@@ -230,22 +232,15 @@ class UnitColwiseParallel(ColwiseParallel):
           Rank: |   0  |   1  |   2  |   3  |
     This gives: |h0h1h2|h0h1h2|h3h4h5|h3h4h5|
 
-    1. Update the rank's expected shape.
-    2. Prepare the slices appropriately when sharding the param.
-
     We need to have [Shard(0), Replicate()] .
     """
 
-    needs_config = True
-
-    def shard_param(self, module, param, mesh):
+    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
             return
         weight = module._parameters["weight"]
-        config = module.config
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        module._unit_mesh = module._mesh_manager.get_unit_mesh(weight.shape[0] // head_dim)
+        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[0] // _head_dim(config))
         module._parameters[param] = torch.nn.Parameter(
             distribute_tensor(meta, module._unit_mesh, [Shard(meta.ndim - 2), Replicate()], src_data_rank=None),
             requires_grad=meta.requires_grad,
@@ -268,7 +263,7 @@ class UnitColwiseParallel(ColwiseParallel):
             )
         return (input_tensor,) + args[1:], kwargs
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         # Training path: already on the unit mesh as [Shard(-1), Replicate()], don't move it to the TP mesh.
         if isinstance(output, DTensor):
             local = output.to_local()
@@ -312,10 +307,10 @@ class RowwiseParallel(TensorParallelLayer):
             requires_grad=meta.requires_grad,
         )
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, config=None, mesh_manager=None):
         if not hasattr(module, "in_features"):
             raise ValueError(f"{type(module).__name__} has no `in_features`: rowwise shards linear layers.")
-        return super().install_forward(module, mesh)
+        return super().install_forward(module, mesh, config=config, mesh_manager=mesh_manager)
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         desired = Shard(-1)
@@ -355,7 +350,7 @@ class RowwiseParallel(TensorParallelLayer):
                 if bias is not None:
                     module._parameters["bias"] = bias
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         use_local_inference_path = (
             isinstance(module, torch.nn.Linear)
             and not isinstance(output, DTensor)
@@ -382,16 +377,16 @@ class RowwiseParallel(TensorParallelLayer):
 
 
 class UnitRowwiseParallel(RowwiseParallel):
-    needs_config = True
+    """Row-wise for the attention output projection: the weight is split by head like `UnitColwiseParallel`, and each
+    rank keeps whole heads. The replica axis recomputes the same heads, so their gradients are scaled by `1/replicas`
+    here and summed back by `UnitColwiseParallel`'s `_AllReduceBackward`."""
 
-    def shard_param(self, module, param, mesh):
+    def shard_param(self, module, param, mesh, *, config=None, mesh_manager=None):
         meta = module._parameters.get(param)
         if meta is None:
             return
         weight = module._parameters["weight"]
-        config = module.config
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        module._unit_mesh = module._mesh_manager.get_unit_mesh(weight.shape[-1] // head_dim)
+        module._unit_mesh = mesh_manager.get_unit_mesh(weight.shape[-1] // _head_dim(config))
         # bias is added once after the reduce, so it stays replicated
         placements = [Replicate(), Replicate()] if param == "bias" else [Shard(meta.ndim - 1), Replicate()]
         module._parameters[param] = torch.nn.Parameter(
@@ -412,11 +407,12 @@ class UnitRowwiseParallel(RowwiseParallel):
             )
         return (input_tensor,) + args[1:], kwargs
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         # Reduce over the unit axis only: reducing over the whole TP mesh, like the parent, would also sum the replicas.
         if not isinstance(output, DTensor):
             # Inference path: local all-reduce over this rank's unit group, then add the bias once.
-            dist.all_reduce(output, group=module._unit_mesh.get_group(0))
+            if module._unit_mesh.size(0) > 1:
+                dist.all_reduce(output, group=module._unit_mesh.get_group(0))
             if (bias := module._parameters.get("bias")) is not None:
                 output = output + (bias.to_local() if isinstance(bias, DTensor) else bias)
             if not self.use_local_output:
@@ -461,7 +457,7 @@ class EmbeddingParallel(TensorParallelLayer):
             input_tensor = input_tensor.to_local()
         return (input_tensor,) + args[1:], kwargs
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         if not isinstance(output, DTensor):
             if self.shard_dim == 0:
                 output = DTensor.from_local(output, mesh, [Partial()], run_check=False)
@@ -482,7 +478,7 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     summed across the mesh.
     """
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, config=None, mesh_manager=None):
         original_forward = module.forward
         # Module-level backward hooks create graph breaks when using torch.compile but not with parameter-level
         # hooks. We can't add them during setup time as the parameters are empty placeholders that are going to be
@@ -508,7 +504,7 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
 class AllReduceParallel(TensorParallelLayer):
     """All-reduce a module's partial forward output across the TP mesh."""
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         if output is None:
             return None
         if not isinstance(output, DTensor):
@@ -546,16 +542,14 @@ class MlaKvAProjParallel(TensorParallelLayer):
     However, k_rot goes straight to attention, never touches kv_b_proj. So we need to average gradient across all ranks otherwise we only get gradient for one rank (partial gradient).
     """
 
-    needs_config = True
-
-    def transform_output_post_forward(self, module, output, mesh):
-        if not hasattr(module.config, "qk_rope_head_dim"):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
+        if not hasattr(config, "qk_rope_head_dim"):
             raise AttributeError(
                 f"Config for {type(module).__name__} does not have `qk_rope_head_dim`. "
                 "MlaKvAProjParallel requires `qk_rope_head_dim` to be defined in the model config. "
                 "Please add it to the model's config or update the TP plan mapping."
             )
-        rope_dim = module.config.qk_rope_head_dim
+        rope_dim = config.qk_rope_head_dim
         pass_output, rope_output = output.split([output.shape[-1] - rope_dim, rope_dim], dim=-1)
         rope_output = _AllReduceBackward.apply(rope_output, mesh.get_group())
         return torch.cat([pass_output, rope_output], dim=-1)
@@ -566,13 +560,13 @@ class SequenceParallel(TensorParallelLayer):
         self.sequence_dim = sequence_dim
         self.use_local_output = use_local_output
 
-    def install_forward(self, module, mesh):
+    def install_forward(self, module, mesh, *, config=None, mesh_manager=None):
         # Replicate the module's params (LayerNorm/RMSNorm ones-init → from_local is safe).
         for p_name, p in list(module.named_parameters(recurse=False)):
             module.register_parameter(
                 p_name, torch.nn.Parameter(DTensor.from_local(p, mesh, [Replicate()], run_check=False))
             )
-        return super().install_forward(module, mesh)
+        return super().install_forward(module, mesh, config=config, mesh_manager=mesh_manager)
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         sequence_layout = Shard(self.sequence_dim)
@@ -583,7 +577,7 @@ class SequenceParallel(TensorParallelLayer):
             input_tensor = input_tensor.redistribute(placements=[sequence_layout])
         return (input_tensor,) + args[1:], kwargs
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         if isinstance(output, DTensor):
             return output.to_local() if self.use_local_output else output
         return output
@@ -643,7 +637,7 @@ class PackedColwiseParallel(TensorParallelLayer):
         input_tensor = input_tensor.to_local(grad_placements=[Partial()])
         return (input_tensor,) + args[1:], kwargs
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         if output is None or self.use_local_output:
             return output
         return DTensor.from_local(
@@ -688,7 +682,7 @@ class MoeExpertsParallel(TensorParallelLayer):
 
         return (hidden_states, *routing_args), kwargs
 
-    def transform_output_post_forward(self, module, output, mesh):
+    def transform_output_post_forward(self, module, output, mesh, config=None):
         if output is None:
             return None
         # each rank ran its shard of every expert: sum the partial outputs
@@ -768,22 +762,17 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
     modules = dict(model.named_modules())
     parameters = dict(model.named_parameters())
 
-    text_config = model.config.get_text_config()
+    context = {"config": model.config.get_text_config(), "mesh_manager": model._mesh_manager}
     for name, style_name in tp_plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
         is_param = name in parameters
         module_name, _, param_name = name.rpartition(".") if is_param else (name, "", "")
         module = modules[module_name]
-        if style.needs_config:
-            # Config-aware styles (head-aware sharding, MLA's rope split) read it from the module.
-            # TODO: Store what they need on the modules when the models initialize them.
-            module.config = text_config
-            module._mesh_manager = model._mesh_manager
         if is_param:
             style.validate_param(module, param_name, tp_mesh, parameter_name=name)
-            style.shard_param(module, param_name, tp_mesh)
+            style.shard_param(module, param_name, tp_mesh, **context)
         else:
-            style.install_forward(module, tp_mesh)
+            style.install_forward(module, tp_mesh, **context)
         module._is_hooked = True
 
     return model

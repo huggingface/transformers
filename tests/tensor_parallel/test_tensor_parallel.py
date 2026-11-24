@@ -411,7 +411,7 @@ class TestUnitParallel(TestCasePlus):
         )
 
     def _attention(self, num_heads, num_key_value_heads):
-        """A real attention layer from a one-layer Llama, with the config the styles read."""
+        """A real attention layer from a one-layer Llama, plus the config the unit styles read."""
         config = LlamaConfig(
             hidden_size=num_heads * self.HEAD_DIM,
             intermediate_size=2 * num_heads * self.HEAD_DIM,
@@ -422,20 +422,17 @@ class TestUnitParallel(TestCasePlus):
             vocab_size=32,
         )
         attention = LlamaModel(config).layers[0].self_attn
-        for proj in (attention.q_proj, attention.k_proj, attention.v_proj, attention.o_proj):
-            proj.config = config  # `apply_tensor_parallelism` attaches this for `needs_config` styles
-        return attention
+        return attention, config
 
-    def _shard(self, module, name, style, manager):
+    def _shard(self, module, name, style, manager, config):
         """Shard one projection, returning the placements it asked for."""
-        module._mesh_manager = manager  # `apply_tensor_parallelism` attaches this for `needs_config` styles
         with (
             self._fake_device_mesh(),
             patch.object(
                 tensor_parallel, "distribute_tensor", side_effect=lambda tensor, *a, **kw: tensor
             ) as distribute,
         ):
-            style.shard_param(module, name, manager.get_mesh("tp"))
+            style.shard_param(module, name, manager.get_mesh("tp"), config=config, mesh_manager=manager)
             return distribute.call_args.args[2]
 
     @parameterized.expand(
@@ -463,19 +460,19 @@ class TestUnitParallel(TestCasePlus):
 
     @parameterized.expand([(2, 2, 4), (6, 6, 4), (8, 8, 4), (32, 8, 8), (32, 8, 16), (8, 1, 4)])
     def test_projections_are_sharded_on_the_head_axis(self, num_heads, num_key_value_heads, world_size):
-        attention = self._attention(num_heads, num_key_value_heads)
+        attention, config = self._attention(num_heads, num_key_value_heads)
         manager = self._manager(world_size)
         colwise, rowwise = ALL_PARALLEL_STYLES["unit_colwise"], ALL_PARALLEL_STYLES["unit_rowwise"]
 
         for name, units in (("q_proj", num_heads), ("k_proj", num_key_value_heads), ("v_proj", num_key_value_heads)):
             proj = getattr(attention, name)
-            placements = self._shard(proj, "weight", colwise, manager)
+            placements = self._shard(proj, "weight", colwise, manager, config)
             groups = math.gcd(units, world_size)
             self.assertEqual(placements[0].dim, 0, f"{name} shards its output features")
             self.assertTrue(placements[1].is_replicate(), f"{name} replicates along the second axis")
             self.assertEqual(proj.weight.shape[0] // groups % self.HEAD_DIM, 0, f"{name} split a head")
 
-        placements = self._shard(attention.o_proj, "weight", rowwise, manager)
+        placements = self._shard(attention.o_proj, "weight", rowwise, manager, config)
         self.assertEqual(placements[0].dim, 1, "o_proj shards its input features")
         self.assertTrue(placements[1].is_replicate())
         self.assertEqual(attention.o_proj.weight.shape[1] // math.gcd(num_heads, world_size) % self.HEAD_DIM, 0)
@@ -483,10 +480,10 @@ class TestUnitParallel(TestCasePlus):
     @parameterized.expand([(2, 4), (6, 4), (8, 4), (12, 8), (32, 16)])
     def test_colwise_and_rowwise_agree_on_the_mesh(self, num_heads, world_size):
         """o_proj consumes q_proj's output, so the two must land on the same unit mesh."""
-        attention = self._attention(num_heads, num_heads)
+        attention, config = self._attention(num_heads, num_heads)
         manager = self._manager(world_size)
-        self._shard(attention.q_proj, "weight", ALL_PARALLEL_STYLES["unit_colwise"], manager)
-        self._shard(attention.o_proj, "weight", ALL_PARALLEL_STYLES["unit_rowwise"], manager)
+        self._shard(attention.q_proj, "weight", ALL_PARALLEL_STYLES["unit_colwise"], manager, config)
+        self._shard(attention.o_proj, "weight", ALL_PARALLEL_STYLES["unit_rowwise"], manager, config)
         self.assertIs(attention.q_proj._unit_mesh, attention.o_proj._unit_mesh, "the unit mesh is built once")
 
 
