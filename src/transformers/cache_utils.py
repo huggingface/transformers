@@ -487,7 +487,8 @@ class DynamicCompressedLayer(DynamicLayer):
 
         # Conversion selected groups (and tail) to the actual selected tokens
         return (
-            torch.searchsorted(attention_mask, indices.flatten(1), right=True, out_int32=True).reshape_as(indices) - 1  # -1 for the boundary
+            torch.searchsorted(attention_mask, indices.flatten(1), right=True, out_int32=True).reshape_as(indices)
+            - 1  # -1 for the boundary
         )
 
     def reset(self):

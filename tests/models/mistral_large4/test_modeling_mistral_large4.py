@@ -22,8 +22,6 @@ from parameterized import parameterized
 
 from transformers import (
     MistralLarge4Config,
-    MistralLarge4TextConfig,
-    PixtralVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -117,7 +115,7 @@ class MistralLarge4ModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip("DSA is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-       pass
+        pass
 
     @parameterized.expand([("no_checkpointing", False), ("checkpointing", True)])
     def test_lerope_training(self, name, activation_checkpointing):

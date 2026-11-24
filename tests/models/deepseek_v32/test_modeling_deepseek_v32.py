@@ -153,7 +153,7 @@ class DeepseekV32ModelTest(CausalLMModelTest, unittest.TestCase):
 
     @unittest.skip("DeepseekV32 uses MLA so it is not compatible with assisted decoding")
     def test_assisted_decoding_sample(self):
-       pass
+        pass
 
     @unittest.skip("Dynamic control flow in MoE")
     @pytest.mark.torch_compile_test
