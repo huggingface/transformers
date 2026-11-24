@@ -218,7 +218,9 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
 )
 ```
+
 A model loaded with the ExLlama V2 backend can't be saved with [`~PreTrainedModel.save_pretrained`]. To save it, load the model with the default backend.
+
 ## Resources
 
 Run the AWQ demo [notebook](https://colab.research.google.com/drive/1HzZH89yAXJaZgwJDhQj9LqSBux932BvY#scrollTo=Wwsg6nCwoThm) for more examples of how to quantize a model, push a quantized model to the Hub, and more.
