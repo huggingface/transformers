@@ -205,14 +205,15 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-    def test_get_audio_embeddings_sample(self):
+    def test_get_audio_features_sample(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = VibeVoiceAsrForConditionalGeneration(config).to(torch_device).eval()
         inputs = {k: inputs_dict[k] for k in ("input_values", "padding_mask")}
 
-        mean = model.get_audio_embeddings(**inputs, sample=False).pooler_output
-        torch.testing.assert_close(model.get_audio_embeddings(**inputs, sample=False).pooler_output, mean)
-        self.assertFalse(torch.allclose(model.get_audio_embeddings(**inputs).pooler_output, mean))
+        mean = model.get_audio_features(**inputs, sample=False).pooler_output
+        torch.testing.assert_close(model.get_audio_features(**inputs, sample=False).pooler_output, mean)
+        sampled = model.get_audio_features(**inputs).pooler_output
+        self.assertFalse(torch.allclose(torch.cat(sampled), torch.cat(mean)))
 
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):

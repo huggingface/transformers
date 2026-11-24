@@ -82,9 +82,6 @@ class HYV3Config(PreTrainedConfig):
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -163,6 +160,7 @@ class HYV3TopKRouter(MixtralTopKRouter):
     def __init__(self, config: HYV3Config):
         super().__init__(config)
         self.router_scaling_factor = config.router_scaling_factor
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(
         self,
@@ -197,6 +195,7 @@ class HYV3MoE(MiniMaxM2SparseMoeBlock):
         self.experts = HYV3Experts(config)
         shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
         self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, hidden_dim = hidden_states.shape
@@ -229,7 +228,7 @@ class HYV3DecoderLayer(DeepseekV3DecoderLayer):
 class HYV3PreTrainedModel(LlamaPreTrainedModel):
     # Not supporting multi-token prediction (MTP) atm
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.80.*"]
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(HYV3TopKRouter, index=0),
         "hidden_states": HYV3DecoderLayer,

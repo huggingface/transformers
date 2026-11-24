@@ -63,6 +63,7 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
         self.n_groups = config.n_groups
         self.head_dim = config.mamba_head_dim
         self.num_heads = config.mamba_num_heads
+        self.time_step_limit = config.time_step_limit
 
         self.conv1d = nn.Conv1d(
             in_channels=self.conv_dim,
@@ -134,39 +135,25 @@ class NemotronHExperts(nn.Module):
         self.act_fn = ACT2FN[config.mlp_hidden_act]
 
     def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor):
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=top_k_weights.dtype)
-
-        # Create expert mask to identify which tokens go to which experts
+        final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
-            expert_mask = expert_mask.permute(2, 1, 0)  # (num_experts, num_experts_per_tok, num_tokens)
-            # Only iterate over experts that have at least one token assigned
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero().squeeze(-1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         for expert_idx in expert_hit:
-            expert_idx = expert_idx.item()
-            # Find which tokens are routed to this expert
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-
-            if token_idx.numel() == 0:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
                 continue
-
-            # Get input for this expert
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-
-            # Expert computation: down_proj(act_fn(up_proj(x)))
-            # No gating mechanism unlike Mixtral which uses: down_proj(act_fn(gate_proj(x)) * up_proj(x))
-            current_hidden_states = torch.nn.functional.linear(current_state, self.up_proj[expert_idx])
-            current_hidden_states = self.act_fn(current_hidden_states)
-            current_hidden_states = torch.nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-
-            # Apply routing weights
+            gate = nn.functional.linear(current_state, self.up_proj[expert_idx])
+            current_hidden_states = self.act_fn(gate)
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-
-            # Accumulate into final output
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
-        return final_hidden_states.to(hidden_states.dtype)
+        return final_hidden_states
 
 
 class NemotronHMoE(DeepseekV3MoE):
@@ -217,15 +204,7 @@ class NemotronHTopkRouter(DeepseekV3TopkRouter):
 
 
 class NemotronHAttention(JambaAttention):
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        cache: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        return super().forward(hidden_states, attention_mask, cache, **kwargs)
+    pass
 
 
 MIXER_TYPES = {
@@ -314,9 +293,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         "attentions": NemotronHAttention,
         "router_logits": OutputRecorder(NemotronHTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = [
-        "e_score_correction_bias",
-    ]
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "gate.weight"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     def _init_weights(self, module):

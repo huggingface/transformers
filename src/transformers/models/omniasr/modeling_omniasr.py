@@ -31,10 +31,16 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -320,12 +326,12 @@ class OmniASRPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
-    is not preserved in the model's forward.
+    Extends [~modeling_outputs.BaseModelOutputWithSplitSizes] to include the output attention mask since sequence
+    length is not preserved in the model's forward.
     """
 )
 @dataclass
-class OmniASREncoderModelOutput(BaseModelOutputWithPooling):
+class OmniASREncoderModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
@@ -386,6 +392,7 @@ class OmniASRAudioModel(OmniASRPreTrainedModel):
         output_mask = None
         if padding_mask is not None:
             output_mask = self._get_output_attention_mask(padding_mask, target_length=hidden_states.shape[1])
+            output_mask = output_mask.to(hidden_states.device)
             # make sure padded tokens output 0
             hidden_states = hidden_states.masked_fill(~output_mask[..., None], 0.0)
 
@@ -448,30 +455,32 @@ class OmniASRModel(OmniASRPreTrainedModel, MultimodalMixin):
         self.post_init()
 
     @can_return_tuple
-    @auto_docstring(
-        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
-    )
+    @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
     def get_audio_embeddings(
-        self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        input_values: torch.FloatTensor,
+        padding_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        input_features (`torch.Tensor`):
-            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-            and conversion into a tensor of type `torch.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
+        input_values (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
+            Float values of the raw audio waveform, as produced by [`OmniASRFeatureExtractor`].
+        padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
+            Mask to avoid running the speech encoder over padding samples of `input_values`. Values selected in
+            `[0, 1]`: 1 for samples that are **not** padding, 0 for padding.
         """
-        audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
-        audio_hidden_states = audio_outputs.last_hidden_state
-        audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
-        audio_embeds = self.multi_modal_projector(audio_hidden_states)
-        audio_outputs.pooler_output = audio_embeds
-        # Each 30-second chunk of `input_features` gives the same number of rows
-        audio_outputs.split_sizes = audio_embeds.new_full(
-            input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
-        )
-        return audio_outputs
+        audio_output = self.audio_tower(input_values, padding_mask=padding_mask, **kwargs)
+        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
+        frames_mask = audio_output.attention_mask
+        if frames_mask is None:
+            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            audio_embeds = audio_embeds.flatten(0, 1)
+        else:
+            frames_mask = frames_mask.to(audio_embeds.device).bool()
+            audio_embeds, split_sizes = audio_embeds[frames_mask], frames_mask.sum(-1)
+        audio_output.pooler_output = audio_embeds
+        audio_output.split_sizes = split_sizes
+        return audio_output
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor
@@ -516,7 +525,7 @@ class OmniASRModel(OmniASRPreTrainedModel, MultimodalMixin):
 
         audio_features = None
         if input_values is not None:
-            audio_outputs = self.get_audio_features(input_values, padding_mask)
+            audio_outputs = self.get_audio_embeddings(input_values, padding_mask)
             audio_embeds = audio_outputs.pooler_output
             audio_features = audio_outputs.last_hidden_state
 
@@ -530,31 +539,6 @@ class OmniASRModel(OmniASRPreTrainedModel, MultimodalMixin):
 
         outputs = self.language_model(inputs_embeds=inputs_embeds, **kwargs)
         return OmniASRBaseModelOutputWithPast(audio_features=audio_features, **outputs)
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="Encode audio into embeddings that can be used by the language model.")
-    def get_audio_features(
-        self,
-        input_values: torch.FloatTensor,
-        padding_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
-            Float values of the raw audio waveform, as produced by [`OmniASRFeatureExtractor`].
-        padding_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
-            Mask to avoid running the speech encoder over padding samples of `input_values`. Values selected in
-            `[0, 1]`: 1 for samples that are **not** padding, 0 for padding.
-        """
-        audio_output = self.audio_tower(input_values, padding_mask=padding_mask, **kwargs)
-        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
-        frames_mask = audio_output.attention_mask
-        if frames_mask is None:
-            audio_embeds = audio_embeds.flatten(0, 1)
-        else:
-            audio_embeds = audio_embeds[frames_mask.to(audio_embeds.device).bool()]
-        audio_output.pooler_output = audio_embeds
-        return audio_output
 
 
 @auto_docstring(
@@ -573,6 +557,7 @@ class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, MultimodalMixin, G
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(

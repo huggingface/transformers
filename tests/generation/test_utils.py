@@ -1572,6 +1572,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
 
             model = model_class(config).to(torch_device).eval()
+            if not model._supports_mm_encoder_outputs():
+                self.skipTest(reason=f"{model_class.__name__}.forward does not accept `mm_encoder_outputs`")
             model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
 
             generation_kwargs = {
@@ -1597,6 +1599,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             if "blip" in model_class.__name__.lower():
                 self.skipTest(reason="Won't fix: old model that adds image placeholders during `forward`")
 
+            # TODO: audio too, once audio models' forwards read pre-encoded `mm_encoder_outputs["audio"]` and generate
+            # encodes it with `get_audio_embeddings` (https://github.com/huggingface/transformers/issues/50946)
             if not any(
                 modality in model_class.input_modalities and hasattr(model_class, f"get_{modality}_features")
                 for modality in ["image", "video"]
@@ -1621,7 +1625,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             inputs_dict_with_encoded_outputs = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
             mm_encoder_outputs = inputs_dict_with_encoded_outputs.pop("mm_encoder_outputs")
             if not mm_encoder_outputs:
-                self.skipTest(reason="The tester's inputs hold no images or videos")
+                self.skipTest(reason="The tester's inputs give no multimodal outputs")
             with self.assertRaisesRegex(ValueError, "You cannot pass both: raw pixels and pre-computed embeddings"):
                 model.generate(
                     **original_inputs_dict,
@@ -3229,6 +3233,35 @@ class UtilsFunctionsTest(unittest.TestCase):
         last_token_counts = collections.Counter(last_validated_token)
         self.assertTrue(last_token_counts[1] > last_token_counts[3] > last_token_counts[7] > 0)
         self.assertTrue(last_token_counts[8] > last_token_counts[3])
+
+    def test_speculative_sampling_never_accepts_zero_probability_token(self):
+        """Deterministic check that a draft token with target probability 0 is never accepted.
+
+        `torch.rand` returns exactly `0.0` with probability 2**-24 (float32). Even then, a draft token that the target
+        gives probability 0 (e.g. filtered out by top-k / top-p) must be rejected: `0.0 < 0` is False.
+        """
+        candidate_length = 1
+        # Draft: token 0 is very likely
+        q_probs = torch.tensor([[[0.97, 0.01, 0.01, 0.01]]])
+        # Target: token 0 is forbidden (probability 0) + a valid distribution for the bonus-token slot
+        inf = float("inf")
+        new_logits = torch.tensor([[[-inf, 1.0, 2.0, 3.0], [0.0, 0.0, 0.0, 0.0]]])
+
+        candidate_logits = q_probs.log()
+        prefix = torch.zeros(1, 5, dtype=torch.long)
+        candidate_input_ids = torch.cat([prefix, torch.tensor([[0]])], dim=-1)
+
+        with patch("transformers.generation.utils.torch.rand_like", return_value=torch.tensor([0.0])):
+            validated_tokens, n_matches = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+            )
+
+        # the forbidden draft token is rejected, and its replacement is sampled among the allowed tokens
+        self.assertEqual(n_matches.item(), 0)
+        self.assertIn(validated_tokens.tolist()[0][0], [1, 2, 3])
 
     def test_speculative_sampling_ensemble_weight_none_equals_standard(self):
         """With `assistant_ensemble_weight=None`, behaviour must be identical to standard speculative sampling."""

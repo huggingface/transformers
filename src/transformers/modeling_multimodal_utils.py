@@ -11,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Shared getters of models that take images or videos."""
+"""What models taking images, videos or audio share: their per-item getters, built on the flat ones (`MultimodalMixin`),
+and the conversion of `mm_encoder_outputs` between the two layouts."""
 
 import copy
 import functools
@@ -26,35 +27,29 @@ from .utils.generic import can_return_tuple
 logger = logging.get_logger(__name__)
 
 
-def flatten_items(features: torch.Tensor) -> tuple[torch.Tensor, torch.LongTensor]:
-    """The `(num_items, num_tokens, hidden_size)` features of fixed-size images or videos as one sequence, and the
-    `split_sizes` of each item."""
-    return features.flatten(0, 1), features.new_full(features.shape[:1], features.shape[1], dtype=torch.long)
+def placeholder_features(outputs):
+    """The features of encoder `outputs` that fill the placeholder tokens: `pooler_output`, or the first deepstack
+    layer's for models only returning deepstack features (Granite 4 Vision)."""
+    pooler_output = getattr(outputs, "pooler_output", None)
+    if pooler_output is not None:
+        return pooler_output
+    deepstack_features = getattr(outputs, "deepstack_features", None)
+    return deepstack_features[0] if deepstack_features else None
+
+
+def map_features(outputs, function):
+    """Applies `function` to the pooled and deepstack features of encoder `outputs`, in place."""
+    if outputs.pooler_output is not None:
+        outputs.pooler_output = function(outputs.pooler_output)
+    if getattr(outputs, "deepstack_features", None) is not None:
+        outputs.deepstack_features = [function(features) for features in outputs.deepstack_features]
+    return outputs
 
 
 def split_modality_outputs(outputs):
     """Splits flat `get_*_embeddings` outputs per item by their `split_sizes`."""
     split_sizes = outputs.split_sizes.tolist()
-    # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
-    if outputs.pooler_output is not None:
-        outputs.pooler_output = torch.split(outputs.pooler_output, split_sizes)
-    if getattr(outputs, "deepstack_features", None) is not None:
-        outputs.deepstack_features = [torch.split(features, split_sizes) for features in outputs.deepstack_features]
-    return outputs
-
-
-def merge_modality_outputs(outputs):
-    """Concatenates per-item outputs back into the flat layout of `get_*_embeddings`."""
-    deepstack_features = getattr(outputs, "deepstack_features", None)
-    features = outputs.pooler_output if outputs.pooler_output is not None else (deepstack_features or [None])[0]
-    if not isinstance(features, (tuple, list)):
-        return outputs
-    merged = copy.copy(outputs)
-    if outputs.pooler_output is not None:
-        merged.pooler_output = torch.cat(outputs.pooler_output)
-    if deepstack_features is not None:
-        merged.deepstack_features = [torch.cat(features) for features in deepstack_features]
-    return merged
+    return map_features(outputs, lambda features: torch.split(features, split_sizes))
 
 
 class MultimodalMixin:
@@ -67,14 +62,20 @@ class MultimodalMixin:
     model: "MultimodalMixin"
     base_model: "MultimodalMixin"
 
+    def _base_model_getter(self, name: str):
+        # Only a head has a base model to reach: a base model without its own getter takes no such input
+        if getattr(self, "model", None) is None:
+            raise AttributeError(f"{type(self).__name__} has no `{name}`, as it takes no such input")
+        return getattr(self.model, name)
+
     def get_image_embeddings(self, *args, **kwargs):
-        return self.model.get_image_embeddings(*args, **kwargs)
+        return self._base_model_getter("get_image_embeddings")(*args, **kwargs)
 
     def get_video_embeddings(self, *args, **kwargs):
-        return self.model.get_video_embeddings(*args, **kwargs)
+        return self._base_model_getter("get_video_embeddings")(*args, **kwargs)
 
     def get_audio_embeddings(self, *args, **kwargs):
-        return self.model.get_audio_embeddings(*args, **kwargs)
+        return self._base_model_getter("get_audio_embeddings")(*args, **kwargs)
 
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
@@ -101,6 +102,13 @@ class MultimodalMixin:
         return base_model.get_data_dependent_inputs(**kwargs)
 
 
+def merge_modality_outputs(outputs):
+    """Concatenates per-item outputs back into the flat layout of `get_*_embeddings`."""
+    if not isinstance(placeholder_features(outputs), (tuple, list)):
+        return outputs
+    return map_features(copy.copy(outputs), torch.cat)
+
+
 def merge_mm_encoder_outputs(forward):
     """Lets `forward` take per-item `mm_encoder_outputs`, as returned by `get_*_features`, by merging them into the
     flat layout it consumes. Only for backward compatibility with users passing them, and deprecated."""
@@ -110,12 +118,14 @@ def merge_mm_encoder_outputs(forward):
         # Idefics' deprecated `mm_encoder_outputs` can be a bare tensor: only a dict of outputs is merged
         if isinstance(mm_encoder_outputs, dict) and mm_encoder_outputs:
             merged = {modality: merge_modality_outputs(outputs) for modality, outputs in mm_encoder_outputs.items()}
-            is_per_item = any(merged[modality] is not outputs for modality, outputs in mm_encoder_outputs.items())
-            if is_per_item and not is_torchdynamo_compiling():
+            per_item = [
+                modality for modality, outputs in mm_encoder_outputs.items() if merged[modality] is not outputs
+            ]
+            if per_item and not is_torchdynamo_compiling():
+                modality = per_item[0]
                 logger.warning_once(
-                    "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) is "
-                    "deprecated and will be removed: pass the flat outputs of `get_image_embeddings` / "
-                    "`get_video_embeddings`."
+                    f"Passing per-item `mm_encoder_outputs['{modality}']` (from `get_{modality}_features`) is deprecated "
+                    f"and will be removed in v5.29: pass the flat outputs of `get_{modality}_embeddings`."
                 )
             mm_encoder_outputs = merged
         return forward(self, *args, mm_encoder_outputs=mm_encoder_outputs, **kwargs)

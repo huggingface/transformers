@@ -37,6 +37,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     CausalLMOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -67,7 +68,7 @@ class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
 
 @auto_docstring
 @dataclass
-class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
+class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(num_image_tokens, hidden_size)`):
         The embedded image tokens of every input image, concatenated.
@@ -83,7 +84,7 @@ class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPooling):
 
 @auto_docstring
 @dataclass
-class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPooling):
+class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(num_audio_tokens, hidden_size)`):
         The embedded audio tokens of every input clip, concatenated.
@@ -797,8 +798,8 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
         self.language_model = Apertus1p5TextModel(config.text_config)
-        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config)
-        self.audio_tokenizer = AutoModel.from_config(config.audio_config)
+        self.vision_tokenizer = Apertus1p5VisionTokenizerModel(config.vision_config).to(dtype=torch.float32)
+        self.audio_tokenizer = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
         self.post_init()
 
     def get_image_tokens(self, pixel_values: torch.Tensor, image_sizes: torch.LongTensor) -> list[torch.LongTensor]:

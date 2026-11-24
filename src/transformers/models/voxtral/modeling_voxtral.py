@@ -31,7 +31,12 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -259,7 +264,6 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-
         embed_dim = config.d_model
         self.num_mel_bins = config.num_mel_bins
         self.max_source_positions = config.max_source_positions
@@ -267,8 +271,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
 
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
-
-        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
+        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim, dtype=torch.float32)
         self.embed_positions.requires_grad_(False)
 
         self.layers = nn.ModuleList([VoxtralEncoderLayer(config) for _ in range(config.encoder_layers)])
@@ -406,8 +409,11 @@ class VoxtralModel(VoxtralPreTrainedModel, MultimodalMixin):
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         audio_outputs.pooler_output = audio_embeds
         # Each 30-second chunk of `input_features` gives the same number of rows
-        audio_outputs.split_sizes = audio_embeds.new_full(
-            input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
+        audio_outputs = BaseModelOutputWithSplitSizes(
+            **audio_outputs,
+            split_sizes=audio_embeds.new_full(
+                input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
+            ),
         )
         return audio_outputs
 

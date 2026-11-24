@@ -49,6 +49,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -156,7 +157,7 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
 
 @auto_docstring
 @dataclass
-class Gemma4AudioModelOutput(BaseModelOutputWithPooling):
+class Gemma4AudioModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
@@ -2216,6 +2217,18 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     return block_sequence_ids
 
 
+def get_video_split_sizes(
+    tokens_per_frame: torch.LongTensor, num_frames_per_video: torch.LongTensor
+) -> torch.LongTensor:
+    """Each video's number of tokens, the sum of its frames' `tokens_per_frame`, without a host sync."""
+    video_index = torch.repeat_interleave(
+        torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
+        num_frames_per_video.to(tokens_per_frame.device),
+        output_size=len(tokens_per_frame),
+    )
+    return tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(0, video_index, tokens_per_frame)
+
+
 @auto_docstring(
     custom_intro="""
     The base Gemma 4 model comprising a vision backbone, an audio backbone, and a language model without a
@@ -2267,7 +2280,9 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
-        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=(image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        )
         return vision_outputs
 
     def get_placeholder_mask(
@@ -2533,13 +2548,8 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         k_squared = self.config.vision_config.pooling_kernel_size**2
         tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        video_index = torch.repeat_interleave(
-            torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-            num_frames_per_video.to(tokens_per_frame.device),
-            output_size=len(tokens_per_frame),
-        )
-        vision_outputs.split_sizes = tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(
-            0, video_index, tokens_per_frame
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
         )
         return vision_outputs
 
@@ -2565,7 +2575,7 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
 
         audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
         audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-        # Only the real audio soft tokens, as the vision encoder strips its padding (`attention_mask` is True on them)
+        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
         valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
         audio_outputs.pooler_output = audio_embeds[valid_mask]
         audio_outputs.split_sizes = valid_mask.sum(-1)

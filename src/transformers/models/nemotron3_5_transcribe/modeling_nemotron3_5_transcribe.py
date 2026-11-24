@@ -32,7 +32,13 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    ModelOutput,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -89,7 +95,7 @@ class Nemotron3_5TranscribeCausalLMOutputWithPast(ModelOutput):
 
 @auto_docstring
 @dataclass
-class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPooling):
+class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(num_audio_tokens, text_config.hidden_size)`, *optional*):
         Projected audio embeddings of the valid encoder frames of every recording, in batch order: the embeddings that
@@ -644,9 +650,11 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel, Multimoda
 
     def __init__(self, config: Nemotron3_5TranscribeConfig):
         super().__init__(config)
-        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.audio_tower = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
         self.language_model = AutoModel.from_config(config.text_config)
-        self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.multi_modal_projector = nn.Linear(
+            config.audio_config.hidden_size, config.text_config.hidden_size, dtype=torch.float32
+        )
         self.word_timestamp_encoder = Nemotron3_5TranscribeWordTimestampModel(config.word_timestamp_config)
         self.post_init()
 

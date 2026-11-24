@@ -23,9 +23,10 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -186,7 +187,13 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
 
         image_features = self.multi_modal_projector(selected_hidden_state)
         image_outputs.pooler_output = image_features
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_outputs.pooler_output.new_full(
+                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     @merge_with_config_defaults
@@ -220,8 +227,11 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel, MultimodalMixin):
 
         video_features = self.multi_modal_projector(video_features)
         video_outputs.pooler_output = video_features.flatten(0, 1)
-        video_outputs.split_sizes = video_features.new_full(
-            (batch_size_vid,), num_frames * video_features.shape[1], dtype=torch.long
+        video_outputs = BaseModelOutputWithSplitSizes(
+            **video_outputs,
+            split_sizes=video_features.new_full(
+                (batch_size_vid,), num_frames * video_features.shape[1], dtype=torch.long
+            ),
         )
         return video_outputs
 

@@ -21,7 +21,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -176,9 +176,12 @@ class Mistral3Model(LlavaModel):
             selected_image_feature.squeeze(0), image_sizes, **kwargs
         )
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        image_outputs.split_sizes = (
-            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
-        ).prod(dim=-1)
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=(
+                torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
+            ).prod(dim=-1),
+        )
         return image_outputs
 
     @merge_with_config_defaults

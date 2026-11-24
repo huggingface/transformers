@@ -21,9 +21,10 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -155,12 +156,16 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
         # If image_sizes is provided, we need to split the image features accordingly,
         # but only if the image_sizes is not None (the default in this and related architectures)
         if image_sizes is not None:
-            image_outputs.split_sizes = (
+            split_sizes = (
                 torch.as_tensor(image_sizes, device=image_features.device) // self.vision_tower.patch_size
             ).prod(dim=-1)
             image_features = image_features.squeeze(0)
         else:
-            image_features, image_outputs.split_sizes = flatten_items(image_features)
+            split_sizes = image_features.new_full(
+                (image_features.shape[0],), image_features.shape[1], dtype=torch.long
+            )
+            image_features = image_features.flatten(0, 1)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = image_features
 
         return image_outputs

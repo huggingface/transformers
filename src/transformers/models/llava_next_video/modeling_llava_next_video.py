@@ -31,9 +31,10 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -515,7 +516,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         image_outputs.pooler_output = torch.cat([image_features, image_newline[None]])[
             pack_index.to(image_features.device)
         ]
-        image_outputs.split_sizes = split_sizes
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         return image_outputs
 
     def get_placeholder_mask(
@@ -694,7 +695,13 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         video_features = self.vision_resampler(selected_video_features)
         video_features = self.multi_modal_projector(video_features)
         video_outputs.pooler_output = video_features.unflatten(0, (batch_size, frames)).flatten(1, 2)
-        video_outputs.pooler_output, video_outputs.split_sizes = flatten_items(video_outputs.pooler_output)
+        video_outputs = BaseModelOutputWithSplitSizes(
+            **video_outputs,
+            split_sizes=video_outputs.pooler_output.new_full(
+                (video_outputs.pooler_output.shape[0],), video_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
+        )
+        video_outputs.pooler_output = video_outputs.pooler_output.flatten(0, 1)
         return video_outputs
 
 

@@ -26,8 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
-from ...modeling_multimodal_utils import flatten_items
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -57,6 +56,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
     get_block_sequence_ids_for_mask,
+    get_video_split_sizes,
 )
 from ..gemma4.processing_gemma4 import Gemma4Processor
 from ..gemma4.video_processing_gemma4 import (
@@ -1033,7 +1033,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         # The final output shape is (total_valid_patches, text_hidden_size)
         pooler_output = vision_outputs.pooler_output[non_pad_mask]
         vision_outputs.pooler_output = pooler_output
-        vision_outputs.split_sizes = non_pad_mask.sum(dim=-1)
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=non_pad_mask.sum(dim=-1))
         return vision_outputs
 
     @can_return_tuple
@@ -1070,13 +1070,8 @@ class Gemma4UnifiedModel(Gemma4Model):
         pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
         vision_outputs.pooler_output = pooler_output
         tokens_per_frame = non_pad_mask.sum(dim=-1)
-        video_index = torch.repeat_interleave(
-            torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-            num_frames_per_video.to(tokens_per_frame.device),
-            output_size=len(tokens_per_frame),
-        )
-        vision_outputs.split_sizes = tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(
-            0, video_index, tokens_per_frame
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
         )
         return vision_outputs
 
@@ -1104,12 +1099,13 @@ class Gemma4UnifiedModel(Gemma4Model):
             )
 
         audio_embeds = self.embed_audio(inputs_embeds=input_features)
-        # Only the real audio soft tokens, as the vision encoder strips its padding
+        # Only the real audio soft tokens, as the image getter drops padding too
         if input_features_mask is not None:
             input_features_mask = input_features_mask.to(audio_embeds.device)
             pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
         else:
-            pooler_output, split_sizes = flatten_items(audio_embeds)
+            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            pooler_output = audio_embeds.flatten(0, 1)
         return Gemma4UnifiedAudioModelOutput(
             pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
         )

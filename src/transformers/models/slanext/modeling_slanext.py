@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithSplitSizes
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -272,7 +272,7 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
     """
 )
 @dataclass
-class SLANeXtVisionEncoderOutput(BaseModelOutputWithPooling):
+class SLANeXtVisionEncoderOutput(BaseModelOutputWithSplitSizes):
     r"""
     image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
@@ -556,8 +556,8 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
 
         self.structure_attention_cell = SLANeXtAttentionGRUCell(
             config.post_conv_out_channels, config.hidden_size, config.out_channels
-        )
-        self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels)
+        ).to(dtype=torch.float32)
+        self.structure_generator = SLANeXtMLP(config.hidden_size, config.out_channels).to(dtype=torch.float32)
 
         self.post_init()
 

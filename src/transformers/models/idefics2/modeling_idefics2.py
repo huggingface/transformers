@@ -31,6 +31,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -857,12 +858,11 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states, attention_mask=patch_attention_mask.flatten(1))
-        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
-        images_per_sample = torch.zeros(batch_size, dtype=torch.long, device=real_images_index.device)
-        images_per_sample = images_per_sample.index_add(
-            0, real_images_index // num_images, torch.ones_like(real_images_index)
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_features.new_full((image_features.shape[0],), image_features.shape[1], dtype=torch.long),
         )
-        image_outputs.split_sizes = images_per_sample * image_features.shape[1]
+        image_outputs.pooler_output = image_features.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple

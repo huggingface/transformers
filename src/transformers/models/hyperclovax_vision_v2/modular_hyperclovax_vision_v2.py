@@ -26,6 +26,7 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -87,10 +88,8 @@ class HyperCLOVAXVisionV2Config(PreTrainedConfig):
 
 @auto_docstring
 class HyperCLOVAXVisionV2PreTrainedModel(VideoLlama3PreTrainedModel):
-    config: HyperCLOVAXVisionV2Config
     # Both towers are built with `AutoModel.from_config` and register their own layers in `post_init`
     _no_split_modules = []
-    input_modalities = ("image", "video", "text")
 
 
 @auto_docstring
@@ -115,23 +114,6 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
                 inputs.update({prefix + name: value for name, value in vision_inputs.items()})
         return inputs
 
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        """
-        return self.get_image_embeddings(
-            pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, return_dict=True, **kwargs
-        )
-
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
@@ -148,8 +130,27 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, VideoLlama3Mo
         vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.pooler_output)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.vision_model.spatial_merge_size**2
+        )
         return vision_outputs
+
+    @accepts_precomputed_kwargs(modality="video")
+    @can_return_tuple
+    @auto_docstring
+    def get_video_embeddings(
+        self,
+        pixel_values_videos: torch.Tensor,
+        video_grid_thw: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.get_image_embeddings(
+            pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, return_dict=True, **kwargs
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -350,8 +351,8 @@ class HyperCLOVAXVisionV2Processor(Exaone4_5_Processor):
         self._pending_needs_placeholder = None
 
     def apply_chat_template(self, conversation, **kwargs):
-        is_batched = isinstance(conversation[0], (list, tuple)) if conversation else False
-        conversations = conversation if is_batched else [conversation]
+        # We only normalize here to look for videos. The original conversation is what we pass on below.
+        conversations, _ = self._normalize_conversations(conversation)
         self._pending_needs_placeholder = [
             "video_duration" not in block
             for conv in conversations

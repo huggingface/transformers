@@ -26,9 +26,10 @@ import torch.nn as nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -46,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
+class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithSplitSizes):
     r"""
     high_res_vision_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the high resolution vision model.
@@ -257,8 +258,8 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel, MultimodalMixin):
         low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
         high_res_outputs = self.get_high_res_image_features(high_res_pixel_values, **kwargs)
         image_features = self.aligner(low_res_outputs.last_hidden_state, high_res_outputs.last_hidden_state)
-        pooler_output, split_sizes = flatten_items(image_features)
-
+        split_sizes = image_features.new_full((image_features.shape[0],), image_features.shape[1], dtype=torch.long)
+        pooler_output = image_features.flatten(0, 1)
         return BaseModelOutputWithHighResVisionEncodings(
             last_hidden_state=low_res_outputs.last_hidden_state,
             pooler_output=pooler_output,

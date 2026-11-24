@@ -23,7 +23,7 @@ from torch import Tensor, broadcast_tensors
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import (
@@ -329,7 +329,7 @@ class MusicFlamingoModel(AudioFlamingo3Model):
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
-        audio_output.split_sizes = post_lengths
+        audio_output = BaseModelOutputWithSplitSizes(**audio_output, split_sizes=post_lengths)
 
         return audio_output
 
