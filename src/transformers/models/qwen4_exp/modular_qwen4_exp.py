@@ -125,9 +125,6 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
 
     model_type = "qwen4_exp_text"
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
@@ -1032,7 +1029,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
-    config: Qwen4ExpTextConfig
+    pass
 
 
 @auto_docstring

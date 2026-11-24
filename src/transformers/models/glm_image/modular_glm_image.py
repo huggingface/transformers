@@ -37,6 +37,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import (
+    accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
@@ -683,6 +684,8 @@ class GlmImageModel(Glm4vModel):
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 
+    # Per image: the image tokenizer's feature maps, from GLM-4V's flat `get_image_embeddings`
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -716,8 +719,6 @@ class GlmImageModel(Glm4vModel):
             reshaped_embeds.append(embed.contiguous())
 
         vision_outputs.pooler_output = reshaped_embeds
-        # Per-image feature maps for the image tokenizer, not the flat rows `split_sizes` counts
-        vision_outputs.split_sizes = None
 
         return vision_outputs
 

@@ -28,6 +28,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -603,11 +604,11 @@ class MiniCPMV4_6Model(Lfm2VlModel):
 
         if use_vit_merger:
             target_sizes = target_sizes // 2
-        vision_output.pooler_output = torch.cat(self.merger(vision_output.last_hidden_state, target_sizes), dim=0)
-        merge_height, merge_width = self.merger.merge_kernel_size
-        rounds = self.merger.merger_times
-        vision_output.split_sizes = (target_sizes[:, 0] // merge_height**rounds) * (
-            target_sizes[:, 1] // merge_width**rounds
+        merged = self.merger(vision_output.last_hidden_state, target_sizes)
+        vision_output.pooler_output = torch.cat(merged, dim=0)
+        vision_output = BaseModelOutputWithSplitSizes(
+            **vision_output,
+            split_sizes=torch.tensor([len(features) for features in merged], device=target_sizes.device),
         )
         return vision_output
 

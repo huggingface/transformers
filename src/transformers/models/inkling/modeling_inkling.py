@@ -40,9 +40,10 @@ from ...integrations import (
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -198,10 +199,10 @@ class InklingAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.k_sconv = InklingShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=0
-        )
+        ).to(dtype=torch.float32)
         self.v_sconv = InklingShortConvolution(
             self.num_key_value_heads * self.head_dim, config.sconv_kernel_size, layer_idx, conv_idx=1
-        )
+        ).to(dtype=torch.float32)
         self.q_norm = InklingRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = InklingRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.rel_logits_proj = InklingRelativeLogits(config.d_rel, self.rel_extent)
@@ -343,8 +344,8 @@ class InklingTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
 
         self.weight = nn.Parameter(torch.empty(self.n_total_experts, config.hidden_size))
-        self.global_scale = nn.Parameter(torch.ones(1))
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.global_scale = nn.Parameter(torch.ones(1, dtype=torch.float32))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -554,10 +555,10 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         self.layer_type = config.layer_types[layer_idx]
         self.attn_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=2
-        )
+        ).to(dtype=torch.float32)
         self.mlp_sconv = InklingShortConvolution(
             config.hidden_size, config.conv_kernel_size, layer_idx=layer_idx, conv_idx=3
-        )
+        ).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -1043,7 +1044,13 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_outputs.pooler_output.new_full(
+                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple
@@ -1064,9 +1071,12 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
             audio_input_ids = audio_input_ids[audio_input_ids_mask.bool()]
             split_sizes = audio_input_ids_mask.sum(-1)
         else:
-            audio_input_ids, split_sizes = flatten_items(audio_input_ids)
+            split_sizes = audio_input_ids.new_full(
+                (audio_input_ids.shape[0],), audio_input_ids.shape[1], dtype=torch.long
+            )
+            audio_input_ids = audio_input_ids.flatten(0, 1)
         audio_outputs = self.audio_tower(audio_input_ids)
-        audio_outputs.split_sizes = split_sizes
+        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=split_sizes)
         return audio_outputs
 
     def get_placeholder_mask(

@@ -35,6 +35,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -1356,7 +1357,9 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel, MultimodalMixin):
         vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
         vision_outputs.pooler_output = image_features
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
+        )
         return vision_outputs
 
     def get_placeholder_mask(

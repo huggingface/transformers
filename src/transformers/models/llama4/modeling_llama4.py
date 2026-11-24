@@ -29,10 +29,11 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -662,6 +663,8 @@ class Llama4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`image_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
+        if self.image_outputs is None:
+            return None
         return self.image_outputs.pooler_output
 
 
@@ -1177,10 +1180,14 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithSplitSizes:
         image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
-        image_features, image_outputs.split_sizes = flatten_items(image_outputs.last_hidden_state)
-        image_outputs.pooler_output = self.multi_modal_projector(image_features)
+        last_hidden_state = image_outputs.last_hidden_state
+        split_sizes = last_hidden_state.new_full(
+            (last_hidden_state.shape[0],), last_hidden_state.shape[1], dtype=torch.long
+        )
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state.flatten(0, 1))
         return image_outputs
 
     def get_placeholder_mask(
@@ -1317,7 +1324,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_outputs=outputs.image_outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
             router_logits=outputs.router_logits,
         )
 

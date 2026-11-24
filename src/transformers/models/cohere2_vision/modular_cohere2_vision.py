@@ -30,12 +30,12 @@ from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageP
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_multimodal_utils import flatten_items
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
+from ..got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs
 from .configuration_cohere2_vision import Cohere2VisionConfig
 
 
@@ -90,7 +90,7 @@ class Cohere2VisionCausalLMOutputWithPast(AyaVisionCausalLMOutputWithPast):
 
 
 class Cohere2VisionPreTrainedModel(AyaVisionPreTrainedModel):
-    base_model_prefix = "model"
+    pass
 
 
 class Cohere2VisionModel(AyaVisionModel):
@@ -107,7 +107,13 @@ class Cohere2VisionModel(AyaVisionModel):
         image_outputs.pooler_output = pooler_output.reshape(
             selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
         )
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_outputs.pooler_output.new_full(
+                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -292,7 +298,7 @@ def get_optimal_tiled_canvas(
     return best_grid  # (width, height)
 
 
-class Cohere2VisionImageProcessorKwargs(ImagesKwargs, total=False):
+class Cohere2VisionImageProcessorKwargs(GotOcr2ImageProcessorKwargs):
     r"""
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
@@ -305,19 +311,12 @@ class Cohere2VisionImageProcessorKwargs(ImagesKwargs, total=False):
         set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
     """
 
-    crop_to_patches: bool
-    min_patches: int
-    max_patches: int
-
 
 @auto_docstring
 class Cohere2VisionImageProcessor(GotOcr2ImageProcessor):
     size = {"height": 512, "width": 512}
-    min_patches = 1
-    max_patches = 12
     crop_to_patches = True
     patch_size = 16
-    valid_kwargs = Cohere2VisionImageProcessorKwargs
 
 
 __all__ = [

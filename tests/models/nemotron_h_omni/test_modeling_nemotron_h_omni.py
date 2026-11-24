@@ -444,9 +444,8 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
 
     @parameterized.expand([("square", 32, 32), ("non_square", 32, 64)])
     def test_video_forward(self, _, frame_height, frame_width):
-        # The video branch of `forward`: it concatenates the per-video `pooler_output` and, with
-        # `video_pruning_rate > 0`, drops redundant tokens on the tubelets' token grid, which is not square when the
-        # frames are not (the processor keeps the aspect ratio).
+        # The video branch of `forward`: with `video_pruning_rate > 0`, it drops redundant tokens on the tubelets'
+        # token grid, which is not square when the frames are not (the processor keeps the aspect ratio).
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         tester = self.model_tester
         num_tubelets = 2
@@ -470,7 +469,7 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
             with torch.no_grad():
                 logits = model(input_ids=input_ids, pixel_values_videos=pixel_values_videos).logits
                 # as in `generate()`, which passes precomputed features
-                video_features = model.get_video_features(pixel_values_videos, return_dict=True)
+                video_features = model.get_video_embeddings(pixel_values_videos, return_dict=True)
                 logits_from_features = model(input_ids=input_ids, mm_encoder_outputs={"video": video_features}).logits
                 logits_from_frames = model(input_ids=input_ids, pixel_values_videos=frames).logits
 
@@ -480,6 +479,32 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
             self.assertEqual(logits.shape[1], text_ids.shape[1] + kept_video_tokens)
             torch.testing.assert_close(logits_from_features, logits)
             torch.testing.assert_close(logits_from_frames, logits)
+
+    def test_video_pruning_beam_search(self):
+        # Beam search repeats the encoded videos per beam, and pruning still needs each video's features
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.video_pruning_rate = 0.5
+        tester = self.model_tester
+        num_tubelets, frame_size = 2, 32
+        pixel_values_videos = floats_tensor(
+            [1, num_tubelets, config.video_temporal_patch_size * tester.num_channels, frame_size, frame_size]
+        )
+        tokens_per_tubelet = int(frame_size // tester.patch_size * config.downsample_ratio) ** 2
+        text_ids = inputs_dict["input_ids"][:1]
+        text_ids = text_ids[text_ids != config.image_token_id].unsqueeze(0)
+        video_ids = torch.full(
+            (1, num_tubelets * tokens_per_tubelet), config.image_token_id, dtype=text_ids.dtype, device=torch_device
+        )
+        input_ids = torch.cat([video_ids, text_ids], dim=1)
+
+        model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
+        model.generate(
+            input_ids=input_ids,
+            pixel_values_videos=pixel_values_videos,
+            num_beams=2,
+            max_new_tokens=2,
+            do_sample=False,
+        )
 
 
 @require_torch

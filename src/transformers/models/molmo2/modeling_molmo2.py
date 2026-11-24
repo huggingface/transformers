@@ -40,6 +40,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -770,7 +771,9 @@ class Molmo2Model(Molmo2PreTrainedModel, MultimodalMixin):
             image_features, image_token_pooling, valid_token_index=valid_token_index
         ).last_hidden_state
         image_outputs.pooler_output = pooled_features
-        image_outputs.split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs, split_sizes=image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
+        )
         return image_outputs
 
     def get_placeholder_mask(

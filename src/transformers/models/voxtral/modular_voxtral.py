@@ -25,6 +25,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import slice_logits_to_keep
@@ -40,7 +41,7 @@ from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioEncoderLayer,
     Qwen2AudioPreTrainedModel,
 )
-from .configuration_voxtral import VoxtralConfig
+from .configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
 
 
 class VoxtralAttention(Qwen2AudioAttention):
@@ -70,6 +71,11 @@ class VoxtralEncoder(Qwen2AudioEncoder):
         "attentions": VoxtralAttention,
         "hidden_states": VoxtralEncoderLayer,
     }
+
+    def __init__(self, config: VoxtralEncoderConfig):
+        super().__init__(config)
+        embed_dim = config.d_model
+        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim, dtype=torch.float32)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -183,8 +189,11 @@ class VoxtralModel(VoxtralPreTrainedModel, MultimodalMixin):
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         audio_outputs.pooler_output = audio_embeds
         # Each 30-second chunk of `input_features` gives the same number of rows
-        audio_outputs.split_sizes = audio_embeds.new_full(
-            input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
+        audio_outputs = BaseModelOutputWithSplitSizes(
+            **audio_outputs,
+            split_sizes=audio_embeds.new_full(
+                input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
+            ),
         )
         return audio_outputs
 

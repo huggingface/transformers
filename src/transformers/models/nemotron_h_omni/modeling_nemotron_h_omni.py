@@ -28,8 +28,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalCausalLMOutputWithPast
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -237,7 +241,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
             image_features = self.vision_final_layernorm(image_features)
         image_features = image_features[pixel_shuffle_index].reshape(-1, merge_size**2 * image_features.shape[-1])
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=vision_outputs.last_hidden_state,
             pooler_output=self.multi_modal_projector(image_features),
             split_sizes=image_grid_hw.prod(-1) // merge_size**2,
@@ -277,7 +281,7 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
         patch_size = self.vision_model.patch_size
         grid_height, grid_width = (side // patch_size for side in pixel_values_videos.shape[-2:])
         video_embeds = self.project_vision_features(vision_outputs.features, grid_height, grid_width)
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=vision_outputs.last_hidden_state.unflatten(0, (num_videos, num_tubelets)),
             pooler_output=video_embeds.flatten(0, 1),
             split_sizes=video_embeds.new_full((num_videos,), num_tubelets * video_embeds.shape[1], dtype=torch.long),
@@ -320,9 +324,9 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Mu
             audio_embeds = audio_embeds[valid_mask]
             split_sizes = valid_mask.sum(-1)
         else:
-            audio_embeds, split_sizes = flatten_items(audio_embeds)
-
-        return BaseModelOutputWithPooling(
+            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            audio_embeds = audio_embeds.flatten(0, 1)
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=audio_outputs.last_hidden_state,
             pooler_output=audio_embeds,
             hidden_states=audio_outputs.hidden_states,

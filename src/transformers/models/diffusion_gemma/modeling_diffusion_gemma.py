@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -43,6 +44,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -979,7 +981,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
 
 @auto_docstring
 @dataclass
-class DiffusionGemmaAudioModelOutput(BaseModelOutputWithPooling):
+class DiffusionGemmaAudioModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
@@ -1048,8 +1050,10 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
         last_hidden_state = vision_outputs.last_hidden_state
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
-        k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
-        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        k_squared = math.isqrt(image_position_ids.shape[1] // output_length) ** 2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=(image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        )
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1184,7 +1188,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
 
         audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
         audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-        # Only the real audio soft tokens, as the vision encoder strips its padding (`attention_mask` is True on them)
+        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
         valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
         audio_outputs.pooler_output = audio_embeds[valid_mask]
         audio_outputs.split_sizes = valid_mask.sum(-1)

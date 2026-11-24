@@ -97,6 +97,8 @@ class CohereCompassImageProcessingTester(ImageProcessingTester):
 class CohereCompassImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
     backend_equivalence_atol = 0.5
+    # PIL and torchvision resize small, upscaled random images differently: the mean diff can reach ~5e-3
+    backend_equivalence_mean_atol = 1e-2
 
     image_processor_tester_class = CohereCompassImageProcessingTester
 

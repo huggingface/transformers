@@ -188,33 +188,34 @@ def get_vision_window_index(
     return window_index, cu_window_seqlens
 
 
-def _antialiased_axis_taps_weights(
-    index: torch.Tensor, size: torch.Tensor, side: int
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Per-axis taps and weights of `F.interpolate(mode="bilinear", align_corners=False, antialias=True)`: a triangle
-    filter as wide as the downscale factor (plain bilinear when upscaling), normalized over the taps in the table."""
-    index = index.to(torch.float32)
-    scale = side / size.to(torch.float32)
-    support = scale.clamp(min=1.0)
-    center = (index + 0.5) * scale
-    # Taps per axis cover the widest filter, the extra ones get a zero weight
-    num_taps = int(torch.ceil(support.max()).item()) * 2 + 1
-    raw_taps = torch.floor(center - support + 0.5).long()[:, None] + torch.arange(num_taps, device=index.device)
-    weights = (1 - ((raw_taps + 0.5 - center[:, None]) / support[:, None]).abs()).clamp(min=0)
-    weights = weights * ((raw_taps >= 0) & (raw_taps <= side - 1))
-    return raw_taps.clamp(0, side - 1), weights / weights.sum(-1, keepdim=True)
-
-
 def _interpolation_axis_taps_weights(
-    index: torch.Tensor, size: torch.Tensor, side: int, mode: str, align_corners: bool, padding: str = "border"
+    index: torch.Tensor,
+    size: torch.Tensor,
+    side: int,
+    mode: str,
+    align_corners: bool,
+    padding: str = "border",
+    antialias: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-axis interpolation taps into a `side`-length source table and their weights, for `index`
     target positions on an axis of length `size`. `mode` selects the kernel width — 2 taps
     (`"bilinear"`) or 4 taps (`"bicubic"`, Keys convolution kernel with `a=-0.75`). `size` may be a
     scalar or a per-element tensor (ragged batches). `padding` controls out-of-range taps: `"border"`
     clamps to the edge value (like `F.interpolate`), `"zeros"` gives them zero weight (like
-    `F.grid_sample(padding_mode="zeros")`)."""
+    `F.grid_sample(padding_mode="zeros")`). `antialias` matches `F.interpolate(antialias=True)` for `"bilinear"`
+    without `align_corners`."""
     index = index.to(torch.float32)
+    if antialias:
+        # A triangle filter as wide as the downscale factor (plain bilinear when upscaling), normalized over the taps
+        # inside the table; taps cover the widest filter, the extra ones get a zero weight
+        scale = side / size.to(torch.float32)
+        support = scale.clamp(min=1.0)
+        center = (index + 0.5) * scale
+        num_taps = int(torch.ceil(support.max()).item()) * 2 + 1
+        raw_taps = torch.floor(center - support + 0.5).long()[:, None] + torch.arange(num_taps, device=index.device)
+        weights = (1 - ((raw_taps + 0.5 - center[:, None]) / support[:, None]).abs()).clamp(min=0)
+        weights = weights * ((raw_taps >= 0) & (raw_taps <= side - 1))
+        return raw_taps.clamp(0, side - 1), weights / weights.sum(-1, keepdim=True)
     if align_corners:
         # Closed form of `torch.linspace(0, side-1, size)[index]` — endpoints map to 0 and side-1.
         # `clamp(min=1)` avoids a divide-by-zero when size == 1 (index is 0, so src is 0 too).
@@ -313,12 +314,12 @@ def get_vision_interpolation_indices_and_weights(
     target_heights, target_widths = heights, widths
     if resize_to_longest_side:
         target_heights = target_widths = torch.maximum(heights, widths)
-    if antialias:
-        h_taps, h_weights = _antialiased_axis_taps_weights(row, target_heights, side)
-        w_taps, w_weights = _antialiased_axis_taps_weights(col, target_widths, side)
-    else:
-        h_taps, h_weights = _interpolation_axis_taps_weights(row, target_heights, side, mode, align_corners, padding)
-        w_taps, w_weights = _interpolation_axis_taps_weights(col, target_widths, side, mode, align_corners, padding)
+    h_taps, h_weights = _interpolation_axis_taps_weights(
+        row, target_heights, side, mode, align_corners, padding, antialias
+    )
+    w_taps, w_weights = _interpolation_axis_taps_weights(
+        col, target_widths, side, mode, align_corners, padding, antialias
+    )
     taps = h_taps.shape[1] * w_taps.shape[1]
     # 2D separable: outer product of the per-axis taps/weights.
     indices = (h_taps[:, :, None] * side + w_taps[:, None, :]).reshape(-1, taps)

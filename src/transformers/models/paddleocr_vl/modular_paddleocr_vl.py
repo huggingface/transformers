@@ -33,6 +33,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -542,8 +543,7 @@ class PaddleOCRVisionMLP(SiglipMLP):
 
 
 class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+    pass
 
 
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
@@ -719,6 +719,9 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
         self.post_init()
 
+    def get_video_embeddings(self):
+        raise AttributeError("PaddleOCRVLModel does not support video.")
+
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,
@@ -730,7 +733,9 @@ class PaddleOCRVLModel(Qwen2VLModel):
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        )
         return vision_outputs
 
     def get_placeholder_mask(

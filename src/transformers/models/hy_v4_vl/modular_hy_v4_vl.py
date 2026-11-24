@@ -28,6 +28,7 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -535,22 +536,13 @@ class HYV4VLModel(Qwen2VLModel):
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
-        merge_size = self.config.vision_config.spatial_merge_size
-        frames, height, width = image_grid_thw.unbind(-1)
         # Each merged row carries one extra newline token
-        vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
+        merge = self.config.vision_config.spatial_merge_size
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs,
+            split_sizes=(image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)),
+        )
         return vision_outputs
-
-    @accepts_precomputed_kwargs(modality="video")
-    @can_return_tuple
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def forward(
         self,
@@ -631,6 +623,12 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["lm_head"]
+
+    def __init__(self, config: HYV4VLConfig):
+        super().__init__(config)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32
+        )
 
     def forward(
         self,

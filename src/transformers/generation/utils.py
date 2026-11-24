@@ -47,7 +47,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
-from ..modeling_outputs import BaseModelOutputWithPooling
+from ..modeling_multimodal_utils import map_features, placeholder_features
 from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
@@ -487,7 +487,12 @@ class DeferredStopCheck(StopCheck):
             self.cache.crop(-steps_to_undo)
             # We also need to deactivate past_recording, since we are giving the cache back to the user and it may lead to unneeded
             # memory spike on the next prefill
-            for layer in self.cache.layers:
+            cache_layers = (
+                self.cache.self_attention_cache.layers
+                if isinstance(self.cache, EncoderDecoderCache)
+                else self.cache.layers
+            )
+            for layer in cache_layers:
                 if hasattr(layer, "record_past"):
                     layer.record_past = False
         return steps_to_undo
@@ -1127,7 +1132,8 @@ class GenerationMixin(ContinuousMixin):
         return decoder_input_ids, model_kwargs
 
     def _placeholder_token_id(self: "GenerativePreTrainedModel", modality: str) -> int:
-        """The token whose positions in the text hold the features of `modality`."""
+        """The token whose positions in the text hold the features of `modality`, to count each sample's rows when
+        repeating them for beams. Models whose videos reuse the image token (GLM-4V, Nemotron-H Omni) override it."""
         return getattr(self.config, f"{modality}_token_id")
 
     def _expand_multimodal_outputs(
@@ -1148,21 +1154,34 @@ class GenerationMixin(ContinuousMixin):
                 # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
                 return list(inputs) * repeat_times
 
-        # A dict of our own, as it may be the user's
+        def repeat_groups(counts: torch.LongTensor, total: int) -> torch.LongTensor:
+            # Index repeating each group of `counts` contiguous entries `expand_size` times in a row, without a host
+            # sync, as `input_ids.repeat_interleave` repeats each sample's row
+            sizes = counts * expand_size
+            group = torch.repeat_interleave(
+                torch.arange(len(counts), device=counts.device), sizes, output_size=total * expand_size
+            )
+            offset = torch.arange(total * expand_size, device=counts.device) - (sizes.cumsum(0) - sizes)[group]
+            return (counts.cumsum(0) - counts)[group] + offset % counts[group]
+
+        # Our own dict and outputs, as they may be the user's
         mm_encoder_output = dict(mm_encoder_output)
         for modality in ["image", "video"]:
-            modalily_outputs = mm_encoder_output.get(modality)
-            if modalily_outputs is None:
+            modality_outputs = mm_encoder_output.get(modality)
+            if modality_outputs is None:
                 continue
-            pooler_output = getattr(modalily_outputs, "pooler_output", None)
-            deepstack_features = getattr(modalily_outputs, "deepstack_features", None)
-            # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
-            features = pooler_output if pooler_output is not None else (deepstack_features or [None])[0]
-            is_flat = isinstance(features, torch.Tensor) and getattr(modalily_outputs, "split_sizes", None) is not None
-            if not is_flat and pooler_output is None:
+            modality_outputs = mm_encoder_output[modality] = copy.copy(modality_outputs)
+            features = placeholder_features(modality_outputs)
+            is_flat = isinstance(features, torch.Tensor) and getattr(modality_outputs, "split_sizes", None) is not None
+            if not is_flat and isinstance(features, torch.Tensor) and features.ndim == 2:
+                raise ValueError(
+                    f"The flat {modality} features of `mm_encoder_outputs` need their `split_sizes`, as returned by "
+                    f"`get_{modality}_embeddings`."
+                )
+            if not is_flat and getattr(modality_outputs, "pooler_output", None) is None:
                 continue
 
-            # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
+            # 1. compute cumulative number of placeholder tokens per sample and per each encoded mm-data
             token_id = self._placeholder_token_id(modality)
             if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
@@ -1174,20 +1193,26 @@ class GenerationMixin(ContinuousMixin):
 
             # Flat outputs from `get_*_embeddings`: each sample's rows are contiguous, one gather repeats them
             if is_flat:
-                mm_encoder_output[modality] = _repeat_flat_outputs(
-                    modalily_outputs, num_image_tokens_in_text, expand_size
+                rows = repeat_groups(num_image_tokens_in_text.to(features.device), features.shape[0])
+                map_features(modality_outputs, lambda features: features[rows.to(features.device)])
+                # The items follow their rows: find each item's sample from where its rows start, then repeat them
+                split_sizes = cast(torch.LongTensor, modality_outputs.split_sizes).to(features.device)
+                item_start = split_sizes.cumsum(0) - split_sizes
+                item_sample = torch.searchsorted(num_image_tokens_in_text.cumsum(0), item_start, right=True)
+                items_per_sample = torch.zeros_like(num_image_tokens_in_text).scatter_add_(
+                    0, item_sample, torch.ones_like(item_sample)
                 )
+                modality_outputs.split_sizes = split_sizes[repeat_groups(items_per_sample, len(split_sizes))]
                 continue
 
-            # Per-item outputs: GLM-Image's feature maps, or deprecated `get_*_features` outputs passed by users, which
-            # `split_sizes` marks (generate itself encodes flat)
-            if getattr(modalily_outputs, "split_sizes", None) is not None:
+            # Per-item outputs, passed by users: from `get_*_features` (deprecated, they keep their `split_sizes`) or
+            # their own encoder
+            if getattr(modality_outputs, "split_sizes", None) is not None:
                 logger.warning_once(
-                    "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) to "
-                    "`generate` is deprecated and will be removed: pass the flat outputs of `get_image_embeddings` / "
-                    "`get_video_embeddings`."
+                    f"Passing per-item `mm_encoder_outputs['{modality}']` (from `get_{modality}_features`) to `generate` "
+                    f"is deprecated and will be removed in v5.29: pass the flat outputs of `get_{modality}_embeddings`."
                 )
-            num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
+            num_image_tokens_in_vision = [len(out) for out in modality_outputs.pooler_output]
             num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
             num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
 
@@ -1197,27 +1222,27 @@ class GenerationMixin(ContinuousMixin):
             offsets = [0] + [
                 i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
             ]
-            is_split_images = not isinstance(modalily_outputs.pooler_output, torch.Tensor)
-            modalily_outputs.pooler_output = [
+            is_split_images = not isinstance(modality_outputs.pooler_output, torch.Tensor)
+            modality_outputs.pooler_output = [
                 out
                 for start, end in zip(offsets[:-1], offsets[1:])
-                for out in repeat_tensor_or_list(modalily_outputs.pooler_output[start:end], expand_size)
+                for out in repeat_tensor_or_list(modality_outputs.pooler_output[start:end], expand_size)
             ]
 
             # 3. if `pooler_output` was a tensor, cat it back to follow model expectations
             if not is_split_images:
-                modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
+                modality_outputs.pooler_output = torch.stack(modality_outputs.pooler_output, dim=0)
 
             # 4. If there are deepstack features, expand them as well: per layer, each feature is a `list[torch.Tensor]`
-            if getattr(modalily_outputs, "deepstack_features", None) is not None:
+            if getattr(modality_outputs, "deepstack_features", None) is not None:
                 # Each deepstack feat is `(total_image_len, dim)` tensor
-                modalily_outputs.deepstack_features = [
+                modality_outputs.deepstack_features = [
                     [
                         expanded_feats
                         for start, end in zip(offsets[:-1], offsets[1:])
                         for expanded_feats in repeat_tensor_or_list(feature_list[start:end], expand_size)
                     ]
-                    for feature_list in modalily_outputs.deepstack_features
+                    for feature_list in modality_outputs.deepstack_features
                 ]
 
         return mm_encoder_output
@@ -3503,6 +3528,8 @@ class GenerationMixin(ContinuousMixin):
                 nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
             )
             topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
+            topk_log_probs, order = topk_log_probs.sort(dim=-1, descending=True)
+            topk_indices = topk_indices.gather(dim=-1, index=order)
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
 
@@ -4444,40 +4471,6 @@ class GenerationMixin(ContinuousMixin):
             return outputs
 
 
-def _repeat_index(counts: torch.LongTensor, repeats: int, total: int) -> torch.LongTensor:
-    """Index repeating each group of `counts` contiguous entries `repeats` times in a row, without a host sync."""
-    sizes = counts * repeats
-    group = torch.repeat_interleave(
-        torch.arange(len(counts), device=counts.device), sizes, output_size=total * repeats
-    )
-    offset = torch.arange(total * repeats, device=counts.device) - (sizes.cumsum(0) - sizes)[group]
-    return (counts.cumsum(0) - counts)[group] + offset % counts[group]
-
-
-def _repeat_flat_outputs(
-    outputs: BaseModelOutputWithPooling, rows_per_sample: torch.LongTensor, repeats: int
-) -> BaseModelOutputWithPooling:
-    """Repeats each sample's rows of flat `get_*_embeddings` outputs, as `input_ids.repeat_interleave` does its row."""
-    pooler_output = outputs.pooler_output
-    deepstack_features = getattr(outputs, "deepstack_features", None)
-    # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
-    reference = pooler_output if isinstance(pooler_output, torch.Tensor) else deepstack_features[0]
-    rows = _repeat_index(rows_per_sample.to(reference.device), repeats, reference.shape[0])
-
-    def repeat(features: torch.Tensor) -> torch.Tensor:
-        return features[rows.to(features.device)]
-
-    # A copy, as the outputs may be the user's (some getters set `split_sizes` on a vision tower's output class)
-    outputs = copy.copy(outputs)
-    if isinstance(pooler_output, torch.Tensor):
-        outputs.pooler_output = repeat(pooler_output)
-    if deepstack_features is not None:
-        outputs.deepstack_features = [repeat(features) for features in deepstack_features]
-    # Nothing reads the item boundaries of the expanded rows
-    outputs.split_sizes = None
-    return outputs
-
-
 def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:
     """
     Keeps the given rows of the flattened `(num_placeholder_tokens, hidden_size)` features of a pre-encoded multimodal
@@ -4534,8 +4527,10 @@ def _speculative_sampling(
     # When probability_ratio > 1 (i.e. q_i(x) < p_i(x), or "assistant probability of the candidate token is smaller
     # than the model probability for the same token"), keep the token. Otherwise reject with p = 1 - probability_ratio
     # (= keep with p = probability_ratio). Keep all the tokens until the first rejection
+    # `r_i` is in [0, 1): a strict `<` accepts with probability exactly `probability_ratio`, so a token the model
+    # assigns zero probability is never accepted (`<=` would accept it when `r_i` is exactly 0)
     r_i = torch.rand_like(probability_ratio)
-    is_accepted = r_i <= probability_ratio
+    is_accepted = r_i < probability_ratio
     n_matches = ((~is_accepted).cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
 
     # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.

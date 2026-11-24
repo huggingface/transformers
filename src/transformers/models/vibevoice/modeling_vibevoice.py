@@ -29,7 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -293,7 +293,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel, MultimodalMixin):
         padding_mask = (positions < num_audio_tokens[:, None]).cpu()
 
         pooler_output = self.multi_modal_projector(acoustic_features)
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=acoustic_features[padding_mask],
             pooler_output=pooler_output[padding_mask],
             split_sizes=num_audio_tokens,

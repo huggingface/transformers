@@ -37,6 +37,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -556,7 +557,7 @@ class GlmImageVQVAEVectorQuantizer(nn.Module):
 
 @auto_docstring
 @dataclass
-class GlmImageVQVAEModelOutput(BaseModelOutputWithPooling):
+class GlmImageVQVAEModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     quantized_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
@@ -1128,7 +1129,9 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
         image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        )
         return image_outputs
 
     def get_placeholder_mask(
@@ -1304,6 +1307,8 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
             all_image_toks.append(vqmodel_outputs.image_tokens)
         return torch.cat(all_image_toks, dim=0)
 
+    # Per image: the image tokenizer's feature maps, from GLM-4V's flat `get_image_embeddings`
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -1337,8 +1342,6 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
             reshaped_embeds.append(embed.contiguous())
 
         vision_outputs.pooler_output = reshaped_embeds
-        # Per-image feature maps for the image tokenizer, not the flat rows `split_sizes` counts
-        vision_outputs.split_sizes = None
 
         return vision_outputs
 

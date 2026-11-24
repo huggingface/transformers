@@ -33,10 +33,11 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -174,10 +175,10 @@ class MuseSparkTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.output_multiplier = config.output_multiplier
         self.scoring_function = ACT2FN["sigmoid"]
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
         self.norm_topk_prob_eps = 1e-15
         self.routed_scaling_factor = config.routed_scaling_factor
 
@@ -447,8 +448,8 @@ class MuseSparkTextDecoderLayer(GradientCheckpointingLayer):
         )
         self.pre_feedforward_layernorm = MuseSparkTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = MuseSparkTextInputScaledRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-        self.post_attention_residual_gate = MuseSparkResidualGate(config)
-        self.post_feedforward_residual_gate = MuseSparkResidualGate(config)
+        self.post_attention_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
+        self.post_feedforward_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -1305,7 +1306,9 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         vision_features = self.vision_projection(vision_features)
         vision_features = self.perception_emb_norm(vision_features)
         vision_outputs.pooler_output = vision_features
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
+        )
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="video")
@@ -1519,10 +1522,12 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
             token_mask = positions[None, :] < num_tokens[:, None]
             audio_features, split_sizes = audio_features[token_mask], num_tokens
         else:
-            audio_features, split_sizes = flatten_items(audio_features)
-
+            split_sizes = audio_features.new_full(
+                (audio_features.shape[0],), audio_features.shape[1], dtype=torch.long
+            )
+            audio_features = audio_features.flatten(0, 1)
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=last_hidden_state,
             pooler_output=audio_features,
             hidden_states=audio_outputs.hidden_states,

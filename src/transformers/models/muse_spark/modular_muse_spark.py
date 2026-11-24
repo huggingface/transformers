@@ -25,10 +25,11 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -318,9 +319,10 @@ class MuseSparkTopkRouter(MiniMaxM2TopKRouter):
         super().__init__(config)
         self.output_multiplier = config.output_multiplier
         self.scoring_function = ACT2FN["sigmoid"]
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
         self.norm_topk_prob_eps = 1e-15
         self.routed_scaling_factor = config.routed_scaling_factor
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -469,9 +471,9 @@ class MuseSparkTextDecoderLayer(MuseGlimmerTextDecoderLayer):
         self.post_attention_layernorm = MuseSparkRMSNorm(
             config.hidden_size, eps=config.post_norm_eps, with_scale=False
         )
-        self.post_attention_residual_gate = MuseSparkResidualGate(config)
+        self.post_attention_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
         self.post_feedforward_layernorm = MuseSparkTextInputScaledRMSNorm(config.hidden_size, eps=config.post_norm_eps)
-        self.post_feedforward_residual_gate = MuseSparkResidualGate(config)
+        self.post_feedforward_residual_gate = MuseSparkResidualGate(config).to(dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -781,10 +783,12 @@ class MuseSparkModel(MuseGlimmerModel):
             token_mask = positions[None, :] < num_tokens[:, None]
             audio_features, split_sizes = audio_features[token_mask], num_tokens
         else:
-            audio_features, split_sizes = flatten_items(audio_features)
-
+            split_sizes = audio_features.new_full(
+                (audio_features.shape[0],), audio_features.shape[1], dtype=torch.long
+            )
+            audio_features = audio_features.flatten(0, 1)
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=last_hidden_state,
             pooler_output=audio_features,
             hidden_states=audio_outputs.hidden_states,

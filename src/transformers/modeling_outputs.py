@@ -89,15 +89,29 @@ class BaseModelOutputWithPooling(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        split_sizes (`torch.LongTensor` of shape `(num_images,)`, *optional*):
-            Multimodal models only: the number of `pooler_output` rows of each image or video, when `pooler_output`
-            holds all of them as one sequence (`get_image_embeddings` and `get_video_embeddings`).
     """
 
     last_hidden_state: torch.Tensor | None = None
-    pooler_output: torch.Tensor | tuple[torch.Tensor, ...] | list[torch.Tensor] | None = None
+    pooler_output: torch.Tensor | None = None
     hidden_states: tuple[torch.Tensor, ...] | None = None
     attentions: tuple[torch.Tensor, ...] | None = None
+
+
+@dataclass
+class BaseModelOutputWithSplitSizes(BaseModelOutputWithPooling):
+    """
+    Outputs of a multimodal model's encoder (`get_image_embeddings`, `get_video_embeddings`, `get_audio_embeddings`):
+    the features of all its images, videos or audios as one sequence, and each item's number of rows.
+
+    Args:
+        pooler_output (`torch.Tensor` of shape `(num_tokens, hidden_size)`):
+            The features of every item, concatenated. Split per item by `get_image_features`, `get_video_features` and
+            `get_audio_features`, as a tuple of `(num_item_tokens, hidden_size)` tensors.
+        split_sizes (`torch.LongTensor` of shape `(num_items,)`, *optional*):
+            The number of `pooler_output` rows of each image, video or audio.
+    """
+
+    pooler_output: torch.Tensor | tuple[torch.Tensor, ...] | list[torch.Tensor] | None = None
     split_sizes: torch.LongTensor | None = None
 
 

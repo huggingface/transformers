@@ -19,8 +19,8 @@ import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_multimodal_utils import flatten_items, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_multimodal_utils import merge_mm_encoder_outputs
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -164,7 +164,13 @@ class PerceptionLMModel(LlavaModel):
             last_hidden_state = last_hidden_state[:, 1:, :]
         image_features = self.multi_modal_projector(last_hidden_state)
         image_outputs.pooler_output = image_features
-        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_outputs.pooler_output)
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_outputs.pooler_output.new_full(
+                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
+        )
+        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple
@@ -259,7 +265,7 @@ class PerceptionLMModel(LlavaModel):
 
         video_features = None
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_image_embeddings(pixel_values=pixel_values_videos, return_dict=True)
+            mm_encoder_outputs["video"] = self.get_video_embeddings(pixel_values_videos, return_dict=True)
 
         if mm_encoder_outputs.get("video") is not None:
             video_features = mm_encoder_outputs["video"].pooler_output
