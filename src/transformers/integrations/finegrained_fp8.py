@@ -734,7 +734,7 @@ class FP8Experts(nn.Module):
         self.has_bias = has_bias
         self.has_gate = has_gate
         self.block_size = block_size
-        self.hidden_dim = config.hidden_size
+        self.hidden_dim = _first_attr(config, "moe_hidden_size", "hidden_size")
         self.activation_scheme = activation_scheme
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")

@@ -217,6 +217,7 @@ def _build_checkpoint_conversion_mapping():
         "hy_v4_flash": [
             WeightRenaming(r"\.self_attn\.learnable_sink_param", ".self_attn.sinks"),
             WeightRenaming(r"\.self_attn\.linear_gate\.weight", ".self_attn.gate_proj.weight"),
+            WeightRenaming(r"\.self_attn\.post_proj_norm\.weight", ".post_self_attn_layernorm.weight"),
             WeightRenaming(r"\.mlp\.post_fc2_norm\.weight", ".post_mlp_layernorm.weight"),
             WeightRenaming(r"\.mlp\.routed_expert_down_proj\.weight", ".mlp.pre_expert_proj.weight"),
             WeightRenaming(r"\.mlp\.routed_expert_up_proj\.weight", ".mlp.post_expert_proj.weight"),

@@ -34,7 +34,13 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -141,8 +147,7 @@ class HYV4FlashRotaryEmbedding(nn.Module):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
-        # Key difference: expand 3D (time, height, width) positions and interleave the three frequency planes.
-        position_ids = position_ids.expand(3, -1, -1)
+        # Key difference: compute frequencies for 3D (time, height, width) positions and interleave the three planes.
         freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * attention_scaling
         sin = freqs.sin() * attention_scaling
@@ -185,7 +190,7 @@ class HYV4FlashExperts(nn.Module):
     def __init__(self, config: HYV4FlashTextConfig):
         super().__init__()
         self.num_experts = config.num_local_experts
-        self.hidden_dim = config.routed_expert_hidden_size
+        self.hidden_dim = config.moe_hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
@@ -222,7 +227,7 @@ class HYV4FlashTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -274,8 +279,8 @@ class HYV4FlashMoE(nn.Module):
             config=config,
             intermediate_size=config.moe_intermediate_size * config.n_shared_experts,
         )
-        self.pre_expert_proj = nn.Linear(config.hidden_size, config.routed_expert_hidden_size, bias=False)
-        self.post_expert_proj = nn.Linear(config.routed_expert_hidden_size, config.hidden_size, bias=False)
+        self.pre_expert_proj = nn.Linear(config.hidden_size, config.moe_hidden_size, bias=False)
+        self.post_expert_proj = nn.Linear(config.moe_hidden_size, config.hidden_size, bias=False)
         self.combine_output_norm = HYV4FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -283,8 +288,10 @@ class HYV4FlashMoE(nn.Module):
         _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
+        # Key difference: project routed tokens into and out of the latent expert space (`moe_hidden_size`).
         routed_in = self.pre_expert_proj(hidden_states)
-        routed_out = self.post_expert_proj(self.experts(routed_in, topk_indices, topk_weights))
+        routed_out = self.experts(routed_in, topk_indices, topk_weights)
+        routed_out = self.post_expert_proj(routed_out)
 
         hidden_states = routed_out + self.shared_experts(hidden_states)
         return self.combine_output_norm(hidden_states).view(*orig_shape)
@@ -513,47 +520,70 @@ class HYV4FlashAttention(nn.Module):
 
     `sliding_attention` layers attend to the last `config.sliding_window` keys with a wider head
     count; `indexed_attention` layers attend to the tokens `compressed_indexer` recalled. Both carry
-    learned attention sinks and close with the sandwich norm.
+    learned attention sinks.
     """
 
     def __init__(self, config: HYV4FlashTextConfig, layer_idx: int):
         super().__init__()
-        self.config = config
+        model_config = config
+        config = config.per_layer_config[layer_idx]
+        self.config = model_config
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+
+        self.q_lora_rank = config.q_lora_rank
+        self.qk_rope_head_dim = config.qk_rope_head_dim
+        self.kv_lora_rank = config.kv_lora_rank
+        self.v_head_dim = config.v_head_dim
+        self.qk_nope_head_dim = config.qk_nope_head_dim
+        self.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+
         self.is_causal = True
 
-        layer_config = config.per_layer_config[layer_idx]
-        self.num_heads = layer_config.num_attention_heads
-        self.num_key_value_groups = 1
-        self.qk_nope_head_dim = layer_config.qk_nope_head_dim
-        self.qk_rope_head_dim = layer_config.qk_rope_head_dim
-        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
-        self.v_head_dim = layer_config.v_head_dim
-        self.q_lora_rank = config.q_lora_rank
-        self.kv_lora_rank = config.kv_lora_rank
-        self.scaling = self.qk_head_dim ** (-0.5)
-
-        self.q_a_proj = nn.Linear(config.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+        self.q_proj = (
+            None
+            if self.q_lora_rank is not None
+            else nn.Linear(self.hidden_size, self.num_heads * self.qk_head_dim, bias=False)
+        )
+        self.q_a_proj = (
+            nn.Linear(self.hidden_size, self.q_lora_rank, bias=config.attention_bias)
+            if self.q_lora_rank is not None
+            else None
+        )
         self.q_a_layernorm = HYV4FlashRMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
-        self.q_b_proj = nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+        self.q_b_proj = (
+            nn.Linear(self.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
+            if self.q_lora_rank is not None
+            else None
+        )
+
         self.kv_a_proj_with_mqa = nn.Linear(
-            config.hidden_size, self.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias
+            self.hidden_size,
+            config.kv_lora_rank + config.qk_rope_head_dim,
+            bias=config.attention_bias,
         )
         self.kv_a_layernorm = HYV4FlashRMSNorm(self.kv_lora_rank, eps=config.rms_norm_eps)
         self.kv_b_proj = nn.Linear(
-            self.kv_lora_rank, self.num_heads * (self.qk_nope_head_dim + self.v_head_dim), bias=False
+            config.kv_lora_rank,
+            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
+            bias=False,
         )
+
+        self.o_proj = nn.Linear(
+            self.num_heads * self.v_head_dim,
+            self.hidden_size,
+            bias=config.attention_bias,
+        )
+        self.scaling = self.qk_head_dim ** (-0.5)
+        self.attention_type = config.layer_types[layer_idx]
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.v_head_dim, config.hidden_size, bias=config.attention_bias)
-        self.post_proj_norm = HYV4FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))
-
-        self.indexer = None
+        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init, dtype=torch.float32))
         self.compressed_indexer = (
-            HYV4FlashCompressedIndexer(config, layer_idx) if self.attention_type == "indexed_attention" else None
+            HYV4FlashCompressedIndexer(model_config, layer_idx) if self.attention_type == "indexed_attention" else None
         )
 
     def expand_kv(self, kv_nope: torch.Tensor, k_rot: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -637,7 +667,7 @@ class HYV4FlashAttention(nn.Module):
 
         attn_output = attn_output * torch.sigmoid(gate_states)
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
-        return self.post_proj_norm(self.o_proj(attn_output)), attn_weights
+        return self.o_proj(attn_output), attn_weights
 
 
 class HYV4FlashEngramEmbedding(nn.Module):
@@ -819,9 +849,11 @@ class HYV4FlashHyperConnection(nn.Module):
         self.hc_eps = config.hc_eps
         self.input_norm = HYV4FlashUnweightedRMSNorm(eps=config.rms_norm_eps)
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
-        self.fn = nn.Parameter(torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size))
-        self.base = nn.Parameter(torch.empty(concatenated_weights_size))
-        self.scale = nn.Parameter(torch.empty(2))
+        self.fn = nn.Parameter(
+            torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size, dtype=torch.float32)
+        )
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
+        self.scale = nn.Parameter(torch.empty(2, dtype=torch.float32))
         self.hc_post_magnitude = config.hc_magnitude
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -856,9 +888,10 @@ class HYV4FlashDecoderLayer(GradientCheckpointingLayer):
         self.mlp = HYV4FlashMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4FlashMLP(config)
         self.input_layernorm = HYV4FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HYV4FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn_hc = HYV4FlashHyperConnection(config)
-        self.ffn_hc = HYV4FlashHyperConnection(config)
+        self.attn_hc = HYV4FlashHyperConnection(config).to(dtype=torch.float32)
+        self.ffn_hc = HYV4FlashHyperConnection(config).to(dtype=torch.float32)
         self.attention_type = config.layer_types[layer_idx]
+        self.post_self_attn_layernorm = HYV4FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         # Dense layers apply their sandwich norm right after the MLP; MoE layers carry `combine_output_norm`
         # inside the block so `HYV4FlashMLP` stays plain for both dense layers and `shared_experts`.
         self.post_mlp_layernorm = (
@@ -904,6 +937,7 @@ class HYV4FlashDecoderLayer(GradientCheckpointingLayer):
             indexer_position_ids=indexer_position_ids,
             **kwargs,
         )
+        hidden_states = self.post_self_attn_layernorm(hidden_states)
         hidden_states = (post.float().unsqueeze(-1) * hidden_states.float().unsqueeze(-2) + residual.float()).to(dtype)
 
         residual = hidden_states
@@ -923,9 +957,9 @@ class HYV4FlashHyperHead(nn.Module):
         self.hc_mult = config.hc_mult
         self.input_norm = HYV4FlashUnweightedRMSNorm(eps=config.rms_norm_eps)
         self.eps = config.hc_eps
-        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size))
-        self.hc_base = nn.Parameter(torch.empty(self.hc_mult))
-        self.hc_scale = nn.Parameter(torch.empty(1))
+        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size, dtype=torch.float32))
+        self.hc_base = nn.Parameter(torch.empty(self.hc_mult, dtype=torch.float32))
+        self.hc_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
@@ -944,12 +978,7 @@ class HYV4FlashPreTrainedModel(PreTrainedModel):
     config: HYV4FlashConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = [
-        "HYV4FlashDecoderLayer",
-        "HYV4VLVisionPatchEmbed",
-        "HYV4VLVisionBlock",
-        "HYV4VLVisionPatchMerger",
-    ]
+    _no_split_modules = ["HYV4FlashDecoderLayer"]
     # Combination of sinks and DSA disable anything but eager atm
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -966,6 +995,7 @@ class HYV4FlashPreTrainedModel(PreTrainedModel):
     # also catches this model's `unified_per_hc_scales`.
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "attn_hc.fn",
         "attn_hc.scale",
         "attn_hc.base",
@@ -1504,7 +1534,7 @@ class HYV4FlashModel(HYV4FlashPreTrainedModel):
         ngram_tokens: torch.Tensor | None = None,
         engram_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | MultimodalMoeBaseModelOutputWithPast:
         r"""
         ngram_tokens (`torch.LongTensor` of shape `(batch_size, sequence_length, engram_max_ngram_size)`, *optional*):
             Compressed token ids of the n-gram ending at each position. Built from `input_ids` when omitted;
@@ -1578,12 +1608,8 @@ class HYV4FlashModel(HYV4FlashPreTrainedModel):
             **kwargs,
         )
 
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
+        return MultimodalMoeBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
     def build_engram_inputs(
@@ -1616,7 +1642,9 @@ class HYV4FlashForConditionalGeneration(HYV4FlashPreTrainedModel, GenerationMixi
     def __init__(self, config: HYV4FlashConfig):
         super().__init__(config)
         self.model = HYV4FlashModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False, dtype=torch.float32
+        )
 
         self.post_init()
 
@@ -1726,13 +1754,15 @@ class HYV4FlashForConditionalGeneration(HYV4FlashPreTrainedModel, GenerationMixi
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return MoeCausalLMOutputWithPast(
+        return MultimodalMoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

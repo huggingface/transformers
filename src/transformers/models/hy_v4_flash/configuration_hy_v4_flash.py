@@ -31,7 +31,7 @@ class HYV4FlashTextConfig(PreTrainedConfig):
     r"""
     sliding_window (`int`, *optional*, defaults to 512):
         Number of keys a sliding layer attends to, counting the query's own position.
-    routed_expert_hidden_size (`int`, *optional*, defaults to 1536):
+    moe_hidden_size (`int`, *optional*, defaults to 1536):
         Latent width the routed experts run in.
     index_kpool (`int`, *optional*, defaults to 4):
         Number of consecutive tokens pooled into one compressed index entry.
@@ -96,9 +96,6 @@ class HYV4FlashTextConfig(PreTrainedConfig):
         "layers.*.self_attn.sinks": "colwise",
         "layers.*.self_attn": "local_params",
         "layers.*.engram_layer.multi_head_embedding.embedding": "embedding_rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -163,7 +160,7 @@ class HYV4FlashTextConfig(PreTrainedConfig):
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
     default_theta = {"indexed_attention": 10000000.0, "sliding_attention": 10000.0}
-    routed_expert_hidden_size: int = 1536
+    moe_hidden_size: int = 1536
     sliding_window: int = 512
     index_kpool: int = 4
     engram_layer_ids: list[int] | None = None
@@ -177,6 +174,10 @@ class HYV4FlashTextConfig(PreTrainedConfig):
     engram_lookup_table_size: int = 120818
 
     def __post_init__(self, **kwargs):
+        # BC: published checkpoints name the latent expert width `routed_expert_hidden_size`.
+        if "routed_expert_hidden_size" in kwargs:
+            self.moe_hidden_size = kwargs.pop("routed_expert_hidden_size")
+
         # Accept the published checkpoint's compressed-indexer aliases alongside the canonical `index_*` names.
         if "compressed_indexer_compress_ratio" in kwargs:
             self.index_kpool = kwargs.pop("compressed_indexer_compress_ratio")
@@ -318,7 +319,7 @@ class HYV4FlashConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        # Published checkpoints label `vision_config.model_type` as `"hy_v4_flash"`, which would recurse
+        # BC: Published checkpoints label `vision_config.model_type` as `"hy_v4_flash"`, which would recurse
         # under `AutoConfig` resolution; redirect it to `"hy_v4_vl_vision"` whose tower this model reuses.
         if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == self.model_type:
             self.vision_config = {**self.vision_config, "model_type": "hy_v4_vl_vision"}

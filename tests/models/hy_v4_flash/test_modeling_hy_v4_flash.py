@@ -51,7 +51,7 @@ class HYV4FlashVisionText2TextModelTester(VLMModelTester):
         "hidden_size": 48,
         "intermediate_size": 96,
         "moe_intermediate_size": 32,
-        "routed_expert_hidden_size": 24,
+        "moe_hidden_size": 24,
         "num_attention_heads": 4,
         "num_key_value_heads": 4,
         "head_dim": 8,
@@ -342,6 +342,9 @@ class HYV4FlashModelTest(VLMModelTest, unittest.TestCase):
             ),
             "model.layers.0.self_attn.learnable_sink_param": "model.language_model.layers.0.self_attn.sinks",
             "model.layers.0.self_attn.linear_gate.weight": "model.language_model.layers.0.self_attn.gate_proj.weight",
+            "model.layers.0.self_attn.post_proj_norm.weight": (
+                "model.language_model.layers.0.post_self_attn_layernorm.weight"
+            ),
             "vit.perceive.proj.0.weight": "model.vision_tower.patch_merger.proj_conv.weight",
             # Names the mapping must leave alone, because the short HY4 targets reach into them
             "model.layers.1.engram_layer.unified_per_hc_scales.0": (
@@ -538,3 +541,18 @@ class HYV4FlashModelTest(VLMModelTest, unittest.TestCase):
 
         self.assertEqual(dynamic.sequences.tolist(), static.sequences.tolist())
         torch.testing.assert_close(torch.stack(dynamic.logits), torch.stack(static.logits), atol=1e-4, rtol=1e-4)
+
+    def test_moe_hidden_size_alias_and_fp8_experts(self):
+        """Legacy `routed_expert_hidden_size` maps to `moe_hidden_size`, and `FP8Experts` picks it up."""
+        from transformers.integrations.finegrained_fp8 import FP8Experts
+
+        text_config_dict = self.model_tester.get_config().text_config.to_dict()
+        text_config_dict.pop("moe_hidden_size")
+        text_config_dict["routed_expert_hidden_size"] = 16
+        text_config = HYV4FlashTextConfig.from_dict(text_config_dict)
+        self.assertEqual(text_config.moe_hidden_size, 16)
+
+        fp8_experts = FP8Experts(text_config, block_size=(16, 16))
+        self.assertEqual(fp8_experts.hidden_dim, 16)
+        self.assertEqual(fp8_experts.gate_up_proj.shape[-1], 16)
+        self.assertEqual(fp8_experts.down_proj.shape[-2], 16)
