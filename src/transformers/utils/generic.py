@@ -450,9 +450,13 @@ class _BCCacheNameMeta(type):
         The @dataclass calls setattr on the class where it's used to add an __init__ method with all the fields (and only
         the declared fields). Se we override setattr to also allow the fields `past_key_values`/`cache_params` and rename
         them to `cache`, for BC on all the remote code most notably. Indeed, every remote code model usually does
-        `return OutputClass(past_key_values=past_key_values,...)` which would crash without this.
+        `return OutputClass(past_key_values=past_key_values,...)` which would crash without this. Classes which still
+        declare one of the old names as a field keep their `__init__` untouched, as the old name is valid for them.
         """
-        if name == "__init__":
+        if name == "__init__" and all(
+            deprecated not in getattr(cls, "__dataclass_fields__", {})
+            for deprecated in ("past_key_values", "cache_params")
+        ):
             init = value
 
             # Wrap with the kwarg name change
@@ -641,8 +645,8 @@ class ModelOutput(OrderedDict, metaclass=_BCCacheNameMeta):
 
     def _replace_old_cache_name(self, key: str) -> str:
         """Handle BC key rename from old `past_key_values`/`cache_params` to the newer `cache`, with warning if needed."""
-        # For BC
-        if key in ("past_key_values", "cache_params"):
+        # For BC, unless the class still declares the old name as a field
+        if key in ("past_key_values", "cache_params") and key not in getattr(self, "__dataclass_fields__", {}):
             if not is_tracing():
                 logger.warning_once("`past_key_values`/`cache_params` are deprecated. Use `cache` instead.")
             return "cache"
