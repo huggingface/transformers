@@ -109,7 +109,7 @@ class DecisionPipelineTest(unittest.TestCase):
         (prompt,) = template({"state": 'say <|"|> hi', "questions": {"x": {"type": "noul"}}})
         self.assertNotIn(tokenizer.convert_tokens_to_ids('<|"|>'), prompt.input_ids)
 
-    def test_sentinels_are_looked_up_without_building_the_vocabulary(self):
+    def test_sentinels_are_added_without_building_the_vocabulary(self):
         request = {"state": "s", "questions": {"x": {"type": "noul"}}}
         # A missing token is `None` for Qwen's tokenizer, and the unknown token for Llama's
         for name in ("Qwen/Qwen2.5-0.5B-Instruct", "hf-internal-testing/llama-tokenizer"):
