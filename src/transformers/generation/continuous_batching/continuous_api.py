@@ -1206,15 +1206,6 @@ class ContinuousBatchingManager:
         if _TRAIN_FIX_PREFIX and self.batch_processor is not None:
             self.reset_prefix_cache()
 
-    def reset_prefix_cache(self) -> None:
-        """WP train: forgets the blocks kept for prefix sharing, so no request submitted from now on reuses keys and
-        values computed before this call. To call after the weights changed, inside `pause()` (the generation loop owns
-        the block ledgers), and on every rank of a TP group, which must all agree on what a request prefills. Requests
-        in flight keep their blocks."""
-        if self.batch_processor is None or not self.background_thread_status.is_pause_requested(local=True):
-            raise RuntimeError("Call `reset_prefix_cache` inside the `pause` context, the generation loop uses it.")
-        self.batch_processor.cache.invalidate_prefix_cache()
-
     def release_memory(self, nbytes: int | None = None) -> int:
         """Frees the GPU memory of the KV cache, so the calling thread can use it during a pause, and returns the number
         of bytes released. The cache waits in pinned host memory, allocated at the first call, and `restore_memory`
