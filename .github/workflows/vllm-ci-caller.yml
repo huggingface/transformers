@@ -927,15 +927,14 @@ jobs:
           pytest -v -s tests/models/language/generation/test_common.py \
             -k "opt-350m or phi-2 or stablelm-3b"
 
-      # HF `generate(num_beams=...)` vs vLLM's beam search. In one shard (only 2 tests). Not included: the tests without a
-      # transformers reference, and test_beam_search_passes_multimodal_data (7B audio model; vLLM's CI excludes it too).
+      # HF `generate(num_beams=...)` vs vLLM's beam search. In one shard (only 1 test). Not included: the tests without a
+      # transformers reference (e.g. test_beam_search_with_concurrency_limit compares vLLM with vLLM), and
+      # test_beam_search_passes_multimodal_data (7B audio model; vLLM's CI excludes it too).
       - name: "Test: beam search"
         if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
-          pytest -v -s \
-            tests/samplers/test_beam_search.py::test_beam_search_single_input \
-            tests/samplers/test_beam_search.py::test_beam_search_with_concurrency_limit
+          pytest -v -s tests/samplers/test_beam_search.py::test_beam_search_single_input
 
       # More pooling models / features vs transformers (`hf_runner`): token classification, multi-label classification,
       # chunked prefill, prefix caching (models up to ~1.5B). In one shard.
