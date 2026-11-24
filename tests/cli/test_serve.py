@@ -3105,3 +3105,98 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
             max_output_tokens=10,
         )
         self.assertTrue(len(resp.output[0].content[0].text) > 0)
+
+
+@require_serve
+@require_torch
+class TestPrefixCache(unittest.TestCase):
+    """GenerateManager reuses the KV cache of the previous request for the prompt prefix the next one shares."""
+
+    @staticmethod
+    def _model(**config_kwargs):
+        import torch
+
+        from transformers import LlamaConfig, LlamaForCausalLM, MistralConfig, MistralForCausalLM
+
+        torch.manual_seed(0)
+        common = {"vocab_size": 128, "hidden_size": 32, "intermediate_size": 64, "num_hidden_layers": 2}
+        common.update(num_attention_heads=4, num_key_value_heads=2, pad_token_id=0, eos_token_id=None)
+        if "sliding_window" in config_kwargs:
+            return MistralForCausalLM(MistralConfig(**common, **config_kwargs)).eval()
+        return LlamaForCausalLM(LlamaConfig(**common, **config_kwargs)).eval()
+
+    @staticmethod
+    def _run(manager, model, ids, max_new_tokens=6):
+        import torch
+
+        from transformers import GenerationConfig
+
+        input_ids = torch.tensor([ids])
+        inputs = {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids)}
+        gen_config = GenerationConfig(max_new_tokens=max_new_tokens, do_sample=False, pad_token_id=0)
+        reuse = manager._reuses_prefix(model, inputs, gen_config)
+        out = manager._generate(model, {**inputs, "generation_config": gen_config}, reuse)
+        return reuse, out[0].tolist()
+
+    def test_second_turn_reuses_the_conversation(self):
+        from transformers.cli.serving.utils import GenerateManager
+
+        model = self._model()
+        cached, fresh = GenerateManager(), GenerateManager(prefix_cache=False)
+        first = list(range(5, 25))
+        reuse, turn1 = self._run(cached, model, first)
+        self.assertTrue(reuse)
+        self.assertEqual(cached._prefix_cache.reused_tokens, 0)
+        self.assertEqual(turn1, self._run(fresh, model, first)[1])
+
+        # the next turn resends the history (prompt + reply) and adds a user message
+        second = turn1 + list(range(40, 50))
+        _, turn2 = self._run(cached, model, second)
+        # everything but the reply's last token, whose KV generate() never computed
+        self.assertEqual(cached._prefix_cache.reused_tokens, len(turn1) - 1)
+        self.assertEqual(turn2, self._run(fresh, model, second)[1])
+
+    def test_diverging_prompt_reuses_the_shared_part_only(self):
+        from transformers.cli.serving.utils import GenerateManager
+
+        model = self._model()
+        cached, fresh = GenerateManager(), GenerateManager(prefix_cache=False)
+        self._run(cached, model, list(range(5, 25)))
+        other = list(range(5, 13)) + list(range(60, 70))  # same first 8 tokens, then a different conversation
+        _, out = self._run(cached, model, other)
+        self.assertEqual(cached._prefix_cache.reused_tokens, 8)
+        self.assertEqual(out, self._run(fresh, model, other)[1])
+        # the same prompt again: all but its last token comes from the cache
+        _, again = self._run(cached, model, other)
+        self.assertEqual(cached._prefix_cache.reused_tokens, len(other) - 1)
+        self.assertEqual(again, out)
+
+    def test_sliding_window_model_is_not_cached(self):
+        from transformers.cli.serving.utils import GenerateManager
+
+        model = self._model(sliding_window=8)
+        manager = GenerateManager()
+        _, first = self._run(manager, model, list(range(5, 25)))
+        self.assertIsNone(manager._prefix_cache._cache)
+        _, second = self._run(manager, model, first + [40, 41])
+        self.assertEqual(manager._prefix_cache.reused_tokens, 0)
+
+    def test_disabled_or_unsupported_requests_skip_it(self):
+        import torch
+
+        from transformers import GenerationConfig
+        from transformers.cli.serving.utils import GenerateManager
+
+        model = self._model()
+        ids = torch.tensor([[5, 6, 7]])
+        inputs = {"input_ids": ids, "attention_mask": torch.ones_like(ids)}
+        greedy = GenerationConfig(max_new_tokens=2)
+        self.assertFalse(GenerateManager(prefix_cache=False)._reuses_prefix(model, inputs, greedy))
+        manager = GenerateManager()
+        self.assertTrue(manager._reuses_prefix(model, inputs, greedy))
+        self.assertFalse(manager._reuses_prefix(model, {"input_ids": ids}, greedy))
+        self.assertFalse(manager._reuses_prefix(model, {**inputs, "pixel_values": ids}, greedy))
+        self.assertFalse(manager._reuses_prefix(model, inputs, GenerationConfig(cache_implementation="static")))
+        self.assertFalse(manager._reuses_prefix(model, inputs, GenerationConfig(num_beams=2)))
+        batch = {"input_ids": ids.repeat(2, 1), "attention_mask": torch.ones(2, 3, dtype=torch.long)}
+        self.assertFalse(manager._reuses_prefix(model, batch, greedy))

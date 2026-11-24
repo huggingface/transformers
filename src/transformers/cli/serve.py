@@ -59,6 +59,13 @@ class Serve:
             str | None, typer.Option(help="Attention implementation (e.g. flash_attention_2).")
         ] = None,
         compile: Annotated[bool, typer.Option(help="Enable torch.compile for faster inference.")] = False,
+        prefix_cache: Annotated[
+            bool,
+            typer.Option(
+                help="Reuse the KV cache of the previous request for the prompt prefix it shares with the next one "
+                "(multi-turn chats). Sequential generation only."
+            ),
+        ] = True,
         quantization: Annotated[
             str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
         ] = None,
@@ -167,6 +174,7 @@ class Serve:
             continuous_batching=continuous_batching,
             compile=compile,
             cb_config=cb_config,
+            prefix_cache=prefix_cache,
         )
 
         if chat_template_kwargs:
