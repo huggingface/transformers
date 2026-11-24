@@ -883,7 +883,8 @@ jobs:
           uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
           VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
           # sentence-transformers: reference models of the pooling tests (tests/conftest.py)
-          uv pip install tblib pqdm pytest-shard sentence-transformers
+          # mteb: the MTEB pooling test; peft: remote code of jina-embeddings-v5 (both listed in vLLM's requirements/test/cuda.in)
+          uv pip install tblib pqdm pytest-shard sentence-transformers 'mteb[bm25s]>=2,<3' peft
           # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
           uv pip install --no-deps -e transformers/
           python -c "
@@ -927,15 +928,60 @@ jobs:
           pytest -v -s tests/models/language/generation/test_common.py \
             -k "opt-350m or phi-2 or stablelm-3b"
 
-      # HF `generate(num_beams=...)` vs vLLM's beam search. In one shard (only 2 tests). Not included: the tests without a
-      # transformers reference, and test_beam_search_passes_multimodal_data (7B audio model; vLLM's CI excludes it too).
+      # HF `generate(num_beams=...)` vs vLLM's beam search. In one shard (only 1 test). Not included: the tests without a
+      # transformers reference (e.g. test_beam_search_with_concurrency_limit compares vLLM with vLLM), and
+      # test_beam_search_passes_multimodal_data (7B audio model; vLLM's CI excludes it too).
       - name: "Test: beam search"
         if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
+          pytest -v -s tests/samplers/test_beam_search.py::test_beam_search_single_input
+
+      # More pooling models / features vs transformers (`hf_runner`): token classification, multi-label classification,
+      # chunked prefill, prefix caching (models up to ~1.5B). In one shard.
+      - name: "Test: more language pooling models"
+        if: ${{ !cancelled() && matrix.shard == 0 }}
+        working-directory: vllm
+        run: |
+          # Not included:
+          # - tests without a transformers reference (vLLM vs vLLM, or vLLM config checks): test_extract_hidden_states.py,
+          #   test_pooler_config_init_behaviour.py, test_last_pool_score_chunked_prefill_matches_unchunked and
+          #   test_non_causal_models.
+          # - test_openai_privacy_filter: bf16 on CPU, 2 / 429 probabilities just above the test's tolerance (0.117 for
+          #   atol=0.1); vLLM runs it on GPU.
           pytest -v -s \
-            tests/samplers/test_beam_search.py::test_beam_search_single_input \
-            tests/samplers/test_beam_search.py::test_beam_search_with_concurrency_limit
+            tests/models/language/pooling/test_token_classification.py \
+            tests/models/language/pooling/test_multilabel_classification_support.py \
+            tests/models/language/pooling/test_head_dtype.py \
+            tests/models/language/pooling/test_all_pooling_plus_chunked_prefill.py \
+            tests/models/language/pooling/test_auto_prefix_cache_support.py \
+            --deselect tests/models/language/pooling/test_all_pooling_plus_chunked_prefill.py::test_last_pool_score_chunked_prefill_matches_unchunked \
+            --deselect tests/models/language/pooling/test_auto_prefix_cache_support.py::test_non_causal_models \
+            --deselect tests/models/language/pooling/test_token_classification.py::test_openai_privacy_filter
+
+      # The tests / models of test_embedding.py and test_classification.py that vLLM doesn't mark `cpu_model` (the
+      # `cpu_model` ones run in the step above), and multi-vector retrieval (bge-m3). In one shard.
+      - name: "Test: more language embedding and classification models"
+        if: ${{ !cancelled() && matrix.shard == 2 }}
+        working-directory: vllm
+        run: |
+          # Not included: the 2 LFM2 tests of test_embedding.py (vLLM's model only, no transformers reference).
+          pytest -v -s \
+            tests/models/language/pooling/test_embedding.py \
+            tests/models/language/pooling/test_classification.py \
+            tests/models/language/pooling/test_multi_vector_retrieval.py \
+            -m "not cpu_model" \
+            --deselect tests/models/language/pooling/test_embedding.py::test_lfm2_bidirectional_conv_respects_sequence_boundaries \
+            --deselect tests/models/language/pooling/test_embedding.py::test_lfm2_bidirectional_embeddings_are_batch_independent
+
+      # MTEB score of vLLM vs sentence-transformers (transformers). Only jina-embeddings-v5-text-nano: the other models of
+      # tests/models/language/pooling_mteb_test compare with a score stored in the test file (no transformers reference).
+      # `model_info2` = jina-embeddings-v5-text-nano (3rd entry of EMBEDDING_MODELS). In one shard.
+      - name: "Test: MTEB pooling (jina-embeddings-v5-text-nano)"
+        if: ${{ !cancelled() && matrix.shard == 3 }}
+        working-directory: vllm
+        run: |
+          pytest -v -s 'tests/models/language/pooling_mteb_test/test_jina.py::test_embed_models_mteb[model_info2]'
 
   # Multimodal generation with vLLM's Transformers modeling backend, compared with transformers (`hf_runner`): the
   # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
@@ -1301,6 +1347,40 @@ jobs:
         run: |
           # Not included: test_whisper.py (its only `cpu_model` test skips itself on CPU: it uses enforce_eager=False).
           pytest -v -s tests/models/multimodal/generation/test_common.py -m cpu_model --num-shards=4 --shard-id=$SHARD_ID
+
+      # Multimodal pooling models vs transformers (`hf_runner`), beyond CLIP / SigLIP (run in `vllm-test-hf-comparison`).
+      # Only ~9 tests: one test file per shard (with `--num-shards`, a shard could get no test), shard 3 runs none.
+      # Not included:
+      # - test_intern_vit.py and test_radio.py: they build vLLM's model directly (`default_vllm_config` / `dist_init`
+      #   fixtures), without the weight loading that sets up vLLM's CPU linear layers ("'QKVParallelLinear' object has no
+      #   attribute 'cpu_linear'"); vLLM runs them on GPU only.
+      # - the tests of test_llama_nemotron_vl.py without a transformers reference, test_prithvi_mae.py (skips itself:
+      #   needs terratorch), test_llava_next.py (CUDA only) and test_models_image_special_tokens_processing of
+      #   test_phi3v.py (vLLM only).
+      - name: "Test: multimodal pooling models (shard ${{ matrix.shard }} / 4)"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          case "$SHARD_ID" in
+            0)
+              pytest -v -s \
+                tests/models/multimodal/pooling/test_llama_nemotron_vl.py::test_models \
+                tests/models/multimodal/pooling/test_llama_nemotron_vl.py::test_reranker
+              ;;
+            1)
+              # test_models_image skips itself on CPU (`@large_gpu_test(min_gb=48)`).
+              pytest -v -s tests/models/multimodal/pooling/test_dse_qwen2_vl.py
+              ;;
+            2)
+              pytest -v -s tests/models/multimodal/pooling/test_jinavl_reranker.py
+              ;;
+            3)
+              # test_models_image skips itself on CPU (`@large_gpu_test(min_gb=48)`).
+              pytest -v -s \
+                tests/models/multimodal/pooling/test_phi3v.py::test_models_text \
+                tests/models/multimodal/pooling/test_phi3v.py::test_models_image
+              ;;
+          esac
 
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
