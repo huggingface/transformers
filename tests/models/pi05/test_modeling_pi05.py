@@ -177,9 +177,13 @@ class PI05ModelIntegrationTest(unittest.TestCase):
         loss, sampled = self.run_model("lerobot/pi05_base", LIBERO_QUANTILES, torch.bfloat16)
         expected_slices = Expectations(
             {
-                ("cuda", 8): [
+                ("cuda", (8, 0)): [
                     [-0.1289, 0.0273, -0.3340, 0.5742, 0.2520, 0.0576, -0.0376],
                     [-0.1328, 0.0364, -0.3262, 0.5586, 0.2617, 0.0581, -0.0356],
+                ],
+                ("cuda", (8, 6)): [
+                    [-0.1299, 0.0293, -0.3379, 0.5742, 0.2559, 0.0581, -0.0437],
+                    [-0.1348, 0.0371, -0.3301, 0.5625, 0.2656, 0.0579, -0.0413],
                 ],
             }
         )  # fmt: skip
