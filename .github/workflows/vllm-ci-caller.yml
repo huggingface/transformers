@@ -1382,6 +1382,118 @@ jobs:
               ;;
           esac
 
+  # More of vLLM's multimodal models vs transformers (`hf_runner`): the models of
+  # `tests/models/multimodal/generation/test_common.py` that vLLM doesn't mark `cpu_model` (vLLM runs them on GPU only;
+  # the `cpu_model` ones run in `vllm-test-multimodal-hf-comparison`).
+  # Not included (they all skip themselves on our runner):
+  # - aria, glm4_1v(-video), kimi_vl, moondream3, ovis1_6-gemma2, qwen2_5_vl-transformers, skywork_r1v: skip on CPU
+  #   (`large_gpu_mark(min_gb=...)`).
+  # - llama4, llava-broadcast, llava_next-broadcast: skip on CPU (`multi_gpu_marks`); llama4 (109B) wouldn't fit anyway.
+  # - deepseek_vl_v2, h2ovl, minicpmv_25, minicpmv_26, minicpmo_26, molmo, ovis2, ovis2_5, phi3v, smolvlm: skip with
+  #   transformers main: their HF reference needs an older transformers (`max_transformers_version` in vLLM's
+  #   tests/models/registry.py).
+  # - granite4_vision: skips itself (`is_available_online=False` in vLLM's tests/models/registry.py).
+  # - the entries vLLM marks `skip` (cosmos3, dots_ocr, glm4v, glm_ocr, intern_vl, intern_vl-video, isaac, pixtral_hf,
+  #   intern_vl-diff-patches).
+  vllm-test-multimodal-hf-comparison-more:
+    permissions:
+      contents: read
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    name: "Test vLLM vs transformers outputs, more multimodal models (shard ${{ matrix.shard }} / 8)"
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      SHARD_ID: ${{ matrix.shard }}
+      # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
+      VLLM_CPU_CI_ENV: "1"
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
+
+      - name: Find latest vLLM commit with built CPU wheel
+        run: |
+          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
+          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
+          print(wheel['path'].split('/')[3])
+          ")
+          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+            exit 1
+          fi
+          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
+          echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
+        run: |
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          # Same as the other CPU jobs (see the comments in `vllm-test-multimodal-processing`).
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
+            exit 1
+          fi
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          uv pip install tblib pqdm pytest-shard
+          # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
+
+      - name: "Test: more multimodal models generation (shard ${{ matrix.shard }} / 8)"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          # `-k "[<model_type>-"`: the test IDs are `<test>[<model_type>-test_case<N>]`.
+          pytest -v -s tests/models/multimodal/generation/test_common.py \
+            -m "not cpu_model" \
+            -k "[blip2- or [gemma3- or [gemma4- or [granite_vision- or [idefics3- or [intern_vl-hf- or [llava_onevision- or [llava-onevision-transformers- or [llava_next-test or [llava_next_video- or [paddleocr_vl- or [paligemma- or [qianfan_ocr- or [qwen2_5_vl-windows-attention- or [qwen3_vl-" \
+            --num-shards=8 --shard-id=$SHARD_ID
+
   # Runs after all test jobs (even on failure) and produces structured JSON
   # reports of failing tests, new failures vs the previous main-branch run,
   # and a breakdown by error category. Reports are uploaded as an artifact.
@@ -1393,7 +1505,7 @@ jobs:
       image: huggingface/transformers-torch-light
     # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
     if: ${{ !cancelled() }}
-    needs: [vllm-test-examples, vllm-test-init, vllm-test-transformers, vllm-test-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison, vllm-test-multimodal-generation, vllm-test-tokenizer-features, vllm-test-multimodal-hf-comparison]
+    needs: [vllm-test-examples, vllm-test-init, vllm-test-transformers, vllm-test-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison, vllm-test-multimodal-generation, vllm-test-tokenizer-features, vllm-test-multimodal-hf-comparison, vllm-test-multimodal-hf-comparison-more]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
       actions: read
