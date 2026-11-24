@@ -66,14 +66,20 @@ class MultimodalMixin:
 
     model: "MultimodalMixin"
 
+    def _base_model_getter(self, name: str):
+        # Only a head has a base model to reach: a base model without its own getter takes no such input
+        if getattr(self, "model", None) is None:
+            raise AttributeError(f"{type(self).__name__} has no `{name}`, as it takes no such input")
+        return getattr(self.model, name)
+
     def get_image_embeddings(self, *args, **kwargs):
-        return self.model.get_image_embeddings(*args, **kwargs)
+        return self._base_model_getter("get_image_embeddings")(*args, **kwargs)
 
     def get_video_embeddings(self, *args, **kwargs):
-        return self.model.get_video_embeddings(*args, **kwargs)
+        return self._base_model_getter("get_video_embeddings")(*args, **kwargs)
 
     def get_audio_embeddings(self, *args, **kwargs):
-        return self.model.get_audio_embeddings(*args, **kwargs)
+        return self._base_model_getter("get_audio_embeddings")(*args, **kwargs)
 
     @can_return_tuple
     def get_image_features(self, *args, **kwargs):
