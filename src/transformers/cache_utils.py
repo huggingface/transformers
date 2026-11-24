@@ -314,7 +314,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
 
 
 class DynamicIndexedLayer(DynamicLayer):
-    """Dynamic cache of completed indexer groups and an unfinished raw group."""
+    """Dynamic indexed cache for compressed groups and unfinished raw tokens."""
 
     is_croppable = False
 
@@ -326,8 +326,23 @@ class DynamicIndexedLayer(DynamicLayer):
         self.indexer_first_slot = None
         self.indexer_length = 0
 
-    def prepare_indexer(self, states, group_size, pool_dim, attention_mask=None):
+        # Metadata for the current prepare/update/select cycle.
+        self._indexer_group_size = 1
+        self._indexer_complete_count = None
+        self._indexer_query_counts = None
+        self._indexer_query_valid = None
+
+
+    def update_groups(
+        self,
+        states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        group_size: int = 1,
+        pool_dim: int | None = None,
+    ) -> torch.Tensor:
+        """Pack valid tokens into groups and retain selection metadata."""
         batch, length, dim = states.shape
+        pool_dim = dim if pool_dim is None else pool_dim
 
         if self.indexer_pools is None:
             self.indexer_pools = states.new_empty(batch, 0, pool_dim)
@@ -338,6 +353,7 @@ class DynamicIndexedLayer(DynamicLayer):
         valid = attention_mask[:, -length:].bool() if attention_mask is not None else torch.ones(
             batch, length, dtype=torch.bool, device=states.device
         )
+
         old_counts = self.indexer_counts
         old_tail_count = old_counts % group_size
         new_counts = old_counts + valid.long().sum(-1)
@@ -348,9 +364,7 @@ class DynamicIndexedLayer(DynamicLayer):
 
         write_slots = old_tail_count[:, None] + valid.long().cumsum(-1) - 1
         packed.scatter_add_(
-            1,
-            write_slots.clamp(min=0)[..., None].expand(-1, -1, dim),
-            states * valid[..., None],
+            1, write_slots.clamp(min=0)[..., None].expand(-1, -1, dim), states * valid[..., None]
         )
 
         counts = old_counts[:, None] + valid.long().cumsum(-1)
@@ -376,73 +390,141 @@ class DynamicIndexedLayer(DynamicLayer):
         self.indexer_counts = new_counts
         self.indexer_length += length
 
-        return groups, complete_count, counts, valid, self.indexer_first_slot
+        self._indexer_group_size = group_size
+        self._indexer_complete_count = complete_count
+        self._indexer_query_counts = counts
+        self._indexer_query_valid = valid
+        return groups
 
-    def update_indexer(self, new_pools, complete_count, group_size):
+    def update_keys(self, new_pools: torch.Tensor) -> torch.Tensor:
+        """Store newly completed compressed groups."""
         batch, groups, dim = new_pools.shape
-        capacity = self.indexer_length // group_size
+        group_size = self._indexer_group_size
+        complete_count = self._indexer_complete_count
 
+        capacity = self.indexer_length // group_size
         extra = capacity - self.indexer_pools.shape[1]
-        if extra:
-            self.indexer_pools = torch.cat((
-                self.indexer_pools,
-                new_pools.new_zeros(batch, extra, dim),
-            ), dim=1)
+        if extra > 0:
+            self.indexer_pools = torch.cat(
+                (self.indexer_pools, new_pools.new_zeros(batch, extra, dim)), dim=1
+            )
 
         if groups and capacity:
             old_group_counts = self.indexer_counts // group_size - complete_count
             offsets = torch.arange(groups, device=new_pools.device)
             destinations = (old_group_counts[:, None] + offsets).clamp(max=capacity - 1)
             completed = offsets[None, :] < complete_count[:, None]
-
             self.indexer_pools.scatter_add_(
-                1,
-                destinations[..., None].expand_as(new_pools),
-                new_pools * completed[..., None],
+                1, destinations[..., None].expand_as(new_pools), new_pools * completed[..., None]
             )
 
         return self.indexer_pools
 
+    def select_indices(self, scores: torch.Tensor, budget: int, tail: bool = False) -> torch.Tensor:
+        """Select completed groups and optionally the unfinished tail."""
+        group_size = self._indexer_group_size
+        counts = self._indexer_query_counts
+        query_valid = self._indexer_query_valid
+        first_slot = self.indexer_first_slot
+
+        _, _, groups = scores.shape
+        offsets = torch.arange(group_size, device=scores.device)
+        complete = counts[..., None] >= (torch.arange(1, groups + 1, device=scores.device) * group_size)
+        complete &= query_valid[..., None]
+
+        topk = min(budget // group_size, groups)
+        top = scores.masked_fill(~complete, torch.finfo(scores.dtype).min).topk(topk, dim=-1).indices
+
+        chosen = first_slot[:, None, None, None] + top[..., None] * group_size + offsets
+        chosen = chosen.masked_fill(~complete.gather(-1, top)[..., None], -1)
+        chosen = torch.nn.functional.pad(chosen.flatten(-2), (0, budget - topk * group_size), value=-1)
+
+        if tail and group_size > 1:
+            tail_size = counts % group_size
+            tail_offsets = offsets[:-1]
+            tail_slots = first_slot[:, None, None] + (counts - tail_size)[..., None] + tail_offsets
+            tail_slots = tail_slots.masked_fill(tail_offsets >= tail_size[..., None], -1)
+            chosen = torch.cat((chosen, tail_slots), dim=-1)
+
+        return chosen.masked_fill(~query_valid[..., None], -1).to(torch.int32)
+
     def offload(self):
         super().offload()
         if self.indexer_pools is not None:
-            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
-                setattr(self, name, getattr(self, name).to("cpu", non_blocking=True))
+            for name in (
+                "indexer_pools",
+                "indexer_tail",
+                "indexer_counts",
+                "indexer_first_slot",
+            ):
+                setattr(
+                    self, name,
+                    getattr(self, name).to("cpu", non_blocking=True),
+                )
 
     def prefetch(self):
         super().prefetch()
         if self.indexer_pools is not None:
-            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
-                setattr(self, name, getattr(self, name).to(self.device, non_blocking=True))
+            for name in (
+                "indexer_pools",
+                "indexer_tail",
+                "indexer_counts",
+                "indexer_first_slot",
+            ):
+                setattr(
+                    self, name,
+                    getattr(self, name).to(self.device, non_blocking=True),
+                )
 
     def reset(self):
         super().reset()
         self.indexer_pools = self.indexer_tail = None
         self.indexer_counts = self.indexer_first_slot = None
         self.indexer_length = 0
+        self._indexer_group_size = 1
+        self._indexer_complete_count = None
+        self._indexer_query_counts = None
+        self._indexer_query_valid = None
 
     def crop(self, tokens_to_remove):
         if tokens_to_remove:
-            raise RuntimeError("Compressed indexer caches cannot roll back completed groups")
+            raise RuntimeError(
+                "Compressed indexer caches cannot roll back completed groups"
+            )
 
     def reorder_cache(self, beam_idx):
         super().reorder_cache(beam_idx)
         if self.indexer_pools is not None:
-            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+            for name in (
+                "indexer_pools",
+                "indexer_tail",
+                "indexer_counts",
+                "indexer_first_slot",
+            ):
                 x = getattr(self, name)
                 setattr(self, name, x.index_select(0, beam_idx.to(x.device)))
 
     def batch_repeat_interleave(self, repeats):
         super().batch_repeat_interleave(repeats)
         if self.indexer_pools is not None:
-            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+            for name in (
+                "indexer_pools",
+                "indexer_tail",
+                "indexer_counts",
+                "indexer_first_slot",
+            ):
                 x = getattr(self, name)
                 setattr(self, name, x.repeat_interleave(repeats, dim=0))
 
     def batch_select_indices(self, indices):
         super().batch_select_indices(indices)
         if self.indexer_pools is not None:
-            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+            for name in (
+                "indexer_pools",
+                "indexer_tail",
+                "indexer_counts",
+                "indexer_first_slot",
+            ):
                 x = getattr(self, name)
                 setattr(self, name, x.index_select(0, indices.to(x.device)))
 
@@ -715,7 +797,7 @@ class StaticSlidingWindowLayer(StaticLayer):
 
 
 class StaticIndexedLayer(StaticLayer):
-    """Fixed-address indexer cache with completed pools and an unfinished raw group."""
+    """Fixed-address indexed cache for compressed groups and unfinished raw tokens."""
 
     is_croppable = False
 
@@ -727,13 +809,25 @@ class StaticIndexedLayer(StaticLayer):
         self.indexer_first_slot = None
         self.indexer_length = None
 
-    def prepare_indexer(self, states, group_size, pool_dim, attention_mask=None):
+        # Metadata for the current prepare/update/select cycle.
+        self._indexer_group_size = 1
+        self._indexer_complete_count = None
+        self._indexer_query_counts = None
+        self._indexer_query_valid = None
+
+    def update_groups(
+        self,
+        states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        group_size: int = 1,
+        pool_dim: int | None = None,
+    ) -> torch.Tensor:
+        """Pack valid tokens into groups and retain selection metadata."""
         batch, length, dim = states.shape
+        pool_dim = dim if pool_dim is None else pool_dim
 
         if self.indexer_pools is None:
-            self.indexer_pools = states.new_zeros(
-                batch, self.max_cache_len // group_size, pool_dim
-            )
+            self.indexer_pools = states.new_zeros(batch, self.max_cache_len // group_size, pool_dim)
             self.indexer_tail = states.new_zeros(batch, group_size - 1, dim)
             self.indexer_counts = torch.zeros(batch, dtype=torch.long, device=states.device)
             self.indexer_first_slot = torch.full((batch,), -1, dtype=torch.long, device=states.device)
@@ -741,17 +835,15 @@ class StaticIndexedLayer(StaticLayer):
 
             if not is_torchdynamo_compiling():
                 for name in (
-                    "indexer_pools",
-                    "indexer_tail",
-                    "indexer_counts",
-                    "indexer_first_slot",
-                    "indexer_length",
+                    "indexer_pools", "indexer_tail", "indexer_counts",
+                    "indexer_first_slot", "indexer_length",
                 ):
                     torch._dynamo.mark_static_address(getattr(self, name))
 
         valid = attention_mask[:, -length:].bool() if attention_mask is not None else torch.ones(
             batch, length, dtype=torch.bool, device=states.device
         )
+
         old_counts = self.indexer_counts
         old_tail_count = old_counts % group_size
         new_counts = old_counts + valid.long().sum(-1)
@@ -762,9 +854,7 @@ class StaticIndexedLayer(StaticLayer):
 
         write_slots = old_tail_count[:, None] + valid.long().cumsum(-1) - 1
         packed.scatter_add_(
-            1,
-            write_slots.clamp(min=0)[..., None].expand(-1, -1, dim),
-            states * valid[..., None],
+            1, write_slots.clamp(min=0)[..., None].expand(-1, -1, dim), states * valid[..., None]
         )
 
         counts = old_counts[:, None] + valid.long().cumsum(-1)
@@ -783,35 +873,66 @@ class StaticIndexedLayer(StaticLayer):
             pending = pending * (offsets[None, :] < pending_size[:, None])[..., None]
             self.indexer_tail.copy_(pending)
 
-        first_slots = torch.where(
+        first_slot = torch.where(
             (old_counts == 0) & valid.any(-1),
             self.indexer_length + valid.long().argmax(-1),
             self.indexer_first_slot,
         )
-        self.indexer_first_slot.copy_(first_slots)
+        self.indexer_first_slot.copy_(first_slot)
         self.indexer_counts.copy_(new_counts)
         self.indexer_length.add_(length)
 
-        return groups, complete_count, counts, valid, self.indexer_first_slot
+        self._indexer_group_size = group_size
+        self._indexer_complete_count = complete_count
+        self._indexer_query_counts = counts
+        self._indexer_query_valid = valid
+        return groups
 
-
-    def update_indexer(self, new_pools, complete_count, group_size):
+    def update_keys(self, new_pools: torch.Tensor) -> torch.Tensor:
+        """Write completed compressed groups without reallocating storage."""
         groups = new_pools.shape[1]
         capacity = self.indexer_pools.shape[1]
+        group_size = self._indexer_group_size
+        complete_count = self._indexer_complete_count
 
         if groups and capacity:
             old_group_counts = self.indexer_counts // group_size - complete_count
             offsets = torch.arange(groups, device=new_pools.device)
             destinations = (old_group_counts[:, None] + offsets).clamp(max=capacity - 1)
             completed = offsets[None, :] < complete_count[:, None]
-
             self.indexer_pools.scatter_add_(
-                1,
-                destinations[..., None].expand_as(new_pools),
-                new_pools * completed[..., None],
+                1, destinations[..., None].expand_as(new_pools), new_pools * completed[..., None]
             )
 
         return self.indexer_pools
+
+    def select_indices(self, scores: torch.Tensor, budget: int, tail: bool = False) -> torch.Tensor:
+        """Select completed groups and optionally the unfinished tail."""
+        group_size = self._indexer_group_size
+        counts = self._indexer_query_counts
+        query_valid = self._indexer_query_valid
+        first_slot = self.indexer_first_slot
+
+        _, _, groups = scores.shape
+        offsets = torch.arange(group_size, device=scores.device)
+        complete = counts[..., None] >= (torch.arange(1, groups + 1, device=scores.device) * group_size)
+        complete &= query_valid[..., None]
+
+        topk = min(budget // group_size, groups)
+        top = scores.masked_fill(~complete, torch.finfo(scores.dtype).min).topk(topk, dim=-1).indices
+
+        chosen = first_slot[:, None, None, None] + top[..., None] * group_size + offsets
+        chosen = chosen.masked_fill(~complete.gather(-1, top)[..., None], -1)
+        chosen = torch.nn.functional.pad(chosen.flatten(-2), (0, budget - topk * group_size), value=-1)
+
+        if tail and group_size > 1:
+            tail_size = counts % group_size
+            tail_offsets = offsets[:-1]
+            tail_slots = first_slot[:, None, None] + (counts - tail_size)[..., None] + tail_offsets
+            tail_slots = tail_slots.masked_fill(tail_offsets >= tail_size[..., None], -1)
+            chosen = torch.cat((chosen, tail_slots), dim=-1)
+
+        return chosen.masked_fill(~query_valid[..., None], -1).to(torch.int32)
 
     def offload(self):
         super().offload()
@@ -823,7 +944,10 @@ class StaticIndexedLayer(StaticLayer):
                 "indexer_first_slot",
                 "indexer_length",
             ):
-                setattr(self, name, getattr(self, name).to("cpu", non_blocking=True))
+                setattr(
+                    self, name,
+                    getattr(self, name).to("cpu", non_blocking=True),
+                )
 
     def prefetch(self):
         super().prefetch()
@@ -835,7 +959,10 @@ class StaticIndexedLayer(StaticLayer):
                 "indexer_first_slot",
                 "indexer_length",
             ):
-                setattr(self, name, getattr(self, name).to(self.device, non_blocking=True))
+                setattr(
+                    self, name,
+                    getattr(self, name).to(self.device, non_blocking=True),
+                )
 
     def reset(self):
         super().reset()
@@ -846,9 +973,16 @@ class StaticIndexedLayer(StaticLayer):
             self.indexer_first_slot.fill_(-1)
             self.indexer_length.zero_()
 
+        self._indexer_group_size = 1
+        self._indexer_complete_count = None
+        self._indexer_query_counts = None
+        self._indexer_query_valid = None
+
     def crop(self, tokens_to_remove):
         if tokens_to_remove:
-            raise RuntimeError("Compressed indexer caches cannot roll back completed groups")
+            raise RuntimeError(
+                "Compressed indexer caches cannot roll back completed groups"
+            )
 
     def reorder_cache(self, beam_idx):
         if self.is_initialized:
@@ -857,7 +991,12 @@ class StaticIndexedLayer(StaticLayer):
             self.values.copy_(self.values.index_select(0, idx))
 
         if self.indexer_pools is not None:
-            for name in ("indexer_pools", "indexer_tail", "indexer_counts", "indexer_first_slot"):
+            for name in (
+                "indexer_pools",
+                "indexer_tail",
+                "indexer_counts",
+                "indexer_first_slot",
+            ):
                 x = getattr(self, name)
                 x.copy_(x.index_select(0, beam_idx.to(x.device)))
 
@@ -1805,19 +1944,6 @@ class Cache:
             raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
         recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, state_idx, **kwargs)
         return recurrent_states
-
-    def update_indexer(
-        self,
-        new_pools: torch.Tensor,
-        complete_count: torch.Tensor,
-        layer_idx: int,
-        group_size: int,
-    ):
-        return self.layers[layer_idx].update_indexer(
-            new_pools=new_pools,
-            complete_count=complete_count,
-            group_size=group_size,
-        )
 
     def early_initialization(
         self,

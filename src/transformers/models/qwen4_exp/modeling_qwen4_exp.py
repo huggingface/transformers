@@ -38,7 +38,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
-from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
+from ...masking_utils import create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -685,44 +685,6 @@ def apply_rotary_pos_emb(q, k=None, cos=None, sin=None, unsqueeze_dim=1):
         return q_rotated
 
 
-def select_indexer_tokens(
-    scores: torch.Tensor,
-    counts: torch.Tensor,
-    query_valid: torch.Tensor,
-    first_slot: torch.Tensor,
-    budget: int,
-    group_size: int,
-    tail: bool = True,
-) -> torch.Tensor:
-    """Select completed groups and the unfinished tail as physical token indices."""
-    _, _, groups = scores.shape
-    offsets = torch.arange(group_size, device=scores.device)
-
-    # A query can only select groups completed by its own causal prefix.
-    complete = counts[..., None] >= (
-        torch.arange(1, groups + 1, device=scores.device) * group_size
-    )
-    complete &= query_valid[..., None]
-
-    topk = min(budget // group_size, groups)
-    top = scores.masked_fill(
-        ~complete, torch.finfo(scores.dtype).min
-    ).topk(topk, dim=-1).indices
-
-    chosen = first_slot[:, None, None, None] + top[..., None] * group_size + offsets
-    chosen = chosen.masked_fill(~complete.gather(-1, top)[..., None], -1)
-    chosen = torch.nn.functional.pad(chosen.flatten(-2), (0, budget - topk * group_size), value=-1)
-
-    if tail and group_size > 1:
-        tail_size = counts % group_size
-        tail_offsets = offsets[:-1]
-        tail_slots = first_slot[:, None, None] + (counts - tail_size)[..., None] + tail_offsets
-        tail_slots = tail_slots.masked_fill(tail_offsets >= tail_size[..., None], -1)
-        chosen = torch.cat((chosen, tail_slots), dim=-1)
-
-    return chosen.masked_fill(~query_valid[..., None], -1).to(torch.int32)
-
-
 class Qwen4ExpTextQSAIndexer(nn.Module):
     """Select QSA token indices from compressed key blocks."""
 
@@ -753,69 +715,35 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
     ) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         hidden_shape = (batch_size, seq_length, -1, self.index_head_dim)
-
         cos, sin = position_embeddings
 
         qk = self.index_qk_proj(hidden_states)
-        q, k = torch.split(
-            qk,
-            [self.index_n_heads * self.index_head_dim, self.index_kv_heads * self.index_head_dim],
-            dim=-1,
-        )
+        q, k = torch.split(qk, [self.index_n_heads * self.index_head_dim, self.index_kv_heads * self.index_head_dim], dim=-1)
+
         q = self.q_layernorm(q.reshape(*hidden_shape))
         q = apply_rotary_pos_emb(q, cos=cos, sin=sin, unsqueeze_dim=2)
         k = k.reshape(*hidden_shape).squeeze(2)
 
-        # Keep each token's RoPE values with its raw key until its group completes.
+        # Retain M-RoPE for groups spanning multiple decoding steps.
         rope_dim = cos.shape[-1]
-        states = torch.cat(
-            (
-                k,
-                cos.expand(batch_size, -1, -1),
-                sin.expand(batch_size, -1, -1),
-            ),
-            dim=-1,
-        )
+        states = torch.cat((k, cos.expand(batch_size, -1, -1), sin.expand(batch_size, -1, -1)), dim=-1)
 
         layer = DynamicIndexedLayer() if cache is None else cache.layers[self.layer_idx]
-        groups, complete_count, counts, query_valid, first_slot = layer.prepare_indexer(
-            states=states,
-            group_size=self.compress_ratio,
-            pool_dim=self.index_head_dim,
-            attention_mask=attention_mask,
+        groups = layer.update_groups(
+            states, attention_mask=attention_mask, group_size=self.compress_ratio, pool_dim=self.index_head_dim
         )
 
-        key_groups, cos_groups, sin_groups = groups.split(
-            [self.index_head_dim, rope_dim, rope_dim], dim=-1
-        )
-
-        # Qwen compression: mean pooling, normalization, then group-start RoPE.
+        key_groups, cos_groups, sin_groups = groups.split([self.index_head_dim, rope_dim, rope_dim], dim=-1)
         pooled_keys = self.k_layernorm(key_groups.float().mean(dim=2).to(k.dtype))
         pooled_keys = apply_rotary_pos_emb(
-            pooled_keys.unsqueeze(2),
-            cos=cos_groups[:, :, 0],
-            sin=sin_groups[:, :, 0],
-            unsqueeze_dim=2,
+            pooled_keys.unsqueeze(2), cos=cos_groups[:, :, 0], sin=sin_groups[:, :, 0], unsqueeze_dim=2
         ).squeeze(2)
-
-        k = layer.update_indexer(
-            new_pools=pooled_keys,
-            complete_count=complete_count,
-            group_size=self.compress_ratio,
-        )
+        k = layer.update_keys(pooled_keys)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
-        scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
+        scores = torch.relu(scores).sum(dim=-2) / math.sqrt(self.index_head_dim)
 
-        return select_indexer_tokens(
-            scores=scores,
-            counts=counts,
-            query_valid=query_valid,
-            first_slot=first_slot,
-            budget=self.token_budget,
-            group_size=self.compress_ratio,
-            tail=True,
-        )
+        return layer.select_indices(scores, budget=self.token_budget, tail=True)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -1508,19 +1436,16 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
             text_position_ids = None
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "cache": cache,
-                "position_ids": text_position_ids,
-                # Due to the indexer, we always want to create a mask to then simply overlay the indexer mask in each layer - otherwise
-                # we may have to recreate it in each layer if it gets skipped
-                "allow_is_causal_skip": False,
-            }
+            attention_mask = create_recurrent_attention_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
+            )
+
             causal_mask_mapping = {
-                "indexed_attention": create_recurrent_attention_mask(**mask_kwargs),
-                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+                "indexed_attention": attention_mask,
+                "linear_attention": attention_mask,
             }
 
         conv_mask = causal_mask_mapping.get("linear_attention")

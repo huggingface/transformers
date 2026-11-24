@@ -144,44 +144,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-def select_indexer_tokens(
-    scores: torch.Tensor,
-    counts: torch.Tensor,
-    query_valid: torch.Tensor,
-    first_slot: torch.Tensor,
-    budget: int,
-    group_size: int = 1,
-    tail: bool = False,
-) -> torch.Tensor:
-    """Select completed groups and the unfinished tail as physical token indices."""
-    _, _, groups = scores.shape
-    offsets = torch.arange(group_size, device=scores.device)
-
-    # A query can only select groups completed by its own causal prefix.
-    complete = counts[..., None] >= (
-        torch.arange(1, groups + 1, device=scores.device) * group_size
-    )
-    complete &= query_valid[..., None]
-
-    topk = min(budget // group_size, groups)
-    top = scores.masked_fill(
-        ~complete, torch.finfo(scores.dtype).min
-    ).topk(topk, dim=-1).indices
-
-    chosen = first_slot[:, None, None, None] + top[..., None] * group_size + offsets
-    chosen = chosen.masked_fill(~complete.gather(-1, top)[..., None], -1)
-    chosen = torch.nn.functional.pad(chosen.flatten(-2), (0, budget - topk * group_size), value=-1)
-
-    if tail and group_size > 1:
-        tail_size = counts % group_size
-        tail_offsets = offsets[:-1]
-        tail_slots = first_slot[:, None, None] + (counts - tail_size)[..., None] + tail_offsets
-        tail_slots = tail_slots.masked_fill(tail_offsets >= tail_size[..., None], -1)
-        chosen = torch.cat((chosen, tail_slots), dim=-1)
-
-    return chosen.masked_fill(~query_valid[..., None], -1).to(torch.int32)
-
-
 class DeepseekV32Indexer(nn.Module):
     """DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens."""
 
@@ -216,56 +178,27 @@ class DeepseekV32Indexer(nn.Module):
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
 
-        if attention_mask is not None:
-            attention_mask = attention_mask.bool()
+        q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
+        q_rot, q_pass = torch.split(q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        q = self.wq_b(q_resid)  # [B, S, H*D]
-        q = q.view(batch_size, seq_len, self.n_heads, self.head_dim)  # [B, S, H, D]
-        q_rot, q_pass = torch.split(
-            q, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1
-        )
+        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)
+        k_rot, k_pass = torch.split(k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1)
 
-        k = self.k_norm(self.wk(hidden_states)).unsqueeze(2)  # [B, S, 1, D]
-        k_rot, k_pass = torch.split(
-            k, [self.qk_rope_head_dim, self.head_dim - self.qk_rope_head_dim], dim=-1
-        )
-
-        # The indexer uses non-interleaved (half-split) RoPE, unlike the main MLA attention.
+        # The indexer uses non-interleaved (half-split) RoPE.
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin, unsqueeze_dim=2)
-        q = torch.cat([q_rot, q_pass], dim=-1)  # [B, S, H, D]
-        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)  # [B, S, D]
+        q = torch.cat([q_rot, q_pass], dim=-1)
+        k = torch.cat([k_rot, k_pass], dim=-1).squeeze(2)
 
-        # Group size 1 means every key is already a completed pool.
         layer = DynamicIndexedLayer() if cache is None else cache.layers[self.layer_idx]
-        groups, complete_count, counts, query_valid, first_slot = layer.prepare_indexer(
-            states=k,
-            group_size=1,
-            pool_dim=self.head_dim,
-            attention_mask=attention_mask,
-        )
-        pooled_keys = groups.squeeze(2)
-        k = layer.update_indexer(
-            new_pools=pooled_keys,
-            complete_count=complete_count,
-            group_size=1,
-        )
+        groups = layer.update_groups(k, attention_mask=attention_mask)
+        k = layer.update_keys(groups.squeeze(2))
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
         scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] -> [B, S, T]
-        weights = self.weights_proj(
-            hidden_states.to(self.weights_proj.weight.dtype)
-        ).float() * (self.n_heads**-0.5)
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        return select_indexer_tokens(
-            scores=index_scores,
-            counts=counts,
-            query_valid=query_valid,
-            first_slot=first_slot,
-            budget=self.index_topk,
-        )
+        return layer.select_indices(index_scores, budget=self.index_topk)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:

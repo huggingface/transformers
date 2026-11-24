@@ -769,44 +769,6 @@ class Glm5NextTextLinearAttention(nn.Module):
         return output
 
 
-def select_indexer_tokens(
-    scores: torch.Tensor,
-    counts: torch.Tensor,
-    query_valid: torch.Tensor,
-    first_slot: torch.Tensor,
-    budget: int,
-    group_size: int,
-    tail: bool = True,
-) -> torch.Tensor:
-    """Select completed groups and the unfinished tail as physical token indices."""
-    _, _, groups = scores.shape
-    offsets = torch.arange(group_size, device=scores.device)
-
-    # A query can only select groups completed by its own causal prefix.
-    complete = counts[..., None] >= (
-        torch.arange(1, groups + 1, device=scores.device) * group_size
-    )
-    complete &= query_valid[..., None]
-
-    topk = min(budget // group_size, groups)
-    top = scores.masked_fill(
-        ~complete, torch.finfo(scores.dtype).min
-    ).topk(topk, dim=-1).indices
-
-    chosen = first_slot[:, None, None, None] + top[..., None] * group_size + offsets
-    chosen = chosen.masked_fill(~complete.gather(-1, top)[..., None], -1)
-    chosen = torch.nn.functional.pad(chosen.flatten(-2), (0, budget - topk * group_size), value=-1)
-
-    if tail and group_size > 1:
-        tail_size = counts % group_size
-        tail_offsets = offsets[:-1]
-        tail_slots = first_slot[:, None, None] + (counts - tail_size)[..., None] + tail_offsets
-        tail_slots = tail_slots.masked_fill(tail_offsets >= tail_size[..., None], -1)
-        chosen = torch.cat((chosen, tail_slots), dim=-1)
-
-    return chosen.masked_fill(~query_valid[..., None], -1).to(torch.int32)
-
-
 class Glm5NextTextIndexer(nn.Module):
     """GLM DSA indexer with learned key-pool compression."""
 
@@ -844,52 +806,28 @@ class Glm5NextTextIndexer(nn.Module):
     ) -> torch.Tensor:
         batch_size, seq_len, _ = hidden_states.shape
 
-        if attention_mask is not None:
-            attention_mask = attention_mask.bool()
-
         q = self.wq_b(q_resid).view(batch_size, seq_len, self.n_heads, self.head_dim)
         k = self.k_norm(self.wk(hidden_states))
         gates = F.linear(hidden_states, self.index_kpool_compress_gate)
-        states = torch.cat([k, gates], dim=-1)
+        states = torch.cat((k, gates), dim=-1)
 
-        # Assemble new groups and keep unfinished raw states in the cache.
         layer = DynamicIndexedLayer() if cache is None else cache.layers[self.layer_idx]
-        groups, complete_count, counts, query_valid, first_slot = layer.prepare_indexer(
-            states=states,
-            group_size=self.index_kpool,
-            pool_dim=self.head_dim,
-            attention_mask=attention_mask,
+        groups = layer.update_groups(
+            states, attention_mask=attention_mask, group_size=self.index_kpool, pool_dim=self.head_dim
         )
 
-        # GLM's learned weighted pooling over each completed group.
         keys, gates = groups.split(self.head_dim, dim=-1)
         logits = gates.float() + self.index_kpool_compress_ape.float()
         probabilities = logits.softmax(dim=2).to(keys.dtype)
         pooled_keys = (probabilities * keys).sum(dim=2)
-
-        k = layer.update_indexer(
-            new_pools=pooled_keys,
-            complete_count=complete_count,
-            group_size=self.index_kpool,
-        )
+        k = layer.update_keys(pooled_keys)
 
         scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1))
         scores = F.relu(scores * self.softmax_scale)
-
-        weights = self.weights_proj(
-            hidden_states.to(self.weights_proj.weight.dtype)
-        ).float() * (self.n_heads**-0.5)
+        weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
         index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
-        return select_indexer_tokens(
-            scores=index_scores,
-            counts=counts,
-            query_valid=query_valid,
-            first_slot=first_slot,
-            budget=self.index_topk,
-            group_size=self.index_kpool,
-            tail=self.index_kpool_always_select_tail,
-        )
+        return layer.select_indices(index_scores, budget=self.index_topk, tail=self.index_kpool_always_select_tail)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
