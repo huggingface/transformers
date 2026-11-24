@@ -174,8 +174,8 @@ class ColwiseParallel(TensorParallelLayer):
         )
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        x = args[0]
-        is_local_input = not isinstance(x, DTensor)
+        input_tensor = args[0]
+        is_local_input = not isinstance(input_tensor, DTensor)
 
         # regular Linear inference fast path: the input is already replicated, the
         # local weight owns a shard of the output features, and no backward is needed.
@@ -187,17 +187,17 @@ class ColwiseParallel(TensorParallelLayer):
         # input-gradient contributions explicitly.
         if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
             process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-            x = _AllReduceBackward.apply(x, process_group)
-            return (x,) + args[1:], kwargs
+            input_tensor = _AllReduceBackward.apply(input_tensor, process_group)
+            return (input_tensor,) + args[1:], kwargs
 
         # DTensor path: handle regular training and layout redistribution.
         if is_local_input:
-            x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
-        if x.placements != (Replicate(),):
-            x = x.redistribute(placements=[Replicate()])
+            input_tensor = DTensor.from_local(input_tensor, mesh, [self.input_layouts], run_check=False)
+        if input_tensor.placements != (Replicate(),):
+            input_tensor = input_tensor.redistribute(placements=[Replicate()])
         if self.should_use_local_tensors(module):
-            x = x.to_local(grad_placements=[Partial()])
-        return (x,) + args[1:], kwargs
+            input_tensor = input_tensor.to_local(grad_placements=[Partial()])
+        return (input_tensor,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
         # The local forward produced this rank's shard of the output features (last dim).
@@ -252,19 +252,21 @@ class UnitColwiseParallel(ColwiseParallel):
         )
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        # The inputs are on a different mesh. We HAVE to swap the meshs as cross mesh coms
+        # The inputs are on a different mesh. We HAVE to swap the meshes as cross mesh comms
         # do not work.
         # Swapping meshes is metadata only while the tensor is replicated, so gather first.
-        x = args[0]
-        if isinstance(x, DTensor):
-            replicated = [Replicate()] * x.device_mesh.ndim
-            if x.placements != tuple(replicated):
-                x = x.redistribute(placements=replicated)
-            x = x.to_local()
+        input_tensor = args[0]
+        if isinstance(input_tensor, DTensor):
+            replicated = [Replicate()] * input_tensor.device_mesh.ndim
+            if input_tensor.placements != tuple(replicated):
+                input_tensor = input_tensor.redistribute(placements=replicated)
+            input_tensor = input_tensor.to_local()
         if not self.should_use_local_tensors(module):
             # The input is replicated on every rank by construction, no need to check it.
-            x = DTensor.from_local(x, module._unit_mesh, [Replicate(), Replicate()], run_check=False)
-        return (x,) + args[1:], kwargs
+            input_tensor = DTensor.from_local(
+                input_tensor, module._unit_mesh, [Replicate(), Replicate()], run_check=False
+            )
+        return (input_tensor,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
         # Training path: already on the unit mesh as [Shard(-1), Replicate()], don't move it to the TP mesh.
@@ -317,25 +319,28 @@ class RowwiseParallel(TensorParallelLayer):
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         desired = Shard(-1)
-        x = args[0]
+        input_tensor = args[0]
         # A local kernel can use a plain input when the previous layer already split it.
-        #  avoid a redundant Tensor -> DTensor -> Tensor round trip.
+        # avoid a redundant Tensor -> DTensor -> Tensor round trip.
         input_has_desired_layout = self.input_layouts == desired
-        if self.should_use_local_tensors(module) and input_has_desired_layout and not isinstance(x, DTensor):
+        if (
+            self.should_use_local_tensors(module)
+            and input_has_desired_layout
+            and not isinstance(input_tensor, DTensor)
+        ):
             return args, kwargs
-        if not isinstance(x, DTensor):
+        if not isinstance(input_tensor, DTensor):
             if isinstance(self.input_layouts, Shard):
                 # the input is this rank's slice of the module's declared `in_features`
-                x = self._from_local_last_dim_shard(x, mesh, module.in_features)
+                input_tensor = self._from_local_last_dim_shard(input_tensor, mesh, module.in_features)
             else:
-                x = DTensor.from_local(x, mesh, [self.input_layouts], run_check=False)
-        if x.placements != (desired,):
-            x = x.redistribute(placements=[desired])
+                input_tensor = DTensor.from_local(input_tensor, mesh, [self.input_layouts], run_check=False)
+        if input_tensor.placements != (desired,):
+            input_tensor = input_tensor.redistribute(placements=[desired])
         if self.should_use_local_tensors(module):
-            x = x.to_local()
-        return (x,) + args[1:], kwargs
+            input_tensor = input_tensor.to_local()
+        return (input_tensor,) + args[1:], kwargs
 
-    @contextlib.contextmanager
     def context_around_forward(self, module, mesh):
         if not self.should_use_local_tensors(module):
             yield
@@ -395,16 +400,17 @@ class UnitRowwiseParallel(RowwiseParallel):
         )
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        x = args[0]
-        # The input is this rank's heads, as left by `UnitColwiseParallel` on the unit mesh.
-        if isinstance(x, DTensor):
-            x = x.to_local()
+        input_tensor = args[0]
+        if isinstance(input_tensor, DTensor):
+            input_tensor = input_tensor.to_local()
         if not self.should_use_local_tensors(module):
             if (replicas := module._unit_mesh.size(1)) > 1:
-                # Every replica back-propagates the same gradient: split it, `UnitColwiseParallel` sums them back.
-                x = _ScaleBackward.apply(x, 1 / replicas)
-            x = DTensor.from_local(x, module._unit_mesh, [Shard(-1), Replicate()], run_check=False)
-        return (x,) + args[1:], kwargs
+                # Scale gradients by 1/replicas; UnitColwiseParallel all-reduces them back.
+                input_tensor = _ScaleBackward.apply(input_tensor, 1 / replicas)
+            input_tensor = DTensor.from_local(
+                input_tensor, module._unit_mesh, [Shard(-1), Replicate()], run_check=False
+            )
+        return (input_tensor,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
         # Reduce over the unit axis only: reducing over the whole TP mesh, like the parent, would also sum the replicas.
@@ -444,16 +450,16 @@ class EmbeddingParallel(TensorParallelLayer):
         )
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        x = args[0]
-        if self.should_use_local_tensors(module) and not isinstance(x, DTensor):
+        input_tensor = args[0]
+        if self.should_use_local_tensors(module) and not isinstance(input_tensor, DTensor):
             return args, kwargs
-        if not isinstance(x, DTensor):
-            x = DTensor.from_local(x, mesh, [Replicate()], run_check=False)
-        elif x.placements != (Replicate(),):
-            x = x.redistribute(placements=[Replicate()])
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, mesh, [Replicate()], run_check=False)
+        elif input_tensor.placements != (Replicate(),):
+            input_tensor = input_tensor.redistribute(placements=[Replicate()])
         if self.should_use_local_tensors(module):
-            x = x.to_local()
-        return (x,) + args[1:], kwargs
+            input_tensor = input_tensor.to_local()
+        return (input_tensor,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
         if not isinstance(output, DTensor):
@@ -569,13 +575,13 @@ class SequenceParallel(TensorParallelLayer):
         return super().install_forward(module, mesh)
 
     def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        seq = Shard(self.sequence_dim)
-        x = args[0]
-        if not isinstance(x, DTensor):
-            x = DTensor.from_local(x, mesh, [seq], run_check=False)
-        elif x.placements != (seq,):
-            x = x.redistribute(placements=[seq])
-        return (x,) + args[1:], kwargs
+        sequence_layout = Shard(self.sequence_dim)
+        input_tensor = args[0]
+        if not isinstance(input_tensor, DTensor):
+            input_tensor = DTensor.from_local(input_tensor, mesh, [sequence_layout], run_check=False)
+        elif input_tensor.placements != (sequence_layout,):
+            input_tensor = input_tensor.redistribute(placements=[sequence_layout])
+        return (input_tensor,) + args[1:], kwargs
 
     def transform_output_post_forward(self, module, output, mesh):
         if isinstance(output, DTensor):

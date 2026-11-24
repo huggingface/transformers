@@ -101,10 +101,10 @@ if is_torch_distributed_available():
         """Allreduce-sum forward, identity backward."""
 
         @staticmethod
-        def forward(ctx, x, process_group):
+        def forward(ctx, tensor, process_group):
             if dist.get_world_size(process_group) > 1:
-                dist.all_reduce(x, group=process_group)
-            return x
+                dist.all_reduce(tensor, group=process_group)
+            return tensor
 
         @staticmethod
         def backward(ctx, grad):
@@ -118,20 +118,20 @@ if is_torch_distributed_available():
         its expert shard). We need to sum the partial gradients without dividing by
         world_size, which is what DTensor's Replicate backward does incorrectly.
 
-        `apply` returns `x` as is when no gradient can flow: at inference the per-call overhead of an
+        `apply` returns `tensor` as is when no gradient can flow: at inference the per-call overhead of an
         `autograd.Function` compounds across layers, e.g. in eager decode.
         """
 
         @classmethod
-        def apply(cls, x, process_group):
-            if torch.is_grad_enabled() and x.requires_grad:
-                return super().apply(x, process_group)
-            return x
+        def apply(cls, tensor, process_group):
+            if torch.is_grad_enabled() and tensor.requires_grad:
+                return super().apply(tensor, process_group)
+            return tensor
 
         @staticmethod
-        def forward(ctx, x, process_group):
+        def forward(ctx, tensor, process_group):
             ctx.process_group = process_group
-            return x
+            return tensor
 
         @staticmethod
         def backward(ctx, grad):
@@ -143,9 +143,9 @@ if is_torch_distributed_available():
         """Identity forward, gradient multiplied by `scale` in backward."""
 
         @staticmethod
-        def forward(ctx, x, scale):
+        def forward(ctx, tensor, scale):
             ctx.scale = scale
-            return x.view_as(x)
+            return tensor.view_as(tensor)
 
         @staticmethod
         def backward(ctx, grad):
@@ -156,8 +156,8 @@ if is_torch_distributed_available():
         torch 2.11)."""
 
         @staticmethod
-        def forward(ctx, x):
-            return wait_tensor(x)
+        def forward(ctx, tensor):
+            return wait_tensor(tensor)
 
         @staticmethod
         def backward(ctx, grad):
