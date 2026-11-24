@@ -131,5 +131,12 @@ class MiniCPMV2_6IntegrationTest(unittest.TestCase):
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         decoded = processor.post_process_image_text_to_text(output[:, inputs["input_ids"].shape[1] :])[0]
-        expected_texts = Expectations({("cpu", None): "EXPECTED"})
+        expected_texts = Expectations(
+            {
+                ("cuda", None): (
+                    "The image features two cats lying on a pink blanket. There are also two remote controls present in "
+                    "the scene."
+                ),
+            }
+        )
         self.assertEqual(decoded, expected_texts.get_expectation())
