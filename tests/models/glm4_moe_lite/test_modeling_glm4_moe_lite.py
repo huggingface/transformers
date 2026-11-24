@@ -38,23 +38,14 @@ class Glm4MoeLiteModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Glm4MoeLiteModel
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        kv_lora_rank=32,
-        q_lora_rank=16,
-        qk_nope_head_dim=64,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-    ):
-        super().__init__(parent=parent)
-        self.n_routed_experts = n_routed_experts
-        self.kv_lora_rank = kv_lora_rank
-        self.q_lora_rank = q_lora_rank
-        self.qk_nope_head_dim = qk_nope_head_dim
-        self.qk_rope_head_dim = qk_rope_head_dim
-        self.v_head_dim = v_head_dim
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "kv_lora_rank": 32,
+        "q_lora_rank": 16,
+        "qk_nope_head_dim": 64,
+        "qk_rope_head_dim": 64,
+        "v_head_dim": 128,
+    }
 
 
 @require_torch

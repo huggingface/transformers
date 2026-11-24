@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -35,20 +34,23 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MoeModelOutputWithPast,
+    MultimodalMoeBaseModelOutputWithPast,
+    MultimodalMoeCausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, yarn_apply_mscale
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs, select_hidden_states
 from ..auto import AutoModel
 from .configuration_mistral_large4 import MistralLarge4Config, MistralLarge4TextConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -90,7 +92,9 @@ class MistralLarge4TextRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        self.alpha = nn.Parameter(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
+        self.alpha = nn.Parameter(
+            torch.zeros_like(self.inv_freq, dtype=torch.float32)
+        )  # init to 0 to avoid NaNs in alpha.exp()
 
     @staticmethod
     def compute_default_rope_parameters(config: MistralLarge4TextConfig, **kwargs) -> tuple[torch.Tensor, float]:
@@ -312,21 +316,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
-
-
 class MistralLarge4TextAttention(nn.Module):
     """DSA attention from GlmMoeDsa, with no Q-LoRA and KV sharing."""
 
@@ -519,7 +508,7 @@ class MistralLarge4TextTopkRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -670,7 +659,6 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False  # flash-mla kernels need a bit more work in the way we enable them!
     _supports_sdpa = True
     _supports_flex_attn = False
@@ -688,7 +676,6 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules = ["indexer.weights_proj"]
     input_modalities = ("image", "text")
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MistralLarge4TextTopkRouter):
@@ -791,29 +778,16 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MistralLarge4 outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class MistralLarge4ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    router_logits (`tuple(torch.Tensor)`, *optional*, returned when `output_router_logits=True` is passed):
-        Tuple of `torch.Tensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
-    """
-
-    image_hidden_states: torch.Tensor | None = None
-
-    router_logits: tuple[torch.Tensor] | None = None
+class MistralLarge4ModelOutputWithPast(MultimodalMoeBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 class MistralLarge4PatchMerger(nn.Module):
@@ -1009,45 +983,19 @@ class MistralLarge4Model(MistralLarge4PreTrainedModel):
             **kwargs,
         )
 
-        return MistralLarge4ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,  # only diff with Mistral3Model: we also return the router logits
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-        )
+        return MistralLarge4ModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for MistralLarge4 causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class MistralLarge4CausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    cache: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-    router_logits: tuple[torch.Tensor] | None = None
+class MistralLarge4CausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
 
 @auto_docstring(
@@ -1164,7 +1112,7 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

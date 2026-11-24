@@ -121,7 +121,6 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         feats_height, feats_width = x.shape[-2:]
         embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
@@ -652,7 +651,6 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
         "attentions": EfficientLoFTRAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
@@ -980,7 +978,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         matching_scores_0, max_indices_0 = masked_scores.max(1)
         matching_scores_1, max_indices_1 = masked_scores.max(2)
 
-        matching_indices = torch.cat([max_indices_0, max_indices_1]).reshape(batch_size, 2, -1)
+        matching_indices = torch.stack([max_indices_0, max_indices_1], dim=1)
         matching_scores = torch.stack([matching_scores_0, matching_scores_1], dim=1)
 
         # For the keypoints not meeting the threshold score, set the indices to -1 which corresponds to no matches found
@@ -1175,7 +1173,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         )
 
         heatmap = fine_confidence.reshape(batch_size, num_keypoints, 3, 3)
-        fine_coordinates_normalized = spatial_expectation2d(heatmap, True)[0]
+        fine_coordinates_normalized = spatial_expectation2d(heatmap, True)
 
         fine_matches_0 = fine_matches[:, 0]
         fine_matches_1 = fine_matches[:, 1] + (fine_coordinates_normalized * (3 // 2) * fine_scale)

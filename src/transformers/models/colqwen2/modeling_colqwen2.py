@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 from torch import nn
@@ -25,8 +26,9 @@ from torch import nn
 from transformers import AutoModel
 
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
+from ...utils import auto_docstring, can_return_tuple, is_torch_available
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_colqwen2 import ColQwen2Config
 
@@ -45,18 +47,18 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
 
 @auto_docstring(
     custom_intro="""
-    Base class for ColQwen2 embeddings output.
+    Base class for ColQwen2 embeddings output. Contains the outputs of the language model backbone and the
+    outputs of vision encoder.
     """
 )
 @dataclass
-class ColQwen2ForRetrievalOutput(ModelOutput):
+class ColQwen2ForRetrievalOutput(MultimodalModelOutput):
     r"""
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -64,9 +66,11 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
         The embeddings of the model.
     cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `cache` input) to speed up sequential decoding.
+        `past_key_values` input) to speed up sequential decoding.
+    image_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+        `None` if no images were processed.
     """
 
     loss: torch.Tensor | None = None
@@ -74,6 +78,7 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
 
 
 @auto_docstring(
@@ -176,6 +181,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             cache=vlm_output.cache,
             hidden_states=vlm_hidden_states,
             attentions=vlm_output.attentions,
+            image_outputs=vlm_output.image_outputs,
         )
 
 

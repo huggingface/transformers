@@ -122,7 +122,6 @@ class BltRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -419,7 +418,6 @@ class BltPreTrainedModel(PreTrainedModel):
     }
     _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize BLT weights following the original ByteLatentTransformer:

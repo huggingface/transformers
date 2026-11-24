@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     require_deterministic_for_xpu,
     require_torch,
+    require_torchvision,
     require_vision,
     slow,
 )
@@ -95,6 +96,58 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
         self.assertEqual([len(group) for group in batched], [2, 2])
 
     @require_torch
+    @require_torchvision
+    def test_batched_generation_left_pads_decoder_only_model(self):
+        # The Qwen2.5-VL tokenizer pads on the right by default, which breaks batched decoder-only generation
+        pipe = pipeline("image-text-to-text", model="trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration")
+        image = Image.new("RGB", (64, 64), color=(120, 30, 200))
+        messages = [
+            [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
+            for text in ("Describe.", "Describe the colors, the shapes and the overall layout of this picture.")
+        ]
+        kwargs = {"max_new_tokens": 6, "do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
+    @require_torch
+    @require_torchvision
+    def test_batched_generation_tokenizer_and_feature_extractor_on_different_sides(self):
+        # The Gemma 4 tokenizer pads on the left and its audio feature extractor on the right
+        pipe = pipeline("image-text-to-text", model="trl-internal-testing/tiny-Gemma4ForConditionalGeneration")
+        image = Image.new("RGB", (64, 64), color=(120, 30, 200))
+        messages = [
+            [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
+            for text in ("Describe.", "Describe the colors, the shapes and the overall layout of this picture.")
+        ]
+        kwargs = {"max_new_tokens": 6, "do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
+    @require_torch
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "image-text-to-text",
+            model="trl-internal-testing/tiny-LlavaForConditionalGeneration",
+            max_new_tokens=2,
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "./tests/fixtures/tests_samples/COCO/000000039769.png"},
+                    {"type": "text", "text": "What is this?"},
+                ],
+            }
+        ]
+
+        outputs = pipe(text=messages, return_tensors=True)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
+
     def test_generate_kwargs_not_mutated_tiny_llava(self):
         pipe = pipeline(
             "image-text-to-text",

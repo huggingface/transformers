@@ -314,7 +314,6 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
         "attentions": LwDetrViTAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module) -> None:
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -764,7 +763,6 @@ class LwDetrPreTrainedModel(PreTrainedModel):
         "hidden_states": LwDetrDecoderLayer,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 

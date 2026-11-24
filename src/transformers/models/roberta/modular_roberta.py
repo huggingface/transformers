@@ -162,7 +162,6 @@ class RobertaPreTrainedModel(PreTrainedModel):
         "cross_attentions": RobertaCrossAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -174,8 +173,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
 
 
 class RobertaModel(BertModel):
-    def __init__(self, config: RobertaConfig, add_pooling_layer=True):
-        super().__init__(self, config)
+    pass
 
 
 @auto_docstring(

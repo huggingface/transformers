@@ -51,16 +51,10 @@ class Olmo3ModelTester(CausalLMModelTester):
         base_model_class = Olmo3Model
         sequence_classification_class = Olmo3ForSequenceClassification
 
-    def __init__(
-        self,
-        parent,
-        layer_types=[
-            "full_attention",
-            "sliding_attention",
-        ],  # we want to test both types
-        **kwargs,
-    ):
-        super().__init__(parent=parent, layer_types=layer_types, **kwargs)
+    small_config_overrides = {
+        # we want to test both types
+        "layer_types": ["full_attention", "sliding_attention"],
+    }
 
 
 @require_torch

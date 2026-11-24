@@ -65,38 +65,38 @@ class MistralLarge4VisionText2TextModelTester(VLMModelTester):
     vision_config_class = PixtralVisionConfig
     conditional_generation_class = MistralLarge4ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
+    small_config_overrides = {
         # Pixtral: 16x16 images, 4x4 patches, merged 2x2 by the projector -> 4 image tokens per image
-        kwargs.setdefault("image_token_id", 3)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("patch_size", 4)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("attention_probs_dropout_prob", 0.0)
+        "image_token_id": 3,
+        "image_size": 16,
+        "patch_size": 4,
+        "spatial_merge_size": 2,
+        "num_image_tokens": 4,
+        "hidden_act": "silu",
+        "attention_probs_dropout_prob": 0.0,
         # MLA without Q-LoRA
-        kwargs.setdefault("kv_lora_rank", 16)
-        kwargs.setdefault("qk_rope_head_dim", 8)
-        kwargs.setdefault("qk_nope_head_dim", 8)
-        kwargs.setdefault("v_head_dim", 16)
+        "kv_lora_rank": 16,
+        "qk_rope_head_dim": 8,
+        "qk_nope_head_dim": 8,
+        "v_head_dim": 16,
         # DSA indexer. `index_topk` is smaller than the test sequences, so the indexer drops tokens
-        kwargs.setdefault("index_topk", 4)
-        kwargs.setdefault("index_head_dim", 16)
-        kwargs.setdefault("index_n_heads", 2)
+        "index_topk": 4,
+        "index_head_dim": 16,
+        "index_n_heads": 2,
         # RoPE, NoPE, RoPE, NoPE. Since KV can only be shared by layers with the same PE, layer 3 reuse layer 1's KV,
         # and layer 2 reuses layer 0's KV. We also test index sharing in the last two layers.
-        kwargs.setdefault("num_hidden_layers", 4)
-        kwargs.setdefault("no_rope_layers", [1, 0, 1, 0])
-        kwargs.setdefault("kv_source_layers", [0, 1, 0, 1])
-        kwargs.setdefault("indexer_types", ["full", "full", "shared", "shared"])
+        "num_hidden_layers": 4,
+        "no_rope_layers": [1, 0, 1, 0],
+        "kv_source_layers": [0, 1, 0, 1],
+        "indexer_types": ["full", "full", "shared", "shared"],
         # MoE: layer 0 is dense, the others route to 2 of 8 experts plus a shared expert
-        kwargs.setdefault("first_k_dense_replace", 1)
-        kwargs.setdefault("moe_intermediate_size", 16)
-        kwargs.setdefault("n_routed_experts", 8)
-        kwargs.setdefault("n_shared_experts", 1)
-        kwargs.setdefault("n_group", 1)
-        kwargs.setdefault("topk_group", 1)
-        super().__init__(parent, **kwargs)
+        "first_k_dense_replace": 1,
+        "moe_intermediate_size": 16,
+        "n_routed_experts": 8,
+        "n_shared_experts": 1,
+        "n_group": 1,
+        "topk_group": 1,
+    }
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size

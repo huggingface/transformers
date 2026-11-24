@@ -89,9 +89,6 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "colwise",
         "layers.*.self_attn": "local_params",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
     }
 
     sliding_window: int | None = 128
@@ -144,7 +141,6 @@ class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
         "attentions": GraniteMoeSWAAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, GraniteMoeSWAAttention):

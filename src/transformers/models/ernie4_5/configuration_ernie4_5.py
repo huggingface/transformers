@@ -43,7 +43,6 @@ class Ernie4_5Config(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5"
-    keys_to_ignore_at_inference = ["cache"]
     default_theta = 500000.0
     # Default tensor parallel plan for base model `Ernie4_5Model`
     base_model_tp_plan = {
