@@ -49,6 +49,19 @@ class Bnb4bitQuantize(ConversionOps):
             # update param name to get the weights instead of the quantized stats
             module, _ = get_module_from_name(model, param_name)
 
+            # Fused MoE experts (3D parameter): keep the packed data, the dequantization is registered after loading
+            if not isinstance(module, bnb.nn.Linear4bit):
+                config = self.hf_quantizer.quantization_config
+                packed, quant_state = bnb.functional.quantize_4bit(
+                    value,
+                    compress_statistics=config.bnb_4bit_use_double_quant,
+                    quant_type=config.bnb_4bit_quant_type,
+                    quant_storage=config.bnb_4bit_quant_storage,
+                )
+                self.hf_quantizer.experts_quant_states[param_name] = quant_state
+                result[param_name] = packed
+                continue
+
             # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
             if issubclass(module.source_cls, Conv1D):

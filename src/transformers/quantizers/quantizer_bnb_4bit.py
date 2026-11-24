@@ -14,7 +14,7 @@
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, should_convert_module
 
 
 if TYPE_CHECKING:
@@ -84,7 +84,15 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         import bitsandbytes as bnb
 
         module, name = get_module_from_name(model, param_name)
-        return isinstance(module, bnb.nn.Linear4bit) and name != "bias"
+        if isinstance(module, bnb.nn.Linear4bit):
+            return name != "bias"
+        # Fused MoE experts store their weights as 3D parameters instead of `nn.Linear` layers
+        module_name = param_name.rpartition(".")[0]
+        return (
+            module_name.endswith(".experts")
+            and should_convert_module(module_name, self.modules_to_not_convert)
+            and getattr(module, name).ndim == 3
+        )
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for buffers that are created during quantization
@@ -118,6 +126,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     ):
         from ..integrations import replace_with_bnb_linear
 
+        # Quantization states of the fused expert parameters quantized on load, by parameter name
+        self.experts_quant_states = {}
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.llm_int8_skip_modules, model._keep_in_fp32_modules
         )
@@ -135,6 +145,15 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         )
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        from bitsandbytes.nn.parametrize import replace_parameter_4bit_prequantized
+
+        # The fused expert parameters hold the packed 4-bit data: dequantize them when they are accessed
+        for param_name, quant_state in self.experts_quant_states.items():
+            module, name = get_module_from_name(model, param_name)
+            replace_parameter_4bit_prequantized(
+                module, name, quant_state.as_dict(packed=True), getattr(module, name).device
+            )
+        self.experts_quant_states = {}
         setattr(model, "is_loaded_in_4bit", True)
         return model
 
