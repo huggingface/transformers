@@ -31,6 +31,7 @@ from ..utils import (
     is_torch_greater_or_equal,
     logging,
 )
+from ..utils.hub import convert_file_size_to_int
 from .utils import (
     _check_distributed_checkpointing_available,
     _distributed_barrier,
@@ -171,16 +172,20 @@ def save_sharded_state_dict(
     save_original_format: bool,
 ) -> tuple[StateDictSplit, dict[str, str]]:
     """
-    Write a TP- or FSDP-sharded `state_dict` as regular safetensors files, with every rank writing some of the files.
+    Write a TP- or FSDP-sharded `state_dict` as regular safetensors files, with every rank writing part of the files.
     Every rank must call this function.
 
         1. Everything is planned on meta tensors with the global shapes, so every rank gets the same plan without
            moving any data: the groups of weights that are reverted together, the reverted weights, their split
-           into files of at most `max_shard_size`, and the byte offset of every weight in its file.
-        2. File `i` is written by rank `i % world_size`.
-        3. All ranks join the `full_tensor()` gathers of every group, in the same order. The owners of the files
-           the group's weights go to revert the weight conversions on device and hand their weights to a background
-           thread, which streams them through pinned buffers into their files, at their planned offsets.
+           into files, and the byte offset of every weight in its file. The files are at most `max_shard_size`, and
+           for large models at most a `world_size`-th of the model, so that there are at least as many files as
+           ranks.
+        2. All the files laid end to end are cut into `world_size` slices of about the same size, between groups,
+           and rank `r` writes the groups of slice `r`. Each file is then written by one rank, or by the two ranks
+           whose slices meet in it.
+        3. All ranks join the `full_tensor()` gathers of every group, in the same order. The owner reverts the
+           weight conversions on device and hands the weights to a background thread, which streams them through
+           pinned buffers into their files, at their planned offsets.
 
     Returns the split of the reverted state dict and the weight map of the files that were written.
     """
@@ -207,27 +212,46 @@ def save_sharded_state_dict(
     planned_outputs = [to_meta(revert({name: meta_state_dict[name] for name in group})) for group in groups]
     reverted_state_dict = {name: tensor for outputs in planned_outputs for name, tensor in outputs.items()}
 
+    # At least one file per rank: filesystems like ext4 serialize concurrent writes into the same file (inode lock),
+    # so ranks sharing a file wait on each other. `max_shard_size` is only an upper bound, so smaller files still
+    # honor it. Small models keep their files, since writing them takes little time anyway.
+    total_bytes = sum(tensor.nbytes for tensor in reverted_state_dict.values())
+    file_size = min(
+        convert_file_size_to_int(max_shard_size),
+        max(-(-total_bytes // world_size), _MIN_FILE_BYTES_PER_RANK),
+    )
     state_dict_split = split_torch_state_dict_into_shards(
-        reverted_state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+        reverted_state_dict, filename_pattern=filename_pattern, max_shard_size=file_size
     )
     weight_map = state_dict_split.tensor_to_filename
     headers, locations = _plan_safetensors_files(state_dict_split.filename_to_tensors, reverted_state_dict, metadata)
 
-    # A group whose weights go to files of several ranks is reverted by each of them.
-    file_owner = {filename: index % world_size for index, filename in enumerate(headers)}
-    group_owners = [{file_owner[weight_map[name]] for name in outputs} for outputs in planned_outputs]
-    # The gathers go through the groups of every rank at the same pace in bytes, so that every rank's writer always
-    # has work queued.
+    # Rank `r` owns the groups of the `r`-th of `world_size` slices of equal size of all the files laid end to end,
+    # cut between groups. A slice can end in the middle of a file, so two ranks can write the same file.
+    file_indices = {filename: index for index, filename in enumerate(headers)}
+    position = [
+        min((file_indices[locations[name][0]], locations[name][1]) for name in outputs) if outputs else (0, 0)
+        for outputs in planned_outputs
+    ]
+    # Each rank goes through its slice front to back, and the gathers go through all the slices at the same pace in
+    # bytes, so that every rank's writer always has work queued.
+    group_owners = [set() for _ in planned_outputs]
     order, queued_bytes = [], [0] * world_size
-    for group_index, outputs in enumerate(planned_outputs):
-        owner = min(group_owners[group_index], default=0)
+    written_bytes, total_bytes = 0, max(total_bytes, 1)
+    for group_index in sorted(range(len(groups)), key=lambda i: position[i]):
+        group_bytes = sum(tensor.nbytes for tensor in planned_outputs[group_index].values())
+        owner = min(int((written_bytes + group_bytes / 2) * world_size / total_bytes), world_size - 1)
+        group_owners[group_index].add(owner)
         order.append((queued_bytes[owner], owner, group_index))
-        queued_bytes[owner] += sum(tensor.nbytes for tensor in outputs.values())
+        queued_bytes[owner] += group_bytes
+        written_bytes += group_bytes
     order = [group_index for _, _, group_index in sorted(order)]
 
-    for filename, (header, size) in headers.items():
-        if file_owner[filename] == rank:
+    # Every file is created at its final size with its header, before any rank writes into it.
+    for file_index, (filename, (header, size)) in enumerate(headers.items()):
+        if file_index % world_size == rank:
             _create_safetensors_file(os.path.join(save_directory, filename), header, size)
+    _distributed_barrier()
 
     writer = _SafetensorsWriter(save_directory, locations)
     try:
@@ -253,8 +277,7 @@ def save_sharded_state_dict(
                         f"The weights reverted from {groups[group_index]} do not match the ones planned on meta tensors."
                     )
                 for name, tensor in outputs.items():
-                    if file_owner[weight_map[name]] == rank:
-                        writer.submit(name, tensor)
+                    writer.submit(name, tensor)
                 del tensors, outputs
     finally:
         writer.close()
@@ -266,6 +289,8 @@ def save_sharded_state_dict(
 
 # Bytes of gathered weights a rank can queue for its writer thread before the gathers wait for it.
 _MAX_PENDING_WRITE_BYTES = 2**30
+# The files of a sharded save are not made smaller than this to give every rank its own file.
+_MIN_FILE_BYTES_PER_RANK = 2**30
 # Size of each of the two pinned buffers that stream a device tensor to its file.
 _STAGING_BUFFER_BYTES = 64 * 2**20
 

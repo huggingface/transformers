@@ -109,6 +109,16 @@ def _test_save_sharded_model_files(rank, directory, source_config, max_shard_siz
         model.save_pretrained(f"{directory}/saved", max_shard_size=max_shard_size)
 
 
+def _test_save_one_file_per_rank(rank, directory, source_config):
+    with _distributed_context(rank, directory):
+        model = MixtralForCausalLM.from_pretrained(
+            f"{directory}/seed", distributed_config=DistributedConfig(**source_config)
+        )
+        # The tiny model is below the size where files are capped, so lower that limit.
+        with patch("transformers.distributed.checkpoint._MIN_FILE_BYTES_PER_RANK", 1):
+            model.save_pretrained(f"{directory}/saved")
+
+
 def _test_save_for_consolidation(rank, directory):
     with _distributed_context(rank, directory):
         model = MixtralForCausalLM.from_pretrained(
@@ -300,7 +310,7 @@ class DistributedUtilsTest(unittest.TestCase):
 
     @parameterized.expand(PARALLEL_CONFIGS.items())
     def test_save_single_model_file(self, _, source_config):
-        # Fewer files than ranks: the other ranks only join the gathers.
+        # Fewer files than ranks: all ranks write into the same file.
         with tempfile.TemporaryDirectory() as directory:
             reference = MixtralForCausalLM(self.moe_config)
             reference.save_pretrained(f"{directory}/seed")
@@ -309,6 +319,22 @@ class DistributedUtilsTest(unittest.TestCase):
             saved_files = [path.name for path in Path(f"{directory}/saved").glob("*.safetensors")]
             self.assertEqual(saved_files, [SAFE_WEIGHTS_NAME])
             self.assertFalse(Path(f"{directory}/saved/{SAFE_WEIGHTS_INDEX_NAME}").exists())
+            torch.testing.assert_close(
+                MixtralForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
+            )
+
+    @parameterized.expand(PARALLEL_CONFIGS.items())
+    def test_save_one_file_per_rank(self, _, source_config):
+        # With the default `max_shard_size`, the files are capped to a `world_size`-th of the model: one file per rank.
+        with tempfile.TemporaryDirectory() as directory:
+            reference = MixtralForCausalLM(self.moe_config)
+            reference.save_pretrained(f"{directory}/seed")
+            mp.spawn(_test_save_one_file_per_rank, args=(directory, source_config), nprocs=4, join=True)
+
+            saved_index = json.loads(Path(f"{directory}/saved/{SAFE_WEIGHTS_INDEX_NAME}").read_text(encoding="utf-8"))
+            saved_files = set(saved_index["weight_map"].values())
+            self.assertGreaterEqual(len(saved_files), 4)
+            self.assertEqual(saved_files, {path.name for path in Path(f"{directory}/saved").glob("*.safetensors")})
             torch.testing.assert_close(
                 MixtralForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
             )
