@@ -1,6 +1,7 @@
 # [scratch] Qwen3-style attention input in one kernel: per-head RMSNorm of q and k then rotary (rotate_half layout),
 # in place on the output of the fused q/k/v projection.
 import torch
+from torch.distributed.tensor import DTensor
 import triton
 import triton.language as tl
 
@@ -72,8 +73,11 @@ def fuse_qkv_weights(model: torch.nn.Module) -> int:
             projections, attribute = (module.gate_proj, module.up_proj), "_proto_gate_up_weight"
         else:
             continue
-        # Only plain linears without bias concatenate into one GEMM: a quantized projection (FP8, ...) has its own forward
-        if any(type(p) is not torch.nn.Linear or p.bias is not None for p in projections):
+        # Only plain linears without bias concatenate into one GEMM: a quantized projection (FP8, ...) has its own forward,
+        # and a tensor parallel one (DTensor weight) holds this rank's heads only
+        if any(
+            type(p) is not torch.nn.Linear or p.bias is not None or isinstance(p.weight.data, DTensor) for p in projections
+        ):
             continue
         weight = torch.cat([p.weight for p in projections]).detach()
         offset = 0
