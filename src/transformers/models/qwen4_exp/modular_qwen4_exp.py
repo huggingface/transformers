@@ -370,79 +370,6 @@ def apply_rotary_pos_emb(q, k=None, cos=None, sin=None, unsqueeze_dim=1):
         return q_rotated
 
 
-def qsa_select_tokens(
-    q: torch.Tensor,
-    raw_keys: torch.Tensor,
-    full_cos: torch.Tensor,
-    full_sin: torch.Tensor,
-    attention_mask: torch.Tensor,
-    k_layernorm: nn.Module,
-    block_topk: int,
-    compress_ratio: int,
-    token_budget: int,
-    **kwargs: Unpack[TransformersKwargs],
-) -> torch.Tensor:
-    """Select the token indices each query can attend to."""
-    batch_size, seq_length = q.shape[:2]
-    # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
-    # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
-    visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
-
-    selected_token_indices = torch.full(
-        (batch_size, seq_length, token_budget + compress_ratio - 1),
-        -1,
-        dtype=torch.int32,
-        device=q.device,
-    )
-    for batch_idx in range(batch_size):
-        for query_idx in range(seq_length):
-            local_visible_indices = torch.nonzero(
-                visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
-            ).flatten()
-            num_complete_blocks = local_visible_indices.shape[-1] // compress_ratio
-            # Compute selected tokens
-            if num_complete_blocks > 0:
-                block_token_indices = local_visible_indices[: num_complete_blocks * compress_ratio].view(
-                    num_complete_blocks, compress_ratio
-                )
-
-                key_groups = raw_keys[batch_idx].index_select(0, block_token_indices.flatten())
-                key_groups = key_groups.view(*block_token_indices.shape, q.shape[-1])
-                pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
-                pooled_keys = k_layernorm(pooled_keys)
-                group_starts = block_token_indices[:, 0]
-                block_key_states = apply_rotary_pos_emb(
-                    pooled_keys.unsqueeze(1),
-                    cos=full_cos[batch_idx].index_select(0, group_starts),
-                    sin=full_sin[batch_idx].index_select(0, group_starts),
-                ).squeeze(1)
-
-                scores = torch.matmul(
-                    q[batch_idx, query_idx].float(), block_key_states.float().transpose(-1, -2)
-                ).transpose(-1, -2)
-                scores = torch.relu(scores).sum(dim=-1) / math.sqrt(q.shape[-1])
-
-                selected_block_indices = scores.topk(min(block_topk, num_complete_blocks), dim=0).indices
-                # Remap the indices of the blocks to the indices of individual tokens
-                selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
-            else:
-                selected_tokens = torch.tensor([], device=q.device)
-            tail = local_visible_indices[num_complete_blocks * compress_ratio :]
-            selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
-            selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
-
-    # Create the selection mask to combine with the main causal mask
-    kv_length = attention_mask.shape[-1]
-    selected_token_mask = torch.zeros(
-        (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
-    )
-    # We absorb all the -1 by scaterring them to the last index that we will drop
-    scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
-    selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
-
-    return selected_token_mask
-
-
 class Qwen4ExpTextQSAIndexer(nn.Module):
     """Select QSA token indices from compressed key blocks."""
 
@@ -491,18 +418,67 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         if cache is not None:
             raw_keys = cache.update_indexer(raw_keys, self.layer_idx)
 
-        return qsa_select_tokens(
-            q,
-            raw_keys,
-            full_cos,
-            full_sin,
-            attention_mask,
-            self.k_layernorm,
-            self.block_topk,
-            self.compress_ratio,
-            self.token_budget,
-            **kwargs,
+        return self._select_tokens(q, raw_keys, full_cos, full_sin, attention_mask, **kwargs)
+
+    def _select_tokens(self, q, raw_keys, full_cos, full_sin, attention_mask, **kwargs) -> torch.Tensor:
+        batch_size, seq_length = q.shape[:2]
+        # Note that the mask is never None here as we only allow eager and sdpa, and we do not allow sdpa's mask skip
+        # It's always 4D with either bool (sdpa) or float (eager) and already gives us the valid indices
+        visible_token_indices = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+
+        selected_token_indices = torch.full(
+            (batch_size, seq_length, self.token_budget + self.compress_ratio - 1),
+            -1,
+            dtype=torch.int32,
+            device=q.device,
         )
+        for batch_idx in range(batch_size):
+            for query_idx in range(seq_length):
+                local_visible_indices = torch.nonzero(
+                    visible_token_indices[batch_idx, 0, query_idx], as_tuple=False
+                ).flatten()
+                num_complete_blocks = local_visible_indices.shape[-1] // self.compress_ratio
+                # Compute selected tokens
+                if num_complete_blocks > 0:
+                    block_token_indices = local_visible_indices[: num_complete_blocks * self.compress_ratio].view(
+                        num_complete_blocks, self.compress_ratio
+                    )
+
+                    key_groups = raw_keys[batch_idx].index_select(0, block_token_indices.flatten())
+                    key_groups = key_groups.view(*block_token_indices.shape, self.index_head_dim)
+                    pooled_keys = key_groups.float().mean(dim=1).to(raw_keys.dtype)
+                    pooled_keys = self.k_layernorm(pooled_keys)
+                    group_starts = block_token_indices[:, 0]
+                    block_key_states = apply_rotary_pos_emb(
+                        pooled_keys.unsqueeze(1),
+                        cos=full_cos[batch_idx].index_select(0, group_starts),
+                        sin=full_sin[batch_idx].index_select(0, group_starts),
+                    ).squeeze(1)
+
+                    scores = torch.matmul(
+                        q[batch_idx, query_idx].float(), block_key_states.float().transpose(-1, -2)
+                    ).transpose(-1, -2)
+                    scores = torch.relu(scores).sum(dim=-1) / math.sqrt(self.index_head_dim)
+
+                    selected_block_indices = scores.topk(min(self.block_topk, num_complete_blocks), dim=0).indices
+                    # Remap the indices of the blocks to the indices of individual tokens
+                    selected_tokens = block_token_indices.index_select(0, selected_block_indices).flatten()
+                else:
+                    selected_tokens = torch.tensor([], device=q.device)
+                tail = local_visible_indices[num_complete_blocks * self.compress_ratio :]
+                selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
+                selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
+
+        # Create the selection mask to combine with the main causal mask
+        kv_length = attention_mask.shape[-1]
+        selected_token_mask = torch.zeros(
+            (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
+        )
+        # We absorb all the -1 by scaterring them to the last index that we will drop
+        scatter_indices = torch.where(selected_token_indices >= 0, selected_token_indices, kv_length)
+        selected_token_mask = selected_token_mask.scatter(-1, scatter_indices, True)[..., :kv_length].unsqueeze(1)
+
+        return selected_token_mask
 
 
 class Qwen4ExpTextAttention(Qwen3_5Attention):
@@ -638,26 +614,6 @@ def _find_nth_prime_after(start: int, count: int) -> int:
     return prime
 
 
-def ngram_shift_right(
-    token_ids: torch.Tensor, shift: int, eos_token_id: int, **kwargs: Unpack[TransformersKwargs]
-) -> torch.Tensor:
-    """Shift `token_ids` right by `shift`, with EOS where the shift would cross one or the start of the sequence."""
-    if shift == 0:
-        return token_ids
-    batch_size, seq_len = token_ids.shape
-    positions = torch.arange(seq_len, device=token_ids.device, dtype=torch.long)
-    eos_positions = torch.where(token_ids == eos_token_id, positions, -1)
-    previous_eos_inclusive = torch.cummax(eos_positions, dim=1).values
-    previous_eos = torch.cat([eos_positions.new_full((batch_size, 1), -1), previous_eos_inclusive[:, :-1]], dim=1)
-    segment_start = previous_eos + 1
-    position_in_segment = positions.unsqueeze(0) - segment_start
-    source_positions = positions - shift
-    gather_positions = source_positions.clamp_min(0).unsqueeze(0).expand(batch_size, -1)
-    shifted = token_ids.gather(dim=1, index=gather_positions)
-    valid = (position_in_segment >= shift) & (source_positions.unsqueeze(0) >= 0)
-    return torch.where(valid, shifted, token_ids.new_full((), eos_token_id))
-
-
 class Qwen4ExpTextNGramEmbedding(nn.Module):
     def __init__(self, config: Qwen4ExpTextConfig, embedding_dim: int, layer_idx: int, ple_layer_index: int = 0):
         super().__init__()
@@ -693,6 +649,22 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         padded_vocab_size = math.ceil(self.total_vocab_size / ngram_vocab_divisor) * ngram_vocab_divisor
         self.ngram_embedding = nn.Embedding(padded_vocab_size, head_dim_per_ngram)
 
+    def _shift_right_ignore_eos(self, token_ids: torch.Tensor, shift: int, **kwargs) -> torch.Tensor:
+        if shift == 0:
+            return token_ids
+        batch_size, seq_len = token_ids.shape
+        positions = torch.arange(seq_len, device=token_ids.device, dtype=torch.long)
+        eos_positions = torch.where(token_ids == self.eos_token_id, positions, -1)
+        previous_eos_inclusive = torch.cummax(eos_positions, dim=1).values
+        previous_eos = torch.cat([eos_positions.new_full((batch_size, 1), -1), previous_eos_inclusive[:, :-1]], dim=1)
+        segment_start = previous_eos + 1
+        position_in_segment = positions.unsqueeze(0) - segment_start
+        source_positions = positions - shift
+        gather_positions = source_positions.clamp_min(0).unsqueeze(0).expand(batch_size, -1)
+        shifted = token_ids.gather(dim=1, index=gather_positions)
+        valid = (position_in_segment >= shift) & (source_positions.unsqueeze(0) >= 0)
+        return torch.where(valid, shifted, token_ids.new_full((), self.eos_token_id))
+
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self, input_ids: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
@@ -723,7 +695,7 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
         # Get full token history
         token_history = torch.cat([previous_context, input_ids], dim=-1)
         shifted_tokens = [
-            ngram_shift_right(token_history, shift, self.eos_token_id, **kwargs) for shift in range(self.ngram_size)
+            self._shift_right_ignore_eos(token_history, shift, **kwargs) for shift in range(self.ngram_size)
         ]
 
         blocks = []
@@ -748,13 +720,6 @@ class Qwen4ExpTextNGramEmbedding(nn.Module):
             self.ngram_embedding.weight.device if self.ngram_embedding.weight.device.type != "meta" else None
         )
         return self.ngram_embedding(ngram_ids.to(execution_device)).to(ngram_ids.device).flatten(-2)
-
-
-def ple_short_conv(
-    hidden_states: torch.Tensor, conv1d: nn.Conv1d, **kwargs: Unpack[TransformersKwargs]
-) -> torch.Tensor:
-    # We cannot use the usual functions/kernels here for the short conv as the conv1d has dilation
-    return F.silu(conv1d(hidden_states))
 
 
 class Qwen4ExpTextPLELayer(nn.Module):
@@ -790,9 +755,7 @@ class Qwen4ExpTextPLELayer(nn.Module):
             bias=False,
         )
 
-    def _short_conv(
-        self, hidden_states: torch.Tensor, cache: Cache | None, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.Tensor:
+    def _short_conv(self, hidden_states: torch.Tensor, cache: Cache | None, **kwargs) -> torch.Tensor:
         seq_len = hidden_states.shape[1]
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -805,7 +768,8 @@ class Qwen4ExpTextPLELayer(nn.Module):
         hidden_states = F.pad(hidden_states, (self.short_conv_state_len, 0))
         hidden_states = hidden_states[..., -(self.short_conv_state_len + seq_len) :]
 
-        hidden_states = ple_short_conv(hidden_states, self.conv1d, **kwargs)
+        # We cannot use the usual functions/kernels here for the short conv as the conv1d has dilation
+        hidden_states = F.silu(self.conv1d(hidden_states))
 
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
