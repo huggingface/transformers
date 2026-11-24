@@ -793,11 +793,12 @@ class TestAttentionKernelRegistration(TestCasePlus):
         passing an expplicit `allow_all_kernels=True`
         """
         from transformers import LlamaConfig, LlamaModel
+        from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
 
         config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
         model = LlamaModel(copy.deepcopy(config))
         untrusted_kernel = "untrusted/flash_attention_2"
-        trusted_kernel = "kernels-community/flash-attn2"
+        trusted_kernel = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
