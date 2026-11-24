@@ -1867,7 +1867,10 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
             if feature_attention_mask is not None:
                 audio_inputs["frame_indices"] = get_audio_frame_indices(feature_attention_mask)
             inputs.update({f"audio_{name}": value for name, value in audio_inputs.items()})
-        if position_ids is None and input_ids is not None and attention_mask is not None:
+        # Only on the prompt: past it, the forward shifts the text positions by the cached `rope_deltas`
+        cache = kwargs.get("cache")
+        is_prompt = cache is None or cache.get_seq_length() == 0
+        if position_ids is None and input_ids is not None and attention_mask is not None and is_prompt:
             inputs["position_ids"], _ = self.get_rope_index(
                 input_ids,
                 image_grid_thw,
