@@ -23,6 +23,25 @@ import triton.language as tl
 from ._proto_fp8_experts import decode_route, decode_topk_sum
 
 
+_FITTING_STAGES = {}  # (kernel, meta-parameters) -> the most pipeline stages that fit in the device's shared memory
+
+
+def _launch(kernel, grid, *args, num_stages, **meta):
+    """Launches `kernel` with at most `num_stages` stages: devices with less shared memory than Hopper (RTX PRO 6000,
+    L40S: ~100 KB) can't hold the deepest pipelines of the configs, picked on an H100."""
+    key = (kernel, num_stages, *sorted(meta.items()))
+    num_stages = _FITTING_STAGES.get(key, num_stages)
+    while True:
+        try:
+            kernel[grid](*args, num_stages=num_stages, **meta)
+            _FITTING_STAGES[key] = num_stages
+            return
+        except triton.runtime.errors.OutOfResources:
+            if num_stages == 1:
+                raise
+            num_stages -= 1
+
+
 MAX_ROWS_PER_EXPERT = float(os.environ.get("PROTO_DECODE_MAX_ROWS_PER_EXPERT", "0"))
 # [scratch] number of real tokens of the step ([1] int32 on device), set by continuous batching when it pads the step:
 # the slots of padding tokens go to no expert
@@ -129,15 +148,16 @@ def proto_decode_experts(hidden_states, top_k_index, top_k_weights, gate_up, dow
     perm, expert_start = decode_route(top_k_index, num_experts)
     block_m = _block_m(num_slots, num_experts)
     inter_out = torch.empty(num_slots, inter, dtype=hidden_states.dtype, device=hidden_states.device)
-    _gate_up_kernel[(num_experts, inter // 128)](
-        hidden_states, perm, expert_start, gate_up, inter_out,
+    _launch(
+        _gate_up_kernel, (num_experts, inter // 128), hidden_states, perm, expert_start, gate_up, inter_out,
         hidden_states.stride(0), gate_up.stride(0), gate_up.stride(1),
         NUM_TOP_K=num_top_k, HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=128, BLOCK_K=64,
         num_warps=4, num_stages=4,
     )  # fmt: skip
     slots_out = torch.empty(num_slots, hidden, dtype=hidden_states.dtype, device=hidden_states.device)
-    _down_kernel[(num_experts, hidden // 128)](
-        inter_out, perm, expert_start, down, top_k_weights, slots_out, down.stride(0), down.stride(1),
+    _launch(
+        _down_kernel, (num_experts, hidden // 128), inter_out, perm, expert_start, down, top_k_weights, slots_out,
+        down.stride(0), down.stride(1),
         HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=128, BLOCK_K=64, num_warps=4, num_stages=4,
     )  # fmt: skip
     return decode_topk_sum(slots_out, top_k_index, num_experts)
@@ -354,15 +374,17 @@ def proto_aligned_experts(hidden_states, top_k_index, top_k_weights, gate_up, do
     sorted_slots, block_expert, num_blocks = align_route(top_k_index, num_experts, block_m)
     max_blocks = block_expert.numel()
     inter_out = torch.empty(max_blocks * block_m, inter, dtype=hidden_states.dtype, device=hidden_states.device)
-    _aligned_gate_up_kernel[(max_blocks, inter // block_n)](
-        hidden_states, sorted_slots, block_expert, num_blocks, gate_up, inter_out,
+    _launch(
+        _aligned_gate_up_kernel, (max_blocks, inter // block_n), hidden_states, sorted_slots, block_expert, num_blocks,
+        gate_up, inter_out,
         hidden_states.stride(0), gate_up.stride(0), gate_up.stride(1), num_slots,
         NUM_TOP_K=num_top_k, HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=block_n, BLOCK_K=block_k,
         num_warps=num_warps, num_stages=num_stages,
     )  # fmt: skip
     slots_out = torch.empty(num_slots, hidden, dtype=hidden_states.dtype, device=hidden_states.device)
-    _aligned_down_kernel[(max_blocks, hidden // down_n)](
-        inter_out, sorted_slots, block_expert, num_blocks, down, top_k_weights, slots_out,
+    _launch(
+        _aligned_down_kernel, (max_blocks, hidden // down_n), inter_out, sorted_slots, block_expert, num_blocks, down,
+        top_k_weights, slots_out,
         down.stride(0), down.stride(1), num_slots,
         HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=down_n, BLOCK_K=down_k,
         num_warps=down_warps, num_stages=down_stages,
