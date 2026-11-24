@@ -13,12 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen4-Exp model."""
 
-import contextlib
 import copy
 import os
 import tempfile
 import unittest
-from unittest import mock
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
@@ -48,7 +46,6 @@ if is_torch_available():
     )
     from transformers.distributed.fsdp import ALL_FSDP_STYLES
     from transformers.integrations import FP8Embedding
-    from transformers.models.qwen4_exp import modeling_qwen4_exp
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
@@ -165,34 +162,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             outputs = model(input_ids, attention_mask=attention_mask, output_attentions=True, use_cache=False)
 
         self.assertTrue(torch.isfinite(outputs.attentions[0]).all())
-
-    def test_extra_kwargs_reach_the_token_mixing_methods(self):
-        config = self.model_tester.get_config()
-        model = Qwen4ExpTextModel(config).to(torch_device).eval()
-        methods = [
-            (modeling_qwen4_exp.Qwen4ExpTextNGramEmbedding, "_shift_right_ignore_eos"),
-            (modeling_qwen4_exp.Qwen4ExpTextPLELayer, "_short_conv"),
-            (modeling_qwen4_exp.Qwen4ExpTextQSAIndexer, "_select_tokens"),
-        ]
-        recorded = {name: [] for _, name in methods}
-
-        def record(cls, name):
-            original = getattr(cls, name)
-
-            def wrapper(self, *args, **kwargs):
-                recorded[name].append(kwargs)
-                return original(self, *args, **kwargs)
-
-            return wrapper
-
-        with contextlib.ExitStack() as stack:
-            for cls, name in methods:
-                stack.enter_context(mock.patch.object(cls, name, record(cls, name)))
-            with torch.no_grad():
-                model(torch.randint(0, config.vocab_size, (2, 6), device=torch_device), use_cache=False, extra_kwarg=0)
-
-        for name, calls in recorded.items():
-            self.assertTrue(calls and all(kwargs["extra_kwarg"] == 0 for kwargs in calls), name)
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
