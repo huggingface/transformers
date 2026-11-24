@@ -40,6 +40,8 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = GotOcr2ImageProcessingTester
     # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
     backend_equivalence_atol = 0.5
+    # PIL and torchvision resize small, upscaled random images differently: the mean diff can reach ~5e-3
+    backend_equivalence_mean_atol = 1e-2
 
     def test_backends_equivalence_crop_to_patches(self):
         if len(self.image_processing_classes) < 2:

@@ -46,7 +46,6 @@ class Qwen3MoeConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_moe"
-    keys_to_ignore_at_inference = ["cache"]
 
     attribute_map = {
         "num_experts": "num_local_experts",
@@ -60,9 +59,6 @@ class Qwen3MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

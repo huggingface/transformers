@@ -65,6 +65,7 @@ else:
             ("granite_speech_plus", "GraniteSpeechProcessor"),
             ("groupvit", "CLIPProcessor"),
             ("hubert", "Wav2Vec2Processor"),
+            ("inkling2_loop", "Inkling2Processor"),
             ("inkling_mm_model", "InklingProcessor"),
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),

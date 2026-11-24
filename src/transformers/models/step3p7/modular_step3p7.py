@@ -186,9 +186,6 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
         "layers.*.self_attn.v_proj": "colwise_gather_output",
         "layers.*.self_attn.g_proj": "colwise_gather_output",
         "layers.*.self_attn.o_proj": "rowwise_split_input",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     # Unused fields inherited from `MiniMaxM3VLTextConfig`; removed rather than documented.
@@ -726,7 +723,6 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Step3p7VisionEncoderLayer", "Step3p7DecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = False
     _supports_sdpa = True
     _supports_flex_attn = True

@@ -108,7 +108,6 @@ class Step3p7TextConfig(PreTrainedConfig):
     """
 
     model_type = "step3p5"
-    keys_to_ignore_at_inference = ["cache"]
     # Same as `MiniMaxM3VLTextConfig.base_model_tp_plan` plus `g_proj` (sharded like q/k/v, since it
     # gates their gathered output). Spelled out in full, not `{**MiniMaxM3VLTextConfig.base_model_tp_plan, ...}`:
     # generated files have no cross-model imports, so that name wouldn't resolve there.
@@ -118,9 +117,6 @@ class Step3p7TextConfig(PreTrainedConfig):
         "layers.*.self_attn.v_proj": "colwise_gather_output",
         "layers.*.self_attn.g_proj": "colwise_gather_output",
         "layers.*.self_attn.o_proj": "rowwise_split_input",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

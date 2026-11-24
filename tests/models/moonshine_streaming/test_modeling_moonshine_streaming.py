@@ -21,6 +21,7 @@ from parameterized import parameterized
 from transformers import MoonshineStreamingConfig, MoonshineStreamingEncoderConfig, is_torch_available
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -42,42 +43,30 @@ if is_torch_available():
 from datasets import load_dataset
 
 
-class MoonshineStreamingModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,  # need batch_size != num_hidden_layers
-        seq_length=1040,
-        is_training=False,
-        use_labels=False,
-        vocab_size=147,
-        hidden_size=8,
-        intermediate_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        head_dim=4,
-        decoder_start_token_id=85,
-        bos_token_id=98,
-        eos_token_id=98,
-        pad_token_id=0,
-    ):
+class MoonshineStreamingModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,  # need batch_size != num_hidden_layers
+        "seq_length": 1040,
+        "is_training": False,
+        "use_labels": False,
+        "vocab_size": 147,
+        "hidden_size": 8,
+        "intermediate_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "head_dim": 4,
+        "decoder_start_token_id": 85,
+        "bos_token_id": 98,
+        "eos_token_id": 98,
+        "pad_token_id": 0,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.decoder_start_token_id = decoder_start_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.seq_length], scale=1.0)
@@ -137,6 +126,7 @@ class MoonshineStreamingModelTester:
 
 @require_torch
 class MoonshineStreamingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = MoonshineStreamingModelTester
     all_model_classes = (
         (MoonshineStreamingModel, MoonshineStreamingForConditionalGeneration) if is_torch_available() else ()
     )

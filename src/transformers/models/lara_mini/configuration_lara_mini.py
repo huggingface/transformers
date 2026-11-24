@@ -55,7 +55,6 @@ class LaraMiniConfig(PreTrainedConfig):
     """
 
     model_type = "lara_mini"
-    keys_to_ignore_at_inference = ["cache"]
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -64,12 +63,9 @@ class LaraMiniConfig(PreTrainedConfig):
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         # The `linear_attn.in_proj_*` stay replicated: they are split from the checkpoint's fused `in_proj` at load time,
         # which the `Split` conversion can't do on a sharded tensor
         "layers.*.linear_attn.out_proj": "colwise_gather_output",

@@ -36,6 +36,7 @@ from ..utils import (
     is_torch_available,
     is_torch_hpu_available,
     is_torch_npu_available,
+    is_torch_supa_available,
     is_torch_xpu_available,
 )
 from ..utils.import_utils import ACCELERATE_MIN_VERSION, _is_package_available
@@ -90,8 +91,11 @@ def env(
         pt_xpu_available = is_torch_xpu_available()
         pt_npu_available = is_torch_npu_available()
         pt_hpu_available = is_torch_hpu_available()
+        pt_supa_available = is_torch_supa_available()
 
-        if pt_cuda_available:
+        if pt_supa_available:
+            pt_accelerator = "SUPA"
+        elif pt_cuda_available:
             pt_accelerator = "CUDA"
         elif pt_xpu_available:
             pt_accelerator = "XPU"
@@ -120,7 +124,12 @@ def env(
         "Using distributed or parallel set-up in script?": "<fill in>",
     }
     if is_torch_available():
-        if pt_cuda_available:
+        if pt_supa_available:
+            info["Using SUPA in script?"] = "<fill in>"
+            info["SUPA type"] = torch.supa.get_device_name()
+            if hasattr(torch.version, "supa"):
+                info["SUPA version"] = torch.version.supa
+        elif pt_cuda_available:
             info["Using GPU in script?"] = "<fill in>"
             info["GPU type"] = torch.cuda.get_device_name()
         elif pt_xpu_available:

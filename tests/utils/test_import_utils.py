@@ -335,6 +335,48 @@ def test_broken_torchaudio_does_not_break_import():
 
 @require_torch
 @run_test_using_subprocess
+def test_broken_torchaudio_does_not_break_model_import():
+    """
+    ``audio_utils`` is imported by ``processing_utils``, which every model imports through ``modeling_layers``, so it
+    must not import torchaudio at module scope either (see ``test_broken_torchaudio_does_not_break_import``). A
+    torchaudio built for a different CUDA version than torch raises ``RuntimeError`` on import, which would otherwise
+    make even text-only models fail to import. torchaudio is imported lazily inside ``load_audio`` instead.
+    """
+    import builtins
+    import importlib
+
+    from transformers import utils
+
+    real_import = builtins.__import__
+
+    def failing_import(name, *args, **kwargs):
+        if name == "torchaudio" or name.startswith("torchaudio."):
+            raise RuntimeError("Detected that PyTorch and TorchAudio were compiled with different CUDA versions.")
+        return real_import(name, *args, **kwargs)
+
+    reimported = (
+        "transformers.audio_utils",
+        "transformers.processing_utils",
+        "transformers.modeling_layers",
+        "transformers.models.llama.modeling_llama",
+    )
+    for name in list(sys.modules):
+        if name in reimported or name == "torchaudio" or name.startswith("torchaudio."):
+            del sys.modules[name]
+
+    # Report torchaudio as installed so that a module-scope import would be attempted (and fail).
+    with (
+        patch.object(utils, "is_torchaudio_available", return_value=True),
+        patch.object(builtins, "__import__", failing_import),
+    ):
+        audio_utils = importlib.import_module("transformers.audio_utils")
+        importlib.import_module("transformers.models.llama.modeling_llama")
+
+    assert not hasattr(audio_utils, "torchaudio"), "torchaudio must be imported lazily, not at module scope"
+
+
+@require_torch
+@run_test_using_subprocess
 def test_import_without_torch_distributed():
     """
     Checks that Transformers can still be imported and used when PyTorch was built with USE_DISTRIBUTED=0

@@ -87,7 +87,6 @@ class HYV4Config(PreTrainedConfig):
     """
 
     model_type = "hy_v4"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -99,9 +98,6 @@ class HYV4Config(PreTrainedConfig):
         "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.sinks": "colwise",
         "layers.*.self_attn": "local_params",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -205,7 +201,8 @@ class HYV4RotaryEmbedding(GlmMoeDsaRotaryEmbedding):
 class HYV4Indexer(DeepseekV32Indexer):
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps, dtype=torch.float32)
+        self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False, dtype=torch.float32)
 
     @torch.no_grad()
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
@@ -265,7 +262,7 @@ class HYV4Attention(GlmMoeDsaAttention):
         super().__init__(config, layer_idx)
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
-        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))
+        self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init, dtype=torch.float32))
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -385,7 +382,11 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
         del self.hc_sinkhorn_iters
         concatenated_weights_size = 2 * self.hc_mult  # noqa: F841
         self.hc_post_magnitude = config.hc_magnitude
-        self.scale = nn.Parameter(torch.empty(2))
+        self.scale = nn.Parameter(torch.empty(2, dtype=torch.float32))
+        self.fn = nn.Parameter(
+            torch.empty(concatenated_weights_size, self.hc_mult * config.hidden_size, dtype=torch.float32)
+        )
+        self.base = nn.Parameter(torch.empty(concatenated_weights_size, dtype=torch.float32))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Independent HC implementation with forced fp32 application"""
@@ -410,6 +411,12 @@ class HYV4HyperConnection(DeepseekV4HyperConnection):
 
 
 class HYV4HyperHead(DeepseekV4HyperHead):
+    def __init__(self, config: HYV4Config):
+        super().__init__(config)
+        self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size, dtype=torch.float32))
+        self.hc_base = nn.Parameter(torch.empty(self.hc_mult, dtype=torch.float32))
+        self.hc_scale = nn.Parameter(torch.empty(1, dtype=torch.float32))
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Key difference is to force fp32 in any case
         device_type = x.device.type
@@ -428,6 +435,8 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(self, config, layer_idx)
         self.mlp = HYV4MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
+        self.input_layernorm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -478,6 +487,7 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
     _supports_flex_attn = False
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
+        "gate.weight",
         "fn",
         "scale",
         "base",
@@ -585,20 +595,11 @@ class HYV4Model(Glm4MoeLiteModel):
 
 
 class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
-    # Same as base but with the additional lm head
-    _keep_in_fp32_modules_strict = [
-        "e_score_correction_bias",
-        "fn",
-        "scale",
-        "base",
-        "hc_fn",
-        "hc_scale",
-        "hc_base",
-        "weights_proj",
-        "k_norm",
-        "sinks",
-        "lm_head",
-    ]
+    _keep_in_fp32_modules_strict = ["lm_head"]  # all the base model ones + lm_head
+
+    def __init__(self, config: HYV4Config):
+        super().__init__(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False, dtype=torch.float32)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
