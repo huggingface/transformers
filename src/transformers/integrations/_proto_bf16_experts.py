@@ -23,23 +23,15 @@ import triton.language as tl
 from ._proto_fp8_experts import decode_route, decode_topk_sum
 
 
-_FITTING_STAGES = {}  # (kernel, meta-parameters) -> the most pipeline stages that fit in the device's shared memory
+# The tile configs were picked on an H100 (228 KB of shared memory per block); RTX PRO 6000 and L40S have ~100 KB
+_SHARED_MEMORY = torch.cuda.get_device_properties(torch.cuda.current_device()).shared_memory_per_block_optin
 
 
-def _launch(kernel, grid, *args, num_stages, **meta):
-    """Launches `kernel` with at most `num_stages` stages: devices with less shared memory than Hopper (RTX PRO 6000,
-    L40S: ~100 KB) can't hold the deepest pipelines of the configs, picked on an H100."""
-    key = (kernel, num_stages, *sorted(meta.items()))
-    num_stages = _FITTING_STAGES.get(key, num_stages)
-    while True:
-        try:
-            kernel[grid](*args, num_stages=num_stages, **meta)
-            _FITTING_STAGES[key] = num_stages
-            return
-        except triton.runtime.errors.OutOfResources:
-            if num_stages == 1:
-                raise
-            num_stages -= 1
+def _fit_stages(num_stages: int, block_m: int, block_n: int, block_k: int, num_b_tiles: int) -> int:
+    """The most pipeline stages, up to `num_stages`, whose bf16 tiles fit in the shared memory of the device. Triton
+    keeps `num_stages - 1` copies of the A tile and of the `num_b_tiles` B tiles."""
+    tile_bytes = (block_m + num_b_tiles * block_n) * block_k * 2
+    return max(1, min(num_stages, _SHARED_MEMORY // tile_bytes + 1))
 
 
 MAX_ROWS_PER_EXPERT = float(os.environ.get("PROTO_DECODE_MAX_ROWS_PER_EXPERT", "0"))
@@ -148,17 +140,17 @@ def proto_decode_experts(hidden_states, top_k_index, top_k_weights, gate_up, dow
     perm, expert_start = decode_route(top_k_index, num_experts)
     block_m = _block_m(num_slots, num_experts)
     inter_out = torch.empty(num_slots, inter, dtype=hidden_states.dtype, device=hidden_states.device)
-    _launch(
-        _gate_up_kernel, (num_experts, inter // 128), hidden_states, perm, expert_start, gate_up, inter_out,
+    _gate_up_kernel[(num_experts, inter // 128)](
+        hidden_states, perm, expert_start, gate_up, inter_out,
         hidden_states.stride(0), gate_up.stride(0), gate_up.stride(1),
         NUM_TOP_K=num_top_k, HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=128, BLOCK_K=64,
-        num_warps=4, num_stages=4,
+        num_warps=4, num_stages=_fit_stages(4, block_m, 128, 64, 2),
     )  # fmt: skip
     slots_out = torch.empty(num_slots, hidden, dtype=hidden_states.dtype, device=hidden_states.device)
-    _launch(
-        _down_kernel, (num_experts, hidden // 128), inter_out, perm, expert_start, down, top_k_weights, slots_out,
-        down.stride(0), down.stride(1),
-        HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=128, BLOCK_K=64, num_warps=4, num_stages=4,
+    _down_kernel[(num_experts, hidden // 128)](
+        inter_out, perm, expert_start, down, top_k_weights, slots_out, down.stride(0), down.stride(1),
+        HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=128, BLOCK_K=64, num_warps=4,
+        num_stages=_fit_stages(4, block_m, 128, 64, 1),
     )  # fmt: skip
     return decode_topk_sum(slots_out, top_k_index, num_experts)
 
@@ -374,19 +366,17 @@ def proto_aligned_experts(hidden_states, top_k_index, top_k_weights, gate_up, do
     sorted_slots, block_expert, num_blocks = align_route(top_k_index, num_experts, block_m)
     max_blocks = block_expert.numel()
     inter_out = torch.empty(max_blocks * block_m, inter, dtype=hidden_states.dtype, device=hidden_states.device)
-    _launch(
-        _aligned_gate_up_kernel, (max_blocks, inter // block_n), hidden_states, sorted_slots, block_expert, num_blocks,
-        gate_up, inter_out,
+    _aligned_gate_up_kernel[(max_blocks, inter // block_n)](
+        hidden_states, sorted_slots, block_expert, num_blocks, gate_up, inter_out,
         hidden_states.stride(0), gate_up.stride(0), gate_up.stride(1), num_slots,
         NUM_TOP_K=num_top_k, HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=block_n, BLOCK_K=block_k,
-        num_warps=num_warps, num_stages=num_stages,
+        num_warps=num_warps, num_stages=_fit_stages(num_stages, block_m, block_n, block_k, 2),
     )  # fmt: skip
     slots_out = torch.empty(num_slots, hidden, dtype=hidden_states.dtype, device=hidden_states.device)
-    _launch(
-        _aligned_down_kernel, (max_blocks, hidden // down_n), inter_out, sorted_slots, block_expert, num_blocks, down,
-        top_k_weights, slots_out,
+    _aligned_down_kernel[(max_blocks, hidden // down_n)](
+        inter_out, sorted_slots, block_expert, num_blocks, down, top_k_weights, slots_out,
         down.stride(0), down.stride(1), num_slots,
         HIDDEN_DIM=hidden, INTER_DIM=inter, BLOCK_M=block_m, BLOCK_N=down_n, BLOCK_K=down_k,
-        num_warps=down_warps, num_stages=down_stages,
+        num_warps=down_warps, num_stages=_fit_stages(down_stages, block_m, down_n, down_k, 1),
     )  # fmt: skip
     return decode_topk_sum(slots_out, top_k_index, num_experts)
