@@ -938,23 +938,25 @@ jobs:
             tests/samplers/test_beam_search.py::test_beam_search_with_concurrency_limit
 
       # More pooling models / features vs transformers (`hf_runner`): token classification, multi-label classification,
-      # hidden states extraction, prefix caching, pooler config defaults (models up to ~1.8B). In one shard.
+      # chunked prefill, prefix caching (models up to ~1.5B). In one shard.
       - name: "Test: more language pooling models"
         if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
-          # Not included: test_last_pool_score_chunked_prefill_matches_unchunked (vLLM vs vLLM, no transformers reference),
-          # and test_openai_privacy_filter (bf16 on CPU: 2 / 429 probabilities just above the test's tolerance, 0.117 for
-          # atol=0.1; vLLM runs it on GPU).
+          # Not included:
+          # - tests without a transformers reference (vLLM vs vLLM, or vLLM config checks): test_extract_hidden_states.py,
+          #   test_pooler_config_init_behaviour.py, test_last_pool_score_chunked_prefill_matches_unchunked and
+          #   test_non_causal_models.
+          # - test_openai_privacy_filter: bf16 on CPU, 2 / 429 probabilities just above the test's tolerance (0.117 for
+          #   atol=0.1); vLLM runs it on GPU.
           pytest -v -s \
             tests/models/language/pooling/test_token_classification.py \
             tests/models/language/pooling/test_multilabel_classification_support.py \
             tests/models/language/pooling/test_head_dtype.py \
-            tests/models/language/pooling/test_extract_hidden_states.py \
             tests/models/language/pooling/test_all_pooling_plus_chunked_prefill.py \
             tests/models/language/pooling/test_auto_prefix_cache_support.py \
-            tests/models/language/pooling/test_pooler_config_init_behaviour.py \
             --deselect tests/models/language/pooling/test_all_pooling_plus_chunked_prefill.py::test_last_pool_score_chunked_prefill_matches_unchunked \
+            --deselect tests/models/language/pooling/test_auto_prefix_cache_support.py::test_non_causal_models \
             --deselect tests/models/language/pooling/test_token_classification.py::test_openai_privacy_filter
 
   # Multimodal generation with vLLM's Transformers modeling backend, compared with transformers (`hf_runner`): the
