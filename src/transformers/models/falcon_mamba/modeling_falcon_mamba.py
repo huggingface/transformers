@@ -116,30 +116,6 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub_with_fallback("mamba_inner_fn", "mamba_ssm")
-def mamba_inner_fn(
-    xz: torch.Tensor,
-    conv1d_weight: torch.Tensor,
-    conv1d_bias: torch.Tensor | None,
-    x_proj_weight: torch.Tensor,
-    delta_proj_weight: torch.Tensor,
-    out_proj_weight: torch.Tensor,
-    out_proj_bias: torch.Tensor | None,
-    A: torch.Tensor,
-    B: torch.Tensor | None = None,
-    C: torch.Tensor | None = None,
-    D: torch.Tensor | None = None,
-    delta_bias: torch.Tensor | None = None,
-    delta_softplus: bool = True,
-    b_rms_weight: torch.Tensor | None = None,
-    c_rms_weight: torch.Tensor | None = None,
-    dt_rms_weight: torch.Tensor | None = None,
-    b_c_dt_rms_eps: float = 1e-6,
-    **kwargs,
-):
-    return None
-
-
 @use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
 def mamba_selective_state_update(
     state: torch.Tensor,
@@ -294,15 +270,16 @@ def mamba_selective_scan(
     return scan_output
 
 
-@use_kernelized_func(
-    [mamba_inner_fn, mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update]
-)
+@use_kernelized_func([mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update])
 class FalconMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
-    A, D are input independent (see FalconMamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
-    ∆, B, C are input-dependent (this is a key difference between FalconMamba and the linear time invariant S4,
-    and is why FalconMamba is called **selective** state spaces)
+    A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
+    ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
+    and is why Mamba is called **selective** state spaces)
+
+    NOTE: unlike Mamba, there is no fused `mamba_inner_fn` path: it can only normalize dt after `dt_proj`, while
+    FalconMamba normalizes it before, see https://github.com/huggingface/transformers/pull/51184
     """
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
@@ -401,8 +378,6 @@ class FalconMambaMixer(nn.Module):
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
         A = -torch.exp(self.A_log.float())
-        # No fused `mamba_inner_fn` path, unlike Mamba: it can only normalize dt after `dt_proj`, while FalconMamba
-        # normalizes it before, see https://github.com/huggingface/transformers/pull/51184
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
