@@ -1841,15 +1841,20 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
 
     def get_data_dependent_inputs(
         self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
         feature_attention_mask: torch.LongTensor | None = None,
         audio_feature_lengths: torch.LongTensor | None = None,
+        use_audio_in_video: bool | None = None,
+        video_second_per_grid: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> dict[str, Any]:
-        """The vision encoder's data-dependent inputs for the images and the videos, prefixed `image_` and `video_`,
-        and the audio encoder's (see [`Qwen3OmniMoeAudioEncoder.get_data_dependent_inputs`]) with the real mel
-        frames' `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them."""
+        """The M-RoPE `position_ids`, the vision encoder's data-dependent inputs for the images and the videos, prefixed
+        `image_` and `video_`, and the audio encoder's (see [`Qwen3OmniMoeAudioEncoder.get_data_dependent_inputs`])
+        with the real mel frames' `frame_indices`, prefixed `audio_`, as the `get_*_features` methods take them."""
         inputs = {}
         for prefix, grid_thw in (("image_", image_grid_thw), ("video_", video_grid_thw)):
             if grid_thw is not None:
@@ -1862,6 +1867,16 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
             if feature_attention_mask is not None:
                 audio_inputs["frame_indices"] = get_audio_frame_indices(feature_attention_mask)
             inputs.update({f"audio_{name}": value for name, value in audio_inputs.items()})
+        if position_ids is None and input_ids is not None and attention_mask is not None:
+            inputs["position_ids"], _ = self.get_rope_index(
+                input_ids,
+                image_grid_thw,
+                video_grid_thw,
+                attention_mask,
+                use_audio_in_video or False,
+                audio_feature_lengths,
+                video_second_per_grid,
+            )
         return inputs
 
     @accepts_precomputed_kwargs(modality="video")
