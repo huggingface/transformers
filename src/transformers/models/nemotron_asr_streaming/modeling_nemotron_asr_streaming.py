@@ -427,7 +427,9 @@ class NemotronAsrStreamingEncoderConvolutionModule(nn.Module):
 
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, time, channels)`): Input tensor.
-            attention_mask (`torch.Tensor` of shape `(batch, 1, time, time)`): Attention mask.
+            all_masked_rows (`torch.Tensor`, *optional*): Mask of fully padded frames, zeroed before the convolution.
+            padding_cache (`NemotronAsrStreamingEncoderCausalConvPaddingCache`, *optional*): Convolution cache for
+                streaming inference.
 
         Returns:
             `torch.Tensor`: Output tensor of shape `(batch, time, channels)`.

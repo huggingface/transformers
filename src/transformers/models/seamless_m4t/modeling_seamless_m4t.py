@@ -980,7 +980,9 @@ class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
         are ignored. This is modified from fairseq's `utils.make_positions`.
 
         Args:
-            x: torch.Tensor x:
+            input_ids (`torch.Tensor`): Indices of input sequence tokens.
+            padding_idx (`int`): Index of the padding token.
+            cache_length (`int`, *optional*, defaults to 0): Number of cached tokens to offset positions by.
 
         Returns: torch.Tensor
         """
@@ -2088,7 +2090,7 @@ class SeamlessM4THifiGan(nn.Module):
         waveform.
 
         Args:
-            spectrogram (`torch.Tensor`):
+            inputs_embeds (`torch.Tensor`):
                 Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
                 model_in_dim)`, or un-batched and of shape `(sequence_length, model_in_dim)`. Note that `model_in_dim`
                 is the sum of `config.unit_embed_dim`, `config.lang_embed_dim` and `config.spkr_embed_dim`.

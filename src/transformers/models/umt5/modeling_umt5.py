@@ -244,9 +244,6 @@ class UMT5Attention(nn.Module):
 
         Args:
             relative_position: an int32 Tensor
-            bidirectional: a boolean - whether the attention is bidirectional
-            num_buckets: an integer
-            max_distance: an integer
 
         Returns:
             a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)

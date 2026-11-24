@@ -373,7 +373,7 @@ class OneFormerLoss(nn.Module):
         loss.
 
         Args:
-            num_labels (`int`):
+            num_classes (`int`):
                 The number of classes.
             matcher (`OneFormerHungarianMatcher`):
                 A torch module that computes the assignments between the predictions and labels.

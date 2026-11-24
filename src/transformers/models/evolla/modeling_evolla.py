@@ -55,7 +55,8 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     are ignored. This is modified from fairseq's `utils.make_positions`.
 
     Args:
-        x: torch.Tensor x:
+        input_ids (`torch.Tensor`): Indices of input sequence tokens.
+        padding_idx (`int`): Index of the padding token.
 
     Returns: torch.Tensor
     """
@@ -630,7 +631,7 @@ class EvollaSequenceCompressorAttention(nn.Module):
         Args:
             x (torch.Tensor): image features
                 shape (b, n1, D)
-            latent (torch.Tensor): latent features
+            latents (torch.Tensor): latent features
                 shape (b, n2, D);  n2: num of latent tokens
         """
         x = self.norm_media(x)

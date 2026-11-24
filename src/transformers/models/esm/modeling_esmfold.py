@@ -832,7 +832,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            x:
+            z:
                 [*, N_res, N_res, C_z] input tensor
             mask:
                 [*, N_res, N_res] input mask

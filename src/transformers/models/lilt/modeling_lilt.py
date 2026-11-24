@@ -99,7 +99,8 @@ class LiltTextEmbeddings(nn.Module):
         Args:
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
-            x: torch.Tensor x:
+            input_ids (`torch.Tensor`): Indices of input sequence tokens.
+            padding_idx (`int`): Index of the padding token.
         Returns: torch.Tensor
         """
         # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.

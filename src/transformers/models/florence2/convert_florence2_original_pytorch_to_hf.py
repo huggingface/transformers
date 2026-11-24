@@ -79,8 +79,8 @@ def vision_spatial_block(stage_idx, block_idx):
     The function helps in renaming vision spatial block layers weights.
 
     Args:
-        idx: stage number in original model
-        cnt: count of blocks in each stage
+        stage_idx: stage number in original model
+        block_idx: index of the block within the stage
     """
     spatial_block = []
     spatial_block.append(
@@ -187,8 +187,8 @@ def vision_channel_block(stage_idx, block_idx):
     The function helps in renaming vision channel block layers weights.
 
     Args:
-        idx: stage number in original model
-        cnt: count of blocks in each stage
+        stage_idx: stage number in original model
+        block_idx: index of the block within the stage
     """
     channel_block = []
     channel_block.append(

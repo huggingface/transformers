@@ -145,14 +145,11 @@ def sample_points_using_uncertainty(
 ) -> Tensor:
     """
     This function is meant for sampling points in [0, 1] * [0, 1] coordinate space based on their uncertainty. The
-    uncertainty is calculated for each point using the passed `uncertainty function` that takes points logit
-    prediction as input.
+    uncertainty of a point is the negative absolute value of its logit prediction.
 
     Args:
         logits (`float`):
             Logit predictions for P points.
-        uncertainty_function:
-            A function that takes logit predictions for P points and returns their uncertainties.
         num_points (`int`):
             The number of points P to sample.
         oversample_ratio (`int`):

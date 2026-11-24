@@ -58,7 +58,7 @@ def get_max_res_without_distortion(
 
     Args:
         image_size (tuple[int, int]): The original resolution of the image (height, width).
-        target_resolution (tuple[int, int]): The desired resolution to fit the image into (height, width).
+        target_size (tuple[int, int]): The desired resolution to fit the image into (height, width).
     Returns:
         tuple[int, int]: The optimal dimensions (height, width) to which the image should be resized.
     Example:

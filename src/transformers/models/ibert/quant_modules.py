@@ -706,7 +706,7 @@ def batch_frexp(inputs, max_bit=31):
     Decompose the scaling factor into mantissa and twos exponent.
 
     Args:
-        scaling_factor (`torch.Tensor`):
+        inputs (`torch.Tensor`):
             Target scaling factor to decompose.
 
     Returns:

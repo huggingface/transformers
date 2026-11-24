@@ -296,6 +296,13 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
         return torch.cat(position_chunks, dim=0)
 
     def forward(self, pixel_values: torch.Tensor, grid_thw: torch.LongTensor) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.Tensor`):
+                Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
+            grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
+                Temporal, height, and width patch-grid dimensions for every packed image or video.
+        """
         # Apply patch embeddings to already patchified pixel values.
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))

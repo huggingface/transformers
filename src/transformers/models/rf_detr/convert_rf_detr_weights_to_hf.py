@@ -172,7 +172,7 @@ def convert_rf_detr_checkpoint(
 
     Args:
         model_name: Name of the model (e.g., "lwdetr_tiny_30e_objects365")
-        checkpoint_path: Path to the checkpoint file
+        checkpoint_url: URL of the checkpoint file; defaults to the hosted checkpoint for `model_name` when `None`
         pytorch_dump_folder_path: Path to save the converted model
         push_to_hub: Whether to push the model to the hub
         organization: Organization to push the model to

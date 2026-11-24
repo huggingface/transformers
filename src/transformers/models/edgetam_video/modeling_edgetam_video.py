@@ -557,8 +557,6 @@ class EdgeTamVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
         Arguments:
             config (`EdgeTamVideoMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optional*, int, defaults to 2):
-                The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
         """
@@ -1747,11 +1745,13 @@ class EdgeTamVideoPromptEncoder(nn.Module):
         Embeds different types of prompts, returning both sparse and dense embeddings.
 
         Args:
-            points (`torch.Tensor`, *optional*):
-                point coordinates and labels to embed.
-            boxes (`torch.Tensor`, *optional*):
+            input_points (`torch.Tensor`, *optional*):
+                point coordinates to embed.
+            input_labels (`torch.Tensor`, *optional*):
+                labels of the points to embed.
+            input_boxes (`torch.Tensor`, *optional*):
                 boxes to embed
-            masks (`torch.Tensor`, *optional*):
+            input_masks (`torch.Tensor`, *optional*):
                 masks to embed
         """
         sparse_embeddings = None

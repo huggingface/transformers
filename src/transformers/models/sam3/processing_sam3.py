@@ -212,8 +212,6 @@ class Sam3Processor(ProcessorMixin):
         Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
 
         Args:
-            target_size (`int`):
-                The target size of the image.
             coords (`torch.Tensor`):
                 The coordinates to be normalized.
             original_size (`tuple`):

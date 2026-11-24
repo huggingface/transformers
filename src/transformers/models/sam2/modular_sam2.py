@@ -935,6 +935,17 @@ class Sam2Attention(nn.Module):
 
 class Sam2TwoWayAttentionBlock(SamTwoWayAttentionBlock, GradientCheckpointingLayer):
     def __init__(self, config: Sam2MaskDecoderConfig, skip_first_layer_pe: bool = False):
+        """
+        A transformer block with four layers:
+            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
+            sparse inputs (4) cross attention of dense inputs -> sparse inputs
+
+        Arguments:
+            config (`Sam2MaskDecoderConfig`):
+                The configuration file used to instantiate the block
+            skip_first_layer_pe (*optional*, bool, defaults to `False`):
+                Whether or not to skip the addition of the query_point_embedding on the first layer.
+        """
         nn.Module.__init__(self)
         self.self_attn = Sam2Attention(config, downsample_rate=1)
         self.layer_norm1 = nn.LayerNorm(config.hidden_size)
