@@ -278,11 +278,11 @@ def torch_chunk_gated_delta_rule(
         if num_intermediate_recurrent_states is not None
         else sequence_length
     )
-    chunked_query, sequential_query = torch.split(query, effective_sequence_length, dim=2)
-    chunked_key, sequential_key = torch.split(key, effective_sequence_length, dim=2)
-    chunked_value, sequential_value = torch.split(value, effective_sequence_length, dim=2)
-    chunked_beta, sequential_beta = torch.split(beta, effective_sequence_length, dim=2)
-    chunked_decay, sequential_decay = torch.split(decay, effective_sequence_length, dim=2)
+    chunked_query, sequential_query = torch.tensor_split(query, [effective_sequence_length], dim=2)
+    chunked_key, sequential_key = torch.tensor_split(key, [effective_sequence_length], dim=2)
+    chunked_value, sequential_value = torch.tensor_split(value, [effective_sequence_length], dim=2)
+    chunked_beta, sequential_beta = torch.tensor_split(beta, [effective_sequence_length], dim=2)
+    chunked_decay, sequential_decay = torch.tensor_split(decay, [effective_sequence_length], dim=2)
 
     # Pad sequence length to be a multiple of chunk_size. Padding is described as (left_pad, right_pad) for each dim.
     pad_size = (chunk_size - effective_sequence_length % chunk_size) % chunk_size
