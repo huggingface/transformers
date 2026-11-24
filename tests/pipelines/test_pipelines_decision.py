@@ -15,6 +15,7 @@
 import functools
 import json
 import re
+import tempfile
 import unittest
 
 from transformers import (
@@ -34,6 +35,8 @@ from ..test_decision_head_common import render, tiny_qwen2
 
 if is_torch_available():
     import torch
+
+    from transformers import Qwen3_5Config, Qwen3_5ForConditionalGeneration
 
 
 if is_vision_available():
@@ -107,6 +110,39 @@ class DecisionPipelineTest(unittest.TestCase):
         )
         (prompt,) = template({"state": 'say <|"|> hi', "questions": {"x": {"type": "noul"}}})
         self.assertNotIn(tokenizer.convert_tokens_to_ids('<|"|>'), prompt.input_ids)
+
+    @require_torch
+    def test_a_language_model_without_a_head_is_read_by_its_labels(self):
+        # Qwen3.5 is mapped to `JevForDecision` for the checkpoints that ship a JEV head; one without the head files
+        # is a language model, read by the logits of its labels like `transformers serve` does. Its `text_config` is
+        # what made it load as a random `JevForDecision`: a Qwen2 model failed to load as one and was already read so
+        text_config = {
+            "vocab_size": len(self.tokenizer),
+            "hidden_size": 16,
+            "intermediate_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 1,
+            "head_dim": 8,
+            "layer_types": ["full_attention", "linear_attention"],
+            "linear_key_head_dim": 8,
+            "linear_value_head_dim": 8,
+            "linear_num_key_heads": 2,
+            "linear_num_value_heads": 2,
+        }
+        vision_config = {"depth": 1, "hidden_size": 16, "intermediate_size": 32, "num_heads": 2, "out_hidden_size": 16}
+        model = Qwen3_5ForConditionalGeneration(Qwen3_5Config(text_config=text_config, vision_config=vision_config))
+        model.eval()
+        with tempfile.TemporaryDirectory() as repo:
+            model.save_pretrained(repo)
+            self.tokenizer.save_pretrained(repo)
+            decide = pipeline("decision", model=repo)
+            answers = decide(REQUEST)
+        expected = pipeline("decision", model=model, tokenizer=self.tokenizer)(REQUEST)
+        self.assertIsInstance(decide.model, Qwen3_5ForConditionalGeneration)
+        probabilities = {name: answer.get("probabilities", answer.get("noul")) for name, answer in answers.items()}
+        expected = {name: answer.get("probabilities", answer.get("noul")) for name, answer in expected.items()}
+        torch.testing.assert_close(probabilities, expected, atol=1e-4, rtol=0)
 
     def test_invalid_questions_raise(self):
         questions = (

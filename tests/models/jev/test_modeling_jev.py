@@ -82,6 +82,13 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertIsInstance(decide.model, JevForDecision)
         self.assertEqual(decide.decision_config.temperature, dict.fromkeys(["noul", "choice", "score"], 2.0))
 
+    def test_a_language_model_without_the_head_files_raises(self):
+        # Neither head files nor a config of JEV: the decision pipeline loads it as a language model instead
+        with tempfile.TemporaryDirectory() as tmp:
+            self.backbone_class(self.config.text_config).save_pretrained(tmp)
+            with self.assertRaisesRegex(ValueError, "has no JevForDecision head"):
+                JevForDecision.from_pretrained(tmp)
+
     def test_config_json_cannot_add_extra_files(self):
         # Only the config classes of decision models name the files read next to the weights, never a `config.json`
         with tempfile.TemporaryDirectory() as tmp:
