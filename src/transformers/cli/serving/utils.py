@@ -821,6 +821,14 @@ class GenerateRunner:
         """Generates with the model's generation config and the request's `generation_kwargs` on top (see
         `BaseHandler._build_generation_kwargs`)."""
 
+        def stop_if_cancelled(input_ids: "torch.LongTensor", scores: "torch.FloatTensor", **kwargs) -> "torch.Tensor":
+            """Stops the generation of a request that doesn't stream once it's cancelled (one that streams stops in
+            `_TokenStreamer.put`, but `generate` takes no streamer with beam search)."""
+            import torch
+
+            cancelled = request_id in self.cancelled_request_ids
+            return torch.full((input_ids.shape[0],), cancelled, device=input_ids.device)
+
         def generate_tokens(model: "PreTrainedModel", processor: Any, streamer: Any = None) -> list[int]:
             seed = generation_kwargs.pop("seed", None)
             if seed is not None:
@@ -834,6 +842,8 @@ class GenerateRunner:
                 "tokenizer": processor,
                 "streamer": streamer,
             }
+            if streamer is None:
+                kwargs["stopping_criteria"] = [stop_if_cancelled]
             # Multimodal models (e.g. Qwen2.5-Omni) may generate audio alongside text by default: text only
             if hasattr(model, "has_talker"):
                 kwargs["generation_mode"] = "text"
