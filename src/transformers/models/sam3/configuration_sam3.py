@@ -214,6 +214,8 @@ class Sam3Config(PreTrainedConfig):
         Weight for the sigmoid focal mask loss.
     dice_loss_coefficient (`float`, *optional*, defaults to 10.0):
         Weight for the dice mask loss.
+    presence_loss_coefficient (`float`, *optional*, defaults to 20.0):
+        Weight for the focal presence loss.
     ce_pos_weight (`float`, *optional*, defaults to 10.0):
         Positive class weight in the binary cross-entropy loss. Scales the loss on matched queries.
     ce_alpha (`float`, *optional*, defaults to 0.25):
@@ -224,12 +226,20 @@ class Sam3Config(PreTrainedConfig):
         Alpha parameter for sigmoid focal loss on mask predictions.
     mask_focal_gamma (`float`, *optional*, defaults to 2.0):
         Gamma parameter for sigmoid focal loss on mask predictions.
+    presence_alpha (`float`, *optional*, defaults to 0.5):
+        Alpha parameter for sigmoid focal loss on presence predictions.
+    presence_gamma (`float`, *optional*, defaults to 0.0):
+        Gamma parameter for sigmoid focal loss on presence predictions.
     matcher_class_cost (`float`, *optional*, defaults to 2.0):
         The relative weight of the classification error in the matching cost.
     matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
         The relative weight of the L1 error of the bounding box coordinates in the matching cost.
     matcher_giou_cost (`float`, *optional*, defaults to 2.0):
         The relative weight of the generalized IoU loss of the bounding box in the matching cost.
+    matcher_alpha (`float`, *optional*, defaults to 0.25):
+        Alpha parameter for the focal classification cost in the Hungarian matcher.
+    matcher_gamma (`float`, *optional*, defaults to 2.0):
+        Gamma parameter for the focal classification cost in the Hungarian matcher.
 
     Example:
     ```python
@@ -282,14 +292,19 @@ class Sam3Config(PreTrainedConfig):
     giou_loss_coefficient: float = 2.0
     mask_loss_coefficient: float = 200.0
     dice_loss_coefficient: float = 10.0
+    presence_loss_coefficient: float = 20.0
     ce_pos_weight: float = 10.0
     ce_alpha: float = 0.25
     ce_gamma: float = 2.0
     mask_focal_alpha: float = 0.25
     mask_focal_gamma: float = 2.0
+    presence_alpha: float = 0.5
+    presence_gamma: float = 0.0
     matcher_class_cost: float = 2.0
     matcher_bbox_cost: float = 5.0
     matcher_giou_cost: float = 2.0
+    matcher_alpha: float = 0.25
+    matcher_gamma: float = 2.0
 
     @property
     def image_size(self):

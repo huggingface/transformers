@@ -514,6 +514,11 @@ class Sam3LiteTextMaskDecoderOutput(ModelOutput):
 @dataclass
 class Sam3LiteTextImageSegmentationOutput(ModelOutput):
     r"""
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided):
+        Total loss as a weighted sum of binary cross-entropy (IoU-adaptive), focal presence, bounding box (L1 and GIoU),
+        and mask (focal and dice) losses.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
     pred_masks (`torch.Tensor` of shape `(batch_size, num_queries, height, width)`):
         Predicted segmentation masks for each query.
     pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
@@ -544,15 +549,13 @@ class Sam3LiteTextImageSegmentationOutput(ModelOutput):
     mask_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from mask decoder layers.
     auxiliary_outputs (`list[Dict]`, *optional*):
-        It is a list of dictionaries containing the two above keys (`pred_logits` and
-        `pred_boxes` in normalized [cx, cy, w, h] format) for each decoder layer.
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided):
-        Total loss as a weighted sum of binary cross-entropy (IoU-adaptive), bounding box (L1 and GIoU),
-        and mask (focal and dice) losses.
-    loss_dict (`Dict`, *optional*):
-        A dictionary containing the individual losses. Useful for logging.
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing `logits`, `pred_boxes` (in normalized
+        [cx, cy, w, h] format), and `presence_logits` for each intermediate decoder layer.
     """
 
+    loss: torch.Tensor | None = None
+    loss_dict: dict | None = None
     pred_masks: torch.Tensor = None
     pred_boxes: torch.Tensor = None
     pred_logits: torch.Tensor | None = None
@@ -567,8 +570,6 @@ class Sam3LiteTextImageSegmentationOutput(ModelOutput):
     detr_decoder_attentions: tuple[torch.Tensor] | None = None
     mask_decoder_attentions: tuple[torch.Tensor] | None = None
     auxiliary_outputs: list[dict] | None = None
-    loss: torch.Tensor | None = None
-    loss_dict: dict | None = None
 
 
 class Sam3LiteTextMLP(nn.Module):
@@ -2073,8 +2074,8 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         labels (`list[dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing the
             following keys:
-            - 'boxes' (`torch.Tensor` of shape `(num_boxes, 4)`): bounding boxes in (x1, y1, x2, y2)
-              format, normalized to [0, 1].
+            - 'boxes' (`torch.Tensor` of shape `(num_boxes, 4)`): bounding boxes in `(center_x, center_y, width, height)`
+              format, normalized to `[0, 1]`.
             - 'masks' (`torch.Tensor` of shape `(num_boxes, H, W)`, *optional*): binary instance masks
               for each box. Can be omitted for detection-only training.
             - 'is_valid_mask' (`torch.BoolTensor` of shape `(num_boxes,)`, *optional*): boolean mask
@@ -2231,19 +2232,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
             **kwargs,
         )
 
-        auxiliary_outputs = None
-        if self.config.auxiliary_loss:
-            auxiliary_outputs = [
-                {
-                    "pred_logits": all_pred_logits[i],
-                    "pred_boxes": all_pred_boxes_cxcywh[i],
-                    "pred_masks": None,
-                }
-                for i in range(len(all_pred_logits) - 1)
-            ]
-
-        loss, loss_dict = None, None
-
+        loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits=pred_logits,
@@ -2251,11 +2240,16 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
                 device=self.device,
                 pred_boxes=all_pred_boxes_cxcywh[-1],
                 pred_masks=mask_outputs.pred_masks,
+                presence_logits=presence_logits,
                 config=self.config,
-                auxiliary_outputs=auxiliary_outputs,
+                outputs_class=all_pred_logits,
+                outputs_coord=all_pred_boxes_cxcywh,
+                outputs_presence=decoder_outputs.presence_logits,
             )
 
         return Sam3LiteTextImageSegmentationOutput(
+            loss=loss,
+            loss_dict=loss_dict,
             pred_masks=mask_outputs.pred_masks,
             pred_boxes=pred_boxes,
             pred_logits=pred_logits,
@@ -2270,8 +2264,6 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
             detr_decoder_attentions=decoder_outputs.attentions,
             mask_decoder_attentions=mask_outputs.attentions,
             auxiliary_outputs=auxiliary_outputs,
-            loss=loss,
-            loss_dict=loss_dict,
         )
 
 
