@@ -1079,6 +1079,7 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
+    is_croppable = True
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
 
@@ -1094,6 +1095,7 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.device = None
         self.dtype = None
         self.record_past = False
+        self.recurrent_states_history = None
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -1147,18 +1149,6 @@ class LinearAttentionCacheLayerMixin(ABC):
                 self.recurrent_states[i] = self.recurrent_states[i].index_select(0, beam_idx.to(self.device))
 
     @property
-    def is_croppable(self) -> bool:
-        """
-        Whether `crop` can put this layer back as it was. This is only supported when there are no recurrent states.
-        """
-        if any(self.is_recurrent_states_initialized.values()):
-            return False
-        # If nothing is initialized, return False as we don't yet know whether we will have any recurrent states or no, so let's be
-        # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
-        # have any recurrent state (they are updated in the same forward)
-        return any(self.is_conv_states_initialized.values())
-
-    @property
     def is_compileable(self) -> bool:
         """
         All shapes are static by essence in a LinearAttention layer, so it is compilable. The exception is when we record the past to
@@ -1174,6 +1164,7 @@ class LinearAttentionCacheLayerMixin(ABC):
         to retrieve previous full states.
         """
         self.record_past = True
+        self.recurrent_states_history = []
 
     def crop(self, tokens_to_remove: int):
         """
@@ -1192,15 +1183,19 @@ class LinearAttentionCacheLayerMixin(ABC):
             )
         for i in range(self.number_of_states):
             tokens_to_remove = abs(tokens_to_remove)
-            # In this case, simply restrict the size back to `conv_kernel_size` without cropping
+            # In this case, simply restrict the size of the conv_states back to `conv_kernel_size` without cropping
             if tokens_to_remove == 0:
                 self.conv_states[i] = self.conv_states[i][..., -self.conv_kernel_size[i] :]
             # This both crop the last `tokens_to_remove`, as well as resize the conv states to `conv_kernel_size` as we never
             # need more for the next forward
             else:
+                # Crop the conv states
                 self.conv_states[i] = self.conv_states[i][
                     ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
                 ]
+                # Reassign the recurrent states, and drop all the history
+                self.recurrent_states[i] = self.recurrent_states_history[-tokens_to_remove]
+                self.recurrent_states_history = []
 
     def get_max_length(self) -> int:
         # LinearAttention layer have no sequence length dimension, so simply return -1 here
@@ -1281,20 +1276,26 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
         # Return full states no matter what
         return full_conv_states
 
-    def update_recurrent_state(self, recurrent_states: torch.Tensor, state_idx: int = 0, **kwargs) -> torch.Tensor:
+    def update_recurrent_state(self, recurrent_states: torch.Tensor | list[torch.Tensor], state_idx: int = 0, **kwargs) -> torch.Tensor:
         """
-        Update the linear attention cache in-place, and return the necessary ssm states.
+        Update the linear attention cache in-place, and return the necessary recurrent states.
 
         Args:
-            smm_states (`torch.Tensor`): The new ssm states to cache.
+            recurrent_states (`torch.Tensor` or `list[torch.Tensor]`): If a single Tensor, the last recurrent state to cache.
+            If a list of torch.Tensor, corresponds to the last `N = len(recurrent_states)` recurrent states during a `forward`
+            with several tokens (usually prefill), to be able to correctly `crop` this layer later on.
 
         Returns:
-            `torch.Tensor`: The updated ssm states.
+            `torch.Tensor`: The updated last recurrent states.
         """
         if not self.is_recurrent_states_initialized[state_idx]:
             self.lazy_initialization(recurrent_states=recurrent_states, state_idx=state_idx)
-        # Note that we copy instead of assigning, to preserve the static address for cudagraphs
-        self.recurrent_states[state_idx].copy_(recurrent_states)
+        if isinstance(recurrent_states, torch.Tensor):
+            # Note that we copy instead of assigning, to preserve the static address for cudagraphs
+            self.recurrent_states[state_idx].copy_(recurrent_states)
+        else:
+            self.recurrent_states[state_idx].copy_(recurrent_states[-1])
+            self.recurrent_states_history = recurrent_states[:-1]
         return self.recurrent_states[state_idx]
 
 
