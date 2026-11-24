@@ -39,7 +39,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
 from ..llama.modeling_llama import LlamaRMSNorm
-from ..mixtral.modeling_mixtral import MixtralTopKRouter
+from ..mixtral.modeling_mixtral import MixtralExperts, MixtralTopKRouter
 from .configuration_longcat_flash import LongcatFlashConfig
 
 
