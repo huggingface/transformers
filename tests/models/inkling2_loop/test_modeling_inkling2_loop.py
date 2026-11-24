@@ -171,6 +171,25 @@ class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
                         actual = model(input_ids[:, start:end], cache=static).logits
                         torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
 
+    def test_generate_with_static_cache_past_sliding_window(self):
+        # `generate` prebuilds the causal masks: the sliding layers of hybrid models must get a sliding mask, not a
+        # full one, or the static buffer length breaks the attention on prefills longer than the window
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.sliding_window_size = 4
+        input_ids = inputs_dict["input_ids"][:, :12]
+        model = Inkling2LoopForCausalLM(config).to(torch_device).eval()
+        dynamic = model.generate(input_ids, max_new_tokens=8, do_sample=False, cache=DynamicCache(config=config))
+        for mode in ("per_loop", "last_loop"):
+            with self.subTest(mode=mode):
+                config.recurrent_kv_cache_mode = mode
+                static = model.generate(
+                    input_ids,
+                    max_new_tokens=8,
+                    do_sample=False,
+                    cache=StaticCache(config=config, max_cache_len=20),
+                )
+                torch.testing.assert_close(static, dynamic, rtol=0, atol=0)
+
     def test_last_loop_readers_hold_no_kv(self):
         # The extra cache layers are read-only views of the loop layers: pass-local conv states, no KV of their own
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
