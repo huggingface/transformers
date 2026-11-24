@@ -72,6 +72,9 @@ def fuse_qkv_weights(model: torch.nn.Module) -> int:
             projections, attribute = (module.gate_proj, module.up_proj), "_proto_gate_up_weight"
         else:
             continue
+        # Only plain linears without bias concatenate into one GEMM: a quantized projection (FP8, ...) has its own forward
+        if any(type(p) is not torch.nn.Linear or p.bias is not None for p in projections):
+            continue
         weight = torch.cat([p.weight for p in projections]).detach()
         offset = 0
         for p in projections:

@@ -1347,6 +1347,7 @@ class FP8ExpertsInterface(ExpertsInterface):
     """Interface for registering custom FP8 experts forward functions."""
 
     _global_mapping = {
+        "proto_decode": fp8_grouped_mm_experts_forward,  # [scratch, bench only] the bf16 prototype's FP8 counterpart
         "batched_mm": fp8_batched_mm_experts_forward,
         "grouped_mm": fp8_grouped_mm_experts_forward,
         "deepgemm": deepgemm_fp8_fp4_experts_forward,
