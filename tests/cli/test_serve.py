@@ -573,6 +573,24 @@ class TestValidation(unittest.TestCase):
             handler._validate_request({"model": "x", "messages": [], "audio": {}})
         self.assertTrue(any("audio" in msg for msg in cm.output))
 
+    def test_max_model_len(self):
+        from transformers import Qwen2Config
+
+        config = Qwen2Config(max_position_embeddings=32)
+        self.assertEqual(GenerationState().context_length(config), 32)  # the model's context by default
+        self.assertEqual(GenerationState(max_model_len=16).context_length(config), 16)
+        with self.assertRaises(ValueError):  # past the model's context, its answers are wrong
+            GenerationState(max_model_len=64).context_length(config)
+
+    def test_prompt_past_max_model_len_rejected(self):
+        from transformers import Qwen2Config
+
+        engine = MagicMock(model_config=Qwen2Config(max_position_embeddings=32))
+        handler = ChatCompletionHandler(model_manager=MagicMock(), generation_state=GenerationState(max_model_len=16))
+        handler._check_prompt_length(engine, {"input_ids": list(range(15))})
+        with self.assertRaises(ValueError):  # no room left for an answer
+            handler._check_prompt_length(engine, {"input_ids": list(range(16))})
+
 
 class TestGetEngine(unittest.TestCase):
     def _make_handler(self, force_model=None):
@@ -1188,6 +1206,35 @@ class TestChatCompletion(ServeIntegrationTestCase):
             max_tokens=10,
         )
         self.assertIsNotNone(resp.choices[0].message.content)
+
+    def test_non_streaming_request_cancellation(self):
+        """A client leaving a non-streaming request stops its generation: the next request doesn't wait for it."""
+        messages = [{"role": "user", "content": "Say hi"}]
+        self.client.chat.completions.create(model=self.MODEL, messages=messages, max_tokens=1)  # the model is loaded
+        body = {
+            "model": self.MODEL,
+            "messages": [{"role": "user", "content": "Write a long story."}],
+            "max_tokens": 2000,
+            "generation_config": json.dumps({"min_new_tokens": 2000}),
+        }
+        with self.assertRaises(httpx.ReadTimeout):
+            httpx.post(f"{self.base_url}/v1/chat/completions", json=body, timeout=2)
+
+        start = time.perf_counter()
+        self.client.chat.completions.create(model=self.MODEL, messages=messages, max_tokens=5)
+        self.assertLess(time.perf_counter() - start, 10)  # the 2000 tokens would take much longer
+
+    def test_error_event_is_valid_json(self):
+        """An error in a stream ends it with an event that is valid JSON, even with quotes in its message."""
+        body = {
+            "model": self.MODEL,
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "stream": True,
+            "generation_config": json.dumps({'fo"o': 1}),  # `generate` rejects it, quoting it in its error
+        }
+        with httpx.stream("POST", f"{self.base_url}/v1/chat/completions", json=body, timeout=60) as resp:
+            events = [line[len("data: ") :] for line in resp.iter_lines() if line.startswith("data: ")]
+        self.assertIn('fo"o', json.loads(events[-1])["error"])
 
 
 @slow
@@ -2298,12 +2345,8 @@ class TestToolCallUnit(unittest.TestCase):
             self.assertEqual(len(message["tool_calls"]), 2)
 
 
-class TestEngineDeadServerIntegration(unittest.TestCase):
-    """End-to-end FastAPI behavior when a model's engine has died.
-
-    Asserts the wiring from an ``EngineDeadError`` raised in a request handler (or a dead engine observed by
-    ``/health``) to a 503 response carrying the cause, the contract orchestrators rely on to recycle the pod.
-    """
+class TestErrorResponses(unittest.TestCase):
+    """How errors reach the client: a dead engine is a 503 with the cause, a `ValueError` (the request's fault) a 400."""
 
     def _build_app(self, model_manager, chat_handler=None):
         return build_server(
@@ -2345,6 +2388,25 @@ class TestEngineDeadServerIntegration(unittest.TestCase):
 
         self.assertEqual(resp.status_code, 503)
         self.assertIn("CUDA illegal memory access", resp.json()["error"])
+
+    def test_value_error_returns_400(self):
+        """A ValueError raised from a route is the request's fault: a 400 with its message."""
+        from fastapi.testclient import TestClient
+
+        chat_handler = MagicMock()
+
+        async def handle_request(_body, _request_id):
+            raise ValueError("`seed` must be a number")
+
+        chat_handler.handle_request = handle_request
+
+        client = TestClient(self._build_app(ModelManager(), chat_handler=chat_handler))
+        resp = client.post(
+            "/v1/chat/completions", json={"model": "x", "messages": [{"role": "user", "content": "hi"}]}
+        )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json(), {"detail": "`seed` must be a number"})
 
 
 class _TestToolCallBase:
