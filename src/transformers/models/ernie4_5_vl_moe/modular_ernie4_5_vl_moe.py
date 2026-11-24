@@ -952,7 +952,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         image_outputs.pooler_output = image_embeds
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

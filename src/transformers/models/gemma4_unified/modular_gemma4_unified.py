@@ -57,6 +57,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
     get_block_sequence_ids_for_mask,
+    get_video_split_sizes,
 )
 from ..gemma4.processing_gemma4 import Gemma4Processor
 from ..gemma4.video_processing_gemma4 import (
@@ -1070,14 +1071,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
         vision_outputs.pooler_output = pooler_output
         tokens_per_frame = non_pad_mask.sum(dim=-1)
-        video_index = torch.repeat_interleave(
-            torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-            num_frames_per_video.to(tokens_per_frame.device),
-            output_size=len(tokens_per_frame),
-        )
-        vision_outputs.split_sizes = tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(
-            0, video_index, tokens_per_frame
-        )
+        vision_outputs.split_sizes = get_video_split_sizes(tokens_per_frame, num_frames_per_video)
         return vision_outputs
 
     @can_return_tuple
@@ -1104,7 +1098,7 @@ class Gemma4UnifiedModel(Gemma4Model):
             )
 
         audio_embeds = self.embed_audio(inputs_embeds=input_features)
-        # Only the real audio soft tokens, as the vision encoder strips its padding
+        # Only the real audio soft tokens, as the image getter drops padding too
         if input_features_mask is not None:
             input_features_mask = input_features_mask.to(audio_embeds.device)
             pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)

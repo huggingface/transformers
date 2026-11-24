@@ -926,6 +926,18 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     return block_sequence_ids
 
 
+def get_video_split_sizes(
+    tokens_per_frame: torch.LongTensor, num_frames_per_video: torch.LongTensor
+) -> torch.LongTensor:
+    """Each video's number of tokens, the sum of its frames' `tokens_per_frame`, without a host sync."""
+    video_index = torch.repeat_interleave(
+        torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
+        num_frames_per_video.to(tokens_per_frame.device),
+        output_size=len(tokens_per_frame),
+    )
+    return tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(0, video_index, tokens_per_frame)
+
+
 @auto_docstring(
     custom_intro="""
     The base Gemma 4 model comprising a vision backbone, an audio backbone, and a language model without a
@@ -1226,14 +1238,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
         vision_outputs.pooler_output = pooler_output
         tokens_per_frame = non_pad_mask.sum(dim=-1)
-        video_index = torch.repeat_interleave(
-            torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-            num_frames_per_video.to(tokens_per_frame.device),
-            output_size=len(tokens_per_frame),
-        )
-        vision_outputs.split_sizes = tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(
-            0, video_index, tokens_per_frame
-        )
+        vision_outputs.split_sizes = get_video_split_sizes(tokens_per_frame, num_frames_per_video)
         return vision_outputs
 
     @can_return_tuple
@@ -1260,7 +1265,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
             )
 
         audio_embeds = self.embed_audio(inputs_embeds=input_features)
-        # Only the real audio soft tokens, as the vision encoder strips its padding
+        # Only the real audio soft tokens, as the image getter drops padding too
         if input_features_mask is not None:
             input_features_mask = input_features_mask.to(audio_embeds.device)
             pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)

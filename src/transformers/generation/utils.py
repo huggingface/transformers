@@ -1157,6 +1157,11 @@ class GenerationMixin(ContinuousMixin):
             # Some models (e.g. Granite 4 Vision) only return deepstack features, without a pooled output
             features = pooler_output if pooler_output is not None else (deepstack_features or [None])[0]
             is_flat = isinstance(features, torch.Tensor) and getattr(modality_outputs, "split_sizes", None) is not None
+            if not is_flat and isinstance(features, torch.Tensor) and features.ndim == 2:
+                raise ValueError(
+                    f"The flat {modality} features of `mm_encoder_outputs` need their `split_sizes`, as returned by "
+                    f"`get_{modality}_embeddings`."
+                )
             if not is_flat and pooler_output is None:
                 continue
 
@@ -1181,9 +1186,8 @@ class GenerationMixin(ContinuousMixin):
             # `get_*_features` passed by users also come per item, and keep their `split_sizes`: those are deprecated
             if getattr(modality_outputs, "split_sizes", None) is not None:
                 logger.warning_once(
-                    "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) to "
-                    "`generate` is deprecated and will be removed: pass the flat outputs of `get_image_embeddings` / "
-                    "`get_video_embeddings`."
+                    "Passing per-item `mm_encoder_outputs` (from `get_*_features`) to `generate` is deprecated and will "
+                    "be removed in v5.29: pass the flat outputs of `get_*_embeddings` (`get_image_embeddings`, ...)."
                 )
             # A copy, as the outputs may be the user's
             modality_outputs = mm_encoder_output[modality] = copy.copy(modality_outputs)

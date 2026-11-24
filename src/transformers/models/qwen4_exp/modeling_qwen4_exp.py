@@ -2187,10 +2187,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel, MultimodalMixin):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        video_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        video_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
-        return video_outputs
+        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
@@ -2203,7 +2200,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel, MultimodalMixin):
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
         image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return image_outputs
 
     def get_placeholder_mask(

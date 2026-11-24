@@ -669,6 +669,8 @@ class GlmImageModel(Glm4vModel):
     def get_image_embeddings(self):
         raise AttributeError("Not needed for GlmImage")
 
+    # Its features are the image tokenizer's feature maps, per image: listing the decorators keeps GLM-4V's flat
+    # `get_image_embeddings` and `@merge_mm_encoder_outputs` (on the forward) from being inherited
     @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring

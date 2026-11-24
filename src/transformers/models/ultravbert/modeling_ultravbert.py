@@ -28,7 +28,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
@@ -260,8 +260,7 @@ class UltraVBertModel(UltraVBertPreTrainedModel, MultimodalMixin):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states)
-        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
-        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_features)
         return image_outputs
 
     @can_return_tuple

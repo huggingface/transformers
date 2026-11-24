@@ -18,7 +18,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.auto.modeling_auto import AutoModel
@@ -117,12 +117,11 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
             The tensors corresponding to the input images.
         """
         patch_embeddings = self.vision_embed_tokens(pixel_values)
+        # A batch of images' patches, or a single image's
+        images_patches = patch_embeddings if patch_embeddings.ndim == 3 else patch_embeddings[None]
+        pooler_output, split_sizes = flatten_items(images_patches)
         return BaseModelOutputWithPooling(
-            last_hidden_state=patch_embeddings,
-            pooler_output=patch_embeddings.reshape(-1, patch_embeddings.shape[-1]),
-            split_sizes=patch_embeddings.new_full(
-                patch_embeddings.shape[:-2] or (1,), patch_embeddings.shape[-2], dtype=torch.long
-            ),
+            last_hidden_state=patch_embeddings, pooler_output=pooler_output, split_sizes=split_sizes
         )
 
     def get_placeholder_mask(

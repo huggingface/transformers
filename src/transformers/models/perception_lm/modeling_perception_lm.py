@@ -275,7 +275,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel, MultimodalMixin):
 
         video_features = None
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
-            mm_encoder_outputs["video"] = self.get_image_embeddings(pixel_values=pixel_values_videos, return_dict=True)
+            mm_encoder_outputs["video"] = self.get_video_embeddings(pixel_values_videos, return_dict=True)
 
         if mm_encoder_outputs.get("video") is not None:
             video_features = mm_encoder_outputs["video"].pooler_output

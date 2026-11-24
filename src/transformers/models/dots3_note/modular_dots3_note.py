@@ -28,7 +28,6 @@ from ...audio_utils import make_list_of_audio
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
@@ -1121,9 +1120,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, InklingModel, MultimodalMixin):
 
 
 @auto_docstring
-class Dots3NoteForConditionalGeneration(
-    Dots3NotePreTrainedModel, VoxtralForConditionalGeneration, MultimodalMixin, GenerationMixin
-):
+class Dots3NoteForConditionalGeneration(Dots3NotePreTrainedModel, VoxtralForConditionalGeneration):
     _keep_in_fp32_modules_strict = AttributeError()
     input_modalities = ("image", "video", "audio", "text")
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}

@@ -26,7 +26,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
+from ...modeling_multimodal_utils import MultimodalMixin, flatten_items, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -837,8 +837,7 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         image_features = self.connector(
             image_hidden_states, attention_mask=patch_attention_mask.view(pixel_values.size(0), -1)
         )
-        image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])
-        image_outputs.split_sizes = real_images_inds.view(batch_size, num_images).sum(dim=1) * image_features.shape[1]
+        image_outputs.pooler_output, image_outputs.split_sizes = flatten_items(image_features)
         return image_outputs
 
     @can_return_tuple

@@ -724,6 +724,10 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         return 2
 
+    @unittest.skip("Audio modality is not tested here")
+    def test_get_audio_embeddings_split_sizes(self):
+        pass
+
     @parameterized.expand([True, False, None])
     @unittest.skip("Audio modality is not tested here")
     def test_get_audio_features_output(self, return_dict: bool | None):

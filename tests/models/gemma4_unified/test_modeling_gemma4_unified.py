@@ -262,6 +262,14 @@ class Gemma4UnifiedAudio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, 
     def test_generate_from_multimodal_encoder_outputs(self):
         pass
 
+    @unittest.skip("The tester has no image in input dict")
+    def test_get_image_embeddings_split_sizes(self):
+        pass
+
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_embeddings_split_sizes(self):
+        pass
+
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):
         pass
@@ -407,6 +415,14 @@ class Gemma4UnifiedVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin,
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
                 self.skipTest(reason="Gemma4 unified does not collect any hidden states or attentions (no mm tower)")
+
+    @unittest.skip("The tester has no videos in input dict")
+    def test_get_video_embeddings_split_sizes(self):
+        pass
+
+    @unittest.skip("The tester has no audios in input dict")
+    def test_get_audio_embeddings_split_sizes(self):
+        pass
 
     @unittest.skip("We need 4 layers to correctly test cache sharing.")
     def test_num_layers_is_small(self):

@@ -691,6 +691,9 @@ class PaddleOCRVLModel(Qwen2VLModel):
 
         self.post_init()
 
+    def get_video_embeddings(self):
+        raise AttributeError("PaddleOCRVLModel does not support video.")
+
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,

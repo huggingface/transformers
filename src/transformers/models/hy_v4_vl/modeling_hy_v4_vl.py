@@ -50,7 +50,13 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    accepts_precomputed_kwargs,
+    get_max_seqlen,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens
 from .configuration_hy_v4_vl import HYV4VLConfig, HYV4VLTextConfig, HYV4VLVisionConfig
@@ -1378,6 +1384,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_embeddings(

@@ -1210,6 +1210,9 @@ class HunYuanVLModel(Qwen2VLModel):
         self.rope_deltas = rope_deltas
         return rope_positions
 
+    def get_video_embeddings(self, **super_kwargs):
+        raise AttributeError("Model doesn't support videos")
+
     def get_image_embeddings(
         self,
         pixel_values: torch.Tensor,

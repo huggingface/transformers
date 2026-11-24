@@ -11,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Shared getters of models that take images or videos."""
+"""What models taking images, videos or audio share: their per-item getters, built on the flat ones (`MultimodalMixin`),
+and the conversion of `mm_encoder_outputs` between the two layouts."""
 
 import copy
 import functools
@@ -102,9 +103,8 @@ def merge_mm_encoder_outputs(forward):
             is_per_item = any(merged[modality] is not outputs for modality, outputs in mm_encoder_outputs.items())
             if is_per_item and not is_torchdynamo_compiling():
                 logger.warning_once(
-                    "Passing per-item `mm_encoder_outputs` (from `get_image_features` / `get_video_features`) is "
-                    "deprecated and will be removed: pass the flat outputs of `get_image_embeddings` / "
-                    "`get_video_embeddings`."
+                    "Passing per-item `mm_encoder_outputs` (from `get_*_features`) is deprecated and will be removed in "
+                    "v5.29: pass the flat outputs of `get_*_embeddings` (`get_image_embeddings`, ...)."
                 )
             mm_encoder_outputs = merged
         return forward(self, *args, mm_encoder_outputs=mm_encoder_outputs, **kwargs)

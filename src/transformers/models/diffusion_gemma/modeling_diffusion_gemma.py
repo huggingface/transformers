@@ -1184,7 +1184,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
 
         audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
         audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-        # Only the real audio soft tokens, as the vision encoder strips its padding (`attention_mask` is True on them)
+        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
         valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
         audio_outputs.pooler_output = audio_embeds[valid_mask]
         audio_outputs.split_sizes = valid_mask.sum(-1)

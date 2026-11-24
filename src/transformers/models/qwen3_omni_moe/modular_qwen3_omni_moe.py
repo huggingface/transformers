@@ -1171,7 +1171,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_outputs
 
     def get_image_embeddings(
@@ -1182,7 +1182,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")

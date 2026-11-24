@@ -523,16 +523,6 @@ class HYV4VLModel(Qwen2VLModel):
         vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
         return vision_outputs
 
-    @can_return_tuple
-    @auto_docstring
-    def get_video_embeddings(
-        self,
-        pixel_values_videos: torch.Tensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
-
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
