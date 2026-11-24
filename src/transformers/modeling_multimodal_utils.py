@@ -50,7 +50,8 @@ def _features_getter(modality: str):
     def get_features(self, *args, **kwargs):
         return split_modality_outputs(getattr(self, f"get_{modality}_embeddings")(*args, return_dict=True, **kwargs))
 
-    get_features.__name__ = get_features.__qualname__ = f"get_{modality}_features"
+    get_features.__name__ = f"get_{modality}_features"
+    get_features.__qualname__ = f"MultimodalMixin.{get_features.__name__}"
     get_features.__doc__ = f"Each {modality}'s features, from `get_{modality}_embeddings`."
     return get_features
 
@@ -65,32 +66,46 @@ def _embeddings_getter(modality: str):
             raise AttributeError(f"{type(self).__name__} has no `{name}`")
         return getattr(self.model, name)(*args, **kwargs)
 
-    get_embeddings.__name__ = get_embeddings.__qualname__ = name
+    get_embeddings.__name__ = name
+    get_embeddings.__qualname__ = f"MultimodalMixin.{name}"
     get_embeddings.__doc__ = f"The base model's `{name}`."
     return get_embeddings
+
+
+class _ModalityGetter:
+    """A getter of `MultimodalMixin` that only exists on models taking its modality as input, so `hasattr` tells which
+    inputs a model takes."""
+
+    def __init__(self, modality: str, getter):
+        self.modality = modality
+        self.getter = getter
+
+    def __get__(self, instance, owner):
+        input_modalities = owner.input_modalities
+        input_modalities = (input_modalities,) if isinstance(input_modalities, str) else input_modalities
+        # A model defining its own per-item getter (GLM-Image's feature maps) has no flat level for the mixin to build on
+        features_owner = next(cls for cls in owner.__mro__ if f"get_{self.modality}_features" in cls.__dict__)
+        if self.modality not in input_modalities or features_owner is not MultimodalMixin:
+            raise AttributeError(f"{owner.__name__} has no `{self.getter.__name__}`")
+        return self.getter.__get__(instance, owner)
 
 
 class MultimodalMixin:
     """
     `get_image_features`, `get_video_features` and `get_audio_features` from a model's flat `get_image_embeddings`,
     `get_video_embeddings` and `get_audio_embeddings`, split per item by the `split_sizes` they return. A model with a
-    head reaches its base model's. Only the modalities in `input_modalities` get them, so `hasattr` tells which inputs
+    head reaches its base model's. Only the modalities in `input_modalities` have them, so `hasattr` tells which inputs
     a model takes.
     """
 
     model: "MultimodalMixin"
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        input_modalities = getattr(cls, "input_modalities", ())
-        input_modalities = (input_modalities,) if isinstance(input_modalities, str) else input_modalities
-        for modality in ("image", "video", "audio"):
-            # A model defining its own per-item getter (GLM-Image's feature maps) has no flat level to build it on
-            if modality not in input_modalities or hasattr(cls, f"get_{modality}_features"):
-                continue
-            setattr(cls, f"get_{modality}_features", _features_getter(modality))
-            if not hasattr(cls, f"get_{modality}_embeddings"):
-                setattr(cls, f"get_{modality}_embeddings", _embeddings_getter(modality))
+    get_image_embeddings = _ModalityGetter("image", _embeddings_getter("image"))
+    get_video_embeddings = _ModalityGetter("video", _embeddings_getter("video"))
+    get_audio_embeddings = _ModalityGetter("audio", _embeddings_getter("audio"))
+    get_image_features = _ModalityGetter("image", _features_getter("image"))
+    get_video_features = _ModalityGetter("video", _features_getter("video"))
+    get_audio_features = _ModalityGetter("audio", _features_getter("audio"))
 
 
 def merge_modality_outputs(outputs):
