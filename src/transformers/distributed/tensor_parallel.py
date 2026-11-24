@@ -602,17 +602,6 @@ class MoeExpertsParallel(TensorParallelLayer):
         return _AllReduceForward.apply(output, process_group)
 
 
-class MoeIdentityParallel(TensorParallelLayer):
-    """
-    Used in longcat_flash zero_experts (nn.Identity) which return the same value on every GPU, but the
-    moe_tp_experts will sums across GPUs. Therefore we pre-divide the identity input by tp_size to cancel the extra scaling.
-    """
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        input_tensor = args[0]
-        return (input_tensor / mesh.size(), *args[1:]), kwargs
-
-
 class LocalParamsParallel(TensorParallelLayer):
     """Runs the module's forward with its own sharded parameters as local tensors. For a bare `nn.Parameter` such as
     attention sinks, which has no forward to hook: its own plan entry shards it, and this style goes on its owner."""
@@ -644,7 +633,6 @@ if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
     ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
     ALL_PARALLEL_STYLES.register("moe_tp_experts_partial", MoeExpertsParallel(reduce_output=False))
-    ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
     ALL_PARALLEL_STYLES.register("local_params", LocalParamsParallel())
     # Every rank keeps the full param, e.g. a per-tensor quantization scale
     ALL_PARALLEL_STYLES.register("replicate", TensorParallelLayer())
@@ -672,6 +660,15 @@ def apply_tensor_parallelism(model: nn.Module, tp_mesh: DeviceMesh, tp_plan: dic
     parameters = dict(model.named_parameters())
     # [gap2 prototype] `tp_all_reduce_add_rms_norm` is called from model code, which has no mesh
     parallel_utils._TP_GROUP = tp_mesh.get_group() if tp_mesh.ndim == 1 else tp_mesh.get_group("tp")
+
+    if "moe_tp_experts" in tp_plan.values():
+        _warning_once_on_rank_zero(
+            "The `moe_tp_experts` parallel style has been deprecated (removal in v5.28.0). "
+            "Use expert parallelism with `ep_dispatch_experts` and `grouped_gemm` instead. "
+            "Most MoE models already define this as their default `ep_plan`, so an explicit "
+            "plan is usually unnecessary. To preserve the previous masking and all-reduce behavior, use "
+            '`DistributedConfig(ep_implementation="all_reduce")`.'
+        )
 
     for name, style_name in tp_plan.items():
         style = ALL_PARALLEL_STYLES[style_name]
