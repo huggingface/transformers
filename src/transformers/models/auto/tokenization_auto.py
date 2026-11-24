@@ -512,17 +512,20 @@ def _tokenizers_backend_in_place_of_hub_class(
     *inputs,
     **kwargs,
 ):
-    """Load `TokenizersBackend` in place of the Hub `tokenizer_class`, keeping that class's behaviour:
+    """Load `TokenizersBackend` in place of a model-specific Hub `tokenizer_class`, keeping that class's behaviour:
     - its default padding side, unless `tokenizer_config.json` sets one.
-    - for a model-specific class, `add_bos_token` / `add_eos_token` from `tokenizer_config.json`, even when the
-      `tokenizer.json` post-processor doesn't add those tokens."""
+    - `add_bos_token` / `add_eos_token` from `tokenizer_config.json`, even when the `tokenizer.json` post-processor
+      doesn't add those tokens."""
     hub_class = tokenizer_class_from_name(hub_class_name) if hub_class_name is not None else None
-    if isinstance(hub_class, type) and issubclass(hub_class, TokenizersBackend):
+    is_model_specific = (
+        isinstance(hub_class, type) and issubclass(hub_class, TokenizersBackend) and hub_class is not TokenizersBackend
+    )
+    if is_model_specific:
         kwargs["_hub_class_padding_side"] = hub_class.padding_side
-        if hub_class is not TokenizersBackend:
-            for key in ("add_bos_token", "add_eos_token"):
-                if key in tokenizer_config:
-                    kwargs.setdefault(key, tokenizer_config[key])
+        if "add_bos_token" in tokenizer_config:
+            kwargs.setdefault("add_bos_token", tokenizer_config["add_bos_token"])
+        if "add_eos_token" in tokenizer_config:
+            kwargs.setdefault("add_eos_token", tokenizer_config["add_eos_token"])
     return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
 
