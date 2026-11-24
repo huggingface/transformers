@@ -384,5 +384,20 @@ class Phi3VForConditionalGeneration(Phi3VPreTrainedModel, GenerationMixin):
             image_outputs=outputs.image_outputs,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def prepare_inputs_for_generation(
+        self, input_ids, cache=None, inputs_embeds=None, is_first_iteration=False, **kwargs
+    ):
+        # Overwritten -- as in `Phi3ForCausalLM`, the cache is recomputed with the long RoPE factors when the sequence
+        # first exceeds `original_max_position_embeddings`, so the images have to be passed again
+        original_max_position_embeddings = self.config.text_config.original_max_position_embeddings
+        if cache is not None and input_ids.shape[1] > original_max_position_embeddings >= cache.get_seq_length() > 0:
+            inputs_embeds = inputs_embeds if is_first_iteration else None
+            cache, is_first_iteration = None, True
+            kwargs["next_sequence_length"] = None
+        return super().prepare_inputs_for_generation(
+            input_ids, cache=cache, inputs_embeds=inputs_embeds, is_first_iteration=is_first_iteration, **kwargs
+        )
+
 
 __all__ = ["Phi3VPreTrainedModel", "Phi3VModel", "Phi3VForConditionalGeneration"]

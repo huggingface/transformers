@@ -24,6 +24,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
@@ -31,6 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessorMixin, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.modeling_llava_next import (
@@ -216,6 +218,21 @@ class Phi3VForConditionalGeneration(LlavaNextForConditionalGeneration):
             `"default"` removes the CLS token.
         """
         return super().forward(**super_kwargs)
+
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def prepare_inputs_for_generation(
+        self, input_ids, cache=None, inputs_embeds=None, is_first_iteration=False, **kwargs
+    ):
+        # Overwritten -- as in `Phi3ForCausalLM`, the cache is recomputed with the long RoPE factors when the sequence
+        # first exceeds `original_max_position_embeddings`, so the images have to be passed again
+        original_max_position_embeddings = self.config.text_config.original_max_position_embeddings
+        if cache is not None and input_ids.shape[1] > original_max_position_embeddings >= cache.get_seq_length() > 0:
+            inputs_embeds = inputs_embeds if is_first_iteration else None
+            cache, is_first_iteration = None, True
+            kwargs["next_sequence_length"] = None
+        return GenerationMixin.prepare_inputs_for_generation(
+            self, input_ids, cache=cache, inputs_embeds=inputs_embeds, is_first_iteration=is_first_iteration, **kwargs
+        )
 
 
 class Phi3VImageProcessorKwargs(ImagesKwargs, total=False):

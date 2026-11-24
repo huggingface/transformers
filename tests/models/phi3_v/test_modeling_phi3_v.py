@@ -76,6 +76,44 @@ class Phi3VForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
+    def test_longrope_generation_crossing_boundary(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs = {key: value[:1] for key, value in inputs.items()}
+        prompt_length = inputs["input_ids"].shape[1]
+        text_config = config.text_config
+        half_head_dim = text_config.hidden_size // text_config.num_attention_heads // 2
+        text_config.original_max_position_embeddings = prompt_length + 1
+        text_config.max_position_embeddings = 4 * prompt_length
+        text_config.rope_parameters = {
+            "rope_type": "longrope",
+            "rope_theta": 10000.0,
+            "short_factor": [1.0] * half_head_dim,
+            "long_factor": [2.0] * half_head_dim,
+            "original_max_position_embeddings": prompt_length + 1,
+            "factor": 4.0,
+        }
+        model = Phi3VForConditionalGeneration(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            generated = model.generate(
+                **inputs,
+                max_new_tokens=4,
+                min_new_tokens=4,
+                suppress_tokens=[config.image_token_id],
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_logits=True,
+            )
+            for step, logits in enumerate(generated.logits):
+                prefix = generated.sequences[:, : prompt_length + step]
+                expected = model(
+                    input_ids=prefix,
+                    pixel_values=inputs["pixel_values"],
+                    image_sizes=inputs["image_sizes"],
+                    use_cache=False,
+                ).logits[:, -1]
+                torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
+
     def test_reverse_loading_mapping(self):
         # The Hub checkpoints are saved from the model with head, the mapping is written for that layout
         super().test_reverse_loading_mapping(skip_base_model=True)
