@@ -33,7 +33,12 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    ModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -504,8 +509,9 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel, MultimodalMixin):
             **kwargs,
         )
         audio_output.pooler_output = self.multi_modal_projector(audio_output.last_hidden_state)
-        audio_output.split_sizes = _get_feat_extract_output_lengths(
-            input_features_mask.sum(-1), self.audio_tower.n_window
+        audio_output = BaseModelOutputWithSplitSizes(
+            **audio_output,
+            split_sizes=_get_feat_extract_output_lengths(input_features_mask.sum(-1), self.audio_tower.n_window),
         )
         return audio_output
 

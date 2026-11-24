@@ -33,6 +33,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -913,7 +914,9 @@ class MuseGlimmerModel(MuseGlimmerPreTrainedModel, MultimodalMixin):
         vision_features = self.vision_projection(vision_features)
         vision_features = self.perception_emb_norm(vision_features)
         vision_outputs.pooler_output = vision_features
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
+        )
         return vision_outputs
 
     @can_return_tuple

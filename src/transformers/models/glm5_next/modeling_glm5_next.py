@@ -44,6 +44,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -1914,7 +1915,9 @@ class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
         image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        )
         return image_outputs
 
     @accepts_precomputed_kwargs(modality="video")
@@ -1937,7 +1940,9 @@ class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
 
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
-        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        )
         return vision_outputs
 
     def get_placeholder_mask(

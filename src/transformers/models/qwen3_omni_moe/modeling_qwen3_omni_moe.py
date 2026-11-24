@@ -41,6 +41,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
@@ -83,7 +84,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithSplitSizes):
     r"""
     deepstack_features (`List[torch.Tensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
@@ -1828,7 +1829,9 @@ class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGenerati
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
         audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, return_dict=True, **kwargs)
-        audio_outputs.split_sizes = _get_feat_extract_output_lengths(feature_lens, self.audio_tower.n_window)
+        audio_outputs = BaseModelOutputWithSplitSizes(
+            **audio_outputs, split_sizes=_get_feat_extract_output_lengths(feature_lens, self.audio_tower.n_window)
+        )
         return audio_outputs
 
     def get_placeholder_mask(

@@ -28,7 +28,7 @@ from ...audio_utils import (
 from ...cache_utils import Cache
 from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -706,7 +706,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         hidden_size = valid_frames.shape[-1]
         merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
         audio_outputs.pooler_output = self.multi_modal_projector(merged_features)
-        audio_outputs.split_sizes = padded_lengths // merge_size
+        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=padded_lengths // merge_size)
         return audio_outputs
 
     @can_return_tuple

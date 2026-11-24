@@ -29,6 +29,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -183,7 +184,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel, MultimodalMixin):
         patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
         image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
-        image_outputs.split_sizes = (spatial_shapes // factor).prod(-1)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=(spatial_shapes // factor).prod(-1))
         return image_outputs
 
     def get_placeholder_mask(

@@ -36,6 +36,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -1285,7 +1286,9 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         vision_features = self.vision_projection(vision_features)
         vision_features = self.perception_emb_norm(vision_features)
         vision_outputs.pooler_output = vision_features
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
+        )
         return vision_outputs
 
     @can_return_tuple
@@ -1503,7 +1506,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
             )
             audio_features = audio_features.flatten(0, 1)
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=last_hidden_state,
             pooler_output=audio_features,
             hidden_states=audio_outputs.hidden_states,

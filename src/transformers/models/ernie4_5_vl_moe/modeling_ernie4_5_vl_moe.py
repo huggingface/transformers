@@ -36,6 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -1256,7 +1257,9 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin):
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         image_outputs.pooler_output = image_embeds
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        )
         return image_outputs
 
     @accepts_precomputed_kwargs(modality="video")
@@ -1271,10 +1274,13 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin):
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
         video_outputs.pooler_output = video_embeds
-        video_outputs.split_sizes = (
-            video_grid_thw.prod(-1)
-            // self.vision_tower.spatial_merge_size**2
-            // self.resampler_model.temporal_merge_size
+        video_outputs = BaseModelOutputWithSplitSizes(
+            **video_outputs,
+            split_sizes=(
+                video_grid_thw.prod(-1)
+                // self.vision_tower.spatial_merge_size**2
+                // self.resampler_model.temporal_merge_size
+            ),
         )
         return video_outputs
 

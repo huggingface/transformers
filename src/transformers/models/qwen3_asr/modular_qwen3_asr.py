@@ -21,7 +21,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_layers import GenericForTokenClassification
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -263,8 +263,9 @@ class Qwen3ASRModel(AudioFlamingo3Model):
             **kwargs,
         )
         audio_output.pooler_output = self.multi_modal_projector(audio_output.last_hidden_state)
-        audio_output.split_sizes = _get_feat_extract_output_lengths(
-            input_features_mask.sum(-1), self.audio_tower.n_window
+        audio_output = BaseModelOutputWithSplitSizes(
+            **audio_output,
+            split_sizes=_get_feat_extract_output_lengths(input_features_mask.sum(-1), self.audio_tower.n_window),
         )
         return audio_output
 

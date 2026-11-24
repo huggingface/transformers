@@ -32,6 +32,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -552,7 +553,9 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
         image_outputs.pooler_output = image_features
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        )
         return image_outputs
 
     @accepts_precomputed_kwargs(modality="video")

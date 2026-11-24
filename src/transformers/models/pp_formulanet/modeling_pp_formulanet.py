@@ -38,6 +38,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -976,8 +977,11 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel, MultimodalMixin):
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.encoder(pixel_values=pixel_values, **kwargs)
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_outputs.pooler_output.new_full(
+                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
         )
         image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs

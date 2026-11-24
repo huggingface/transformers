@@ -37,7 +37,12 @@ from ...image_utils import (
 )
 from ...masking_utils import create_causal_mask
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -620,7 +625,7 @@ class DeepseekOcr2Config(PreTrainedConfig):
 
 @auto_docstring
 @dataclass
-class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
+class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithSplitSizes):
     r"""
     local_last_hidden_state (`torch.Tensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.

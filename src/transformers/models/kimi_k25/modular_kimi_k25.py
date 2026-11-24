@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import (
@@ -501,7 +501,9 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         vision_outputs.pooler_output = image_embeds
         merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
-        vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // merge_kernel_size
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw[:, 1:].prod(-1) // merge_kernel_size
+        )
         return vision_outputs
 
     @can_return_tuple

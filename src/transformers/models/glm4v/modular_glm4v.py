@@ -29,6 +29,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -772,7 +773,9 @@ class Glm4vModel(Qwen2VLModel):
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )
-        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        )
         return vision_outputs
 
     def get_placeholder_mask(

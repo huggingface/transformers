@@ -19,7 +19,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
@@ -152,9 +152,10 @@ class Mistral3Model(LlavaModel):
 
         image_features = self.multi_modal_projector(selected_image_feature.squeeze(0), image_sizes)
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        image_outputs.split_sizes = (
-            torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio
-        ).prod(dim=-1)
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=(torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1),
+        )
         image_outputs.pooler_output = image_features.squeeze(0)
         return image_outputs
 

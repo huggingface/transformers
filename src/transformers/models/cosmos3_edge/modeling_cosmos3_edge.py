@@ -34,6 +34,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -951,7 +952,9 @@ class Cosmos3EdgeModel(Cosmos3EdgePreTrainedModel, MultimodalMixin):
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.projector.spatial_merge_size**2
+        )
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="video")

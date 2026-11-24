@@ -25,7 +25,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_recurrent_attention_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -300,7 +300,7 @@ class Nemotron3_5TranscribeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWi
 
 @auto_docstring
 @dataclass
-class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPooling):
+class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(num_audio_tokens, text_config.hidden_size)`, *optional*):
         Projected audio embeddings of the valid encoder frames of every recording, in batch order: the embeddings that

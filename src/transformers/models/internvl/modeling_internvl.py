@@ -36,6 +36,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -178,7 +179,7 @@ class InternVLVisionAttention(nn.Module):
     """
 )
 @dataclass
-class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
+class InternVLVisionModelOutputWithPooling(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if

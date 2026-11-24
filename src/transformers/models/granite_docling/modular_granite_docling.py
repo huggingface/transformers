@@ -32,7 +32,7 @@ from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, SizeDict, is_valid_image, make_nested_list_of_images
 from ...masking_utils import create_causal_mask
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithSplitSizes
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -701,7 +701,7 @@ class GraniteDoclingCausalLMOutputWithPast(AriaCausalLMOutputWithPast): ...
     """
 )
 @dataclass
-class GraniteDoclingImageFeaturesOutput(BaseModelOutputWithPooling):
+class GraniteDoclingImageFeaturesOutput(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`tuple[torch.FloatTensor]` of length `batch_size`):
         Image tokens of each sample, in tile order, projected to the text hidden size. Each tensor has shape

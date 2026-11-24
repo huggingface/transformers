@@ -31,7 +31,13 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    ModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, torch_compilable_check
@@ -437,7 +443,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel, MultimodalMixin):
         audio_embeds = self.multi_modal_projector(encoder_out, input_features_mask, **kwargs)
         pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=encoder_out,
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,

@@ -43,6 +43,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -979,7 +980,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
 
 @auto_docstring
 @dataclass
-class DiffusionGemmaAudioModelOutput(BaseModelOutputWithPooling):
+class DiffusionGemmaAudioModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
@@ -1049,7 +1050,9 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
-        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=(image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        )
         return vision_outputs
 
     def get_placeholder_mask(

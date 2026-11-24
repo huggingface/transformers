@@ -31,7 +31,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, can_return_tuple, logging
@@ -464,7 +464,9 @@ class VideoLlama3Model(Qwen2VLModel):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
+        )
         return vision_outputs
 
     def get_video_embeddings(

@@ -36,6 +36,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -638,7 +639,10 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel, MultimodalMixin):
             target_sizes = target_sizes // 2
         merged = self.merger(vision_output.last_hidden_state, target_sizes)
         vision_output.pooler_output = torch.cat(merged, dim=0)
-        vision_output.split_sizes = torch.tensor([len(features) for features in merged], device=target_sizes.device)
+        vision_output = BaseModelOutputWithSplitSizes(
+            **vision_output,
+            split_sizes=torch.tensor([len(features) for features in merged], device=target_sizes.device),
+        )
         return vision_output
 
     def get_placeholder_mask(

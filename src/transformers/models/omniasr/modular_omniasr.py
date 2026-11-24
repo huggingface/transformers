@@ -20,7 +20,12 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -30,7 +35,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..parakeet.modeling_parakeet import ParakeetEncoderModelOutput, ParakeetPreTrainedModel
+from ..parakeet.modeling_parakeet import ParakeetPreTrainedModel
 from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration, VoxtralModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
@@ -133,8 +138,24 @@ class OmniASRPreTrainedModel(ParakeetPreTrainedModel):
         return lengths
 
 
-class OmniASREncoderModelOutput(ParakeetEncoderModelOutput):
-    pass
+@auto_docstring(
+    custom_intro="""
+    Extends [~modeling_outputs.BaseModelOutputWithSplitSizes] to include the output attention mask since sequence
+    length is not preserved in the model's forward.
+    """
+)
+@dataclass
+class OmniASREncoderModelOutput(BaseModelOutputWithSplitSizes):
+    r"""
+    attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
+        sequence length may differ from the input sequence length. Mask values selected in `[0, 1]`:
+
+        - 1 for tokens that are **not masked**,
+        - 0 for tokens that are **masked**.
+    """
+
+    attention_mask: torch.Tensor | None = None
 
 
 # NOTE: similar to `Wav2Vec2Model` but with latest naming conventions like in `ParakeetEncoder`

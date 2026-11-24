@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -1033,7 +1033,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         # The final output shape is (total_valid_patches, text_hidden_size)
         pooler_output = vision_outputs.pooler_output[non_pad_mask]
         vision_outputs.pooler_output = pooler_output
-        vision_outputs.split_sizes = non_pad_mask.sum(dim=-1)
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=non_pad_mask.sum(dim=-1))
         return vision_outputs
 
     @can_return_tuple
@@ -1070,7 +1070,9 @@ class Gemma4UnifiedModel(Gemma4Model):
         pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
         vision_outputs.pooler_output = pooler_output
         tokens_per_frame = non_pad_mask.sum(dim=-1)
-        vision_outputs.split_sizes = get_video_split_sizes(tokens_per_frame, num_frames_per_video)
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
+        )
         return vision_outputs
 
     @can_return_tuple

@@ -36,6 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -1180,7 +1181,7 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
         padding_mask = padding_mask.to(hidden_states.device)
         pooled_output = self.adapter(hidden_states[padding_mask])
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=hidden_states, pooler_output=pooled_output, split_sizes=padding_mask.sum(-1)
         )
 
@@ -1598,7 +1599,9 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
             **kwargs,
         )
 
-        outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        outputs = BaseModelOutputWithSplitSizes(
+            **outputs, split_sizes=image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        )
         return outputs
 
     @can_return_tuple

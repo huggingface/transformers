@@ -25,7 +25,12 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...modeling_outputs import BaseModelOutputWithPooling, Seq2SeqLMOutput, Seq2SeqModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
@@ -1357,8 +1362,11 @@ class Florence2Model(LlavaModel):
         """
         image_outputs = self.vision_tower(pixel_values, **kwargs)
         image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_outputs.pooler_output.new_full(
+                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
         )
         image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs

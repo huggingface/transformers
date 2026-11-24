@@ -43,6 +43,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -1043,8 +1044,11 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_outputs.pooler_output.new_full(
+                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
         )
         image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs
@@ -1072,7 +1076,7 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
             )
             audio_input_ids = audio_input_ids.flatten(0, 1)
         audio_outputs = self.audio_tower(audio_input_ids)
-        audio_outputs.split_sizes = split_sizes
+        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=split_sizes)
         return audio_outputs
 
     def get_placeholder_mask(

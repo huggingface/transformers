@@ -31,7 +31,7 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -1225,7 +1225,7 @@ class HunYuanVLModel(Qwen2VLModel):
         image_outputs.pooler_output = image_outputs.pooler_output[0]
         # Include row separators and image boundary tokens in each split.
         merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        image_outputs.split_sizes = merged_h * (merged_w + 1) + 2
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=merged_h * (merged_w + 1) + 2)
         return image_outputs
 
     def get_placeholder_mask(

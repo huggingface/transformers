@@ -31,7 +31,12 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -321,12 +326,12 @@ class OmniASRPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Extends [~modeling_outputs.BaseModelOutputWithPooling] to include the output attention mask since sequence length
-    is not preserved in the model's forward.
+    Extends [~modeling_outputs.BaseModelOutputWithSplitSizes] to include the output attention mask since sequence
+    length is not preserved in the model's forward.
     """
 )
 @dataclass
-class OmniASREncoderModelOutput(BaseModelOutputWithPooling):
+class OmniASREncoderModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Mask to avoid performing attention on padding token indices after sequence compression. Returned because the

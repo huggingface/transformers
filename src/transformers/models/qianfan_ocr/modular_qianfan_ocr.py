@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import SubConfigSpec
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithSplitSizes
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
@@ -163,7 +163,7 @@ class QianfanOCRVisionEmbeddings(InternVLVisionEmbeddings):
     pass
 
 
-class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
+class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if

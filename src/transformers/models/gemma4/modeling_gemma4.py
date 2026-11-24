@@ -49,6 +49,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -156,7 +157,7 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
 
 @auto_docstring
 @dataclass
-class Gemma4AudioModelOutput(BaseModelOutputWithPooling):
+class Gemma4AudioModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
@@ -2279,7 +2280,9 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
-        vision_outputs.split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=(image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        )
         return vision_outputs
 
     def get_placeholder_mask(
@@ -2545,7 +2548,9 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         k_squared = self.config.vision_config.pooling_kernel_size**2
         tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        vision_outputs.split_sizes = get_video_split_sizes(tokens_per_frame, num_frames_per_video)
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
+        )
         return vision_outputs
 
     @can_return_tuple

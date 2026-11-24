@@ -29,6 +29,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -378,7 +379,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel, MultimodalMixin):
             image_newline=self.image_newline,
         )
         image_outputs.pooler_output = torch.cat(image_features, dim=0)
-        image_outputs.split_sizes = feature_lens
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=feature_lens)
 
         return image_outputs
 

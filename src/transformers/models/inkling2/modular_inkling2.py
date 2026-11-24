@@ -38,7 +38,7 @@ from ...masking_utils import (
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -1425,7 +1425,7 @@ class Inkling2Model(InklingModel):
     ) -> tuple | BaseModelOutputWithPooling:
         image_grid_thw = image_grid_thw.cpu()
         image_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
-        image_outputs.split_sizes = image_grid_thw.prod(-1)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=image_grid_thw.prod(-1))
         return image_outputs
 
     def get_audio_embeddings(self):

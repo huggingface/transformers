@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithSplitSizes,
     CausalLMOutputWithPast,
     Seq2SeqLMOutput,
 )
@@ -50,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
+class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithSplitSizes):
     r"""
     vision_outputs (`BaseModelOutputWithPooling`):
         Outputs of the vision encoder.

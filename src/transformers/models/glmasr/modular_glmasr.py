@@ -21,7 +21,7 @@ from ...audio_utils import AudioInput, make_audio_chat_template_content, make_li
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
@@ -371,7 +371,7 @@ class GlmAsrModel(AudioFlamingo3Model):
 
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
-        audio_outputs.split_sizes = post_lengths
+        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=post_lengths)
 
         return audio_outputs
 

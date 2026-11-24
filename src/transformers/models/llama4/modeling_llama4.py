@@ -33,6 +33,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -1179,13 +1180,14 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithSplitSizes:
         image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
-        image_outputs.split_sizes = image_outputs.last_hidden_state.new_full(
-            (image_outputs.last_hidden_state.shape[0],), image_outputs.last_hidden_state.shape[1], dtype=torch.long
+        last_hidden_state = image_outputs.last_hidden_state
+        split_sizes = last_hidden_state.new_full(
+            (last_hidden_state.shape[0],), last_hidden_state.shape[1], dtype=torch.long
         )
-        image_features = image_outputs.last_hidden_state.flatten(0, 1)
-        image_outputs.pooler_output = self.multi_modal_projector(image_features)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state.flatten(0, 1))
         return image_outputs
 
     def get_placeholder_mask(

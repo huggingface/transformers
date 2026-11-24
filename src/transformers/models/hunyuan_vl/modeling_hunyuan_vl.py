@@ -36,6 +36,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -1004,7 +1005,7 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         image_outputs.pooler_output = image_outputs.pooler_output[0]
         # Include row separators and image boundary tokens in each split.
         merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        image_outputs.split_sizes = merged_h * (merged_w + 1) + 2
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=merged_h * (merged_w + 1) + 2)
         return image_outputs
 
     def get_placeholder_mask(

@@ -25,7 +25,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -84,7 +84,7 @@ class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     """
 )
 @dataclass
-class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPooling):
+class Granite4VisionImageFeaturesOutput(BaseModelOutputWithSplitSizes):
     r"""
     deepstack_features (`list[torch.Tensor]`, *optional*):
         The features the deepstack and spatial projectors add to the decoder layers: one

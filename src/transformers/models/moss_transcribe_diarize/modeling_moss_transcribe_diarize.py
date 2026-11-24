@@ -29,7 +29,12 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    ModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -431,7 +436,7 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel, Multimoda
         hidden_size = valid_frames.shape[-1]
         merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
         audio_outputs.pooler_output = self.multi_modal_projector(merged_features)
-        audio_outputs.split_sizes = padded_lengths // merge_size
+        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=padded_lengths // merge_size)
         return audio_outputs
 
     def get_placeholder_mask(

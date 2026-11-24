@@ -29,6 +29,7 @@ from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -770,7 +771,7 @@ class MuseSparkModel(MuseGlimmerModel):
             )
             audio_features = audio_features.flatten(0, 1)
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithSplitSizes(
             last_hidden_state=last_hidden_state,
             pooler_output=audio_features,
             hidden_states=audio_outputs.hidden_states,

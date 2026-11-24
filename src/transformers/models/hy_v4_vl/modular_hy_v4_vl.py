@@ -27,6 +27,7 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -519,8 +520,9 @@ class HYV4VLModel(Qwen2VLModel):
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
         # Each merged row carries one extra newline token
         merge = self.config.vision_config.spatial_merge_size
-        vision_outputs.split_sizes = (
-            image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs,
+            split_sizes=(image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)),
         )
         return vision_outputs
 

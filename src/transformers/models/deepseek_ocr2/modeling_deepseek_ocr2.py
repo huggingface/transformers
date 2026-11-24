@@ -40,6 +40,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -65,7 +66,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
+class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithSplitSizes):
     r"""
     local_last_hidden_state (`torch.Tensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.

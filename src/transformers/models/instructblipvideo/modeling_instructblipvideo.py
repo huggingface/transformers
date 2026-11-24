@@ -37,6 +37,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithSplitSizes,
     CausalLMOutputWithPast,
     Seq2SeqLMOutput,
 )
@@ -1019,7 +1020,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
+class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithSplitSizes):
     r"""
     vision_outputs (`BaseModelOutputWithPooling`):
         Outputs of the vision encoder.

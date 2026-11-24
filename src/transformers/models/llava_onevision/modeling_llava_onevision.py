@@ -33,6 +33,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -381,7 +382,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel, MultimodalMixin):
             vision_aspect_ratio=vision_aspect_ratio,
         )
         image_outputs.pooler_output = torch.cat(image_features, dim=0)
-        image_outputs.split_sizes = feature_lens
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=feature_lens)
 
         return image_outputs
 
@@ -566,8 +567,11 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel, MultimodalMixin):
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
         image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
         vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
-        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
-            (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs,
+            split_sizes=vision_outputs.pooler_output.new_full(
+                (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
         )
         vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs

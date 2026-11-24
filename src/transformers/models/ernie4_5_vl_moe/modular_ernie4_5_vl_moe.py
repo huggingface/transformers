@@ -29,6 +29,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -936,10 +937,13 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
         video_outputs.pooler_output = video_embeds
-        video_outputs.split_sizes = (
-            video_grid_thw.prod(-1)
-            // self.vision_tower.spatial_merge_size**2
-            // self.resampler_model.temporal_merge_size
+        video_outputs = BaseModelOutputWithSplitSizes(
+            **video_outputs,
+            split_sizes=(
+                video_grid_thw.prod(-1)
+                // self.vision_tower.spatial_merge_size**2
+                // self.resampler_model.temporal_merge_size
+            ),
         )
         return video_outputs
 
@@ -952,7 +956,9 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         image_outputs.pooler_output = image_embeds
-        image_outputs.split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        )
         return image_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")

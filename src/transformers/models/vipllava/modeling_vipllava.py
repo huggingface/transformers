@@ -30,6 +30,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -158,8 +159,11 @@ class VipLlavaModel(VipLlavaPreTrainedModel, MultimodalMixin):
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
         image_outputs.pooler_output = image_features
-        image_outputs.split_sizes = image_outputs.pooler_output.new_full(
-            (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=image_outputs.pooler_output.new_full(
+                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
         )
         image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
         return image_outputs

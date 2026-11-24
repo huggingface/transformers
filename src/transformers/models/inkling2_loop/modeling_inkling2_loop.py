@@ -48,6 +48,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MoeModelOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -1586,7 +1587,7 @@ class Inkling2LoopModel(Inkling2LoopPreTrainedModel, MultimodalMixin):
     ) -> tuple | BaseModelOutputWithPooling:
         image_grid_thw = image_grid_thw.cpu()
         image_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
-        image_outputs.split_sizes = image_grid_thw.prod(-1)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=image_grid_thw.prod(-1))
         return image_outputs
 
     def get_placeholder_mask(

@@ -33,6 +33,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     CausalLMOutputWithPast,
     ModelOutput,
     MultimodalBaseModelOutputWithPast,
@@ -1632,7 +1633,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        vision_outputs.split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        )
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1646,7 +1649,9 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        )
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="audio")
@@ -1682,7 +1687,7 @@ class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration
         )
         if audio_outputs.last_hidden_state.shape[0] != sum(audio_output_lengths.tolist()):
             raise ValueError("length of audio_features should match audio_output_lengths")
-        audio_outputs.split_sizes = audio_output_lengths
+        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=audio_output_lengths)
         return audio_outputs
 
     def get_placeholder_mask(

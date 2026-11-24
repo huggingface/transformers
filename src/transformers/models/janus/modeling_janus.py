@@ -35,6 +35,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     ModelOutput,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -796,7 +797,7 @@ class JanusVQVAEDecoder(nn.Module):
 
 @auto_docstring
 @dataclass
-class JanusVQVAEModelOutput(BaseModelOutputWithPooling):
+class JanusVQVAEModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     quantized_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
@@ -958,8 +959,11 @@ class JanusModel(JanusPreTrainedModel, MultimodalMixin):
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
-        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
-            (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs,
+            split_sizes=vision_outputs.pooler_output.new_full(
+                (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
+            ),
         )
         vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
         return vision_outputs

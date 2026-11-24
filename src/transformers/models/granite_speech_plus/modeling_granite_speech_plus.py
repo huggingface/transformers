@@ -29,7 +29,12 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
+    ModelOutput,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
@@ -153,13 +158,14 @@ class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel, MultimodalMixin):
         projected_embeds = self.projector(audio_outputs.last_hidden_state)
         if input_features_mask is not None:
             input_features_mask = input_features_mask.to(projected_embeds.device)
-            audio_outputs.pooler_output = projected_embeds[input_features_mask]
-            audio_outputs.split_sizes = input_features_mask.sum(-1)
+            pooler_output, split_sizes = projected_embeds[input_features_mask], input_features_mask.sum(-1)
         else:
-            audio_outputs.split_sizes = projected_embeds.new_full(
+            split_sizes = projected_embeds.new_full(
                 (projected_embeds.shape[0],), projected_embeds.shape[1], dtype=torch.long
             )
-            audio_outputs.pooler_output = projected_embeds.flatten(0, 1)
+            pooler_output = projected_embeds.flatten(0, 1)
+        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=split_sizes)
+        audio_outputs.pooler_output = pooler_output
         return audio_outputs
 
     def get_placeholder_mask(

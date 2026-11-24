@@ -25,7 +25,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_int
@@ -135,7 +135,7 @@ class InternVLVisionAttention(JanusVisionAttention):
     """
 )
 @dataclass
-class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
+class InternVLVisionModelOutputWithPooling(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if

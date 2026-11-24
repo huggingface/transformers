@@ -29,6 +29,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
@@ -174,9 +175,10 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel, MultimodalMixin):
         image_features = self.vision_projection(image_features.squeeze(0), image_sizes)
 
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
-        image_outputs.split_sizes = (
-            torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio
-        ).prod(dim=-1)
+        image_outputs = BaseModelOutputWithSplitSizes(
+            **image_outputs,
+            split_sizes=(torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1),
+        )
         image_outputs.pooler_output = image_features
         return image_outputs
 

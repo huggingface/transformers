@@ -43,6 +43,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     ModelOutput,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -998,7 +999,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         # The final output shape is (total_valid_patches, text_hidden_size)
         pooler_output = vision_outputs.pooler_output[non_pad_mask]
         vision_outputs.pooler_output = pooler_output
-        vision_outputs.split_sizes = non_pad_mask.sum(dim=-1)
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=non_pad_mask.sum(dim=-1))
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1238,7 +1239,9 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
         vision_outputs.pooler_output = pooler_output
         tokens_per_frame = non_pad_mask.sum(dim=-1)
-        vision_outputs.split_sizes = get_video_split_sizes(tokens_per_frame, num_frames_per_video)
+        vision_outputs = BaseModelOutputWithSplitSizes(
+            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
+        )
         return vision_outputs
 
     @can_return_tuple

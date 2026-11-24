@@ -34,6 +34,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -385,7 +386,7 @@ class QianfanOCRVisionEmbeddings(nn.Module):
         return embeddings
 
 
-class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
+class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
