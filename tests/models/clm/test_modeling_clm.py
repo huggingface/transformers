@@ -31,8 +31,79 @@ if is_torch_available():
     from transformers.loss.loss_clm import ClmForDecisionLoss
 
 
+class ClmModelTester:
+    is_training = True
+
+    def __init__(self, config):
+        self.config = config
+
+    def prepare_inputs(self):
+        return {
+            "input_ids": torch.tensor([[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]]),
+            "marks": torch.tensor([[2, 4, 6, 8, 10, 12]]),
+            "num_options": torch.tensor([[1, 1, 1]]),
+        }
+
+    def prepare_config_and_inputs_for_training(self):
+        inputs = self.prepare_inputs()
+        inputs["labels"] = torch.arange(inputs["num_options"].shape[1])
+        return copy.deepcopy(self.config), inputs
+
+
 @require_torch
-class ClmLossTest(unittest.TestCase):
+class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
+    all_model_classes = (ClmForDecision,) if is_torch_available() else ()
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5")
+        cls.config = ClmConfig(
+            text_config=tiny_qwen2(cls.tokenizer).config,
+            hidden_size=24,
+            projection_dim=8,
+            num_hidden_layers=3,
+        )
+        cls.config._attn_implementation = "eager"
+        cls.config.text_config._attn_implementation = "eager"
+        cls.decision_config = ClmForDecision(cls.config).decision_config
+        request = {
+            "state": {"name": "Account", "facts": [True, {"balance": 12}]},
+            "questions": {
+                "intent": {
+                    "type": "choice",
+                    "instructions": "Choose a team.",
+                    "criteria": {"z": "Refunds", "a": None},
+                },
+                "urgent": {"type": "noul", "instructions": "Is it urgent?"},
+                "severity": {"type": "score", "criteria": ["Low", "High"]},
+            },
+        }
+        expected_state = "name: Account\n\nfacts:\n  - true\n  -\n    balance: 12"
+        expected_texts = [
+            [expected_state + "\n\nChoose a team.", "Refunds", "a"],
+            [
+                expected_state + "\n\nIs it urgent?",
+                "false: No. This is false: Is it urgent?",
+                "true: Yes. This is true: Is it urgent?",
+            ],
+            [expected_state, "Low", "High"],
+        ]
+        cls.test = {"request": request, "sequences": []}
+        for texts in expected_texts:
+            sequences = cls.tokenizer(texts)["input_ids"]
+            cls.test["sequences"].append(
+                {
+                    "input_ids": [token for sequence in sequences for token in sequence],
+                    "marks": torch.tensor([len(sequence) for sequence in sequences]).cumsum(0).tolist(),
+                }
+            )
+        cls.prompts = render(cls.tokenizer, request, cls.decision_config)
+
+    def setUp(self):
+        self.model_tester = ClmModelTester(type(self).config)
+        self.config = copy.deepcopy(type(self).config)
+        self.inputs = self.model_tester.prepare_inputs()
+
     def test_official_loss_and_gradients(self):
         logits = torch.tensor([[1.0, -0.3, 0.2], [0.4, 1.2, -0.5], [0.1, 0.6, 0.7]], requires_grad=True)
         cases = [
@@ -108,76 +179,6 @@ class ClmLossTest(unittest.TestCase):
         loss.backward()
         torch.testing.assert_close(loss.double(), torch.log1p(mass), rtol=1e-6, atol=0)
         torch.testing.assert_close(logits.grad.double(), expected_gradient, rtol=1e-6, atol=0)
-
-
-@require_torch
-class ClmForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
-    all_model_classes = (ClmForDecision,) if is_torch_available() else ()
-
-    @classmethod
-    def setUpClass(cls):
-        cls.tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-Qwen2ForCausalLM-2.5")
-        cls.config = ClmConfig(
-            text_config=tiny_qwen2(cls.tokenizer).config,
-            hidden_size=24,
-            projection_dim=8,
-            num_hidden_layers=3,
-        )
-        cls.config._attn_implementation = "eager"
-        cls.config.text_config._attn_implementation = "eager"
-        cls.decision_config = ClmForDecision(cls.config).decision_config
-        request = {
-            "state": {"name": "Account", "facts": [True, {"balance": 12}]},
-            "questions": {
-                "intent": {
-                    "type": "choice",
-                    "instructions": "Choose a team.",
-                    "criteria": {"z": "Refunds", "a": None},
-                },
-                "urgent": {"type": "noul", "instructions": "Is it urgent?"},
-                "severity": {"type": "score", "criteria": ["Low", "High"]},
-            },
-        }
-        expected_state = "name: Account\n\nfacts:\n  - true\n  -\n    balance: 12"
-        expected_texts = [
-            [expected_state + "\n\nChoose a team.", "Refunds", "a"],
-            [
-                expected_state + "\n\nIs it urgent?",
-                "false: No. This is false: Is it urgent?",
-                "true: Yes. This is true: Is it urgent?",
-            ],
-            [expected_state, "Low", "High"],
-        ]
-        cls.test = {"request": request, "sequences": []}
-        for texts in expected_texts:
-            sequences = cls.tokenizer(texts)["input_ids"]
-            cls.test["sequences"].append(
-                {
-                    "input_ids": [token for sequence in sequences for token in sequence],
-                    "marks": torch.tensor([len(sequence) for sequence in sequences]).cumsum(0).tolist(),
-                }
-            )
-        cls.prompts = render(cls.tokenizer, request, cls.decision_config)
-
-    def setUp(self):
-        self.config = copy.deepcopy(type(self).config)
-        self.inputs = {
-            "input_ids": torch.tensor([[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]]),
-            "marks": torch.tensor([[2, 4, 6, 8, 10, 12]]),
-            "num_options": torch.tensor([[1, 1, 1]]),
-        }
-
-    def test_loss_backward(self):
-        for dtype in (torch.float32, torch.bfloat16):
-            with self.subTest(dtype=dtype):
-                model = ClmForDecision(self.config).to(dtype).eval()
-                output = model(**self.inputs, labels=torch.arange(3))
-                self.assertEqual(output.loss.dtype, torch.float32)
-                output.loss.backward()
-
-                self.assertTrue(all(p.grad is None or torch.isfinite(p.grad).all() for p in model.parameters()))
-                self.assertGreater(model.action_head.output_projection.weight.grad.abs().sum(), 0)
-                self.assertGreater(model.model.get_input_embeddings().weight.grad.abs().sum(), 0)
 
     def test_candidate_permutation(self):
         model = ClmForDecision(self.config).eval()

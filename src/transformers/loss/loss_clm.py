@@ -15,15 +15,18 @@ import torch
 from torch.nn import functional as F
 
 
-def _log_softmax(logits: torch.Tensor) -> torch.Tensor:
+def contrastive_log_softmax(logits: torch.Tensor) -> torch.Tensor:
+    """Compute log probabilities without rounding away confident predictions."""
+    logits = logits.float()
     maximum = logits.argmax(-1, keepdim=True)
     shifted = (logits - logits.gather(-1, maximum)).scatter(-1, maximum, 0.0)
     others = shifted.exp().scatter(-1, maximum, 0.0).sum(-1, keepdim=True)
     return shifted - torch.log1p(others)
 
 
-def _contrastive_cross_entropy(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    log_probabilities = _log_softmax(logits).masked_fill(targets == 0, 0.0)
+def contrastive_cross_entropy(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    """Average cross-entropy over the rows of one contrastive direction."""
+    log_probabilities = contrastive_log_softmax(logits).masked_fill(targets == 0, 0.0)
     return -(targets * log_probabilities).sum(-1).mean()
 
 
@@ -36,9 +39,8 @@ def ClmForDecisionLoss(
 ) -> torch.Tensor:
     """CLM's bidirectional InfoNCE over the in-batch candidate pool.
 
-    Source: Contrastive-LM/CLM@d5f9ef0fd9bde185df0ceaad4f4ecc6cfe8c34f6, train/finetune.py, _clm_loss and infonce_loss.
+    Source: https://github.com/Contrastive-LM/CLM/blob/d5f9ef0fd9bde185df0ceaad4f4ecc6cfe8c34f6/train/finetune.py
     """
-    logits = logits.float()
     labels = labels.to(logits.device)
     targets = F.one_hot(labels.long(), logits.shape[-1]).float() if labels.ndim == 1 else labels.float()
 
@@ -48,13 +50,13 @@ def ClmForDecisionLoss(
         same_group.fill_diagonal_(False)
         logits = logits.masked_fill(same_group, -torch.inf)
 
-    state_loss = _contrastive_cross_entropy(logits, targets)
+    state_loss = contrastive_cross_entropy(logits, targets)
 
     reverse_targets = targets.T
     positive_candidates = reverse_targets.sum(-1) > 0
     reverse_targets = reverse_targets[positive_candidates]
     reverse_targets = reverse_targets / reverse_targets.sum(-1, keepdim=True)
-    action_loss = _contrastive_cross_entropy(logits.T[positive_candidates], reverse_targets)
+    action_loss = contrastive_cross_entropy(logits.T[positive_candidates], reverse_targets)
 
     loss = (state_loss + action_loss) / 2
     if num_items_in_batch is not None:
