@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -592,7 +591,8 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // math.prod(self.vision_tower.merge_kernel_size)
+        merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
+        vision_outputs.split_sizes = image_grid_thw[:, 1:].prod(-1) // merge_kernel_size
         return vision_outputs
 
     @can_return_tuple

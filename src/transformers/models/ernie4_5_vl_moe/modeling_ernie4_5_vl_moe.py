@@ -1258,7 +1258,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel, MultimodalMixin):
         video_outputs.pooler_output = video_embeds
         video_outputs.split_sizes = (
             video_grid_thw.prod(-1)
-            // self.config.vision_config.spatial_merge_size**2
+            // self.vision_tower.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
         )
         return video_outputs

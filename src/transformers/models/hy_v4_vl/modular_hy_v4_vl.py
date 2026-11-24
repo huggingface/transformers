@@ -517,10 +517,11 @@ class HYV4VLModel(Qwen2VLModel):
     ) -> tuple | BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(pixel_values.to(self.vision_tower.dtype), grid_thw=image_grid_thw, **kwargs)
         vision_outputs.pooler_output = vision_outputs.pooler_output.squeeze(0)
-        merge_size = self.config.vision_config.spatial_merge_size
-        frames, height, width = image_grid_thw.unbind(-1)
         # Each merged row carries one extra newline token
-        vision_outputs.split_sizes = frames * (height // merge_size) * (width // merge_size + 1)
+        merge = self.config.vision_config.spatial_merge_size
+        vision_outputs.split_sizes = (
+            image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)
+        )
         return vision_outputs
 
     def forward(

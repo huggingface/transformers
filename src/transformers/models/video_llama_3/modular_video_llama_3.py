@@ -483,7 +483,7 @@ class VideoLlama3Model(Qwen2VLModel):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs.split_sizes = image_grid_thw.prod(-1) // image_merge_sizes**2
+        vision_outputs.split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
         return vision_outputs
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
