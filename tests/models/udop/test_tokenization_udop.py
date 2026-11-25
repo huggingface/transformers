@@ -857,7 +857,10 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         for parameter_name, parameter in signature.parameters.items():
-            if parameter.default != inspect.Parameter.empty:
+            if (
+                parameter.default != inspect.Parameter.empty
+                and parameter_name != "_spm_precompiled_charsmap"  # intentionally excluded, see TokenizersBackend
+            ):
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
 
     def test_special_tokens_mask_input_pairs(self):
@@ -1318,6 +1321,17 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         if tokenizer.backend_tokenizer.normalizer is not None:
             expected_result = tokenizer.backend_tokenizer.normalizer.normalize_str(expected_result)
         self.assertEqual(expected_result, decoded_input)
+
+    def test_sentencepiece_normalization(self):
+        # Regression test for #50674: test the SentencePiece charsmap.
+        # Expected values fixed from transformers v4.57.6.
+        text = "Ｈｅｌｌｏ，ｗｏｒｌｄ！ ﬁne Wait… a\u200bb a \u200bb a\u00a0b hello  "
+        expected_tokens = ['▁Hello', ',', 'world', '!', '▁fine', '▁Wait', '...', '▁', 'a', '▁', 'b', '▁', 'a', '▁', 'b', '▁', 'a', '▁', 'b', '▁hello']  # fmt: skip
+        expected_ids = [8774, 6, 7276, 55, 1399, 14583, 233, 3, 9, 3, 115, 3, 9, 3, 115, 3, 9, 3, 115, 21820]  # fmt: skip
+
+        tokenizer = self.get_tokenizer()
+        self.assertEqual(tokenizer.tokenize(text), expected_tokens)
+        self.assertEqual(tokenizer.encode(text, add_special_tokens=False), expected_ids)
 
     def test_prepare_for_model(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
