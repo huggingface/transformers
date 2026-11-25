@@ -3718,6 +3718,39 @@ class GenerationIntegrationTests(unittest.TestCase):
                 )
             )
 
+    def test_inputs_embeds_left_padding_repetition_penalty(self):
+        # Regression test for #51093: with inputs_embeds (no input_ids) and left padding,
+        # repetition_penalty must not treat the attention_mask's leading pad count as
+        # prompt_ignore_length on the newly generated tokens.
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        torch.manual_seed(14)
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            pad_token_id=0,
+            bos_token_id=None,
+            eos_token_id=None,
+        )
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        embed = model.get_input_embeddings()
+        kwargs = {"max_new_tokens": 8, "do_sample": False, "repetition_penalty": 2.0}
+
+        alone = torch.tensor([[5, 6]], device=torch_device)
+        batch = torch.tensor([[0, 0, 0, 5, 6], [7, 8, 9, 10, 11]], device=torch_device)
+        batch_mask = (batch != 0).long()
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            out_alone = model.generate(inputs_embeds=embed(alone), attention_mask=torch.ones_like(alone), **kwargs)
+            out_batch = model.generate(inputs_embeds=embed(batch), attention_mask=batch_mask, **kwargs)
+
+        torch.testing.assert_close(out_batch[0], out_alone[0])
+
     @slow
     def test_beam_search_early_stop_heuristic(self):
         """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""

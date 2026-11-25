@@ -1470,8 +1470,12 @@ class GenerationMixin(ContinuousMixin):
                     UserWarning,
                 )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            mask = (model_kwargs or {}).get(
-                "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+            mask = (
+                (model_kwargs or {}).get(
+                    "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+                )
+                if input_ids_seq_length != 0
+                else None
             )
             padding_lengths = (mask != 0).int().argmax(dim=1) if mask is not None else None
             processors.append(
