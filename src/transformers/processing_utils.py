@@ -176,6 +176,19 @@ def _get_modality_for_attribute(attribute_name: str) -> str:
     )
 
 
+def _pop_sub_processor_kwargs(kwargs: dict, names) -> dict[str, dict]:
+    """
+    Pop each `<name>_kwargs` from `kwargs`: options for that sub-processor only, beside the shared `kwargs`.
+    """
+    sub_processor_kwargs = {name: kwargs.pop(f"{name}_kwargs", {}) for name in names}
+    for name, own_kwargs in sub_processor_kwargs.items():
+        if own_kwargs and kwargs.get(name) is not None:
+            raise ValueError(f"Pass either `{name}` or `{name}_kwargs`, not both.")
+        if duplicated_keys := sorted(set(own_kwargs) & set(kwargs)):
+            raise ValueError(f"Pass {duplicated_keys} either as shared kwargs or in `{name}_kwargs`, not both.")
+    return sub_processor_kwargs
+
+
 class TextKwargs(TypedDict, total=False):
     """
     Keyword arguments for text processing. For extended documentation, check out tokenization_utils_base methods and
@@ -1965,13 +1978,7 @@ class ProcessorMixin(PushToHubMixin):
         # get args from processor init signature
         sub_processors = cls.get_attributes()
 
-        # `<attribute>_kwargs` go to that sub-processor only, beside the shared kwargs
-        sub_processor_kwargs = {name: kwargs.pop(f"{name}_kwargs", {}) for name in sub_processors}
-        for name, own in sub_processor_kwargs.items():
-            if own and kwargs.get(name) is not None:
-                raise ValueError(f"Pass either `{name}` or `{name}_kwargs`, not both.")
-            if both := sorted(set(own) & set(kwargs)):
-                raise ValueError(f"Pass {both} either as shared kwargs or in `{name}_kwargs`, not both.")
+        sub_processor_kwargs = _pop_sub_processor_kwargs(kwargs, sub_processors)
 
         for sub_processor_type in sub_processors:
             modality = _get_modality_for_attribute(sub_processor_type)

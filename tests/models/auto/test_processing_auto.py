@@ -510,6 +510,16 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
         self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
 
+        # With no processor class, the bare image processor still gets its `image_processor_kwargs`
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/tiny-random-convnext", image_processor_kwargs={"backend": "pil"}
+        )
+        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessorPil")
+        with self.assertRaisesRegex(ValueError, r"\['backend'\] either as shared kwargs"):
+            AutoProcessor.from_pretrained(
+                "hf-internal-testing/tiny-random-convnext", backend="pil", image_processor_kwargs={"backend": "pil"}
+            )
+
     def test_auto_processor_save_load(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
         with tempfile.TemporaryDirectory() as tmp_dir:

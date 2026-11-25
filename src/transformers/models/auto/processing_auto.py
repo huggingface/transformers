@@ -23,7 +23,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ProcessorMixin, _pop_sub_processor_kwargs
 from ...tokenization_python import TOKENIZER_CONFIG_FILE
 from ...utils import (
     FEATURE_EXTRACTOR_NAME,
@@ -355,11 +355,21 @@ class AutoProcessor:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         # At this stage, there doesn't seem to be a `Processor` class available for this model.
-        # Let's try the commonly available classes
-        for klass in (AutoTokenizer, AutoImageProcessor, AutoVideoProcessor, AutoFeatureExtractor):
+        # Let's try the commonly available classes, each with its own `<name>_kwargs`
+        fallback_classes = {
+            "tokenizer": AutoTokenizer,
+            "image_processor": AutoImageProcessor,
+            "video_processor": AutoVideoProcessor,
+            "feature_extractor": AutoFeatureExtractor,
+        }
+        sub_processor_kwargs = _pop_sub_processor_kwargs(kwargs, fallback_classes)
+        for name, klass in fallback_classes.items():
             try:
                 return klass.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
+                    **sub_processor_kwargs[name],
                 )
             except Exception:
                 continue
