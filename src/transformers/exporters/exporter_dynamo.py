@@ -587,6 +587,60 @@ def _patch_chunk_gated_delta_rule(_original):
     return patch
 
 
+@register_patch(
+    "dynamo",
+    "transformers.models.falcon_mamba.modeling_falcon_mamba.mamba_selective_scan",
+    "transformers.models.jamba.modeling_jamba.mamba_selective_scan",
+    "transformers.models.mamba.modeling_mamba.mamba_selective_scan",
+    "transformers.models.zamba.modeling_zamba.mamba_selective_scan",
+)
+def _patch_mamba_selective_scan(_original):
+    """Mamba's recurrence for any sequence length: a trace unrolls its loop over positions for the traced length, so
+    the loop runs as a `scan`."""
+
+    def patch(
+        hidden_states,
+        dt,
+        A,
+        B,
+        C,
+        D=None,
+        z=None,
+        delta_bias=None,
+        delta_softplus=False,
+        return_last_state=False,
+        **kwargs,
+    ):
+        batch_size, intermediate_size, _ = hidden_states.shape
+        input_dtype = hidden_states.dtype
+        if delta_bias is not None:
+            dt = dt + delta_bias.to(dt.dtype)[..., None]
+        if delta_softplus:
+            dt = torch.nn.functional.softplus(dt)
+
+        discrete_A = torch.exp(A[None, :, None, :] * dt[:, :, :, None])
+        deltaB_u = dt[:, :, :, None] * B.transpose(1, 2)[:, None, :, :].float() * hidden_states[:, :, :, None].float()
+
+        def step(ssm_state, position):
+            discrete_A, deltaB_u, C = position
+            ssm_state = discrete_A * ssm_state + deltaB_u
+            return ssm_state, torch.bmm(ssm_state.to(input_dtype), C.unsqueeze(-1)).squeeze(-1)
+
+        # Positions on the leading dim, as `scan` iterates it
+        positions = [x.movedim(2, 0).contiguous() for x in (discrete_A, deltaB_u, C)]
+        ssm_state = deltaB_u.new_zeros(batch_size, intermediate_size, A.shape[-1])
+        ssm_state, scan_output = _scan(step, ssm_state, positions)
+        scan_output = scan_output.permute(1, 2, 0)
+
+        if D is not None:
+            scan_output = scan_output + hidden_states * D[None, :, None]
+        if z is not None:
+            scan_output = scan_output * torch.nn.functional.silu(z)
+        return (scan_output, ssm_state) if return_last_state else scan_output
+
+    return patch
+
+
 def _scan(combine_fn, init, xs):
     """`torch`'s `scan` of `combine_fn` over the leading dim of `xs`, which a backend that can't lower it patches.
 

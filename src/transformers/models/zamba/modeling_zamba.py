@@ -364,25 +364,6 @@ def mamba_selective_scan(
         scan_output = scan_output.squeeze(-1).transpose(1, 2)
         ssm_state = all_states[:, :, -1]
 
-    # Under export, the recurrence as a `while_loop`: a Python loop would be unrolled for the traced length, and every
-    # backend translates the loop (ONNX's `Loop`, OpenVINO's `Loop`) where few translate `associative_scan`
-    elif is_torchdynamo_exporting():
-        from torch._higher_order_ops.while_loop import while_loop
-
-        def body(index, ssm_state, scan_output):
-            step = index.reshape(1)
-            ssm_state = discrete_A.index_select(2, step)[:, :, 0] * ssm_state + deltaB_u.index_select(2, step)[:, :, 0]
-            output = torch.matmul(ssm_state.to(input_dtype), C.index_select(1, step)[:, 0, :].unsqueeze(-1))
-            return index + 1, ssm_state, scan_output.index_copy(2, step, output.to(input_dtype))
-
-        # In the discretized states' dtype, which the first step turns the recurrent path's state into
-        ssm_state = deltaB_u.new_zeros(batch_size, intermediate_size, A.shape[-1])
-        scan_output = hidden_states.new_zeros(batch_size, intermediate_size, seq_len)
-        index = torch.zeros((), dtype=torch.int64, device=hidden_states.device)
-        _, ssm_state, scan_output = while_loop(
-            lambda index, ssm_state, scan_output: index < scan_output.shape[-1], body, (index, ssm_state, scan_output)
-        )
-
     # Recurrent iteration
     else:
         # "Initial hidden state" is not supported by the kernel path, so use
