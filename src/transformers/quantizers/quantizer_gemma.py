@@ -47,7 +47,7 @@ class GemmaQuantizer(HfQuantizer):
         from ..integrations.gemma_quant import replace_with_quant_layers
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, getattr(model, "_keep_in_fp32_modules", None)
         )
         model = replace_with_quant_layers(
             model,
