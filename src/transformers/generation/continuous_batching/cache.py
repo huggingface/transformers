@@ -27,13 +27,16 @@ from ...utils.generic import is_flash_attention_requested
 from .cache_allocators import (
     FULL_ATTENTION,
     INDEXED_ATTENTION,
+    LINEAR_ATTENTION,
     SLIDING_ATTENTION,
     CacheAllocator,
     CachePool,
     FullAttentionCacheAllocator,
     IndexedMLACacheAllocator,
     MLACacheAllocator,
+    LinearAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
+    StateSpec,
 )
 from .cache_allocators.cache_allocator import compute_block_hash
 from .distributed import DistributedHelper
@@ -55,6 +58,7 @@ ATTN_TYPE_TO_ALLOCATOR = {
     FULL_ATTENTION: FullAttentionCacheAllocator,
     SLIDING_ATTENTION: SlidingAttentionCacheAllocator,
     INDEXED_ATTENTION: IndexedMLACacheAllocator,
+    LINEAR_ATTENTION: LinearAttentionCacheAllocator,
 }
 
 
@@ -149,6 +153,7 @@ class PagedAttentionCache:
         dtype: torch.dtype = torch.float16,
         model_supports_logits_to_keep: bool = False,
         do_sample: bool = False,
+        cache_states: dict[int, list[StateSpec]] | None = None,
     ) -> None:
         """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
         only full attention layers.
@@ -162,6 +167,8 @@ class PagedAttentionCache:
             model_supports_logits_to_keep: When True, memory sizing charges the LM head peak per request instead of
                 per batch token, since the model slices hidden states before the LM head
             do_sample: Whether next tokens are sampled, which holds more fp32 copies of the logits at once than argmax
+            cache_states: The shape and dtype of the per-request states of each linear attention layer,
+                by layer index, as the layers declare them through `cache_states`
         """
         self.config = config
         self.dtype = dtype
@@ -184,13 +191,30 @@ class PagedAttentionCache:
         # Construct the necessary cache allocator for each attention type
         self.cache_allocators: dict[str, CacheAllocator] = {}
         self.layer_to_allocator: dict[int, CacheAllocator] = {}
-        for index, (attn_type, layer_indices) in enumerate(group_layers_by_attn_type(config).items()):
+        # The linear attention allocator comes last: its blocks are sized to a multiple of the other allocators'
+        # blocks, which keeps the sectors (the LCM of all block sizes) small
+        layer_groups = group_layers_by_attn_type(config)
+        linear_layers = layer_groups.pop(LINEAR_ATTENTION, None)
+        for attn_type, layer_indices in layer_groups.items():
             # Create the allocator and register it by name and layers indices
             allocator = self._create_allocator(
-                continuous_batching_config, attn_type, index, layer_indices, num_key_value_heads
+                continuous_batching_config, attn_type, len(self.cache_allocators), layer_indices, num_key_value_heads
             )
             self.cache_allocators[attn_type] = allocator
             self.layer_to_allocator = self.layer_to_allocator | dict.fromkeys(layer_indices, allocator)
+        if linear_layers is not None:
+            states = self._get_cache_states(linear_layers, cache_states or {})
+            block_alignment = lcm(*(ca.bytes_per_block for ca in self.cache_allocators.values()), 128)
+            linear_kwargs = {
+                "num_key_value_heads": num_key_value_heads,
+                "config": config,
+                "cache_dtype": self.dtype,
+                "page_size": continuous_batching_config.page_size,
+                "allow_block_sharing": continuous_batching_config.allow_block_sharing,
+                "states": states,
+                "block_alignment": block_alignment,
+            }
+            self._add_cache_allocator(LINEAR_ATTENTION, linear_layers, linear_kwargs)
 
         # To have the maximal granularity while ensuring alignment for all cache allocators, we compute the LCM of all
         # cache allocator block sizes AND a default alignment of 128 bytes
@@ -306,6 +330,29 @@ class PagedAttentionCache:
             allow_block_sharing=continuous_batching_config.allow_block_sharing,
         )
         return allocator
+    @staticmethod
+    def _get_cache_states(layer_indices: list[int], cache_states: dict[int, list[StateSpec]]) -> list[StateSpec]:
+        """The states the linear attention layers declare, which have to be the same for all of them since the
+        allocator gives every layer the same page."""
+        states = []
+        for layer_idx in layer_indices:
+            if layer_idx not in cache_states:
+                raise ValueError(
+                    f"Layer {layer_idx} is a linear attention layer that declares no states: continuous batching "
+                    "supports the linear attention layers that declare their per-request states through "
+                    "`cache_states`, like the gated delta net of Qwen3-Next."
+                )
+            states.append(cache_states[layer_idx])
+        if any(layer_states != states[0] for layer_states in states):
+            raise ValueError(f"The linear attention layers declare different states: {states}")
+        return states[0]
+
+    def _add_cache_allocator(self, attn_type: str, layer_indices: list[int], ca_kwargs: dict[str, Any]) -> None:
+        """Creates the allocator of an attention type and registers it by name and layer indices."""
+        index = len(self.cache_allocators)
+        allocator = ATTN_TYPE_TO_ALLOCATOR[attn_type](index=index, layer_indices=layer_indices, **ca_kwargs)
+        self.cache_allocators[attn_type] = allocator
+        self.layer_to_allocator = self.layer_to_allocator | dict.fromkeys(layer_indices, allocator)
 
     def _infer_read_cache_limit(self) -> int | None:
         """The maximum number of tokens that can be read from the cache for a single request."""
@@ -322,7 +369,9 @@ class PagedAttentionCache:
             return 0
         acc = float("inf")
         for allocator in self.cache_allocators.values():
-            acc = min(acc, allocator.tokens_per_page * self.max_blocks_per_request)
+            # An allocator indexing by sequence holds one block per request whatever its length
+            if not allocator.indexes_by_sequence:
+                acc = min(acc, allocator.tokens_per_page * self.max_blocks_per_request)
         return int(acc)
 
     def _infer_use_varlen_block_table(self) -> bool:
@@ -729,6 +778,34 @@ class PagedAttentionCache:
         self.evict_cached_blocks()
         for allocator in self.cache_allocators.values():
             allocator.ledger.epoch += 1
+    @torch.compiler.disable  # does not play well with the views of the cache tensor
+    def read_cache_states(self, layer_idx: int, kwargs: dict[str, Any]) -> tuple[torch.Tensor, ...]:
+        """Reads the states of the batch's sequences for a linear attention layer, in batch order and in the order the
+        layer declares them, each of shape [num_sequences, *shape]. A sequence with no past reads zeros, from the
+        read trash block."""
+        allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
+        index = self._linear_attention_state_index(allocator, kwargs, write=False)
+        return tuple(view[index] for view in allocator.state_views(layer_idx))
+
+    @torch.compiler.disable  # does not play well with the views of the cache tensor
+    def write_cache_states(self, layer_idx: int, states: tuple[torch.Tensor, ...], kwargs: dict[str, Any]) -> None:
+        """Writes the states of the batch's sequences for a linear attention layer, given in batch order and in the
+        order the layer declares them. Padding sequences write to the write trash block."""
+        allocator: LinearAttentionCacheAllocator = self.layer_to_allocator[layer_idx]  # type: ignore
+        index = self._linear_attention_state_index(allocator, kwargs, write=True)
+        for view, state in zip(allocator.state_views(layer_idx), states):
+            view.index_copy_(0, index, state.to(view.dtype))
+
+    @staticmethod
+    def _linear_attention_state_index(allocator: CacheAllocator, kwargs: dict[str, Any], write: bool) -> torch.Tensor:
+        """The block holding each sequence's states. On the decode fast path it comes from the block table, whose
+        padding rows hold -1 and are sent to the trash blocks; otherwise it is the allocator's read or write index."""
+        block_table = kwargs.get("block_table")
+        if block_table is None:
+            return kwargs["write_index" if write else "read_index"][allocator.index]
+        index = block_table[allocator.index][:, 0].to(torch.int64)
+        trash_index = allocator.write_trash_index if write else allocator.read_trash_index
+        return torch.where(index < 0, trash_index, index)
 
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
