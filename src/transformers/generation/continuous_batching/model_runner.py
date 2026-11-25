@@ -21,6 +21,7 @@ from torch import nn
 
 from ...distributed.parallel_utils import with_fast_tp_all_reduce
 from ...generation.configuration_utils import ContinuousBatchingConfig
+from ...utils.generic import is_flash_attention_requested
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList, ContinuousBatchingTemperatureLogitsWarper
 from ..logits_process import TemperatureLogitsWarper
@@ -127,6 +128,11 @@ class ModelRunner:
         self.return_logprobs = return_logprobs
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
+        # [scratch] FA4 decode steps through TRT-LLM's decode kernel: its workspace exists before any graph capture
+        if cache.use_varlen_block_table and is_flash_attention_requested(cache.config, version=4):
+            from ...modeling_flash_attention_utils import proto_trtllm_decode_workspace
+
+            proto_trtllm_decode_workspace(cache.device)
         self._model_supports_logits_to_keep: bool | None = None  # resolved on first forward
         self._proto_varlen_warm_done = False  # gap4 zsbench prototype, see CB_PROTO_VARLEN_BUCKETS
         self._proto_varlen_eager: dict[tuple[int, ...], int] = {}

@@ -749,6 +749,28 @@ def _process_flash_attention_kwargs(
 
 
 _PROTO_KV_WRITE = os.environ.get("PROTO_KV_WRITE", "1") == "1"
+# [scratch] FA4 (Blackwell) decode-only steps through flashinfer's TRT-LLM decode kernel (vLLM's Blackwell backend):
+# it splits the keys of a few long sequences and reuses prefix-shared pages better than FA4's varlen call
+_PROTO_TRTLLM_DECODE = os.environ.get("PROTO_TRTLLM_DECODE", "1") == "1"
+_TRTLLM_WORKSPACE: dict = {}
+
+
+def proto_trtllm_decode_workspace(device: torch.device) -> None:
+    """Allocates the zeroed workspace of the TRT-LLM decode kernel, before any CUDA graph capture."""
+    if _PROTO_TRTLLM_DECODE and device not in _TRTLLM_WORKSPACE:
+        _TRTLLM_WORKSPACE[device] = torch.zeros(128 * 1024 * 1024, dtype=torch.uint8, device=device)
+
+
+@torch.compiler.disable
+def _trtllm_decode(q, k_cache, v_cache, block_table, seqused, softmax_scale, window_left):
+    import flashinfer
+
+    out = flashinfer.decode.trtllm_batch_decode_with_kv_cache(
+        q, (k_cache, v_cache), _TRTLLM_WORKSPACE[q.device], block_table, seqused,
+        block_table.size(1) * k_cache.size(1), bmm1_scale=softmax_scale, bmm2_scale=1.0, window_left=window_left,
+        kv_layout="NHD",
+    )  # fmt: skip
+    return out
 # [scratch] debug: attention sinks through the log-sum-exp rescale on Hopper too (see `_flash_attention_forward`)
 _PROTO_SINKS_BY_LSE = os.environ.get("PROTO_SINKS_BY_LSE") == "1"
 
@@ -845,6 +867,18 @@ def _flash_attention_forward(
             from .integrations._proto_paged_kv_write import paged_kv_write
 
             seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
+            keywords = flash_kwargs_fn.keywords
+            # [scratch] decode-only steps (one query token per sequence) through TRT-LLM's decode kernel
+            if (
+                max_length_q == 1
+                and q.device in _TRTLLM_WORKSPACE
+                and keywords.get("s_aux") is None
+                and keywords.get("softcap") is None
+            ):
+                scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
+                window = keywords.get("sliding_window")
+                out = _trtllm_decode(q, k_cache, v_cache, block_table, seqused, scale, -1 if window is None else window - 1)
+                return out.view(batch_size, -1, *out.shape[-2:])
             flash_kwargs = partial(process_flash_kwargs_fn, **flash_kwargs_fn.keywords)(
                 max_seqlen_q=max_length_q, max_seqlen_k=block_table.size(1) * k_cache.size(1), block_table=block_table
             )
