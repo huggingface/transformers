@@ -128,6 +128,12 @@ class ModelRunner:
         self.return_logprobs = return_logprobs
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
+        # [scratch] Dynamo compiles some frames once per layer (guards on the layer index or the module): with the default
+        # limit of 8 recompiles, the layers after the 8th ran eager inside the CUDA graphs
+        torch._dynamo.config.recompile_limit = max(
+            torch._dynamo.config.recompile_limit, int(os.environ.get("PROTO_RECOMPILE_LIMIT", 256))
+        )
+        torch._dynamo.config.accumulated_recompile_limit = max(torch._dynamo.config.accumulated_recompile_limit, 4096)
         # [scratch] FA4 decode steps through TRT-LLM's decode kernel: its workspace exists before any graph capture
         if cache.use_varlen_block_table and is_flash_attention_requested(cache.config, version=4):
             from ...modeling_flash_attention_utils import proto_trtllm_decode_workspace
@@ -770,6 +776,13 @@ class ModelRunner:
         # Early return if the warmup is not needed
         if not self.pad_inputs:
             return None
+
+        # [scratch] Blackwell: bf16 MoE experts shuffled once for TRT-LLM's kernel, before any graph capture
+        from ...integrations._proto_bf16_experts import trtllm_bf16_prepare_model
+
+        num_prepared = trtllm_bf16_prepare_model(model)
+        if num_prepared:
+            logger.warning(f"PROTO_TRTLLM_BF16_MOE: {num_prepared} expert modules on TRT-LLM's bf16 MoE")
 
         # In async mode, each IO pair has its own graph buffer and static tensors, so we warm up both
         total_duration = 0

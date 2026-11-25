@@ -155,12 +155,95 @@ def proto_decode_experts(hidden_states, top_k_index, top_k_weights, gate_up, dow
     return decode_topk_sum(slots_out, top_k_index, num_experts)
 
 
+# [scratch] Blackwell: the experts through flashinfer's TRT-LLM bf16 routed MoE (vLLM's FLASHINFER_TRTLLM unquantized
+# backend), on weights shuffled in place once (`trtllm_bf16_prepare_model`). Off with PROTO_TRTLLM_BF16_MOE=0.
+PROTO_TRTLLM_BF16_MOE = os.environ.get("PROTO_TRTLLM_BF16_MOE", "1") == "1"
+
+
+@torch.no_grad()
+def _trtllm_bf16_shuffle_(weight: torch.Tensor, is_w13: bool, cache: dict) -> None:
+    """In place, as vLLM's `convert_moe_weights_to_flashinfer_trtllm_block_layout`: rows reordered for the 128-row
+    epilogue tile (gate/up halves swapped for w13), then each expert stored in the BlockMajorK layout."""
+    from flashinfer.fused_moe.core import _maybe_get_cached_w3_w1_permute_indices, get_w2_permute_indices_with_cache
+
+    num_experts = weight.shape[0]
+    rows, cols = weight[0].view(torch.uint8).shape
+    scratch = torch.empty(cols // 128, rows, 128, dtype=torch.uint8, device=weight.device)
+    for e in range(num_experts):
+        expert = weight[e].view(torch.uint8)
+        if is_w13:
+            idx = _maybe_get_cached_w3_w1_permute_indices(cache, expert, 128, is_gated_act_gemm=True)
+            idx = (idx + expert.shape[0] // 2) % expert.shape[0]
+        else:
+            idx = get_w2_permute_indices_with_cache(cache, expert, 128)
+        blocks = expert.view(expert.shape[0], cols // 128, 128).permute(1, 0, 2)
+        torch.index_select(blocks, 1, idx.to(expert.device), out=scratch)
+        expert.view(-1).copy_(scratch.view(-1))
+
+
+def trtllm_bf16_prepare_model(model) -> int:
+    """Shuffles the experts of the `proto_decode` MoE layers of `model` for TRT-LLM's kernel (Blackwell, bf16, gated
+    SiLU, no bias, not expert parallel). Returns the number of modules prepared."""
+    if not (PROTO_TRTLLM_BF16_MOE and torch.cuda.is_available() and torch.cuda.get_device_capability()[0] == 10):
+        return 0
+    try:
+        import flashinfer.fused_moe  # noqa: F401
+    except ImportError:
+        return 0
+    from .moe import _default_apply_gate
+
+    prepared, cache = 0, {}
+    for module in model.modules():
+        if "gate_up_proj" not in module.__dict__.get("_parameters", {}) or module.__dict__.get("_proto_trtllm_bf16"):
+            continue
+        if getattr(getattr(module, "config", None), "_experts_implementation", None) != "proto_decode":
+            continue
+        usable = (
+            module.has_gate
+            and module._apply_gate.__func__ is _default_apply_gate
+            and type(module.act_fn).__name__ in ("SiLU", "SiLUActivation")
+            and not module.has_post_expert_norm
+            and not module.has_bias
+            and not module.is_transposed
+            and not module._is_expert_parallel
+            and module.gate_up_proj.dtype == torch.bfloat16
+            and module.gate_up_proj.shape[1] % 256 == 0
+            and module.down_proj.shape[1] % 128 == 0
+        )
+        if not usable:
+            continue
+        _trtllm_bf16_shuffle_(module.gate_up_proj.data, True, cache)
+        _trtllm_bf16_shuffle_(module.down_proj.data, False, cache)
+        module._proto_trtllm_bf16 = True
+        prepared += 1
+    return prepared
+
+
+def _trtllm_bf16_experts(gate_up, down, hidden_states, top_k_index, top_k_weights):
+    from flashinfer.fused_moe import WeightLayout, trtllm_bf16_routed_moe
+
+    num_experts, two_i, hidden = gate_up.shape
+    out = trtllm_bf16_routed_moe(
+        topk_ids=(top_k_index.to(torch.int32), top_k_weights.to(torch.bfloat16)), hidden_states=hidden_states,
+        gemm1_weights=gate_up.view(num_experts, hidden // 64, two_i, 64),
+        gemm2_weights=down.view(num_experts, two_i // 2 // 64, hidden, 64),
+        num_experts=num_experts, top_k=top_k_index.shape[-1], n_group=None, topk_group=None,
+        intermediate_size=two_i // 2, local_expert_offset=0, local_num_experts=num_experts, routing_method_type=1,
+        use_shuffled_weight=True, weight_layout=WeightLayout.BlockMajorK, do_finalize=True,
+    )  # fmt: skip
+    return out[0] if isinstance(out, (list, tuple)) else out
+
+
 def proto_decode_experts_forward(self, hidden_states, top_k_index, top_k_weights):
     """`experts_implementation="proto_decode"`: the fused path for decode-sized batches, `grouped_mm` above. Under
     expert parallelism, the routes to other ranks' experts (local id `num_experts`) are skipped by the routing and the
     top-k sum."""
     from .moe import _default_apply_gate, grouped_mm_experts_forward
 
+    if self.__dict__.get("_proto_trtllm_bf16"):  # weights shuffled for TRT-LLM: no other path reads them now
+        return torch.compiler.disable(_trtllm_bf16_experts)(
+            self.gate_up_proj, self.down_proj, hidden_states, top_k_index, top_k_weights
+        )
     usable = (
         self.has_gate
         and self._apply_gate.__func__ is _default_apply_gate
