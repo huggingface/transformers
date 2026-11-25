@@ -130,13 +130,12 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
         Verify that greedy generation with `cache_implementation="static"` succeeds and matches
         `cache_implementation="dynamic"` when sequence length exceeds `sliding_window_size` on `hybrid_sliding` layers.
         """
-        config = self.model_tester.get_config()
+        config, input_ids, *_ = self.model_tester.prepare_config_and_inputs()
         config.sliding_window = 4
         config.sliding_window_size = 4
         config._attn_implementation = "eager"
 
         model = InklingForCausalLM(config).to(torch_device).eval()
-        input_ids = ids_tensor([1, 6], config.vocab_size)
 
         out_dynamic = model.generate(input_ids, max_new_tokens=5, cache_implementation="dynamic", do_sample=False)
         out_static = model.generate(input_ids, max_new_tokens=5, cache_implementation="static", do_sample=False)
