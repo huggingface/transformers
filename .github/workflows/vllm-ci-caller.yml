@@ -66,6 +66,7 @@ jobs:
     permissions:
       contents: read
     name: Test vLLM examples and weight mapping
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
     # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
@@ -127,6 +128,7 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -169,6 +171,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -318,6 +321,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -365,6 +369,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM tokenizers, chat templates and configs"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -648,6 +653,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -702,6 +708,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM structured output, detokenizer, parsers and video processing"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -805,6 +812,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -925,6 +933,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, more multimodal models (shard ${{ matrix.shard }} / 8)"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -980,6 +989,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, other areas (basic correctness, prompt embeds, tensorizer, quantization)"
+    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -1133,7 +1143,7 @@ jobs:
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
-            --slack-channel "#transformers-ci-vllm" \
+            --slack-channel "#transformers-ci-dummy" \
             --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
             --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
             --commit-date "vllm=$VLLM_COMMIT_DATE"
