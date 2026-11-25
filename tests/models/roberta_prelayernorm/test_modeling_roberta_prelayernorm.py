@@ -509,6 +509,20 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
+    @unittest.skip(
+        "Packed sequences are not separated with eager/sdpa: the attention mask is built without `position_ids`, so "
+        "the packed sequences attend to each other"
+    )
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        "Packed sequences are not separated with eager/sdpa: the attention mask is built without `position_ids`, so "
+        "the packed sequences attend to each other"
+    )
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class RobertaPreLayerNormModelIntegrationTest(TestCasePlus):

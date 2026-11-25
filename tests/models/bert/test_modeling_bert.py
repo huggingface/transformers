@@ -551,6 +551,20 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model = BertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @unittest.skip(
+        "Packed sequences are not separated with eager/sdpa: the attention mask is built without `position_ids`, so "
+        "the packed sequences attend to each other"
+    )
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        "Packed sequences are not separated with eager/sdpa: the attention mask is built without `position_ids`, so "
+        "the packed sequences attend to each other"
+    )
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class BertModelIntegrationTest(unittest.TestCase):
