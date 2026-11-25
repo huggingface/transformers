@@ -1545,10 +1545,8 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_tokens = ['▁Hello', ',', 'world', '!', '▁fine', '▁Wait', '...', '▁a', '▁b', '▁a', '▁b', '▁a', '▁b', '▁hell', 'o']  # fmt: skip
         expected_ids = [35378, 4, 32554, 38, 5885, 175254, 27, 10, 876, 10, 876, 10, 876, 33600, 31]  # fmt: skip
 
-        # setUpClass builds the saved tokenizer from vocab only (no charsmap), so load the real checkpoint.
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")
         self.assertEqual(tokenizer.tokenize(text), expected_tokens)
-        # `encode` expects words and boxes, so go through the backend tokenizer
         self.assertEqual(tokenizer.backend_tokenizer.encode(text, add_special_tokens=False).ids, expected_ids)
 
     def test_prepare_for_model(self):
