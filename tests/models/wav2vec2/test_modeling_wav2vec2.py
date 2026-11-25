@@ -38,6 +38,7 @@ from transformers.testing_utils import (
 
 from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -1716,3 +1717,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+
+class Wav2Vec2FastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-Wav2Vec2ForCTC"
+    all_model_classes = (Wav2Vec2ForCTC,) if is_torch_available() else ()
+    input_modalities = ("audio",)

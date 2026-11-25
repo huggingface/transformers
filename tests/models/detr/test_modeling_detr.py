@@ -26,6 +26,7 @@ from transformers.testing_utils import Expectations, require_timm, require_torch
 
 from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -730,3 +731,9 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertEqual(predicted_first_segment["label_id"], expected_first_segment["label_id"])
         self.assertEqual(predicted_first_segment["was_fused"], expected_first_segment["was_fused"])
         self.assertAlmostEqual(predicted_first_segment["score"], expected_first_segment["score"], places=3)
+
+
+class DetrFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-DetrForObjectDetection"
+    all_model_classes = (DetrForObjectDetection,) if is_torch_available() else ()
+    input_modalities = ("image",)
