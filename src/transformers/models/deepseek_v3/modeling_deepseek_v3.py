@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deepseek_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+import os
 from collections.abc import Callable
 
 import torch
@@ -33,7 +34,14 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_deepseek_v3 import DeepseekV3Config
 
 
+# [scratch] absorbed MLA for continuous batching steps
+_PROTO_MLA_ABSORB = os.environ.get("PROTO_MLA_ABSORB", "1") == "1"
+if _PROTO_MLA_ABSORB:
+    from ...integrations._proto_mla_absorbed import absorbed_mla_forward
+
+
 @use_kernel_forward_from_hub("RMSNorm")
+
 class DeepseekV3RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -442,6 +450,11 @@ class DeepseekV3Attention(nn.Module):
         # Cache read / write is performed while latent KV is still compressed
         if cache is not None:
             kv_nope, k_rot = cache.update(kv_nope, k_rot, self.layer_idx, kwargs=kwargs)
+
+        # [scratch] PROTO_MLA_ABSORB=1: a continuous batching step attends on the cached latents, never expanded
+        if _PROTO_MLA_ABSORB and cache is not None and kwargs.get("cu_seq_lens_q") is not None:
+            attn_output = absorbed_mla_forward(self, q_pass, q_rot, kv_nope, k_rot, kwargs)
+            return self.o_proj(attn_output), None
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
 
