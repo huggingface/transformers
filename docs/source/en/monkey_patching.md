@@ -359,7 +359,7 @@ class FusedQKVAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -374,8 +374,8 @@ class FusedQKVAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx)
 
         attn_output, attn_weights = sdpa_attention_forward(
             self,
@@ -483,8 +483,8 @@ with apply_patches():
 # Expose `output_selected_experts=True` on the base model by adding an OutputRecorder
 # at runtime. Index 2 of the router's tuple output is the expert indices.
 inner = model.model
-existing = _CAN_RECORD_REGISTRY.get(str(inner.__class__), {}) or {}
-_CAN_RECORD_REGISTRY[str(inner.__class__)] = {
+existing = _CAN_RECORD_REGISTRY.get(inner)
+_CAN_RECORD_REGISTRY[inner] = {
     **existing,
     "selected_experts": OutputRecorder(ReplayableQwen3MoeTopKRouter, index=2),
 }

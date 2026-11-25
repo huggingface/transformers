@@ -1529,6 +1529,9 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
             arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
             next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID
             `batch_id`.
+        num_beams (`int`):
+            Number of expanded rows per original prompt. When constructing this processor directly for
+            multi-return sampling, pass `max(num_beams, num_return_sequences)`.
 
     Examples:
 
@@ -2336,7 +2339,7 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             "input_ids": unconditional_ids,
             "attention_mask": unconditional_attention_mask,
             "use_cache": use_cache,
-            "past_key_values": None,
+            "cache": None,
             "first_pass": True,
         }
 
@@ -2370,9 +2373,9 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             input_ids,
             attention_mask=attention_mask,
             use_cache=self.unconditional_context["use_cache"],
-            past_key_values=self.unconditional_context["past_key_values"],
+            cache=self.unconditional_context["cache"],
         )
-        self.unconditional_context["past_key_values"] = out.get("past_key_values", None)
+        self.unconditional_context["cache"] = out.get("cache", None)
 
         return out.logits
 

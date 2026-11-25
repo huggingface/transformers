@@ -179,7 +179,6 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     ```"""
 
     model_type = "phi4_multimodal"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.qkv_proj": "colwise_gather_output",  # we need to replicate here due to the slicing of qkv
         "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the slicing of qkv
@@ -238,12 +237,12 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", default_theta))
         self.rope_parameters.setdefault("partial_rotary_factor", kwargs.get("partial_rotary_factor", 1.0))
-        self.standardize_rope_params()
 
         # For backward compatibility if previous version used "su" or "yarn"
-        rope_parameters_type = self.rope_parameters.get("rope_type", None)
+        rope_parameters_type = self.rope_parameters.get("rope_type", self.rope_parameters.get("type"))
         if rope_parameters_type is not None and rope_parameters_type in ["su", "yarn"]:
             self.rope_parameters["rope_type"] = "longrope"
+        self.standardize_rope_params()
         return kwargs
 
     def validate_rope(self):

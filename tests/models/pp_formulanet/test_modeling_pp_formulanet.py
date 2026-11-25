@@ -51,46 +51,45 @@ class PPFormulaNetModelTester(VLMModelTester):
 
     conditional_generation_class = PPFormulaNetForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("hidden_size", 48)
-        kwargs.setdefault("image_size", 768)
-        kwargs.setdefault("patch_size", 768)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("num_hidden_layers", 1)
-        kwargs.setdefault("is_training", False)
-        kwargs.setdefault(
-            "vision_config",
-            {
-                "image_size": 768,
-                "patch_size": 16,
-                "hidden_size": 48,
-                "windows_size": 14,
-                "num_hidden_layers": 1,
-                "output_channels": 16,
-                "num_attention_heads": 2,
-                "global_attn_indexes": [1, 1, 1, 1],
-                "mlp_dim": 1,
-                "post_conv_in_channels": 16,
-                "post_conv_mid_channels": 16,
-                "post_conv_out_channels": 16,
-                "decoder_hidden_size": 48,
-            },
-        )
-        kwargs.setdefault(
-            "text_config",
-            {
-                "decoder_ffn_dim": 16,
-                "decoder_layers": 1,
-                "d_model": 48,
-                "vocab_size": 99,
-            },
-        )
-        super().__init__(parent, **kwargs)
-        self.seq_length = self.image_size // self.patch_size
-        self.encoder_seq_length = self.vision_config["windows_size"] ** 2
-        self.decoder_seq_length = 1
+    small_config_overrides = {
+        "batch_size": 2,
+        "hidden_size": 48,
+        "image_size": 768,
+        "patch_size": 768,
+        "num_attention_heads": 2,
+        "num_channels": 3,
+        "num_hidden_layers": 1,
+        "is_training": False,
+        "vision_config": {
+            "image_size": 768,
+            "patch_size": 16,
+            "hidden_size": 48,
+            "windows_size": 14,
+            "num_hidden_layers": 1,
+            "output_channels": 16,
+            "num_attention_heads": 2,
+            "global_attn_indexes": [1, 1, 1, 1],
+            "mlp_dim": 1,
+            "post_conv_in_channels": 16,
+            "post_conv_mid_channels": 16,
+            "post_conv_out_channels": 16,
+            "decoder_hidden_size": 48,
+        },
+        "text_config": {
+            "decoder_ffn_dim": 16,
+            "decoder_layers": 1,
+            "d_model": 48,
+            "vocab_size": 99,
+        },
+        "decoder_seq_length": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = values["image_size"] // values["patch_size"]
+        values["encoder_seq_length"] = values["vision_config"]["windows_size"] ** 2
+        return values
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
@@ -282,10 +281,8 @@ class PPFormulaNetModelTest(VLMModelTest, unittest.TestCase):
     def test_assisted_decoding_sample(self):
         pass
 
-    @unittest.skip(
-        reason="PPFormulaNet does not support continuing generation from past_key_values across generate calls."
-    )
-    def test_generate_continue_from_past_key_values(self):
+    @unittest.skip(reason="PPFormulaNet does not support continuing generation from cache across generate calls.")
+    def test_generate_continue_from_cache(self):
         pass
 
 

@@ -25,9 +25,8 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.generic import no_inherit_decorator
-from ...utils.import_utils import requires
 from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
@@ -156,24 +155,11 @@ class LightGlueImageProcessorKwargs(SuperGlueImageProcessorKwargs):
 
 
 class LightGlueImageProcessor(SuperGlueImageProcessor):
-    def post_process_keypoint_matching(
-        self,
-        outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: TensorType | list[tuple],
-        threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
-        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
+    pass
 
 
 class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
-    @requires(backends=("torch",))
-    def post_process_keypoint_matching(
-        self,
-        outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: TensorType | list[tuple],
-        threshold: float = 0.0,
-    ) -> list[dict[str, "torch.Tensor"]]:
-        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
+    pass
 
 
 class LightGluePositionalEncoder(nn.Module):

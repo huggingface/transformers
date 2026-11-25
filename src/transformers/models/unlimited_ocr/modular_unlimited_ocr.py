@@ -53,6 +53,7 @@ from ...utils import (
     logging,
     torch_int,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.configuration_clip import CLIPVisionConfig
@@ -210,21 +211,6 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
             skip_tensor_conversion=self.skip_tensor_conversion,
         )
 
-    def get_patches_grid(self, height: int, width: int, images_kwargs: dict | None = None) -> tuple[int, int] | None:
-        """
-        Returns the `(num_columns, num_rows)` grid of local patches for a given image size, or `None` if the
-        image is not cropped into local patches.
-        """
-        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
-        min_patches = images_kwargs["min_patches"]
-        max_patches = images_kwargs["max_patches"]
-        tile_size = images_kwargs["tile_size"]
-        crop_to_patches = images_kwargs["crop_to_patches"]
-
-        if crop_to_patches and max(height, width) > tile_size:
-            return get_optimal_tiled_canvas((height, width), (tile_size, tile_size), min_patches, max_patches)
-        return None
-
 
 class UnlimitedOcrProcessor(DeepseekOcr2Processor):
     images_kwargs = AttributeError()
@@ -286,13 +272,23 @@ class UnlimitedOcrProcessor(DeepseekOcr2Processor):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
-            num_image_tokens = [
-                self._get_num_image_tokens(
-                    self.image_processor.get_patches_grid(*image_size, images_kwargs), **images_kwargs
-                )
-                for image_size in image_sizes
-            ]
+            images_kwargs = self.image_processor._merge_and_standardize_kwargs(
+                **self._merge_kwargs(**kwargs)["images_kwargs"]
+            )
+            min_patches = images_kwargs["min_patches"]
+            max_patches = images_kwargs["max_patches"]
+            tile_size = images_kwargs["tile_size"]
+            crop_to_patches = images_kwargs["crop_to_patches"]
+
+            num_image_tokens = []
+            for height, width in image_sizes:
+                # Images larger than a tile are also cropped into a grid of local patches
+                patches_grid = None
+                if crop_to_patches and max(height, width) > tile_size:
+                    patches_grid = get_optimal_tiled_canvas(
+                        (height, width), (tile_size, tile_size), min_patches, max_patches
+                    )
+                num_image_tokens.append(self._get_num_image_tokens(patches_grid, **images_kwargs))
             num_image_patches = [1] * len(image_sizes)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
@@ -1062,12 +1058,22 @@ class UnlimitedOcrStaticReferenceSlidingWindowLayer(StaticSlidingWindowLayer):
             torch._dynamo.mark_static_address(self.keys)
             torch._dynamo.mark_static_address(self.values)
 
+    @property
+    def is_croppable(self) -> bool:
+        """
+        Whether `crop` can put this layer back as it was.
+        """
+        # We don't know yet, so let's be extra careful
+        if self.prefill_length is None:
+            return False
+        return self.prefill_max_cache_len <= self.prefill_length
+
 
 def create_reference_sliding_window_causal_mask(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
+    cache: Cache | None,
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
@@ -1076,10 +1082,8 @@ def create_reference_sliding_window_causal_mask(
     allow_is_causal_skip: bool = False,
 ) -> torch.Tensor | BlockMask | None:
     layer = None
-    if past_key_values is not None:
-        layer = next(
-            (layer for layer in past_key_values.layers if layer._layer_type == "reference_sliding_attention"), None
-        )
+    if cache is not None:
+        layer = next((layer for layer in cache.layers if layer._layer_type == "reference_sliding_attention"), None)
 
     if layer is None:
         prefill_length = float("inf")
@@ -1104,7 +1108,7 @@ def create_reference_sliding_window_causal_mask(
         config=config,
         inputs_embeds=inputs_embeds,
         attention_mask=attention_mask,
-        past_key_values=past_key_values,
+        cache=cache,
         position_ids=position_ids,
         or_mask_function=prefill_mask_function,
         and_mask_function=and_mask_function,
@@ -1115,12 +1119,13 @@ def create_reference_sliding_window_causal_mask(
 
 
 class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1131,12 +1136,12 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         # It may already have been prepared by, e.g., `generate`
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1145,7 +1150,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
 
@@ -1163,7 +1168,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
                 attention_mask=causal_mask_mapping[self.config.layer_types[layer_idx]],
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -1171,7 +1176,7 @@ class UnlimitedOcrTextModel(DeepseekOcr2TextModel):
         hidden_states = self.norm(hidden_states)
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1261,6 +1266,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             **local_outputs,
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1270,7 +1276,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
         patches_grid: list[list[int]] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
@@ -1307,19 +1313,12 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             use_cache=use_cache,
             **kwargs,
         )
 
-        return UnlimitedOcrModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=mm_encoder_outputs["image"].pooler_output if mm_encoder_outputs.get("image") else None,
-            router_logits=outputs.router_logits,
-        )
+        return UnlimitedOcrModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 # Cannot inherit from XYZForConditionalGeneration as this results in MRO clashes between GenerationMixin
@@ -1365,6 +1364,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1374,7 +1374,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         patches_grid: list[list[int]] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -1456,7 +1456,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
             patches_grid=patches_grid,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
@@ -1479,10 +1479,10 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         return UnlimitedOcrCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
             router_logits=outputs.router_logits,
         )
 

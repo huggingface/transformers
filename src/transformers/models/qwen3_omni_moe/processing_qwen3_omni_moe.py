@@ -195,7 +195,13 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
             )
             kwargs["load_audio_from_video"] = True
         return super().__call__(
-            images=images, text=text, videos=videos, audio=audio, videos_kwargs=videos_kwargs, **kwargs
+            images=images,
+            text=text,
+            videos=videos,
+            audio=audio,
+            audio_kwargs=audio_kwargs,
+            videos_kwargs=videos_kwargs,
+            **kwargs,
         )
 
     def validate_inputs(
@@ -428,6 +434,9 @@ class Qwen3OmniMoeProcessor(OmniModalProcessorMixin):
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
+        if "n_window" in kwargs:
+            kwargs["audio_kwargs"] = dict(kwargs.get("audio_kwargs", {}))
+            kwargs["audio_kwargs"].setdefault("n_window", kwargs.pop("n_window"))
 
         vision_data = {}
         merged_kwargs = self._merge_kwargs(**kwargs)

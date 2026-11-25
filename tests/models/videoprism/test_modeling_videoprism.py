@@ -35,6 +35,7 @@ from transformers.utils import (
 )
 from transformers.utils.import_utils import is_torchvision_greater_or_equal
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -87,63 +88,47 @@ class VideoPrismModelTest(ModelTesterMixin):
 
 
 @require_vision
-class VideoPrismVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        image_size=8,
-        num_frames=3,
-        tubelet_size=[1, 4, 4],
-        num_channels=3,
-        hidden_size=32,
-        num_spatial_layers=3,
-        num_temporal_layers=2,
-        num_attention_heads=4,
-        intermediate_size=64,  # a multiple of hidden size so that intermediate_size / num_attention_heads is integer
-        hidden_act="gelu_python",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-06,
-        qkv_bias=True,
-        attn_logit_softcapping=50.0,
-        num_auxiliary_layers=2,
-        apply_l2norm=True,
-        is_training=False,
-        **kwargs,
-    ):
+class VideoPrismVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "image_size": 8,
+        "num_frames": 3,
+        "tubelet_size": [1, 4, 4],
+        "num_channels": 3,
+        "hidden_size": 32,
+        "num_spatial_layers": 3,
+        "num_temporal_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 64,  # a multiple of hidden size so that intermediate_size / num_attention_heads is integer
+        "hidden_act": "gelu_python",
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-06,
+        "qkv_bias": True,
+        "attn_logit_softcapping": 50.0,
+        "num_auxiliary_layers": 2,
+        "apply_l2norm": True,
+        "is_training": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        patch_size = (values["tubelet_size"][1], values["tubelet_size"][2])
+        image_size = (values["image_size"], values["image_size"])
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        # extra caller kwargs used to be set after these, so a caller's value wins
+        values.setdefault("num_patches", num_patches)
+        values.setdefault("spatial_seq_length", num_patches)
+        values.setdefault("temporal_seq_length", values["num_frames"])
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_frames = num_frames
-        self.tubelet_size = tubelet_size
-        self.num_channels = num_channels
-        self.hidden_size = hidden_size
-        self.num_spatial_layers = num_spatial_layers
-        self.num_temporal_layers = num_temporal_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.attn_logit_softcapping = attn_logit_softcapping
-        self.num_auxiliary_layers = num_auxiliary_layers
-        self.apply_l2norm = apply_l2norm
-        self.is_training = is_training
-
-        patch_size = (self.tubelet_size[1], self.tubelet_size[2])
-        image_size = (self.image_size, self.image_size)
-        self.num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.spatial_seq_length = self.num_patches
-        self.temporal_seq_length = self.num_frames
-
-        if kwargs:
-            for key, value in kwargs.items():
-                setattr(self, key, value)
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -207,6 +192,8 @@ class VideoPrismVisionModelTest(VideoPrismModelTest, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoPrismVisionModel does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = VideoPrismVisionModelTester
 
     all_model_classes = (VideoPrismVisionModel, VideoPrismVideoModel) if is_torch_available() else ()
 
@@ -354,48 +341,39 @@ class VideoPrismVisionModelTest(VideoPrismModelTest, unittest.TestCase):
 
 
 @require_vision
-class VideoPrismTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        hidden_size=32,  # should be same as the hidden_size of the vision model tester
-        intermediate_size=37,
-        num_attention_heads=4,
-        num_hidden_layers=2,
-        vocab_size=99,
-        apply_l2norm=True,
-        hidden_act="relu",
-        attention_probs_dropout_prob=0.0,
-        qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        layer_norm_eps=1e-06,
-        initializer_range=0.02,
-        attn_logit_softcapping=50.0,
-        seq_length=7,
-        is_training=False,
-        use_input_mask=True,
-    ):
+class VideoPrismTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "hidden_size": 32,  # should be same as the hidden_size of the vision model tester
+        "intermediate_size": 37,
+        "num_attention_heads": 4,
+        "num_hidden_layers": 2,
+        "vocab_size": 99,
+        "apply_l2norm": True,
+        "hidden_act": "relu",
+        "attention_probs_dropout_prob": 0.0,
+        "qkv_bias": True,
+        "hidden_dropout_prob": 0.0,
+        "layer_norm_eps": 1e-06,
+        "initializer_range": 0.02,
+        "attn_logit_softcapping": 50.0,
+        "seq_length": 7,
+        "is_training": False,
+        "use_input_mask": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["encoder_seq_length"] = values["seq_length"] + 1
+        values["key_length"] = values["seq_length"] + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.vocab_size = vocab_size
-        self.apply_l2norm = apply_l2norm
-        self.hidden_act = hidden_act
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.attn_logit_softcapping = attn_logit_softcapping
-        self.seq_length = seq_length
-        self.encoder_seq_length = seq_length + 1
-        self.key_length = seq_length + 1
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -453,6 +431,8 @@ class VideoPrismTextModelTester:
 
 @require_vision
 class VideoPrismTextModelTest(VideoPrismModelTest, unittest.TestCase):
+    model_tester_class = VideoPrismTextModelTester
+
     all_model_classes = (VideoPrismTextModel,) if is_torch_available() else ()
 
     def setUp(self):
@@ -480,8 +460,20 @@ class VideoPrismTextModelTest(VideoPrismModelTest, unittest.TestCase):
 
 
 @require_vision
-class VideoPrismClipModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class VideoPrismClipModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # need bs for batching_equivalence test
+        values["batch_size"] = VideoPrismTextModelTester.get_small_config_defaults(**(text_kwargs or {}))["batch_size"]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -490,8 +482,8 @@ class VideoPrismClipModelTester:
         self.parent = parent
         self.text_model_tester = VideoPrismTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = VideoPrismVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -532,6 +524,8 @@ class VideoPrismClipModelTester:
 
 @require_vision
 class VideoPrismClipModelTest(VideoPrismModelTest, unittest.TestCase):
+    model_tester_class = VideoPrismClipModelTester
+
     _is_composite = True
     test_attention_outputs = False
     additional_model_inputs = ["input_ids", "attention_mask"]
@@ -689,10 +683,11 @@ class VideoPrismClipModelTest(VideoPrismModelTest, unittest.TestCase):
 
 @require_vision
 class VideoPrismForVideoClassificationModelTester(VideoPrismVisionModelTester):
-    def __init__(self, parent, vision_kwargs=None, is_training=True):
-        if vision_kwargs is None:
-            vision_kwargs = {}
-        super().__init__(parent, **vision_kwargs)
+    defaults = {**VideoPrismVisionModelTester.defaults, **VideoPrismVisionModelTester.small_config_overrides}
+    small_config_overrides = {
+        "use_labels": True,
+        "num_labels": 10,
+    }
 
     def get_config(self):
         config = super().get_config()
@@ -725,13 +720,13 @@ class VideoPrismForVideoClassificationModelTester(VideoPrismVisionModelTester):
 
 @require_vision
 class VideoPrismForVideoClassificationTest(VideoPrismModelTest, unittest.TestCase):
+    model_tester_class = VideoPrismForVideoClassificationModelTester
+
     all_model_classes = (VideoPrismForVideoClassification,) if is_torch_available() else ()
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = VideoPrismForVideoClassificationModelTester(
-            self, vision_kwargs={"use_labels": True, "num_labels": 10}
-        )
+        self.model_tester = VideoPrismForVideoClassificationModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=VideoPrismVisionConfig,

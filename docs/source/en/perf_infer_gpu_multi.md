@@ -119,7 +119,6 @@ ALL_PARALLEL_STYLES.register("replicated_with_grad_allreduce", ReplicatedWithGra
 ALL_PARALLEL_STYLES.register("mla_kv_a_proj", MlaKvAProjParallel())
 ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
 ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
-ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
 ALL_PARALLEL_STYLES.register("local_params", LocalParamsParallel())
 ```
 
@@ -139,10 +138,8 @@ The table below describes each strategy.
 | `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. |
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
-| `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
 | `LocalParamsParallel` | Runs a module's forward with its own sharded parameters as local tensors. Use it on the owner of a bare `nn.Parameter`, such as attention sinks, that its own plan entry shards. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
-| `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
 
 ### Packed strategies
 

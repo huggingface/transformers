@@ -26,19 +26,30 @@ from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 if is_torch_available():
     import torch
 
-    from transformers import BeamConfig, BeamForCausalLM, BeamModel
+    from transformers import (
+        BeamConfig,
+        BeamForCausalLM,
+        BeamForTokenClassification,
+        BeamModel,
+    )
 
 
 class BeamModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = BeamModel
+        token_classification_class = BeamForTokenClassification
 
-    def __init__(self, parent, **kwargs):
-        super().__init__(parent=parent, **kwargs)
-        self.n_group = 2
-        self.topk_group = 1
-        self.layer_types = ["sliding_attention"] * (self.num_hidden_layers - 1) + ["full_attention"]
-        self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
+    small_config_overrides = {
+        "n_group": 2,
+        "topk_group": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["layer_types"] = ["sliding_attention"] * (values["num_hidden_layers"] - 1) + ["full_attention"]
+        values["mlp_layer_types"] = ["dense"] + ["sparse"] * (values["num_hidden_layers"] - 1)
+        return values
 
 
 @require_torch

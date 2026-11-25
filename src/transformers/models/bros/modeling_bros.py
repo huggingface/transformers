@@ -447,7 +447,6 @@ class BrosPreTrainedModel(PreTrainedModel):
         "cross_attentions": OutputRecorder(BrosSelfAttention, index=1, layer_name="crossattention"),
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)

@@ -37,6 +37,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 from transformers.video_utils import load_video
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -53,40 +54,30 @@ if is_vision_available():
     from PIL import Image
 
 
-class Sam2VisionModelTester:
-    def __init__(
-        self,
-        parent,
-        hidden_size=16,
-        embed_dim_per_stage=[16, 32, 64, 128],
-        num_attention_heads_per_stage=[1, 2, 4, 8],
-        num_channels=3,
-        image_size=128,
-        patch_kernel_size=7,
-        patch_stride=4,
-        patch_padding=3,
-        batch_size=2,
-        blocks_per_stage=[1, 2, 7, 2],
-        backbone_channel_list=[128, 64, 32, 16],
-        backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
-        fpn_hidden_size=32,
-        is_training=True,
-    ):
+class Sam2VisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "hidden_size": 16,
+        "embed_dim_per_stage": [16, 32, 64, 128],
+        "num_attention_heads_per_stage": [1, 2, 4, 8],
+        "num_channels": 3,
+        "image_size": 128,
+        "patch_kernel_size": 7,
+        "patch_stride": 4,
+        "patch_padding": 3,
+        "batch_size": 2,
+        "blocks_per_stage": [1, 2, 7, 2],
+        "backbone_channel_list": [128, 64, 32, 16],
+        "backbone_feature_sizes": [[32, 32], [16, 16], [8, 8]],
+        "fpn_hidden_size": 32,
+        "is_training": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.hidden_size = hidden_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.patch_kernel_size = patch_kernel_size
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.blocks_per_stage = blocks_per_stage
-        self.embed_dim_per_stage = embed_dim_per_stage
-        self.num_attention_heads_per_stage = num_attention_heads_per_stage
-        self.backbone_channel_list = backbone_channel_list
-        self.backbone_feature_sizes = backbone_feature_sizes
-        self.fpn_hidden_size = fpn_hidden_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         backbone_config = Sam2HieraDetConfig(
@@ -138,6 +129,8 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = Sam2VisionModelTester
 
     all_model_classes = (Sam2VisionModel,) if is_torch_available() else ()
 
@@ -356,40 +349,30 @@ class Sam2MaskDecoderTester:
         return config, dummy_inputs
 
 
-class Sam2ModelTester:
-    def __init__(
-        self,
-        parent,
-        num_channels=3,
-        image_size=128,
-        hidden_size=12,
-        patch_kernel_size=7,
-        patch_stride=4,
-        patch_padding=3,
-        blocks_per_stage=[1, 2, 7, 2],
-        embed_dim_per_stage=[12, 24, 48, 96],
-        backbone_channel_list=[96, 48, 24, 12],
-        backbone_feature_sizes=[[32, 32], [16, 16], [8, 8]],
-        fpn_hidden_size=32,
-        memory_encoder_hidden_size=32,
-        batch_size=2,
-        is_training=True,
-    ):
+class Sam2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "num_channels": 3,
+        "image_size": 128,
+        "hidden_size": 12,
+        "patch_kernel_size": 7,
+        "patch_stride": 4,
+        "patch_padding": 3,
+        "blocks_per_stage": [1, 2, 7, 2],
+        "embed_dim_per_stage": [12, 24, 48, 96],
+        "backbone_channel_list": [96, 48, 24, 12],
+        "backbone_feature_sizes": [[32, 32], [16, 16], [8, 8]],
+        "fpn_hidden_size": 32,
+        "memory_encoder_hidden_size": 32,
+        "batch_size": 2,
+        "is_training": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.image_size = image_size
-        self.hidden_size = hidden_size
-        self.patch_kernel_size = patch_kernel_size
-        self.patch_stride = patch_stride
-        self.patch_padding = patch_padding
-        self.blocks_per_stage = blocks_per_stage
-        self.embed_dim_per_stage = embed_dim_per_stage
-        self.backbone_channel_list = backbone_channel_list
-        self.backbone_feature_sizes = backbone_feature_sizes
-        self.fpn_hidden_size = fpn_hidden_size
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.memory_encoder_hidden_size = memory_encoder_hidden_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
         self.prompt_encoder_tester = Sam2PromptEncoderTester()
         self.mask_decoder_tester = Sam2MaskDecoderTester()
@@ -457,6 +440,8 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as SAM's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = Sam2ModelTester
 
     all_model_classes = (Sam2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (

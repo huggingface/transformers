@@ -20,7 +20,7 @@ from parameterized import parameterized
 from torch.distributed.device_mesh import init_device_mesh
 from torch.utils.checkpoint import checkpoint
 
-from transformers.distributed import expert_parallel
+from transformers.distributed import DistributedConfig, expert_parallel
 from transformers.distributed.expert_parallel import (
     AllReduceEP,
     AllToAllEP,
@@ -115,6 +115,24 @@ class TestExpertParallelLayer(TestCasePlus):
     def test_megamoe_hands_experts_a_slice_of_the_shared_batch(self):
         """`"deepgemm_megamoe"` hands each rank a padded slice with global ids, the EP group and the shared buffers."""
         run_distributed(world_size=2, backend="gloo")(_megamoe_hands_experts_a_slice_of_the_shared_batch)()
+
+    @parameterized.expand([("ep_router", "model.layers.*.mlp.gate"), ("moe_tp_experts", "model.layers.*.mlp.experts")])
+    def test_legacy_masked_ep_plan_is_refused(self, style, module):
+        """A legacy masked EP plan raises instead of leaving the experts unsharded."""
+        from transformers import MixtralConfig, MixtralForCausalLM
+
+        config = MixtralConfig(
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            vocab_size=64,
+            num_local_experts=4,
+        )
+        model = MixtralForCausalLM(config)
+        with self.assertRaisesRegex(ValueError, "ep_dispatch_experts"):
+            model._resolve_parallel_plans(DistributedConfig(tp_size=2, ep_size=2, ep_plan={module: style}))
 
 
 class _DummyExperts(torch.nn.Module):

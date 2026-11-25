@@ -49,7 +49,6 @@ class MellumConfig(PreTrainedConfig):
     """
 
     model_type = "mellum"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_experts": "num_local_experts",
         "num_mtp_layers": "num_nextn_predict_layers",
@@ -63,9 +62,6 @@ class MellumConfig(PreTrainedConfig):
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

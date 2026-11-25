@@ -56,19 +56,19 @@ class Qwen3NextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3NextModel
 
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    small_config_overrides = {
         # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
         # different RNG states between the non-TP and TP model forward passes (they run sequentially),
         # leading to different dropout masks and mismatched losses.
-        self.attention_probs_dropout_prob = 0.0
-        self.hidden_act = "silu"
-        self.layer_types = ["linear_attention", "full_attention"]
-        self.linear_conv_kernel_dim = 2
-        self.linear_key_head_dim = 16
-        self.linear_value_head_dim = 16
-        self.linear_num_key_heads = 4
-        self.linear_num_value_heads = 8
+        "attention_probs_dropout_prob": 0.0,
+        "hidden_act": "silu",
+        "layer_types": ["linear_attention", "full_attention"],
+        "linear_conv_kernel_dim": 2,
+        "linear_key_head_dim": 16,
+        "linear_value_head_dim": 16,
+        "linear_num_key_heads": 4,
+        "linear_num_value_heads": 8,
+    }
 
     def get_gated_delta_rule_inputs(
         self, batch_size, seq_length, num_k_heads, num_v_heads, k_head_dim, v_head_dim, requires_grad=False
@@ -179,8 +179,8 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         # Reference: prefill, then forward the next token alone with the populated cache.
         cache_single = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
-            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+            model(input_ids=prompt, cache=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, cache=cache_single, use_cache=True)
         ref_first = single_out.last_hidden_state[:, 0, :]
 
         # Under test: prefill, then forward [next_token, *distractors] in one call. The first
@@ -189,8 +189,8 @@ class Qwen3NextModelTest(CausalLMModelTest, unittest.TestCase):
         multi_input = torch.cat([next_token, distractors], dim=1)
         cache_multi = DynamicCache(config=config)
         with torch.no_grad():
-            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
-            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+            model(input_ids=prompt, cache=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, cache=cache_multi, use_cache=True)
         under_test_first = multi_out.last_hidden_state[:, 0, :]
 
         torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)

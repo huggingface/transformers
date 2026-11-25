@@ -423,64 +423,6 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
             )
         return do_split, num_rows, num_cols, new_height, new_width
 
-    def get_image_layout(
-        self, height: int, width: int, images_kwargs: dict | None = None
-    ) -> tuple[int, int, int, int]:
-        """
-        A utility that returns the tile grid and resized size of an image, as reported in `image_rows`, `image_cols`
-        and `image_sizes` when `return_row_col_info=True`.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `tuple[int, int, int, int]`: The `(num_rows, num_cols, resized_height, resized_width)` of the image.
-        """
-        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
-        min_tiles = images_kwargs["min_tiles"]
-        max_tiles = images_kwargs["max_tiles"]
-        if not images_kwargs["do_image_splitting"]:
-            min_tiles = max_tiles = 1
-
-        _, num_rows, num_cols, new_height, new_width = self._get_split_layout(
-            height,
-            width,
-            downsample_factor=images_kwargs["downsample_factor"],
-            min_tiles=min_tiles,
-            max_tiles=max_tiles,
-            min_image_tokens=images_kwargs["min_image_tokens"],
-            max_image_tokens=images_kwargs["max_image_tokens"],
-            encoder_patch_size=images_kwargs["encoder_patch_size"],
-            tile_size=images_kwargs["tile_size"],
-            max_pixels_tolerance=images_kwargs["max_pixels_tolerance"],
-        )
-        return num_rows, num_cols, new_height, new_width
-
-    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
-        """
-        A utility that returns number of image patches for a given image size.
-
-        Args:
-            height (`int`):
-                Height of the input image.
-            width (`int`):
-                Width of the input image.
-            images_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the image processor.
-        Returns:
-            `int`: Number of tiles per image, including the thumbnail.
-        """
-        images_kwargs = self._merge_and_standardize_kwargs(**(images_kwargs or {}))
-        num_rows, num_cols, _, _ = self.get_image_layout(height, width, images_kwargs)
-        num_tiles = num_rows * num_cols
-        if num_tiles > 1 and images_kwargs["use_thumbnail"]:
-            num_tiles += 1
-        return num_tiles
-
     def resize_and_split(
         self,
         images: "torch.Tensor",
