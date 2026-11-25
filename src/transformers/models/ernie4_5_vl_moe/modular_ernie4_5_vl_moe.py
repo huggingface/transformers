@@ -645,7 +645,6 @@ class Ernie4_5_VLMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
 
 class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_VLMoeMoeBlock, index=1),
         "hidden_states": Ernie4_5_VLMoeVisionBlock,
         "attentions": Ernie4_5_VLMoeVisionAttention,
     }

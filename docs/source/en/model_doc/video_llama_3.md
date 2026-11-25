@@ -216,7 +216,9 @@ model = VideoLlama3ForConditionalGeneration.from_pretrained(
 
 [[autodoc]] VideoLlama3Model
     - forward
+    - get_video_embeddings
     - get_video_features
+    - get_image_embeddings
     - get_image_features
 
 ## VideoLlama3VisionModel

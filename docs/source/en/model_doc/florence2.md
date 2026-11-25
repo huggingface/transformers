@@ -175,6 +175,7 @@ print(parsed_answer)
 
 [[autodoc]] Florence2Model
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## Florence2ForConditionalGeneration

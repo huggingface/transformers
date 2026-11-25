@@ -310,4 +310,5 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] Sam2VideoModel
     - forward
     - propagate_in_video_iterator
+    - get_image_embeddings
     - get_image_features

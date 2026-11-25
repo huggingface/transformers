@@ -348,4 +348,5 @@ with torch.no_grad():
 
 [[autodoc]] Sam2Model
     - forward
+    - get_image_embeddings
     - get_image_features

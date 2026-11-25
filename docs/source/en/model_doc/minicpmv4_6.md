@@ -184,6 +184,7 @@ If you already have the rendered prompt string, you can call `processor(text=...
 
 [[autodoc]] MiniCPMV4_6Model
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## MiniCPMV4_6ForConditionalGeneration

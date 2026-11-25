@@ -255,6 +255,7 @@ The [DocLang](https://doclang.ai/) spec and `doclang` toolkit (validate / pack) 
 
 [[autodoc]] GraniteDoclingModel
     - forward
+    - get_image_embeddings
     - get_image_features
     - predict_fine_route
 

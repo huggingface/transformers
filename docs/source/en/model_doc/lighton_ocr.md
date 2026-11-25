@@ -65,6 +65,7 @@ print(output_text)
 
 [[autodoc]] LightOnOcrModel
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## LightOnOcrForConditionalGeneration
