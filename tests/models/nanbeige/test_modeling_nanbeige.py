@@ -19,6 +19,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -72,7 +73,7 @@ class NanbeigeModelTest(CausalLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
-class NanbeigeIntegrationTest(unittest.TestCase):
+class NanbeigeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     checkpoint = "Nanbeige/Nanbeige4.2-3B"
 
     def test_bf16_generation(self):
