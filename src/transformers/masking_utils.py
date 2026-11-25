@@ -767,7 +767,6 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
 def packed_sequences_cu_seq_lens(
     config: PreTrainedConfig,
     packed_sequence_mask: torch.Tensor | None,
-    attention_mask: torch.Tensor | None,
     needs_dense_mask: bool,
 ) -> torch.Tensor | None:
     """
@@ -785,7 +784,6 @@ def packed_sequences_cu_seq_lens(
         or getattr(config, "index_topk", None) is not None
         # The number of sequences is data-dependent
         or is_tracing(packed_sequence_mask)
-        or (attention_mask is not None and not attention_mask.all())
     ):
         return None
     # Sequence ids continue from one row to the next
@@ -845,8 +843,8 @@ def _preprocess_mask_arguments(
         kv_offset (`int`):
             An offset to indicate at which first position the key and values states will refer to.
     """
-    # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom). So are SDPA's 1D
-    # cumulative lengths of packed rows, already prepared too
+    # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom). So are the 1D
+    # cumulative lengths of packed rows (`packed_sequences_cu_seq_lens`), already prepared too
     if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) in (1, 4):
         return True, attention_mask, None, None, None, None, None
 
@@ -998,7 +996,7 @@ def create_causal_mask(
     needs_dense_mask = not allow_is_causal_skip or any(
         overlay is not None for overlay in (or_mask_function, and_mask_function, block_sequence_ids)
     )
-    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, attention_mask, needs_dense_mask)
+    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, needs_dense_mask)
     if cu_seq_lens is not None:
         return cu_seq_lens
 
@@ -1237,7 +1235,7 @@ def create_sliding_window_causal_mask(
     needs_dense_mask = not allow_is_causal_skip or any(
         overlay is not None for overlay in (or_mask_function, and_mask_function, block_sequence_ids)
     )
-    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, attention_mask, needs_dense_mask)
+    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, needs_dense_mask)
     if cu_seq_lens is not None:
         return cu_seq_lens
 

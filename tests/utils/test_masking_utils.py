@@ -89,18 +89,6 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
             self.assertEqual(mask.tolist(), [0, 4, 6, 10, 16, 20])
             self.assertEqual(mask.dtype, torch.int32)
 
-        # Padded rows keep the dense mask
-        attention_mask = torch.ones((2, 10), dtype=torch.long)
-        attention_mask[1, -1] = 0
-        mask = create_causal_mask(
-            config=config,
-            inputs_embeds=torch.empty((2, 10), dtype=torch.float16),
-            attention_mask=attention_mask,
-            cache=None,
-            position_ids=position_ids,
-        )
-        self.assertEqual(mask.shape, (2, 1, 10, 10))
-
     def test_packed_sequence_mask_eager(self):
         config = LlamaConfig()
         config._attn_implementation = "eager"

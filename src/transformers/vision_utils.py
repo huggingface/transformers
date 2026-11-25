@@ -35,6 +35,7 @@ import torch
 import torch.nn.functional as F
 
 from .configuration_utils import PreTrainedConfig
+from .integrations.sdpa_attention import per_sequence_attention_forward
 from .utils import logging
 from .utils.generic import get_max_seqlen, is_flash_attention_requested
 from .utils.import_utils import is_tracing
@@ -184,21 +185,20 @@ def packed_sequences_attention_forward(
             **kwargs,
         )
 
-    lengths = sequence_lengths if sequence_lengths is not None else (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-    attn_outputs, attn_weights = [], []
-    for sequence_query, sequence_key, sequence_value in zip(
-        query.split(lengths, dim=2), key.split(lengths, dim=2), value.split(lengths, dim=2)
-    ):
-        attn_output, weights = attention_interface(
-            module, sequence_query, sequence_key, sequence_value, attention_mask=None, **kwargs
-        )
-        attn_outputs.append(attn_output)
-        if return_attention_weights:
-            attn_weights.append(weights)
-        # Free them before the next sequence's are computed
-        del weights
-    attn_weights = tuple(attn_weights) if return_attention_weights and attn_weights[0] is not None else None
-    return torch.cat(attn_outputs, dim=1), attn_weights
+    attn_output, attn_weights = per_sequence_attention_forward(
+        attention_interface,
+        module,
+        query,
+        key,
+        value,
+        cu_seqlens,
+        cu_seqlens,
+        sequence_lengths=sequence_lengths,
+        is_causal=kwargs.pop("is_causal", False),
+        return_attention_weights=return_attention_weights,
+        **kwargs,
+    )
+    return attn_output, tuple(attn_weights) if attn_weights and attn_weights[0] is not None else None
 
 
 def get_vision_position_ids(

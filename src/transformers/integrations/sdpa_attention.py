@@ -251,7 +251,11 @@ def eager_packed_sequences_attention_forward(
             module, query, key, value, attention_mask, sliding_window=sliding_window, **kwargs
         )
     batch_size, num_heads, length, head_dim = query.shape
-    record_attentions = kwargs.get("output_attentions", getattr(module.config, "output_attentions", False))
+    is_causal = kwargs.pop("is_causal", None)
+    is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
+    record_attentions = kwargs.get(
+        "output_attentions", getattr(getattr(module, "config", None), "output_attentions", False)
+    )
     # One packed row of all the sequences: a view for a batch of one
     query, key, value = (states.transpose(0, 1).flatten(1, 2)[None] for states in (query, key, value))
     attn_output, sequence_weights = per_sequence_attention_forward(
@@ -262,7 +266,7 @@ def eager_packed_sequences_attention_forward(
         value,
         attention_mask,
         attention_mask,
-        is_causal=getattr(module, "is_causal", True),
+        is_causal=is_causal,
         sliding_window=sliding_window,
         causal_needs_mask=True,
         return_attention_weights=record_attentions,
