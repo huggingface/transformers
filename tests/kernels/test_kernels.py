@@ -200,19 +200,11 @@ class TestHubKernels(MemoryCleanupTestCase):
 
     def test_unkernelize(self):
         model = copy.deepcopy(self.model_kernelized)
-
-        with self.assertLogs("transformers.modeling_utils", level="WARNING") as cm:
-            model.use_kernels = False
-
-        self.assertTrue(
-            any(
-                "Disabling kernels at runtime is a no-op as there is no 'unkernelize' routine; keeping current kernels active."
-                in msg
-                for msg in cm.output
-            )
-        )
+        model.use_kernels = False
 
         self.assertFalse(model.use_kernels)
+        kernel_layers = [module for module in model.modules() if hasattr(type(module), "kernel_layer_name")]
+        self.assertFalse(any("forward" in module.__dict__ for module in kernel_layers))
         del model
 
     def test_kernels_mapping(self):
@@ -522,6 +514,34 @@ class TestKernelUtilities(TestCasePlus):
 
         self.assertIs(model.norm.forward, hooked_forward)
         self.assertIs(model.norm._old_forward, kernel_forward)
+
+    def test_unkernelize_restores_class_forward(self):
+        class Norm(torch.nn.Module):
+            kernel_layer_name = "Norm"
+
+            def forward(self, x):
+                return x
+
+        class Model(torch.nn.Module):
+            kernel_config = None
+            device = torch.device("cpu")
+
+            def __init__(self):
+                super().__init__()
+                self.norm = Norm()
+
+        def kernel_forward(x):
+            return x
+
+        def fake_kernelize(model, **kwargs):
+            model.norm.forward = kernel_forward
+
+        model = Model()
+        with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=fake_kernelize):
+            hub_kernels_pkg.kernelize(model)
+        hub_kernels_pkg.unkernelize(model)
+
+        self.assertNotIn("forward", model.norm.__dict__)
 
     def test_lazy_load_kernel_success_and_cache(self):
         sentinel = types.ModuleType("sentinel_kernel_module")

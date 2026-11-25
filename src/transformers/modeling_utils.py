@@ -77,7 +77,7 @@ from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
+from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize, unkernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
@@ -4800,9 +4800,7 @@ class PreTrainedModel(
             self.set_use_kernels(True)
         else:
             if getattr(self, "_use_kernels", False):
-                logger.warning_once(
-                    "Disabling kernels at runtime is a no-op as there is no 'unkernelize' routine; keeping current kernels active."
-                )
+                unkernelize(self)
             self._use_kernels = False
 
     def _default_compile_config(self) -> CompileConfig:

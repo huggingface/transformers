@@ -20,7 +20,7 @@ import sys
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from types import ModuleType
+from types import MethodType, ModuleType
 from typing import TYPE_CHECKING
 
 from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
@@ -1148,6 +1148,20 @@ def kernelize(model: "PreTrainedModel", mode: "Mode | None" = None):
             _kernels_kernelize(model, device=device, mode=mode, use_fallback=use_fallback)
 
     model._use_kernels = True
+
+
+def unkernelize(model: "PreTrainedModel"):
+    """Undo `kernelize`: every layer and function it swapped runs the forward of its class again."""
+    for module in model.modules():
+        for layer in (module, *getattr(module, "_kernel_funcs", {}).values()):
+            if not hasattr(type(layer), "kernel_layer_name"):
+                continue
+            layer.__dict__.pop("_kernel_repo", None)
+            if hasattr(layer, "_hf_hook"):
+                # With a `device_map`, accelerate's hook calls `_old_forward`, where `kernelize` put its forward
+                layer._old_forward = MethodType(type(layer).forward, layer)
+            else:
+                layer.__dict__.pop("forward", None)
 
 
 def get_kernel(
