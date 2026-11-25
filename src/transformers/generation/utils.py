@@ -4229,11 +4229,22 @@ class GenerationMixin(ContinuousMixin):
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
                         decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.decoder_hidden_states, cur_len, newly_added_length
+                            decoder_hidden_states,
+                            outputs.decoder_hidden_states,
+                            cur_len,
+                            newly_added_length,
                         )
                     else:
+                        input_shape = (
+                            candidate_input_ids.shape[0],
+                            candidate_input_ids.shape[1] if is_first_iteration else candidate_length + 1,
+                        )
                         decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states, outputs.hidden_states, cur_len, newly_added_length
+                            decoder_hidden_states,
+                            outputs.hidden_states,
+                            cur_len,
+                            newly_added_length,
+                            input_shape=input_shape,
                         )
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -4510,7 +4521,22 @@ def _speculative_sampling(
     return valid_tokens, n_matches
 
 
-def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False):
+def _get_seq_len_dim(hidden_states: torch.Tensor, input_shape: tuple[int, int]) -> int:
+    """
+    Hidden states are always `[..., batch_size, seq_len, ...]`, but some models have extra dims before the batch (e.g.
+    gemma3n) or after the sequence (glm5_next), so find the sequence dim dynamically.
+    """
+    batch_size, seq_len = input_shape
+    for dim in range(1, hidden_states.ndim - 1):
+        if hidden_states.shape[dim - 1 : dim + 1] == (batch_size, seq_len):
+            return dim
+    raise ValueError(
+        f"Could not find a `(batch_size, seq_len) = {(batch_size, seq_len)}` pair of dims in hidden states of shape "
+        f"{tuple(hidden_states.shape)}"
+    )
+
+
+def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False, input_shape=None):
     """
     Given the (decoder/cross attentions)/(decoder hidden states) for multiple generated tokens, splits it into a tuple
     where each member corresponds to a single generated token.
@@ -4520,7 +4546,12 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     if len(outputs) == 0:
         new_tuple = ()
         for layer in new_outputs:
-            new_tuple += (layer[..., :cur_len, :cur_len],) if is_decoder_attention else (layer[:, :cur_len],)
+            if is_decoder_attention:
+                new_tuple += (layer[..., :cur_len, :cur_len],)
+            else:
+                # hidden_states may be 4D sometimes, with seq_len on the 3rd dim (gemma3n) or 2nd dim (glm5_next)
+                dim = 1 if input_shape is None else _get_seq_len_dim(layer, input_shape)
+                new_tuple += (layer.narrow(dim, 0, cur_len),)
         outputs += (new_tuple,)
         # The first iteration contains the prompt + 1 generated token, let's update the length variables accordingly
         cur_len += 1
@@ -4529,6 +4560,11 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     for i in range(added_len):
         new_tuple = ()
         for layer in new_outputs:
-            new_tuple += (layer[..., i : i + 1, : cur_len + i],) if is_decoder_attention else (layer[:, i : i + 1],)
+            if is_decoder_attention:
+                new_tuple += (layer[..., i : i + 1, : cur_len + i],)
+            else:
+                # hidden_states may be 4D sometimes, with seq_len on the 3rd dim (gemma3n) or 2nd dim (glm5_next)
+                dim = 1 if input_shape is None else _get_seq_len_dim(layer, input_shape)
+                new_tuple += (layer.narrow(dim, i, 1),)
         outputs += (new_tuple,)
     return outputs
