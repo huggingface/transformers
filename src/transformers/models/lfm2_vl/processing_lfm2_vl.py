@@ -16,6 +16,7 @@ import math
 from ...image_utils import ImageInput, make_flat_list_of_images, make_nested_list_of_images
 from ...processing_utils import (
     BatchFeature,
+    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
@@ -268,6 +269,54 @@ class Lfm2VlProcessor(ProcessorMixin):
         tokens_for_image = self._compute_tokens_for_image(image_size, encoder_patch_size, downsample_factor)
 
         return tokens_per_tile, tokens_for_image
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            image_processor = self.image_processor
+            layout_kwargs = {
+                name: images_kwargs.get(name, getattr(image_processor, name))
+                for name in (
+                    "downsample_factor",
+                    "min_tiles",
+                    "max_tiles",
+                    "min_image_tokens",
+                    "max_image_tokens",
+                    "encoder_patch_size",
+                    "tile_size",
+                    "max_pixels_tolerance",
+                )
+            }
+            if not images_kwargs.get("do_image_splitting", image_processor.do_image_splitting):
+                layout_kwargs["min_tiles"] = layout_kwargs["max_tiles"] = 1
+            use_thumbnail = images_kwargs.get("use_thumbnail", image_processor.use_thumbnail)
+
+            num_image_tokens, num_image_patches = [], []
+            for image_size in image_sizes:
+                _, rows, cols, *resized_size = image_processor._get_split_layout(*image_size, **layout_kwargs)
+                tokens_per_tile, tokens_for_image = self._get_image_num_tokens(resized_size, **images_kwargs)
+                if rows > 1 or cols > 1:
+                    num_image_tokens.append(rows * cols * tokens_per_tile + (tokens_for_image if use_thumbnail else 0))
+                    num_image_patches.append(rows * cols + int(use_thumbnail))
+                else:
+                    num_image_tokens.append(tokens_for_image)
+                    num_image_patches.append(1)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     @property
     def unused_input_names(self) -> list[str]:
