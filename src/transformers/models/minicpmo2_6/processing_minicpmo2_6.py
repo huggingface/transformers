@@ -122,7 +122,8 @@ class MiniCPMO2_6Processor(ProcessorMixin):
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         # Each second of audio gets its own <|audio_start|>...<|audio_end|>, as the checkpoint was trained
-        num_tokens, tokens_per_second = audio_inputs["num_audio_tokens"][audio_idx], 25
+        num_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        tokens_per_second = 25
         return "".join(
             self.audio_start_token
             + self.audio_token * min(tokens_per_second, num_tokens - start)

@@ -40,8 +40,8 @@ messages = [
     {
         "role": "user",
         "content": [
-            {"type": "audio", "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"},
             {"type": "text", "text": "Please listen to the audio snippet carefully and transcribe the content."},
+            {"type": "audio", "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"},
         ],
     }
 ]

@@ -237,7 +237,7 @@ class MiniCPMO2_6PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    # The vision tower and the audio encoder register their own layers
+    # Sub-models add their own no-split layers
     _no_split_modules = ["MiniCPMO2_6Resampler"]
     # The checkpoint also holds the speech decoder (`tts.*`), which this model doesn't include
     _keys_to_ignore_on_load_unexpected = [r"^tts\."]
@@ -478,7 +478,8 @@ class MiniCPMO2_6AudioEncoder(MiniCPMO2_6PreTrainedModel):
         frame_mask = attention_mask[:, None, :].to(input_features.dtype)
         inputs_embeds = nn.functional.gelu(self.conv1(input_features * frame_mask)) * frame_mask
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds)).permute(0, 2, 1)
-        hidden_states = inputs_embeds + self.embed_positions.weight[: inputs_embeds.shape[1]]
+        positions = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
+        hidden_states = inputs_embeds + self.embed_positions(positions)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         lengths, _ = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
@@ -761,8 +762,8 @@ class MiniCPMO2_6ForConditionalGeneration(MiniCPMO2_6PreTrainedModel, Generation
         ...     {
         ...         "role": "user",
         ...         "content": [
+        ...             {"type": "text", "text": "Please listen to the audio snippet carefully and transcribe the content."},
         ...             {"type": "audio", "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"},
-        ...             {"type": "text", "text": "Transcribe this audio."},
         ...         ],
         ...     }
         ... ]

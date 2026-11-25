@@ -193,14 +193,14 @@ class MiniCPMO2_6IntegrationTest(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {
+                        "type": "text",
+                        "text": "Please listen to the audio snippet carefully and transcribe the content.",
+                    },
+                    {
                         "type": "audio",
                         "url": url_to_local_path(
                             "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3"
                         ),
-                    },
-                    {
-                        "type": "text",
-                        "text": "Please listen to the audio snippet carefully and transcribe the content.",
                     },
                 ],
             }
