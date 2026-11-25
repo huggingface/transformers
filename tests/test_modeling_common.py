@@ -4589,6 +4589,15 @@ class ModelTesterMixin(ExportTesterMixin):
             self.skipTest(f"{self.__class__.__name__} doesn't have the attribute `_torch_compile_train_cls`.")
 
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Disable dropout to avoid randomized outcomes
+        if hasattr(config, "attention_dropout"):
+            config.attention_dropout = 0.0
+        if hasattr(config, "attention_probs_dropout_prob"):
+            config.attention_probs_dropout_prob = 0.0
+        if hasattr(config, "dropout_rate"):
+            config.dropout_rate = 0.0
+
         cls = self._torch_compile_train_cls
         attn_implementation = getattr(self, "_torch_compile_train_attn_implementation", None)
         if attn_implementation is not None:
