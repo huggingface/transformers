@@ -4,6 +4,8 @@
 # on the latent rows directly, as a single-KV-head attention with 576-dim keys and 512-dim values:
 #   q_latent = q_nope @ W_UK  (per head)      scores = q_latent . kv_latent + q_rope . k_rope
 #   out = softmax(scores) @ kv_latent, then @ W_UV (per head) before o_proj
+import itertools
+
 import torch
 import triton
 import triton.language as tl
@@ -192,12 +194,84 @@ def absorbed_mla_forward(attn, q_nope, q_rope, kv_nope, k_rope, cache, kwargs):
     weight = weight.to_local() if isinstance(weight, DTensor) else weight  # tensor parallel: this rank's heads
     weight = weight.view(num_heads, attn.qk_nope_head_dim + attn.v_head_dim, attn.kv_lora_rank)
     w_uk, w_uv = weight[:, : attn.qk_nope_head_dim], weight[:, attn.qk_nope_head_dim :]
+    if block_table is not None and is_prefill_step(q_nope.shape[2]) and not torch.cuda.is_current_stream_capturing():
+        return _prefill_step(attn, allocator, q_nope, q_rope, kv, block_table, cu_seqlens_k, kwargs, w_uk, w_uv)
     q = torch.cat([torch.einsum("htn,hnc->thc", q_nope[0], w_uk), q_rope[0].transpose(0, 1)], dim=-1)
     out = mla_varlen_attention(
         q, kv, read_index, kwargs["cu_seq_lens_q"], cu_seqlens_k, kwargs["max_length_q"], attn.scaling,
         attn.kv_lora_rank, block_table, allocator.tokens_per_page,
     )  # fmt: skip
     return torch.einsum("thc,hvc->thv", out, w_uv).reshape(1, out.shape[0], -1)
+
+
+def is_prefill_step(num_tokens: int) -> bool:
+    """Block table steps with `MLA_PREFILL_MIN_TOKENS` (padded) query tokens or more hold prompts: the model runner runs
+    them eagerly, and their prompts attend through flash attention on decompressed keys and values. The absorbed kernel
+    spent ~7 s on one 8,192-token prompt of DeepSeek-V3.1 on a B300 (576-wide keys, one query token per program); the
+    decode tokens of the step keep it."""
+    from ..generation.continuous_batching.utils import MLA_PREFILL_MIN_TOKENS
+
+    return num_tokens >= MLA_PREFILL_MIN_TOKENS
+
+
+def _prefill_step(attn, allocator, q_nope, q_rope, kv, block_table, cu_seqlens_k, kwargs, w_uk, w_uv):
+    """An eager block table step with prompts: sequences bringing several tokens attend through flash attention on
+    their decompressed context (read through the block table), the decode tokens through the absorbed kernel. The
+    step's partition is read on the host once, by the group's first layer."""
+    from ..modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+    device, page = q_nope.device, allocator.tokens_per_page
+    if attn.layer_idx == allocator.layer_indices[0]:
+        cu_q = kwargs["cu_seq_lens_q"][: block_table.shape[0] + 1].tolist()
+        cu_k = cu_seqlens_k[: block_table.shape[0] + 1].tolist()
+        q_lens = [b - a for a, b in zip(cu_q[:-1], cu_q[1:])]
+        k_lens = [b - a for a, b in zip(cu_k[:-1], cu_k[1:])]
+        prefill = [i for i, n in enumerate(q_lens) if n > 1]
+        decode = [i for i, n in enumerate(q_lens) if n == 1]
+        plan = {"prefill": None, "decode": None}
+        if prefill:
+            seqs = torch.tensor(prefill, device=device)
+            tokens = torch.cat([torch.arange(cu_q[i], cu_q[i + 1], device=device) for i in prefill])
+            # the rows of every key of the prompts' sequences, read through the block table
+            key_lens = torch.tensor([k_lens[i] for i in prefill], device=device)
+            key_seq = torch.repeat_interleave(seqs, key_lens)
+            key_pos = torch.cat([torch.arange(k_lens[i], device=device) for i in prefill])
+            key_rows = block_table.long()[key_seq, key_pos // page] * page + key_pos % page
+            cu_q_p = torch.tensor([0] + list(itertools.accumulate(q_lens[i] for i in prefill)), device=device, dtype=torch.int32)
+            cu_k_p = torch.tensor([0] + list(itertools.accumulate(k_lens[i] for i in prefill)), device=device, dtype=torch.int32)
+            max_q, max_k = max(q_lens[i] for i in prefill), max(k_lens[i] for i in prefill)
+            plan["prefill"] = (tokens, key_rows, cu_q_p, cu_k_p, max_q, max_k)
+        if decode:
+            seqs = torch.tensor(decode, device=device)
+            tokens = torch.tensor([cu_q[i] for i in decode], device=device)
+            cu_q_d = torch.arange(len(decode) + 1, device=device, dtype=torch.int32)
+            cu_k_d = torch.tensor([0] + list(itertools.accumulate(k_lens[i] for i in decode)), device=device, dtype=torch.int32)
+            plan["decode"] = (tokens, seqs, cu_q_d, cu_k_d)
+        allocator._step_prefill_plan = plan
+    plan = allocator._step_prefill_plan
+    num_tokens, num_heads = q_nope.shape[2], q_nope.shape[1]
+    out = q_nope.new_zeros(num_tokens, num_heads, attn.v_head_dim)
+    if plan["prefill"] is not None:
+        tokens, key_rows, cu_q_p, cu_k_p, max_q, max_k = plan["prefill"]
+        latents = kv[key_rows]  # [keys, kv_lora_rank + rope]
+        key_states, value_states = attn.expand_kv(
+            latents[None, None, :, : attn.kv_lora_rank], latents[None, None, :, attn.kv_lora_rank :]
+        )
+        query_states = torch.cat([q_nope[:, :, tokens], q_rope[:, :, tokens]], dim=-1)
+        attention_interface = ALL_ATTENTION_FUNCTIONS[attn.config._attn_implementation]
+        prefill_out, _ = attention_interface(
+            attn, query_states, key_states, value_states, None, dropout=0.0, scaling=attn.scaling,
+            cu_seq_lens_q=cu_q_p, cu_seq_lens_k=cu_k_p, max_length_q=max_q, max_length_k=max_k,
+        )  # fmt: skip
+        out[tokens] = prefill_out.reshape(tokens.shape[0], num_heads, attn.v_head_dim)
+    if plan["decode"] is not None:
+        tokens, seqs, cu_q_d, cu_k_d = plan["decode"]
+        q = torch.cat([torch.einsum("htn,hnc->thc", q_nope[0][:, tokens], w_uk), q_rope[0][:, tokens].transpose(0, 1)], dim=-1)
+        latent_out = mla_varlen_attention(
+            q, kv, None, cu_q_d, cu_k_d, 1, attn.scaling, attn.kv_lora_rank, block_table[seqs], page
+        )  # fmt: skip
+        out[tokens] = torch.einsum("thc,hvc->thv", latent_out, w_uv)
+    return out.reshape(1, num_tokens, -1)
 
 
 def _block_table_write_rows(block_table, cu_seqlens_q, cu_seqlens_k, num_tokens, page_size, trash_row):

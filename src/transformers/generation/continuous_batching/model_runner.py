@@ -37,6 +37,7 @@ from .input_outputs import (
 )
 from .requests import RequestState, RequestStatus, create_warmup_future_states
 from .utils import (
+    MLA_PREFILL_MIN_TOKENS,
     accelerator_graph_capture_context,
     create_accelerator_graph,
     get_memory_pools,
@@ -301,10 +302,14 @@ class ModelRunner:
             use_cuda_graph = self.use_cuda_graph_decode
             # [scratch] With varlen block tables, a step that brings several tokens for some sequence is a varlen step:
             # it takes a graph only if the varlen path does (not on models whose layers read lengths on the host)
+            io = self.inputs_and_outputs
+            host_io = io.io_pairs[io.current_pair].host_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
             if use_cuda_graph and self.cache.use_varlen_block_table and not self.use_cuda_graph_varlen:
-                io = self.inputs_and_outputs
-                host_io = io.io_pairs[io.current_pair].host_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
                 use_cuda_graph = host_io.max_length_q == 1
+            # [scratch] Latent attention: steps with prompts attend through flash attention on decompressed keys, which
+            # reads the step's lengths on the host (see `utils.MLA_PREFILL_MIN_TOKENS`): they run eagerly
+            if use_cuda_graph and self.cache.latent_attention and host_io.num_q_tokens >= MLA_PREFILL_MIN_TOKENS:
+                use_cuda_graph = False
         else:
             forward_fn = self._forward_process_and_sample if self._compiled_varlen is None else self._compiled_varlen
             use_cuda_graph = self.use_cuda_graph_varlen
