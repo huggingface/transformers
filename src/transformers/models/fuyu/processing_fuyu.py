@@ -481,11 +481,11 @@ class FuyuProcessor(ProcessorMixin):
                     image_present=torch.ones(1, 1, 1),
                     image_unpadded_h=torch.tensor([[image_unpadded_h]]),
                     image_unpadded_w=torch.tensor([[image_unpadded_w]]),
-                    image_placeholder_id=0,  # dummy ids, we can be sure `id=0` is never out-of-range
-                    image_newline_id=0,
+                    image_placeholder_id=0,  # dummy ids, we can be sure they are never out-of-range
+                    image_newline_id=1,
                     variable_sized=True,
                 )
-                num_image_tokens.append(model_image_input["image_input_ids"][0][0].shape[-1])
+                num_image_tokens.append(int((model_image_input["image_input_ids"][0][0] == 0).sum()))
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
 
