@@ -226,11 +226,12 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
         constraints = {"is_persistent": True, "epilogue_subtile": 1}
         triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
     # [scratch] SM120 (RTX PRO 6000): the Blackwell scale layout does not compile past 256 tokens (job
-    # 6b06fba1d91f621b93083065), the strided one does; with 128-wide K blocks in 2 stages, gpt-oss-20b's gate_up takes
-    # 331 / 336 / 473 / 3,160 us at 8 / 64 / 256 / 2,048 tokens
+    # 6b06fba1d91f621b93083065), the strided one does. The default 128 x 256 x 256 tiles (and 128-wide K blocks) spill
+    # ~1,250 registers with the fused swiglu: gpt-oss-20b's MoE block took 386 ms at 8,192 tokens, 8.3 ms with 64-wide K
+    # blocks in 2 stages, 1.2 ms at 8 tokens either way (job 6b070768d91f621b93085a28)
     elif w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] == 12:
         scale_layout, scale_layout_opts = layout.StridedLayout, {}
-        constraints = {"block_k": 128, "num_stages": 2}
+        constraints = {"block_k": 64, "num_stages": 2}
         triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
     # [scratch] Ampere / Ada: the default prefill tiles (128 x 256 x 128) took ~350 ms a layer on an A100
     elif w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] < 9:
