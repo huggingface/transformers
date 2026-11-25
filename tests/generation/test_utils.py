@@ -711,7 +711,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
             set_config_for_less_flaky_test(config)
 
-            if config.model_type in [
+            if config.model_type.replace("-", "_") in [
                 "moshi",
                 "git",
                 "prophetnet",
@@ -883,7 +883,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
-            if config.model_type in [
+            if config.model_type.replace("-", "_") in [
                 "moshi",
                 "git",
                 "prophetnet",
