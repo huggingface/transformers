@@ -598,16 +598,22 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         ).view(n, heads, head_dim)  # fmt: skip
 
     @torch.compiler.disable  # reads the sequence lengths on the host: compiled, it recompiled for every new batch
-    def _paged_varlen_scan(self, x, dt, A, B, C, ssm_state, cu_seqlens, out):
+    def _paged_varlen_scan(self, x, dt, A, B, C, ssm_state, cu_seqlens, out, cache):
         """[scratch] A step with prompt tokens: single-token sequences take the recurrent update together, longer ones
-        the chunked scan one at a time, from (and into) their states in `ssm_state`. Writes the outputs into `out`."""
+        the chunked scan one at a time, from (and into) their states in `ssm_state`. Writes the outputs into `out`.
+        The step's lengths are read on the host once, by the group's first layer (a read per layer stalled the host
+        on the GPU 36 times a step)."""
         heads, head_dim, groups, state = self.num_heads, self.head_dim, self.n_groups, self.ssm_state_size
-        bounds = cu_seqlens.tolist()
-        lengths = [end - start for start, end in zip(bounds[:-1], bounds[1:])]
-        singles = [i for i, length in enumerate(lengths) if length == 1]
-        if singles:
-            seqs = torch.tensor(singles, device=x.device)
-            tokens = torch.tensor([bounds[i] for i in singles], device=x.device)
+        allocator = cache.layer_to_allocator[self.layer_idx]
+        if self.layer_idx == allocator.layer_indices[0]:
+            bounds = cu_seqlens.tolist()
+            lengths = [end - start for start, end in zip(bounds[:-1], bounds[1:])]
+            singles = [i for i, length in enumerate(lengths) if length == 1]
+            seqs = torch.tensor(singles, device=x.device) if singles else None
+            tokens = torch.tensor([bounds[i] for i in singles], device=x.device) if singles else None
+            allocator._step_plan = (bounds, lengths, seqs, tokens)
+        bounds, lengths, seqs, tokens = allocator._step_plan
+        if seqs is not None:
             states = ssm_state[seqs]
             out[tokens] = self._paged_recurrent(states, x[tokens], dt[tokens], A, B[tokens], C[tokens])
             ssm_state[seqs] = states
@@ -652,7 +658,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             n = min(num_tokens, num_sequences)
             out[:n] = self._paged_recurrent(ssm_state[:n], x[:n], dt[:n], A, B[:n], C[:n])
         else:
-            self._paged_varlen_scan(x, dt, A, B, C, ssm_state, cu_seqlens, out)
+            self._paged_varlen_scan(x, dt, A, B, C, ssm_state, cu_seqlens, out, cache)
         cache.write_cache_states(self.layer_idx, (conv_state, ssm_state), kwargs)
         scan_output = self.norm(out.view(1, num_tokens, -1), gate)
         return self.out_proj(scan_output.to(dtype))
