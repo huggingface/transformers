@@ -330,6 +330,42 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
         "expert_gating_func": "scoring_func",
     },
+    "deepseek2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        # rope.dimension_count is the rotary head dim (qk_rope_head_dim), not head_dim
+        "rope.dimension_count": "qk_rope_head_dim",
+        # rope.freq_base is folded into rope_parameters on load, see load_gguf_checkpoint
+        "rope.freq_base": None,
+        "attention.head_count": "num_attention_heads",
+        # llama.cpp writes 1 here (MLA as MQA with 1 group); fixed up to
+        # num_attention_heads on load, see load_gguf_checkpoint
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "attention.q_lora_rank": "q_lora_rank",
+        "attention.kv_lora_rank": "kv_lora_rank",
+        # key_length is kv_lora_rank + qk_rope_head_dim in llama.cpp files and
+        # qk_nope_head_dim + qk_rope_head_dim in others; neither is a config field
+        "attention.key_length": None,
+        # value_length is kv_lora_rank in llama.cpp files and v_head_dim in others
+        "attention.value_length": None,
+        "attention.key_length_mla": None,
+        "attention.value_length_mla": "v_head_dim",
+        "expert_count": "num_local_experts",
+        "expert_used_count": "num_experts_per_tok",
+        "expert_shared_count": "n_shared_experts",
+        "expert_group_count": "n_group",
+        "expert_group_used_count": "topk_group",
+        "expert_weights_scale": "routed_scaling_factor",
+        "expert_weights_norm": "norm_topk_prob",
+        # DeepSeek always routes with sigmoid; no config field for the gating func
+        "expert_gating_func": None,
+        "expert_feed_forward_length": "moe_intermediate_size",
+        "leading_dense_block_count": "first_k_dense_replace",
+        "vocab_size": "vocab_size",
+    },
 }
 
 GGUF_CONFIG_DEFAULTS_MAPPING = {

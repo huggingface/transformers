@@ -14,6 +14,7 @@
 """Integration tests for loading GGUF checkpoints through `from_pretrained`."""
 
 import math
+import os
 import tempfile
 import unittest
 import unittest.mock
@@ -22,6 +23,8 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
+    DeepseekV3Config,
+    DeepseekV3ForCausalLM,
     GenerationConfig,
     GgufConfig,
     Lfm2ForCausalLM,
@@ -31,6 +34,7 @@ from transformers import (
 from transformers.testing_utils import (
     require_gguf,
     require_kernels,
+    require_torch,
     require_torch_accelerator,
     require_torch_mps,
     slow,
@@ -586,3 +590,180 @@ class GemmaGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "unsloth/gemma-3-1b-it-GGUF"
     quantized_gguf_file = "gemma-3-1b-it-Q4_K_M.gguf"
     reference_repo = "google/gemma-3-1b-it"
+
+
+@require_gguf
+@require_torch
+class Deepseek2GgufTest(unittest.TestCase):
+    """DeepSeek V2/V3/R1 GGUF loading, from a tiny model written out with GGUFWriter.
+
+    No Hub checkpoint needed: the file is built from the tiny config the
+    DeepSeek V3 model tester already uses, with the metadata layout real
+    deepseek2 files carry (checked against unsloth/DeepSeek-R1-GGUF).
+    Two layouts are covered: the whole `attn_kv_b` tensor (Unsloth-style
+    files) and the per-head `attn_k_b` / `attn_v_b` split (llama.cpp's
+    converter, which also writes `attention.head_count_kv` as 1).
+    """
+
+    def _tiny_config(self):
+        return DeepseekV3Config(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=32,
+            moe_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            n_shared_experts=1,
+            n_routed_experts=8,
+            routed_scaling_factor=2.5,
+            kv_lora_rank=16,
+            q_lora_rank=32,
+            qk_rope_head_dim=16,
+            v_head_dim=32,
+            qk_nope_head_dim=32,
+            n_group=2,
+            topk_group=1,
+            num_experts_per_tok=2,
+            first_k_dense_replace=1,
+            norm_topk_prob=True,
+            # 163840 / 4096 = 40, the yarn factor, so the RoPE scaling stays consistent.
+            max_position_embeddings=163840,
+            rope_parameters={
+                "rope_type": "yarn",
+                "rope_theta": 10000.0,
+                "factor": 40.0,
+                "original_max_position_embeddings": 4096,
+                "mscale_all_dim": 1.0,
+            },
+        )
+
+    def _write_gguf_file(self, path, split_kv_b, head_count_kv):
+        from gguf import ExpertGatingFuncType, GGUFWriter, RopeScalingType
+
+        from transformers.modeling_gguf_pytorch_utils import Deepseek2TensorProcessor, get_gguf_hf_weights_map
+
+        config = self._tiny_config()
+        model = DeepseekV3ForCausalLM(config)
+        state_dict = model.state_dict()
+
+        writer = GGUFWriter(path, "deepseek2")
+        writer.add_context_length(config.max_position_embeddings)
+        writer.add_block_count(config.num_hidden_layers)
+        writer.add_feed_forward_length(config.intermediate_size)
+        writer.add_embedding_length(config.hidden_size)
+        writer.add_vocab_size(config.vocab_size)
+        writer.add_head_count(config.num_attention_heads)
+        writer.add_head_count_kv(head_count_kv)
+        writer.add_rope_dimension_count(config.qk_rope_head_dim)
+        writer.add_rope_freq_base(10000.0)
+        writer.add_q_lora_rank(config.q_lora_rank)
+        writer.add_kv_lora_rank(config.kv_lora_rank)
+        writer.add_key_length(config.qk_nope_head_dim + config.qk_rope_head_dim)
+        writer.add_value_length(config.v_head_dim)
+        writer.add_layer_norm_rms_eps(config.rms_norm_eps)
+        writer.add_expert_count(config.n_routed_experts)
+        writer.add_expert_used_count(config.num_experts_per_tok)
+        writer.add_expert_shared_count(config.n_shared_experts)
+        writer.add_expert_group_count(config.n_group)
+        writer.add_expert_group_used_count(config.topk_group)
+        writer.add_expert_weights_scale(config.routed_scaling_factor)
+        writer.add_expert_weights_norm(config.norm_topk_prob)
+        writer.add_expert_gating_func(ExpertGatingFuncType.SIGMOID)
+        writer.add_expert_feed_forward_length(config.moe_intermediate_size)
+        writer.add_leading_dense_block_count(config.first_k_dense_replace)
+        writer.add_rope_scaling_type(RopeScalingType.YARN)
+        writer.add_rope_scaling_factor(40.0)
+        writer.add_rope_scaling_orig_ctx_len(4096)
+        writer.add_rope_scaling_yarn_log_mul(0.1)
+
+        gguf_to_hf = get_gguf_hf_weights_map(model, Deepseek2TensorProcessor(config={}))
+        hf_to_gguf = {}
+        for gguf_name, hf_name in gguf_to_hf.items():
+            hf_to_gguf.setdefault(hf_name, []).append(gguf_name)
+
+        for hf_name, tensor in state_dict.items():
+            if hf_name.endswith("mlp.experts.gate_up_proj"):
+                bid = hf_name.split(".")[2]
+                # Fused gate_up_proj: first half is gate, second half is up.
+                gate, up = tensor.chunk(2, dim=1)
+                writer.add_tensor(f"blk.{bid}.ffn_gate_exps.weight", gate.contiguous().numpy())
+                writer.add_tensor(f"blk.{bid}.ffn_up_exps.weight", up.contiguous().numpy())
+            elif hf_name.endswith("self_attn.kv_b_proj.weight") and split_kv_b:
+                bid = hf_name.split(".")[2]
+                # [H, kv_lora, qk_nope] and v_b [H, v_head, kv_lora].
+                kv_b = tensor.view(
+                    config.num_attention_heads,
+                    config.qk_nope_head_dim + config.v_head_dim,
+                    config.kv_lora_rank,
+                )
+                k_b, v_b = kv_b.split([config.qk_nope_head_dim, config.v_head_dim], dim=1)
+                writer.add_tensor(f"blk.{bid}.attn_k_b.weight", k_b.transpose(1, 2).contiguous().numpy())
+                writer.add_tensor(f"blk.{bid}.attn_v_b.weight", v_b.contiguous().numpy())
+            else:
+                writer.add_tensor(hf_to_gguf[hf_name][0], tensor.numpy())
+
+        writer.write_header_to_file()
+        writer.write_kv_data_to_file()
+        writer.write_tensors_to_file()
+        writer.close()
+        return model
+
+    def _assert_round_trip(self, split_kv_b, head_count_kv):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gguf_path = os.path.join(tmpdir, "deepseek2.gguf")
+            original = self._write_gguf_file(gguf_path, split_kv_b, head_count_kv)
+            loaded, loading_info = AutoModelForCausalLM.from_pretrained(
+                tmpdir, gguf_file="deepseek2.gguf", dtype=torch.float32, output_loading_info=True
+            )
+            self.assertEqual(loading_info["missing_keys"], set())
+            self.assertEqual(loading_info["unexpected_keys"], set())
+            self.assertEqual(loading_info["mismatched_keys"], set())
+
+            # Config rebuilt from the file's metadata alone.
+            config = loaded.config
+            self.assertEqual(config.model_type, "deepseek_v3")
+            self.assertEqual(config.num_hidden_layers, 2)
+            self.assertEqual(config.hidden_size, 32)
+            self.assertEqual(config.intermediate_size, 32)
+            self.assertEqual(config.vocab_size, 99)
+            self.assertEqual(config.num_attention_heads, 4)
+            self.assertEqual(config.num_key_value_heads, 4)
+            self.assertEqual(config.q_lora_rank, 32)
+            self.assertEqual(config.kv_lora_rank, 16)
+            self.assertEqual(config.qk_rope_head_dim, 16)
+            self.assertEqual(config.v_head_dim, 32)
+            self.assertEqual(config.n_routed_experts, 8)
+            self.assertEqual(config.num_experts_per_tok, 2)
+            self.assertEqual(config.n_shared_experts, 1)
+            self.assertEqual(config.n_group, 2)
+            self.assertEqual(config.topk_group, 1)
+            self.assertEqual(config.routed_scaling_factor, 2.5)
+            self.assertTrue(config.norm_topk_prob)
+            self.assertEqual(config.first_k_dense_replace, 1)
+            rope_parameters = config.rope_parameters
+            self.assertEqual(rope_parameters["rope_type"], "yarn")
+            self.assertEqual(rope_parameters["rope_theta"], 10000.0)
+            self.assertEqual(rope_parameters["factor"], 40.0)
+            self.assertEqual(rope_parameters["original_max_position_embeddings"], 4096)
+            self.assertAlmostEqual(rope_parameters["mscale_all_dim"], 1.0, places=5)
+
+            # Weights round-trip exactly, and the model runs.
+            original_state_dict = original.state_dict()
+            loaded_state_dict = loaded.state_dict()
+            for name, expected in original_state_dict.items():
+                torch.testing.assert_close(loaded_state_dict[name], expected)
+            input_ids = torch.randint(0, config.vocab_size, (1, 5))
+            with torch.inference_mode():
+                expected_logits = original(input_ids).logits
+                actual_logits = loaded(input_ids).logits
+            self.assertEqual(actual_logits.shape, (1, 5, config.vocab_size))
+            torch.testing.assert_close(actual_logits, expected_logits)
+
+    def test_deepseek2_gguf_whole_kv_b(self):
+        # Unsloth-style file: whole attn_kv_b, head_count_kv already full.
+        self._assert_round_trip(split_kv_b=False, head_count_kv=4)
+
+    def test_deepseek2_gguf_split_kv_b(self):
+        # llama.cpp-style file: split attn_k_b / attn_v_b, head_count_kv is 1.
+        self._assert_round_trip(split_kv_b=True, head_count_kv=1)

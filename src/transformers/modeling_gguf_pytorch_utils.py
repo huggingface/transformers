@@ -453,11 +453,101 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
             out.copy_(torch_weights)
 
 
+class Deepseek2TensorProcessor(TensorProcessor):
+    # DeepSeek V2/V3/R1 (llama.cpp arch "deepseek2") uses fused MoE experts
+    # (gate_up_proj / down_proj as single parameters) like MiniMax-M2, and MLA
+    # attention whose kv_b projection is either stored whole as attn_kv_b
+    # (e.g. Unsloth files) or split per head into attn_k_b / attn_v_b
+    # (llama.cpp's converter). The whole tensor goes through the standard
+    # tensor name map; the split pair is recombined here.
+    HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp\.experts\.\d+\.")
+    HF_MOE_W13_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
+    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
+    GGUF_KV_B_PARTS_PATTERN = re.compile(r"(?P<name>.*\.attn_(?P<part>k_b|v_b))\.weight$")
+    HF_BIAS_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.gate\.e_score_correction_bias")
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+        self._kv_b_parts = {}
+
+    def preprocess_name(self, hf_name: str) -> str:
+        return re.sub(self.HF_EXPERT_RENAME_PATTERN, "mlp.experts.", hf_name)
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        # Map merged gate_up_proj to both ffn_gate_exps and ffn_up_exps GGUF tensors.
+        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
+            full_hf_name = qual_name + hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
+        # Map e_score_correction_bias to GGUF exp_probs_b.bias (the standard
+        # tensor name map only knows the `e_score_correction` name).
+        elif m := re.fullmatch(self.HF_BIAS_PATTERN, hf_name):
+            gguf_to_hf_name_map[f"blk.{m['bid']}.exp_probs_b.bias"] = qual_name + hf_name
+
+    def process(self, weights, name: str, **kwargs):
+        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping:
+                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"])
+            return GGUFTensor(weights, None, {})
+        if m := re.fullmatch(self.GGUF_KV_B_PARTS_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping and parsed_parameters:
+                # Look up the HF name through the whole attn_kv_b tensor, which
+                # the standard tensor name map already covers.
+                kv_b_gguf_name = name.replace(f"attn_{m['part']}", "attn_kv_b")
+                hf_name = tensor_key_mapping.get(kv_b_gguf_name)
+                if hf_name is not None:
+                    self._set_kv_b_tensor(weights, parsed_parameters, hf_name, m["part"])
+            return GGUFTensor(weights, None, {})
+        return GGUFTensor(weights, name, {})
+
+    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
+        torch_weights = torch.from_numpy(np.copy(weights))
+        if w == "down":
+            parsed_parameters["tensors"][hf_name] = torch_weights
+        else:
+            # Merge gate and up into gate_up_proj [num_experts, 2*intermediate, hidden]
+            shape = list(weights.shape)
+            shard_dim = 1
+            shard_size = shape[shard_dim]
+            shape[shard_dim] = shard_size * 2
+            if hf_name not in parsed_parameters["tensors"]:
+                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
+            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
+            if w == "gate":
+                out = out.narrow(shard_dim, 0, shard_size)
+            else:  # w == "up"
+                out = out.narrow(shard_dim, shard_size, shard_size)
+            out.copy_(torch_weights)
+
+    def _set_kv_b_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, part: str):
+        # llama.cpp's converter splits kv_b_proj per head into k_b
+        # [num_heads, kv_lora_rank, qk_nope_head_dim] and v_b
+        # [num_heads, v_head_dim, kv_lora_rank]; the HF weight is the two
+        # concatenated along the per-head dim, reshaped to
+        # [num_heads * (qk_nope_head_dim + v_head_dim), kv_lora_rank].
+        # The shapes carry everything needed, no config lookup required.
+        torch_weights = torch.from_numpy(np.copy(weights))
+        parts = self._kv_b_parts.setdefault(hf_name, {})
+        parts[part] = torch_weights
+        if "k_b" in parts and "v_b" in parts:
+            k_b = parts.pop("k_b").transpose(1, 2)  # [H, qk_nope, kv_lora]
+            v_b = parts.pop("v_b")  # [H, v_head, kv_lora]
+            kv_b = torch.cat([k_b, v_b], dim=1)  # [H, qk_nope + v_head, kv_lora]
+            parsed_parameters["tensors"][hf_name] = kv_b.reshape(-1, kv_b.shape[-1])
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
     "gpt_oss": GptOssTensorProcessor,
     "qwen3moe": Qwen2MoeTensorProcessor,
+    "deepseek2": Deepseek2TensorProcessor,
     "bloom": BloomTensorProcessor,
     "t5": T5TensorProcessor,
     "t5encoder": T5TensorProcessor,
@@ -522,6 +612,8 @@ def get_gguf_hf_weights_map(
         model_type = "minimax-m2"
     elif model_type == "gpt_oss":
         model_type = "gpt-oss"
+    elif model_type == "deepseek_v3":
+        model_type = "deepseek2"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -704,6 +796,65 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         # EOG tokens to match generation_config.json: <eos>(1),
         # <|tool_response>(50), <turn|>(106).
         parsed_parameters["config"]["eos_token_id"] = [1, 106, 50]
+
+    # DeepSeek GGUF checkpoints use llama.cpp's `deepseek2` architecture name
+    if parsed_parameters["config"].get("model_type") == "deepseek2":
+        parsed_parameters["config"]["model_type"] = "deepseek_v3"
+        # llama.cpp writes attention.head_count_kv as 1 (MLA as MQA with 1
+        # group); the HF model needs the full head count so repeat_kv expands
+        # per head. Files that already store the full count are unaffected.
+        num_heads = parsed_parameters["config"].get("num_attention_heads")
+        if num_heads is not None:
+            parsed_parameters["config"]["num_key_value_heads"] = num_heads
+        # expert_weights_norm is a bool in current files; be lenient with older ones
+        norm_topk_prob = parsed_parameters["config"].get("norm_topk_prob")
+        if norm_topk_prob is not None:
+            parsed_parameters["config"]["norm_topk_prob"] = bool(norm_topk_prob)
+        # qk_nope_head_dim and v_head_dim are not stored in GGUF metadata, so
+        # infer them from the attention weight shapes in the file. GGUF stores
+        # dims reversed, so a torch [rows, cols] weight has stored dims [cols, rows].
+        num_heads = parsed_parameters["config"].get("num_attention_heads")
+        qk_rope = parsed_parameters["config"].get("qk_rope_head_dim")
+        if num_heads and qk_rope:
+            kv_b_shape = next((t.shape for t in reader.tensors if t.name.endswith(".attn_kv_b.weight")), None)
+            q_b_shape = next((t.shape for t in reader.tensors if t.name.endswith(".attn_q_b.weight")), None)
+            if kv_b_shape is not None and q_b_shape is not None:
+                qk_nope = int(q_b_shape[1]) // num_heads - qk_rope
+                v_head = int(kv_b_shape[1]) // num_heads - qk_nope
+                if qk_nope > 0 and v_head > 0:
+                    parsed_parameters["config"]["qk_nope_head_dim"] = qk_nope
+                    parsed_parameters["config"]["v_head_dim"] = v_head
+            else:
+                # Split layout: k_b is stored [qk_nope, kv_lora, num_heads],
+                # v_b is stored [kv_lora, v_head, num_heads].
+                k_b_shape = next((t.shape for t in reader.tensors if t.name.endswith(".attn_k_b.weight")), None)
+                v_b_shape = next((t.shape for t in reader.tensors if t.name.endswith(".attn_v_b.weight")), None)
+                if k_b_shape is not None and int(k_b_shape[0]) > 0:
+                    parsed_parameters["config"]["qk_nope_head_dim"] = int(k_b_shape[0])
+                if v_b_shape is not None and int(v_b_shape[1]) > 0:
+                    parsed_parameters["config"]["v_head_dim"] = int(v_b_shape[1])
+        # Reconstruct rope_parameters from the rope.scaling metadata
+        rope_type = read_field(reader, "deepseek2.rope.scaling.type")
+        if rope_type:
+            rope_parameters = {"rope_type": rope_type[0]}
+            rope_theta = read_field(reader, "deepseek2.rope.freq_base")
+            if rope_theta:
+                rope_parameters["rope_theta"] = float(rope_theta[0])
+            for suffix, hf_key in (
+                ("factor", "factor"),
+                ("original_context_length", "original_max_position_embeddings"),
+                ("yarn_attn_factor", "attention_factor"),
+                ("yarn_beta_fast", "beta_fast"),
+                ("yarn_beta_slow", "beta_slow"),
+            ):
+                value = read_field(reader, f"deepseek2.rope.scaling.{suffix}")
+                if value:
+                    rope_parameters[hf_key] = value[0]
+            yarn_log_multiplier = read_field(reader, "deepseek2.rope.scaling.yarn_log_multiplier")
+            if yarn_log_multiplier:
+                # llama.cpp writes yarn_log_multiplier = 0.1 * mscale_all_dim
+                rope_parameters["mscale_all_dim"] = float(yarn_log_multiplier[0]) * 10
+            parsed_parameters["config"]["rope_parameters"] = rope_parameters
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
