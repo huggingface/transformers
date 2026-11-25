@@ -425,7 +425,7 @@ class AutoVideoProcessor:
         if video_processor_class is not None:
             video_processor_class = _load_backend_class(video_processor_class, backend)
 
-        if video_processor_class.__name__ == "Ernie4_5_VLMoeVideoProcessor":
+        if video_processor_class is not None and video_processor_class.__name__ == "Ernie4_5_VLMoeVideoProcessor":
             # Ernie needs to add its own fields in the resolved dict, so call it again
             config_dict, _ = video_processor_class.get_video_processor_dict(
                 pretrained_model_name_or_path, **hub_kwargs
