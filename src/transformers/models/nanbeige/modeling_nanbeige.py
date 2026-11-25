@@ -365,7 +365,7 @@ class NanbeigeModel(NanbeigePreTrainedModel):
             cache = DynamicCache(config=self.config)
 
         num_layers = self.config.num_hidden_layers
-        num_loops = self.config._effective_num_loops
+        num_loops = self.config.num_loops
         if cache is not None and len(cache.layers) == num_layers:
             # Later passes write to their own cache layers, appended after the first pass's layers.
             cache.layers += [copy.deepcopy(layer) for layer in cache.layers * (num_loops - 1)]
@@ -398,8 +398,7 @@ class NanbeigeModel(NanbeigePreTrainedModel):
                     use_cache=use_cache,
                     **kwargs,
                 )
-            if loop_idx == num_loops - 1 or not self.config.skip_loop_final_norm:
-                hidden_states = self.norm(hidden_states)
+            hidden_states = self.norm(hidden_states)
 
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 

@@ -36,11 +36,7 @@ class NanbeigeConfig(PreTrainedConfig):
     r"""
     num_loops (`int`, *optional*, defaults to 2):
         Number of times the decoder layers run per forward pass, with shared weights. Each pass has its own key-value
-        cache entries when caching is enabled. By default, the output RMSNorm runs after every pass.
-    loop_loss_weights (`list[float]`, *optional*):
-        Legacy setting. A nonempty list determines the number of passes as its length plus one.
-    skip_loop_final_norm (`bool`, *optional*, defaults to `False`):
-        Apply the output RMSNorm only after the last pass when set to `True`.
+        cache entries when caching is enabled. The output RMSNorm runs after every pass.
 
     ```python
     >>> from transformers import NanbeigeConfig, NanbeigeModel
@@ -92,8 +88,6 @@ class NanbeigeConfig(PreTrainedConfig):
 
     default_theta = 70_000_000.0
     num_loops: int = loop_count_field(default=2)
-    loop_loss_weights: list[float] | None = None
-    skip_loop_final_norm: bool = False
 
     def __post_init__(self, **kwargs):
         if self.head_dim is None:
@@ -112,14 +106,9 @@ class NanbeigeConfig(PreTrainedConfig):
             )
 
     @property
-    def _effective_num_loops(self) -> int:
-        loop_loss_weights = self.loop_loss_weights
-        return len(loop_loss_weights) + 1 if loop_loss_weights else self.num_loops
-
-    @property
     def total_num_hidden_layers(self) -> int:
         """Number of decoder layer calls per forward pass."""
-        return self._effective_num_loops * self.num_hidden_layers
+        return self.num_loops * self.num_hidden_layers
 
 
 __all__ = ["NanbeigeConfig"]
