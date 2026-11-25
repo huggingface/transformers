@@ -4617,28 +4617,36 @@ class ModelTesterMixin(ExportTesterMixin):
             if not hasattr(model_class, "get_data_dependent_inputs"):
                 continue
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config).to(torch_device, torch.bfloat16).eval()
+            model = model_class(config).to(torch_device).eval()
+
+            # Packed encoders only trace with flash attention (SDPA loops over their items on the host), which needs bf16.
+            # Models without any run in fp32 with their default attention, where compiling changes the least.
+            # TODO: with SDPA and packed inputs, models could call torch's own varlen attention instead of looping, which
+            # would make SDPA trace too.
+            dtype = torch.float32
+            if packed := get_packed_inputs_encoders(model):
+                dtype = torch.bfloat16
+                # Built in bf16 rather than cast, so the modules kept in fp32 (e.g. MoE routers) stay so
+                model = model_class._from_config(config, dtype=dtype).to(torch_device).eval()
+                # `""` is the model itself, when it is the packed encoder (e.g. a vision model test). This is only set when
+                # needed: setting it also re-applies the top-level implementation to the sub-models whose config isn't
+                # a sub-config, e.g. `sdpa` to VibeVoice's acoustic tokenizer, which doesn't support it
+                flash = dict.fromkeys(packed, "flash_attention_2")
+                model.set_attn_implementation({"": model.config._attn_implementation} | flash)
             inputs = {
-                name: value.to(torch_device, torch.bfloat16 if value.is_floating_point() else value.dtype)
+                name: value.to(torch_device, dtype if value.is_floating_point() else value.dtype)
                 if isinstance(value, torch.Tensor)
                 else value
                 for name, value in self._prepare_for_class(inputs, model_class).items()
             }
-
-            # Packed encoders only trace with flash attention, since SDPA loops over their images on the host. The rest
-            # of the model keeps its default attention.
-            # TODO: with SDPA and packed inputs, models could call torch's own varlen attention instead of looping, which
-            # would make SDPA trace too.
-            # `""` among them is the model under test itself, when it is a packed encoder (e.g. a vision model test)
-            packed = get_packed_inputs_encoders(model)
-            attn_implementation = {"": model.config._attn_implementation} | dict.fromkeys(packed, "flash_attention_2")
-            model.set_attn_implementation(attn_implementation)
             inputs |= model.get_data_dependent_inputs(**inputs)
             torch.compiler.reset()
             with torch.no_grad():
                 expected = model(**copy.deepcopy(inputs))
                 actual = torch.compile(model, fullgraph=True, backend="eager")(**copy.deepcopy(inputs))
-            torch.testing.assert_close(actual.to_tuple()[0], expected.to_tuple()[0], atol=1e-2, rtol=1e-2)
+            # bf16 allows one rounding step at the outputs' magnitude, as compiling can reorder a few operations
+            tolerance = 2e-2 if dtype == torch.bfloat16 else 1e-4
+            torch.testing.assert_close(actual.to_tuple()[0], expected.to_tuple()[0], atol=tolerance, rtol=tolerance)
 
     @slow
     @require_torch_accelerator

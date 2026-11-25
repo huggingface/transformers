@@ -99,6 +99,11 @@ class Apertus1p5Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = Apertus1p5Vision2TextModelTester
     test_all_params_have_gradient = False  # the media tokenizers assign codes by argmax
     test_torch_exportable = False  # images are tokenized one by one at their own size
+
+    @unittest.skip("Its images are tokenized one by one at their own size, as padding would change their codes")
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     skip_test_image_features_output_shape = True  # per-image `pooler_output`, no `last_hidden_state`
 
     def test_pruned_lm_head(self):
@@ -197,6 +202,11 @@ class Apertus1p5Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     model_tester_class = Apertus1p5Audio2TextModelTester
     test_all_params_have_gradient = False  # the media tokenizers assign codes by argmax
     test_torch_exportable = False  # clips are tokenized one by one at their own length
+
+    @unittest.skip("Its clips are tokenized one by one at their own length, as padding would change their codes")
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     skip_test_audio_features_output_shape = True  # per-clip `pooler_output`, no `last_hidden_state`
 
     def test_expand_inputs_for_generation_keeps_audio_groups(self):

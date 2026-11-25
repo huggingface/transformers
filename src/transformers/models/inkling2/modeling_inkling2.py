@@ -1579,7 +1579,7 @@ class Inkling2VisionModel(Inkling2PreTrainedModel):
         patches_per_image = patch_grid_thw.prod(-1)
         num_patches = pixel_values.shape[0] * merge**2
         if (cu_seqlens := kwargs.pop("cu_seqlens", None)) is None:
-            cu_seqlens = F.pad((patches_per_image + 1).cumsum(0), (1, 0)).to(torch.int32)
+            cu_seqlens = F.pad((patches_per_image + 1).cumsum(0), (1, 0)).to(device, torch.int32)
         # sequence index of every patch, skipping the class token in front of each image
         image_ids = torch.arange(1, patch_grid_thw.shape[0] + 1)
         patch_index = torch.arange(num_patches) + torch.repeat_interleave(image_ids, patches_per_image)

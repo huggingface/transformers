@@ -94,6 +94,13 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
     # so last_hidden_state.shape[-1] != vision_config.hidden_size
     skip_test_image_features_output_shape = True
 
+    @unittest.skip(
+        "Its experts opt out of `use_experts_implementation` (`@no_inherit_decorator`): the eager loop over the experts "
+        "hit (`nonzero`) can't be traced with `fullgraph=True`"
+    )
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     # Training tests: only Step3p7ForConditionalGeneration has a loss head.
     # Step3p7Model is a backbone (returns BaseModelOutputWithPast, no .loss).
     def _for_cond_gen_only(self, fn):

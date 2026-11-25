@@ -348,14 +348,12 @@ class FunAsrNanoEncoder(FunAsrNanoPreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class FunAsrNanoMultiModalProjector(FunAsrNanoPreTrainedModel):
-    """Projects audio features into the text space and applies the checkpoint's adaptor layers. It owns the adaptor's
-    config, so the attention implementation is dispatched to it."""
-
-    config: FunAsrNanoAdaptorConfig
+class FunAsrNanoMultiModalProjector(nn.Module):
+    """Projects audio features into the text space and applies the checkpoint's adaptor layers."""
 
     def __init__(self, config: FunAsrNanoConfig):
-        super().__init__(config.adaptor_config)
+        super().__init__()
+        self.config = config.adaptor_config
         self.linear_1 = nn.Linear(config.audio_config.hidden_size, config.adaptor_config.projector_hidden_size)
         self.act = ACT2FN[config.adaptor_config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.adaptor_config.projector_hidden_size, config.adaptor_config.hidden_size)
@@ -365,7 +363,6 @@ class FunAsrNanoMultiModalProjector(FunAsrNanoPreTrainedModel):
                 for _ in range(config.adaptor_config.num_hidden_layers)
             ]
         )
-        self.post_init()
 
     def forward(
         self,
