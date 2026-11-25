@@ -1039,6 +1039,49 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
 
         np.testing.assert_array_equal(output, expected)
 
+    def test_whole_word_mask_edge_cases_and_long_sequence(self):
+        """Test edge cases (empty, all-special, masked special, sparse ids) and O(B * L) scaling."""
+        # Masked special tokens (-1) must stay unmasked and not propagate to other tokens.
+        word_ids = np.array([[-1, 0, 0, -1, 1], [-1, -1, -1, -1, -1]])
+        mask = np.array([[1, 0, 0, 1, 1], [1, 1, 0, 0, 0]], dtype=bool)
+        expected = np.array([[0, 0, 0, 0, 1], [0, 0, 0, 0, 0]], dtype=bool)
+        np.testing.assert_array_equal(DataCollatorForLanguageModeling._whole_word_mask(word_ids, mask), expected)
+
+        # Empty input and all-False mask.
+        empty = np.empty((0, 4), dtype=np.int64)
+        np.testing.assert_array_equal(
+            DataCollatorForLanguageModeling._whole_word_mask(empty, np.empty((0, 4), dtype=bool)),
+            np.empty((0, 4), dtype=bool),
+        )
+        np.testing.assert_array_equal(
+            DataCollatorForLanguageModeling._whole_word_mask(word_ids, np.zeros_like(mask)),
+            np.zeros_like(mask),
+        )
+
+        # Sparse arbitrary word ids (fallback path).
+        sparse_ids = np.array([[1, 1, 100_000, -1], [1, 100_000, 100_000, -1]])
+        sparse_mask = np.array([[1, 0, 0, 1], [0, 1, 0, 0]], dtype=bool)
+        sparse_expected = np.array([[1, 1, 0, 0], [0, 1, 1, 0]], dtype=bool)
+        np.testing.assert_array_equal(
+            DataCollatorForLanguageModeling._whole_word_mask(sparse_ids, sparse_mask), sparse_expected
+        )
+
+        # Long sequence (batch=8, length=8192): quadratic implementation needed ~1 GiB.
+        batch_size, seq_len = 8, 8192
+        long_word_ids = np.broadcast_to(np.arange(seq_len, dtype=np.int64) // 2 + 1, (batch_size, seq_len)).copy()
+        long_word_ids[:, 0] = -1
+        long_word_ids[:, -1] = -1
+        long_mask = np.zeros((batch_size, seq_len), dtype=bool)
+        long_mask[:, 2::10] = True  # First subword of every 5th word
+
+        long_out = DataCollatorForLanguageModeling._whole_word_mask(long_word_ids, long_mask)
+        self.assertEqual(long_out.shape, (batch_size, seq_len))
+        self.assertFalse(long_out[:, 0].any())
+        self.assertFalse(long_out[:, -1].any())
+        # Both subwords (2 and 3) of word 2 must be masked, while word 3 (4 and 5) stays unmasked.
+        self.assertTrue(long_out[:, 2].all() and long_out[:, 3].all())
+        self.assertFalse(long_out[:, 4].any() or long_out[:, 5].any())
+
 
 # =============================================================================
 # DataCollatorForLanguageModeling with whole word masking tests

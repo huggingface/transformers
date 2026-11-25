@@ -1012,15 +1012,39 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         """
         Mask whole words based on word ids and mask.
         """
-        mask = to_numpy(mask)
+        mask = to_numpy(mask).astype(bool, copy=False)
+        word_ids = to_numpy(word_ids)
+
+        if word_ids.size == 0:
+            return np.zeros(word_ids.shape, dtype=bool)
 
         valid_ids = word_ids != -1
+        masked_valid = valid_ids & mask
+        if not np.any(masked_valid):
+            return np.zeros(word_ids.shape, dtype=bool)
 
-        # Create 3D mask where [batch, token_i, token_j] is True if token_i and token_j are the same word
-        same_word = (word_ids[:, :, None] == word_ids[:, None, :]) & valid_ids[:, :, None] & valid_ids[:, None, :]
+        # Offset each row's word ids so identical ids in different batch rows do not collide.
+        valid_vals = word_ids[valid_ids]
+        min_id = int(valid_vals.min())
+        span = int(valid_vals.max()) - min_id + 1
+        batch_size = word_ids.shape[0]
 
-        # For each token, set True if any token in the same word is masked
-        return np.any(same_word & mask[:, None, :], axis=2)
+        # O(batch * length) boolean lookup table for compact word ids (always true
+        # for _calc_word_ids_and_prob_mask, where span <= seq_len).
+        if batch_size * span <= max(word_ids.size * 4, 65536):
+            row_offsets = np.arange(batch_size, dtype=np.int64)[:, None] * span
+            flat_ids = np.where(valid_ids, (word_ids - min_id) + row_offsets, 0)
+            table = np.zeros(batch_size * span, dtype=bool)
+            table[flat_ids[masked_valid]] = True
+            return valid_ids & table[flat_ids]
+
+        # Fallback for arbitrarily sparse word ids.
+        result = np.zeros(word_ids.shape, dtype=bool)
+        for i in range(batch_size):
+            masked_words = word_ids[i, masked_valid[i]]
+            if masked_words.size > 0:
+                result[i] = valid_ids[i] & np.isin(word_ids[i], masked_words)
+        return result
 
 
 def to_numpy(x) -> np.ndarray[Any]:
