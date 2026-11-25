@@ -745,18 +745,19 @@ class _MPSHostRouter:
 
     def _install_many(self, pool, layer, experts, keep):
         """Read `experts` of `layer` into slots and publish them (data first, then the table entries): one
-        safetensors `prefetch` per bank straight into the slots (GIL released), else `preadv` per row."""
+        safetensors `prefetch` per file straight into the slots (GIL released), else `preadv` per row."""
         slots = {e: self._evict_into(pool, (layer, e), keep) for e in experts}
+        # file -> ({key: rows}, {key: slots}): every bank of the batch in one `prefetch`, so its reader threads have
+        # one chunk per bank and row to share. One call per bank leaves them a single chunk each (one missed expert):
+        # 0.98 -> 0.66 ms per miss on an M5 (Qwen3.8, 12 GiB cache)
+        plans = {}
         for param in pool.layout:
             if self.prefetch_to_mps:
                 path, key = self.keys[(layer, param)]
-                handle = self.handles.get(path)
-                if handle is None:
-                    handle = self.handles[path] = safe_open(path, framework="pt", device="mps")
                 bank = pool.banks[param]
-                rows = [slice(e, e + 1) for e in experts]
-                out = [bank[slots[e] : slots[e] + 1] for e in experts]
-                handle.prefetch({key: rows}, device="mps", threads=8, out={key: out}).take(key)
+                plan, out = plans.setdefault(path, ({}, {}))
+                plan[key] = [slice(e, e + 1) for e in experts]
+                out[key] = [bank[slots[e] : slots[e] + 1] for e in experts]
             else:
                 fd, base, row_bytes = self.layout[(layer, param)]
                 for e in experts:
@@ -764,6 +765,13 @@ class _MPSHostRouter:
                         (fd, self._slot_address(pool, param, slots[e]), row_bytes, base + e * row_bytes)
                     ):
                         raise OSError(f"short read of expert {e} of {layer}")
+        for path, (plan, out) in plans.items():
+            handle = self.handles.get(path)
+            if handle is None:
+                handle = self.handles[path] = safe_open(path, framework="pt", device="mps")
+            loader = handle.prefetch(plan, device="mps", threads=8, out=out)
+            for key in plan:
+                loader.take(key)
         self.store.reads += len(experts)
         self._publish(pool)
         return slots

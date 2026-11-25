@@ -1181,7 +1181,9 @@ def metal_kernel(name: str):
     build for this torch / Python)."""
     if not (is_kernels_available() and torch.backends.mps.is_available()):
         return None
-    from kernels import get_kernel as get_hub_kernel  # the library's own: pinned revision, a trusted non-community repo
+    from kernels import (
+        get_kernel as get_hub_kernel,  # the library's own: pinned revision, a trusted non-community repo
+    )
 
     repo_id, revision = _METAL_KERNELS[name]
     try:

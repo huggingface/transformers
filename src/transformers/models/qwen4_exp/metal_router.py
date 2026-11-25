@@ -1,5 +1,6 @@
 """Fused Qwen4 router: one Metal dispatch for a decode token's 512-expert softmax top-10."""
-import math, os, torch
+import torch
+
 
 _SOURCE = r"""
 #include <metal_stdlib>
