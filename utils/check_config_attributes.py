@@ -46,6 +46,9 @@ SPECIAL_CASES_TO_ALLOW = {
     "NemotronH_Omni_Reasoning_V3_Config": [
         "sound_context_token",  # used by the processor for `<audio>` placeholder expansion
     ],
+    "Qwen2_5_VLVisionConfig": [
+        "tokens_per_second",  # used by the processor to space out the temporal RoPE positions of videos
+    ],
     # We need it for DSA (but it's not really used as it's implicitly assumed)
     "HYV4Config": ["layer_types"],
     # For consistency we keep head dim but it's not used as NoPE is applied

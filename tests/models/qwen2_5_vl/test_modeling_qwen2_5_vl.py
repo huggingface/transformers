@@ -27,6 +27,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.image_utils import load_image
+from transformers.processing_utils import create_mrope_position_ids
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -44,6 +45,7 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
+    mrope_position_ids,
 )
 from ...test_processing_common import url_to_local_path
 
@@ -174,6 +176,7 @@ class Qwen2_5_VLVisionText2TextModelTester(ModelTesterConfigMixin):
             "attention_mask": attention_mask,
             "mm_token_type_ids": mm_token_type_ids,
         }
+        inputs_dict["position_ids"] = mrope_position_ids(config, inputs_dict)
         return config, inputs_dict
 
 
@@ -225,7 +228,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
-            model.base_model.rope_deltas = None
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
             input_ids = curr_input_dict["input_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
@@ -240,82 +242,21 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     image_grid_thw=image_grid_thw,
                 )
 
-            model.base_model.rope_deltas = None
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            mm_types = (input_ids == config.image_token_id).long()
+            positions = {"input_ids": input_ids, "mm_token_type_ids": mm_types, "image_grid_thw": image_grid_thw}
             _ = model(
+                position_ids=mrope_position_ids(config, positions),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
             )
 
-    def test_vision_position_ids(self):
-        """
-        Tests that vision position ids are built correctly for images and for videos.
-        See https://github.com/huggingface/transformers/pull/45400
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Qwen2_5_VLModel(config).to(torch_device)
-        batch_size = input_dict["input_ids"].shape[0]
-
-        # Test most simple case when num_image_tokens == 1. Position ids will be sunsequent and text-like
-        position_ids = model.get_rope_index(
-            input_dict["input_ids"], input_dict["mm_token_type_ids"], input_dict["image_grid_thw"]
-        )[0]
-        expected_positions = torch.arange(39)[None, None, :].repeat(3, batch_size, 1)
-        self.assertListEqual(list(position_ids.shape), [3, batch_size, 39])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
-        # Each image encodes to more than 1 token (i.e. 4 height and 3 width patches = 12 tokens)
-        image_token_id = config.image_token_id
-        pad_token_id = config.text_config.pad_token_id
-        input_ids = torch.tensor([[pad_token_id] + [image_token_id] * 12 + [pad_token_id]], device=torch_device)
-        mm_token_type_ids = torch.tensor([[0] + [1] * 12 + [0]], device=torch_device)
-        image_grid_thw = torch.tensor([[1, 4, 3]], device=torch_device)
-        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, image_grid_thw)[0]
-        expected_positions = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5]],
-                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
-                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
-            ]
-        )
-
-        self.assertListEqual(list(position_ids.shape), [3, 1, 14])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
-        # Check video position ids with 2 frames, and 4 height, 3 width patches (= 12 * 2 tokens)
-        video_token_id = config.video_token_id
-        input_ids = torch.tensor([[pad_token_id] + [video_token_id] * 24 + [pad_token_id]], device=torch_device)
-        mm_token_type_ids = torch.tensor([[0] + [2] * 24 + [0]], device=torch_device)
-        video_grid_thw = torch.tensor([[2, 4, 3]], device=torch_device)
-        second_per_grid_ts = torch.tensor([3], device=torch_device)
-        position_ids = model.get_rope_index(
-            input_ids, mm_token_type_ids, video_grid_thw=video_grid_thw, second_per_grid_ts=second_per_grid_ts
-        )[0]
-        expected_positions = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5]],
-                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
-                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
-            ]
-        )
-
-        self.assertListEqual(list(position_ids.shape), [3, 1, 26])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
     def test_video_position_ids_fractional_seconds(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.vision_config.tokens_per_second = 2
-        model = Qwen2_5_VLModel(config).to(torch_device)
-        input_ids = torch.tensor(
-            [[config.text_config.pad_token_id] + [config.video_token_id] * 4], device=torch_device
-        )
-        mm_token_type_ids = torch.tensor([[0, 2, 2, 2, 2]], device=torch_device)
-        video_grid_thw = torch.tensor([[4, 1, 1]], device=torch_device)
-
-        # Quantize the final positions, not seconds or the scaled temporal step.
+        # frame `i` of a video sits at `int(i * tokens_per_second * second_per_grid_t)` on the temporal axis
+        tokens_per_second = 2
         for seconds, temporal_positions in [
             (0.25, [1, 1, 2, 2]),
             (0.5, [1, 2, 3, 4]),
@@ -323,19 +264,11 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             (1.0, [1, 3, 5, 7]),
             (1.5, [1, 4, 7, 10]),
         ]:
-            for as_tensor in (False, True):
-                with self.subTest(seconds=seconds, as_tensor=as_tensor):
-                    intervals = torch.tensor([seconds], device=torch_device) if as_tensor else [seconds]
-                    positions, deltas = model.get_rope_index(
-                        input_ids,
-                        mm_token_type_ids,
-                        video_grid_thw=video_grid_thw,
-                        second_per_grid_ts=intervals,
-                    )
-                    self.assertEqual(positions.dtype, torch.long)
-                    self.assertListEqual(positions[0, 0].tolist(), [0] + temporal_positions)
-                    self.assertListEqual(positions[1:, 0].tolist(), [[0, 1, 1, 1, 1]] * 2)
-                    self.assertListEqual(deltas.tolist(), [[max(temporal_positions) + 1 - 5]])
+            with self.subTest(seconds=seconds):
+                grids = {2: [(4, 1, 1, tokens_per_second * seconds)]}
+                positions = create_mrope_position_ids([[0, 2, 2, 2, 2]], None, grids)
+                self.assertListEqual(positions[0, 0].tolist(), [0] + temporal_positions)
+                self.assertListEqual(positions[1:, 0].tolist(), [[0, 1, 1, 1, 1]] * 2)
 
     def test_video_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -383,6 +316,14 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             second_per_grid_ts = torch.tensor([1.0] * B, device=torch_device)
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {
+                        "input_ids": input_ids,
+                        "mm_token_type_ids": (input_ids == config.image_token_id).long(),
+                        "video_grid_thw": video_grid_thw,
+                    },
+                ),
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
@@ -433,12 +374,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 }
 
                 # add position_ids
-                vision_position_ids, deltas = model.model.get_rope_index(
-                    input_ids=inputs_dict["input_ids"],
-                    image_grid_thw=inputs_dict["image_grid_thw"],
-                    attention_mask=inputs_dict["attention_mask"],
-                    mm_token_type_ids=inputs_dict["mm_token_type_ids"],
-                )  # [3, bs, padded-seq-len]
+                vision_position_ids = mrope_position_ids(config, inputs_dict)  # [3, bs, padded-seq-len]
                 vision_padfree_positions = vision_position_ids[:, dummy_attention_mask.bool()].view(
                     3, -1
                 )  # [3, bs*padfree-len]

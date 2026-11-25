@@ -93,6 +93,10 @@ class Kimi_K25Processor(ProcessorMixin):
             video_structure += f"{timestamp_str}<|media_begin|>video<|media_content|>{video_tokens}<|media_end|>"
         return video_structure
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # Kimi-K2.5 uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.

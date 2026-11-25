@@ -242,6 +242,12 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]]:
+        # the language model sees each grid after the vision tower's `merge_size` x `merge_size` spatial merge
+        merge_size = self.image_processor.merge_size
+        image_grids = np.asarray(image_inputs.get("image_grid_thw", [])).tolist()
+        return {1: [(t, h // merge_size, w // merge_size, 1) for t, h, w in image_grids]}
+
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_size = self.image_processor.merge_size
         num_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // (merge_size * merge_size)
@@ -687,7 +693,6 @@ class PaddleOCRVLModel(Qwen2VLModel):
         self.visual = PaddleOCRVisionModel._from_config(config.vision_config)
         self.projector = PaddleOCRProjector(config)
         self.language_model = PaddleOCRTextModel._from_config(config.text_config)
-        self.rope_deltas = None
 
         self.post_init()
 
@@ -766,15 +771,8 @@ class PaddleOCRVLModel(Qwen2VLModel):
             image_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if position_ids is None:
-            position_ids = self.compute_3d_position_ids(
-                input_ids=input_ids,
-                image_grid_thw=image_grid_thw,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache=cache,
-                mm_token_type_ids=mm_token_type_ids,
-            )
+        if position_ids is None and image_grid_thw is not None:
+            raise ValueError("Multimodal inputs need the 3D RoPE `position_ids` returned by the processor.")
 
         outputs = self.language_model(
             input_ids=None,

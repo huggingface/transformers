@@ -309,15 +309,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
             **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
-    def compute_3d_position_ids(self, **kwargs):
-        raise AttributeError("Exaone4.5 doesn't use 3D positions")
-
-    def get_vision_position_ids(self, **kwargs):
-        raise AttributeError("Exaone4.5 doesn't use 3D positions")
-
-    def get_rope_index(self, **kwargs):
-        raise AttributeError("Exaone4.5 doesn't use 3D positions")
-
 
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLForConditionalGeneration):
     """
@@ -414,13 +405,14 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         model_inputs["position_ids"] = None
         return model_inputs
 
-    def _prepare_position_ids_for_generation(self, **kwargs):
-        raise AttributeError("Exaone4.5 doesn't use 3D positions")
-
 
 class Exaone4_5_Processor(Qwen2VLProcessor):
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = AttributeError()
+
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # Exaone4.5 uses 1D RoPE, the model builds its own `position_ids`
+        return None
 
     @property
     def model_input_names(self):

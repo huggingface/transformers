@@ -100,6 +100,10 @@ class Lfm3VlProcessor(ProcessorMixin):
             video_placeholder += self.vision_start_token + self.video_token * frame_seqlen + self.vision_end_token
         return video_placeholder
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # LFM3-VL uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.

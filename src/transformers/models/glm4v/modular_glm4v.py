@@ -703,14 +703,8 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
         # NOTE: we need to pass text position ids for packing. Qwen2-VL uses 3D positions
         # where each dim indicates visual spatial positions for temporal/height/width grids.
-        # There are two scenarios when FA2-like packed masking might be activated.
-        # 1. User specifically passed packed `position_ids` and no attention mask.
-        #    In this case we expect the user to create correct position ids for all 3 grids
-        #    and prepend text-only position ids to it. The final tensor will be [4, bs, seq-len]
-        # 2. User runs forward with no attention mask and no position ids. In this case, position ids
-        #    are prepared by the model (`get_rope_index`) as `[4, bs, seq-len]` tensor. Text-only positions are
-        #    prepended by us when creating positions so that the mask is constructed correctly. NOTE: failing to pass
-        #    text-only positions will cause incorrect mask construction, do not change `prepare_input_for_generation`
+        # For FA2-like packed masking (packed `position_ids` and no attention mask), prepend the text-only
+        # position ids to the 3 grids: the tensor is then [4, bs, seq-len] and the mask is built from row 0.
         if position_ids.ndim == 3 and position_ids.shape[0] == 4:
             text_position_ids = position_ids[0]
             position_ids = position_ids[1:]
@@ -819,43 +813,6 @@ class Glm4vModel(Qwen2VLModel):
             )
         return special_image_mask, special_video_mask
 
-    def get_rope_index(
-        self,
-        video_grid_thw: torch.LongTensor | None = None,
-        **super_kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - GLM4V uses timestamps to separate each video frame, so the video_grid_thw should also be split too.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-
-        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
-
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
@@ -906,16 +863,8 @@ class Glm4vModel(Qwen2VLModel):
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        if position_ids is None:
-            position_ids = self.compute_3d_position_ids(
-                input_ids=input_ids,
-                image_grid_thw=image_grid_thw,
-                video_grid_thw=video_grid_thw,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache=cache,
-                mm_token_type_ids=mm_token_type_ids,
-            )
+        if position_ids is None and (image_grid_thw is not None or video_grid_thw is not None):
+            raise ValueError("Multimodal inputs need the 3D RoPE `position_ids` returned by the processor.")
 
         outputs = self.language_model(
             input_ids=None,
@@ -1079,6 +1028,16 @@ class Glm4vProcessor(Qwen2VLProcessor):
         "return_token_type_ids": False,
     }
     videos_kwargs = {"return_metadata": True}
+
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]]:
+        # every video frame is its own block in the text (separated by its timestamp), so each frame is a (1, h, w) grid
+        image_merge, video_merge = self.image_processor.merge_size, self.video_processor.merge_size
+        image_grids = np.asarray(image_inputs.get("image_grid_thw", [])).tolist()
+        video_grids = np.asarray(video_inputs.get("video_grid_thw", [])).tolist()
+        return {
+            1: [(t, h // image_merge, w // image_merge, 1) for t, h, w in image_grids],
+            2: [(1, h // video_merge, w // video_merge, 1) for t, h, w in video_grids for _ in range(t)],
+        }
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)

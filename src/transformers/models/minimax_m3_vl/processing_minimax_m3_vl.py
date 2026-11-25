@@ -80,6 +80,10 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
             chunk += self.VISION_START_TOKEN + self.VIDEO_TOKEN * frame_seqlen + self.VISION_END_TOKEN
         return chunk
 
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> None:
+        # MiniMax-M3-VL uses 1D RoPE, the model builds its own `position_ids`
+        return None
+
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
@@ -146,7 +150,7 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        return super().model_input_names + ["mm_token_type_ids"]
+        return super().model_input_names + ["mm_token_type_ids", "position_ids"]
 
     @property
     def unused_input_names(self):

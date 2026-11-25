@@ -38,7 +38,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor, ids_tensor, mrope_position_ids
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -48,6 +48,8 @@ if is_torch_available():
 
 
 class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
+    mrope_split_video_frames = True
     base_model_class = Qwen3VLMoeModel
     config_class = Qwen3VLMoeConfig
 
@@ -184,6 +186,10 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "image_grid_thw": image_grid_thw},
+                ),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
@@ -276,6 +282,11 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
             # TODO:we should remove this because we use timestamps for video
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "video_grid_thw": video_grid_thw},
+                    split_video_frames=True,
+                ),
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,

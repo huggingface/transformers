@@ -606,43 +606,6 @@ class Qwen3VLModel(Qwen2VLModel):
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
 
-    def get_rope_index(
-        self,
-        video_grid_thw: torch.LongTensor | None = None,
-        **super_kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - Since Qwen3.5 use timestamps to separate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            mm_token_type_ids (`torch.IntTensor` of shape `(batch_size, sequence_length)`):
-                Token type ids matching each modality to a different value in the input sequence, i.e. text (0), image (1), video (2).
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-        Returns:
-            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
-            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
-        """
-
-        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
-        if video_grid_thw is not None:
-            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
-            video_grid_thw[:, 0] = 1
-
-        return super().get_rope_index(video_grid_thw=video_grid_thw, **super_kwargs)
-
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -756,16 +719,8 @@ class Qwen3VLModel(Qwen2VLModel):
             visual_pos_masks = video_mask
             deepstack_visual_embeds = [torch.cat(feat, dim=0) for feat in deepstack_video_embeds]
 
-        if position_ids is None:
-            position_ids = self.compute_3d_position_ids(
-                input_ids=input_ids,
-                image_grid_thw=image_grid_thw,
-                video_grid_thw=video_grid_thw,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache=cache,
-                mm_token_type_ids=mm_token_type_ids,
-            )
+        if position_ids is None and (image_grid_thw is not None or video_grid_thw is not None):
+            raise ValueError("Multimodal inputs need the 3D RoPE `position_ids` returned by the processor.")
 
         outputs = self.language_model(
             input_ids=None,
@@ -891,6 +846,16 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
     }
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = True
+
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]]:
+        # every video frame is its own block in the text (separated by its timestamp), so each frame is a (1, h, w) grid
+        image_merge, video_merge = self.image_processor.merge_size, self.video_processor.merge_size
+        image_grids = np.asarray(image_inputs.get("image_grid_thw", [])).tolist()
+        video_grids = np.asarray(video_inputs.get("video_grid_thw", [])).tolist()
+        return {
+            1: [(t, h // image_merge, w // image_merge, 1) for t, h, w in image_grids],
+            2: [(1, h // video_merge, w // video_merge, 1) for t, h, w in video_grids for _ in range(t)],
+        }
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, video_processor, chat_template, **kwargs)

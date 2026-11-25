@@ -855,11 +855,119 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
     def __init__(self, config: HunYuanVLConfig):
         super().__init__(config)
         self.language_model = HunYuanVLTextModel._from_config(config.text_config)
-        self.rope_deltas = None  # cache rope_deltas here
         self.vision_tower = HunYuanVLVisionTransformer(config.vision_config)
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @accepts_precomputed_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        vision_dtype = next(self.vision_tower.parameters()).dtype
+        pixel_values = pixel_values.to(vision_dtype)
+        image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        # Include row separators and image boundary tokens in each split.
+        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
+        split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
+        image_outputs.pooler_output = torch.split(image_outputs.pooler_output[0], split_sizes)
+        return image_outputs
+
+    def get_placeholder_mask(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+    ) -> torch.BoolTensor:
+        """
+        Compute a boolean mask over ``inputs_embeds`` selecting the positions that hold the visual placeholder
+        token, and validate that the placeholder count matches the number of provided image features.
+        """
+        if input_ids is None:
+            placeholder_token_embed = self.get_input_embeddings()(
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = (inputs_embeds == placeholder_token_embed).all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            raise ValueError(
+                f"Image features and image tokens do not match: tokens: {n_image_tokens}, "
+                f"features {image_features.shape[0]}"
+            )
+        return special_image_mask
+
+    @can_return_tuple
+    @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> HunYuanVLModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            image_mask = self.get_placeholder_mask(
+                input_ids,
+                inputs_embeds=inputs_embeds,
+                image_features=image_embeds,
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                attention_mask=attention_mask,
+                cache=cache,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+        outputs: BaseModelOutputWithPast = self.language_model(
+            input_ids=None,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            cache=cache,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return HunYuanVLModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
     def get_vision_position_ids(
         self,
@@ -988,51 +1096,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         rope_deltas = torch.tensor(rope_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, rope_deltas
 
-    @accepts_precomputed_kwargs(modality="image")
-    @can_return_tuple
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.Tensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        vision_dtype = next(self.vision_tower.parameters()).dtype
-        pixel_values = pixel_values.to(vision_dtype)
-        image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        # Include row separators and image boundary tokens in each split.
-        merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        split_sizes = (merged_h * (merged_w + 1) + 2).tolist()
-        image_outputs.pooler_output = torch.split(image_outputs.pooler_output[0], split_sizes)
-        return image_outputs
-
-    def get_placeholder_mask(
-        self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.Tensor,
-        image_features: torch.Tensor | None = None,
-    ) -> torch.BoolTensor:
-        """
-        Compute a boolean mask over ``inputs_embeds`` selecting the positions that hold the visual placeholder
-        token, and validate that the placeholder count matches the number of provided image features.
-        """
-        if input_ids is None:
-            placeholder_token_embed = self.get_input_embeddings()(
-                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = (inputs_embeds == placeholder_token_embed).all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, "
-                f"features {image_features.shape[0]}"
-            )
-        return special_image_mask
-
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def compute_3d_position_ids(
         self,
@@ -1059,70 +1122,6 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel):
         )
         self.rope_deltas = rope_deltas
         return rope_positions
-
-    @can_return_tuple
-    @auto_docstring
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        cache: Cache | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        use_cache: bool | None = None,
-        pixel_values: torch.Tensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> HunYuanVLModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if pixel_values is not None and mm_encoder_outputs is not None:
-            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
-        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
-            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, image_grid_thw, return_dict=True)
-
-        if mm_encoder_outputs.get("image") is not None:
-            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
-                inputs_embeds.device, inputs_embeds.dtype
-            )
-            image_mask = self.get_placeholder_mask(
-                input_ids,
-                inputs_embeds=inputs_embeds,
-                image_features=image_embeds,
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-
-        if position_ids is None:
-            position_ids = self.compute_3d_position_ids(
-                input_ids=input_ids,
-                image_grid_thw=image_grid_thw,
-                attention_mask=attention_mask,
-                cache=cache,
-                mm_token_type_ids=mm_token_type_ids,
-            )
-
-        outputs: BaseModelOutputWithPast = self.language_model(
-            input_ids=None,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            cache=cache,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        return HunYuanVLModelOutputWithPast(
-            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
-        )
 
 
 @auto_docstring

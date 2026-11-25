@@ -343,6 +343,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
+    uses_mrope_position_ids = True
     base_model_class = Qwen4ExpModel
     config_class = Qwen4ExpConfig
 

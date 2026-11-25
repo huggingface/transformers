@@ -23,6 +23,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import numpy as np
+
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils.deprecation import deprecate_attr
 
@@ -49,6 +52,12 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         self.image_token = tokenizer.image_token
         self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    def get_mrope_grids(self, image_inputs: dict, video_inputs: dict) -> dict[int, list[tuple]]:
+        # the language model sees each grid after the vision tower's `merge_size` x `merge_size` spatial merge
+        merge_size = self.image_processor.merge_size
+        image_grids = np.asarray(image_inputs.get("image_grid_thw", [])).tolist()
+        return {1: [(t, h // merge_size, w // merge_size, 1) for t, h, w in image_grids]}
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_size = self.image_processor.merge_size

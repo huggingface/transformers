@@ -38,6 +38,7 @@ from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
+    mrope_position_ids,
 )
 from ...test_processing_common import url_to_local_path
 
@@ -377,6 +378,7 @@ class Qwen3_5VisionText2TextModelTester(ModelTesterConfigMixin):
             "attention_mask": attention_mask,
             "mm_token_type_ids": mm_token_type_ids,
         }
+        inputs_dict["position_ids"] = mrope_position_ids(config, inputs_dict)
         return config, inputs_dict
 
 
@@ -557,9 +559,6 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             with self.assertRaises(ValueError):
                 _ = model(**curr_input_dict)
 
-            if hasattr(model.base_model, "rope_deltas"):
-                model.base_model.rope_deltas = None
-
             input_ids = curr_input_dict["input_ids"][:1]
             mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
             pixel_values = curr_input_dict["pixel_values"][:one_img_length]
@@ -575,12 +574,12 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                     mm_token_type_ids=mm_token_type_ids,
                 )
 
-            if hasattr(model.base_model, "rope_deltas"):
-                model.base_model.rope_deltas = None
-
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
+            mm_types = (input_ids == config.image_token_id).long()
+            positions = {"input_ids": input_ids, "mm_token_type_ids": mm_types, "image_grid_thw": image_grid_thw}
             _ = model(
+                position_ids=mrope_position_ids(config, positions),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
@@ -631,6 +630,10 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "image_grid_thw": image_grid_thw},
+                ),
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
@@ -716,6 +719,11 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
             outputs = model(
+                position_ids=mrope_position_ids(
+                    config,
+                    {"input_ids": input_ids, "mm_token_type_ids": mm_token_type_ids, "video_grid_thw": video_grid_thw},
+                    split_video_frames=True,
+                ),
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
