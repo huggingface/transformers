@@ -2102,6 +2102,9 @@ class ModelTesterMixin(ExportTesterMixin):
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = {
+                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
+            }
             loss = model(**inputs).loss
             loss.backward()
 
@@ -6435,35 +6438,22 @@ class ModelTesterMixin(ExportTesterMixin):
     def test_kernels_can_run_without_crashing_training(self):
         """
         Check whether activating kernels and then running through some input leads to an (value) error (training)
+
+        # NOTE: We run the original `test_training` and modify to trigger kernelization after calling `.train`
+                (otherwise we need to override 100s of models manually).
         """
-        # TODO: fix one by one
-        if type(self).test_training is not ModelTesterMixin.test_training:
-            self.skipTest(reason="Model uses a custom training test")
+        original_train = PreTrainedModel.train
 
-        if not self.model_tester.is_training:
-            self.skipTest(reason="ModelTester is not configured to run training tests")
+        def train_with_kernels(model, mode=True):
+            result = original_train(model, mode)
 
-        for model_class in self.all_model_classes:
-            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
+            if mode and not model.use_kernels:
+                model.use_kernels = True
 
-            if model_class.__name__ in [
-                *get_values(MODEL_MAPPING_NAMES),
-                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
-            ]:
-                continue
+            return result
 
-            model = model_class(config).to(torch_device)
-            model.train()
-            model.use_kernels = True
-
-            prepared_inputs = self._prepare_for_class(inputs, model_class, return_labels=True)
-            prepared_inputs = {
-                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
-            }
-
-            loss = model(**prepared_inputs).loss
-            loss.backward()
+        with patch.object(PreTrainedModel, "train", train_with_kernels):
+            self.test_training()
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
