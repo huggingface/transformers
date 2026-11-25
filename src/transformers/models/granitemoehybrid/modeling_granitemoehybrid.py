@@ -665,13 +665,23 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
         # Recurrent form
         if recurrent_state is not None and seq_len == 1:
+            dt_bias = self.dt_bias
+            dt_softplus = True
+            if self.time_step_limit is not None and (
+                self.time_step_limit[0] > 0.0 or self.time_step_limit[1] < float("inf")
+            ):
+                # selective_state_update has no dt_limit argument.
+                dt = F.softplus(dt.float() + dt_bias.float()).clamp(*self.time_step_limit)
+                dt_bias = torch.zeros_like(dt_bias)  # Some kernel versions require a bias tensor.
+                dt_softplus = False
+
             hidden_states = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             A = A[:, None, None].expand(-1, self.head_dim, self.ssm_state_size)
             B = B.view(batch_size, self.n_groups, self.ssm_state_size)
             C = C.view(batch_size, self.n_groups, self.ssm_state_size)
             D = self.D[:, None].expand(-1, self.head_dim)
-            dt_bias = self.dt_bias[:, None].expand(-1, self.head_dim)
+            dt_bias = dt_bias[:, None].expand(-1, self.head_dim)
 
             scan_output = mamba2_selective_state_update(
                 recurrent_state,
@@ -683,7 +693,7 @@ class GraniteMoeHybridMambaLayer(nn.Module):
                 D,
                 z=None,
                 dt_bias=dt_bias,
-                dt_softplus=True,
+                dt_softplus=dt_softplus,
                 **kwargs,
             )
             scan_output = scan_output.view(batch_size, 1, -1)
