@@ -374,7 +374,10 @@ class EmbeddingParallel(TensorParallelLayer):
             with _use_local_dtensor_params(module), _use_local_padding_idx(module, start, num_rows):
                 output = original_forward((input_ids - start).masked_fill(outside, 0), *args, **kwargs)
             output = output.masked_fill(outside.unsqueeze(-1), 0)
-            return self.transform_output_post_forward(module, output, mesh)
+            if not self.use_local_output:
+                return self.transform_output_post_forward(module, output, mesh)
+            process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+            return _AllReduceForward.apply(output, process_group)
 
         module.forward = vocab_parallel_forward
         return module
