@@ -109,50 +109,34 @@ class AutoTokenizerTest(unittest.TestCase):
         "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
     ]
 
+    @parameterized.expand(BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS)
     @slow
     @require_tokenizers
-    @parameterized.expand(BYTE_LEVEL_LLAMA_TOKENIZER_CLASS_CHECKPOINTS)
     def test_byte_level_llama_tokenizer_class_uses_tokenizers_backend(self, repo_id):
         text = "Hello world. 嗯，"
         tokenizer = AutoTokenizer.from_pretrained(repo_id)
-        # exact type: LlamaTokenizer subclasses TokenizersBackend
         self.assertIs(type(tokenizer), TokenizersBackend)
         self.assertEqual(tokenizer.decode(tokenizer.encode(text, add_special_tokens=False)), text)
 
+    @parameterized.expand(
+        [
+            "deepseek-ai/DeepSeek-V2-Lite", # byte-level `tokenizer.json``
+            "deepseek-ai/deepseek-coder-1.3b-base", # in `MODEL_IDS_TO_TOKENIZERS_BACKEND`
+            "HuggingFaceH4/zephyr-7b-beta", # model type registers another tokenizer class
+        ]
+    )
+    @slow
     @require_tokenizers
-    def test_byte_level_llama_tokenizer_class_keeps_left_padding(self):
-        # `LlamaTokenizer` pads on the left, and so must the `TokenizersBackend` loaded in its place
-        from tokenizers import Tokenizer, decoders, pre_tokenizers
-        from tokenizers.models import BPE
+    def test_llama_tokenizer_class_keeps_left_padding(self, repo_id):
+        # The Hub `tokenizer_class` is `LlamaTokenizerFast`, which pads left, and `TokenizersBackend` loads instead
+        texts = ["hello", "hello world, how are you"]
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        self.assertIs(type(tokenizer), TokenizersBackend)
+        self.assertEqual(tokenizer(texts, padding=True).input_ids[0][0], tokenizer.pad_token_id)
 
-        backend_tokenizer = Tokenizer(BPE({"<pad>": 0, "a": 1, "b": 2}, []))
-        backend_tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
-        backend_tokenizer.decoder = decoders.ByteLevel()
-
-        # the three ways `AutoTokenizer` comes to load `TokenizersBackend` in place of the Hub class: a byte-level
-        # `tokenizer.json`, a checkpoint in `MODEL_IDS_TO_TOKENIZERS_BACKEND`, and a model type with another tokenizer
-        configs = {
-            "byte-level": AutoConfig.for_model("llama"),
-            "model id": AutoConfig.for_model("llama", name_or_path="deepseek-ai/deepseek-coder-1.3b-instruct"),
-            "model type": MistralConfig(),
-        }
-        # the padding side set in `tokenizer_config.json` still comes first
-        for padding_side, expected_input_ids in ((None, [[0, 1], [1, 2]]), ("right", [[1, 0], [1, 2]])):
-            tokenizer_config = {"tokenizer_class": "LlamaTokenizerFast", "pad_token": "<pad>"}
-            if padding_side is not None:
-                tokenizer_config["padding_side"] = padding_side
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                backend_tokenizer.save(os.path.join(tmp_dir, "tokenizer.json"))
-                with open(os.path.join(tmp_dir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
-                    json.dump(tokenizer_config, f)
-                tokenizers = {
-                    name: AutoTokenizer.from_pretrained(tmp_dir, config=config) for name, config in configs.items()
-                }
-
-            for name, tokenizer in tokenizers.items():
-                with self.subTest(name, padding_side=padding_side):
-                    self.assertIs(type(tokenizer), TokenizersBackend)
-                    self.assertEqual(tokenizer(["a", "ab"], padding=True)["input_ids"], expected_input_ids)
+        # The user kwarg still wins
+        tokenizer = AutoTokenizer.from_pretrained(repo_id, padding_side="right")
+        self.assertEqual(tokenizer(texts, padding=True).input_ids[0][-1], tokenizer.pad_token_id)
 
     @slow
     @require_tokenizers
@@ -171,6 +155,33 @@ class AutoTokenizerTest(unittest.TestCase):
         input_ids = tokenizer("hello").input_ids
         self.assertEqual(input_ids[0], tokenizer.bos_token_id)
         self.assertNotEqual(input_ids[-1], tokenizer.eos_token_id)
+
+    @slow
+    @require_tokenizers
+    def test_llama_tokenizer_class_replaced_by_registered_class_keeps_llama_defaults(self):
+        # The Hub `tokenizer_class` is `LlamaTokenizerFast`, but the model type's registered class loads instead
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B")
+        self.assertIsInstance(tokenizer, Qwen2Tokenizer)
+        self.assertEqual(tokenizer.padding_side, "left")
+        input_ids = tokenizer("hello").input_ids
+        self.assertEqual(input_ids[0], tokenizer.bos_token_id)
+        self.assertNotEqual(input_ids[-1], tokenizer.eos_token_id)
+
+    @parameterized.expand(
+        [
+            # `tokenizer.json` sets right padding
+            ("Salesforce/SFR-Embedding-Mistral", "right"),
+            ("intfloat/e5-mistral-7b-instruct", "left"),
+        ]
+    )
+    @slow
+    @require_tokenizers
+    def test_llama_tokenizer_class_keeps_add_eos_token_from_config(self, repo_id, padding_side):
+        # The config only sets `add_eos_token: true`, so BOS is still added by default
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        tokens = tokenizer.convert_ids_to_tokens(tokenizer("hello").input_ids)
+        self.assertEqual(tokens, ["<s>", "▁hell", "o", "</s>"])
+        self.assertEqual(tokenizer.padding_side, padding_side)
 
     @slow
     def test_tokenizer_from_pretrained(self):

@@ -505,28 +505,18 @@ def _use_mistral_format(
     return resolve_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **probe_kwargs)[0]
 
 
-def _tokenizers_backend_in_place_of_hub_class(
-    hub_class_name: str | None,
-    tokenizer_config: dict,
-    pretrained_model_name_or_path: str | os.PathLike[str],
-    *inputs,
-    **kwargs,
-):
-    """Load `TokenizersBackend` in place of a model-specific Hub `tokenizer_class`, keeping that class's behaviour:
-    - its default padding side, unless `tokenizer_config.json` sets one.
-    - `add_bos_token` / `add_eos_token` from `tokenizer_config.json`, even when the `tokenizer.json` post-processor
-      doesn't add those tokens."""
-    hub_class = tokenizer_class_from_name(hub_class_name) if hub_class_name is not None else None
-    is_model_specific = (
-        isinstance(hub_class, type) and issubclass(hub_class, TokenizersBackend) and hub_class is not TokenizersBackend
-    )
-    if is_model_specific:
-        kwargs["_hub_class_padding_side"] = hub_class.padding_side
-        if "add_bos_token" in tokenizer_config:
-            kwargs.setdefault("add_bos_token", tokenizer_config["add_bos_token"])
-        if "add_eos_token" in tokenizer_config:
-            kwargs.setdefault("add_eos_token", tokenizer_config["add_eos_token"])
-    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+def _keep_llama_tokenizer_defaults(tokenizer, tokenizer_config: dict, kwargs: dict):
+    """When the hub declares `LlamaTokenizer` but `AutoTokenizer` loads another class, keep the v4 llama defaults:
+    add bos, no eos, pad left. User-passed kwargs, `tokenizer_config.json` and `tokenizer.json` padding still win.
+    See https://github.com/huggingface/transformers/pull/51078"""
+    for name, default in (("add_bos_token", True), ("add_eos_token", False)):
+        setattr(tokenizer, name, kwargs.get(name, tokenizer_config.get(name, default)))
+    if (
+        "padding_side" not in kwargs
+        and "padding_side" not in tokenizer_config
+        and tokenizer.backend_tokenizer.padding is None
+    ):
+        tokenizer.padding_side = tokenizer.init_kwargs["padding_side"] = "left"
 
 
 def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
@@ -836,7 +826,6 @@ class AutoTokenizer:
                 config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         config_model_type = config.model_type
-        config_model_name = config.model_name if hasattr(config, "model_name") else None
 
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
@@ -853,97 +842,66 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # Some specific checkpoints need TokenizersBackend because their config on the Hub really needs to be updated.
-        _config_name_or_path = (
-            name.lower() if isinstance((name := getattr(config, "_name_or_path", None)), str) else ""
+        # Some checkpoints load another class than the Hub `tokenizer_class`
+        hub_class = (tokenizer_config_class or getattr(config, "tokenizer_class", None) or "").removesuffix("Fast")
+        registered_class = (TOKENIZER_MAPPING_NAMES.get(config_model_type) or "").removesuffix("Fast")
+        config_model_name = getattr(config, "model_name", None)
+        hub_class_is_wrong = (
+            config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+            or config_model_name in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
         )
-        _hub_declared_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
-        if (
-            tokenizer_auto_map is None
-            and TokenizersBackend is not None
-            and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
-        ):
-            return _tokenizers_backend_in_place_of_hub_class(
-                _hub_declared_class, tokenizer_config, pretrained_model_name_or_path, *inputs, **kwargs
-            )
-
-        # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend
-        # because LlamaTokenizer hardcodes Metaspace. Skip Mistral checkpoints (also ByteLevel) so
-        # they still go through the tekken-first MistralCommonBackend check below.
-        if (
-            tokenizer_auto_map is None
-            and TokenizersBackend is not None
-            and _hub_declared_class is not None
-            and _hub_declared_class.removesuffix("Fast") == "LlamaTokenizer"
-            and (TOKENIZER_MAPPING_NAMES.get(config_model_type) or "").removesuffix("Fast") != "MistralCommonBackend"
-            and config_model_type not in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
-            and config_model_name not in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+        backend_classes = ("TokenizersBackend", "PythonBackend", "PreTrainedTokenizerFast")
+        generic_classes = (*backend_classes, "MistralCommonBackend")
+        name_or_path = name.lower() if isinstance((name := getattr(config, "_name_or_path", None)), str) else ""
+        class_name = None
+        if tokenizer_auto_map is not None:
+            pass
+        # Specific checkpoints whose Hub config needs updating
+        elif any(fnmatch.fnmatch(name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND):
+            class_name = "TokenizersBackend"
+        # A ByteLevel (Llama3 style) `tokenizer.json` can't load in `LlamaTokenizer`, which hardcodes Metaspace.
+        # Mistral checkpoints (also ByteLevel) go through the tekken-first `MistralCommonBackend` check below.
+        elif (
+            hub_class == "LlamaTokenizer"
+            and registered_class != "MistralCommonBackend"
+            and not hub_class_is_wrong
             and TokenizersBackend._tokenizer_json_has_byte_level(pretrained_model_name_or_path, **kwargs)
         ):
             logger.warning_once(
-                f"`tokenizer_class` is `{_hub_declared_class}` but `tokenizer.json` is ByteLevel; "
-                "loading `TokenizersBackend`. Set `tokenizer_class` to `TokenizersBackend` in "
-                "`tokenizer_config.json`."
+                f"`tokenizer_class` is `{hub_class}` but `tokenizer.json` is ByteLevel; loading `TokenizersBackend`. "
+                "Set `tokenizer_class` to `TokenizersBackend` in `tokenizer_config.json`."
             )
-            return _tokenizers_backend_in_place_of_hub_class(
-                _hub_declared_class, tokenizer_config, pretrained_model_name_or_path, *inputs, **kwargs
-            )
-
-        # if there is a config, we can check that the tokenizer class != than model class.
-        # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
-        # Hub class should prioritize tokenizer_config.json or fallback to config.tokenizer_class.
-        _hub_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
-        if (
-            tokenizer_auto_map is None
-            and _hub_class is not None
-            and config_model_type is not None
-            and config_model_type != ""
-            and TOKENIZER_MAPPING_NAMES.get(config_model_type) is not None
-            and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
-            != (_hub_class.removesuffix("Fast"))
+            class_name = "TokenizersBackend"
+        # Otherwise only a Hub class that differs from the one registered for the model type is replaced
+        elif not hub_class or not registered_class or hub_class == registered_class:
+            pass
+        elif registered_class not in generic_classes and hub_class_is_wrong:
+            class_name = registered_class
+        elif (
+            registered_class not in generic_classes
+            and (tokenizer_class_from_name(hub_class) or TokenizersBackend).__name__ not in backend_classes
         ):
-            registered_class_name = TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast")
-            if registered_class_name not in (
-                "TokenizersBackend",
-                "PythonBackend",
-                "PreTrainedTokenizerFast",
-                "MistralCommonBackend",
-            ):
-                # If the hub class is known incorrect for this model type, use the registered class; otherwise trust the hub.
-                class_name = (
-                    registered_class_name
-                    if (
-                        config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
-                        or config_model_name in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
-                    )
-                    else _hub_class
-                )
-                tokenizer_class = tokenizer_class_from_name(class_name)
-                if tokenizer_class is not None and tokenizer_class.__name__ not in (
-                    "TokenizersBackend",
-                    "PythonBackend",
-                    "PreTrainedTokenizerFast",
-                ):
-                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            class_name = hub_class
+        elif (
+            registered_class == "MistralCommonBackend"
+            and "fix_mistral_regex" not in kwargs
+            and _use_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **kwargs)
+        ):
+            class_name = "MistralCommonBackend"
+        else:
+            class_name = "TokenizersBackend"
 
-            if (
-                registered_class_name == "MistralCommonBackend"
-                and "fix_mistral_regex" not in kwargs
-                and _use_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **kwargs)
-            ):
-                tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
-                if tokenizer_class is not None:
-                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
-            if TokenizersBackend is not None:
-                return _tokenizers_backend_in_place_of_hub_class(
-                    _hub_class, tokenizer_config, pretrained_model_name_or_path, *inputs, **kwargs
-                )
-
-            raise ValueError(
-                f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
-                f"The tokenizer may need to be converted or re-saved."
+        if class_name is not None:
+            tokenizer = tokenizer_class_from_name(class_name).from_pretrained(
+                pretrained_model_name_or_path, *inputs, **kwargs
             )
+            if (
+                hub_class == "LlamaTokenizer"
+                and class_name != "LlamaTokenizer"
+                and isinstance(tokenizer, TokenizersBackend)
+            ):
+                _keep_llama_tokenizer_defaults(tokenizer, tokenizer_config, kwargs)
+            return tokenizer
 
         if tokenizer_config_class and tokenizer_config_class.endswith("Fast"):
             tokenizer_config_class = tokenizer_config_class[:-4]
