@@ -20,11 +20,9 @@ from unittest import mock
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
-    require_cuda_capability_at_least,
     require_kernels,
     require_torch,
     require_torch_accelerator_memory,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -40,7 +38,7 @@ if is_torch_available():
 
     from transformers import BailingHybridConfig, BailingHybridForCausalLM, BailingHybridModel, FineGrainedFP8Config
     from transformers.generation.utils import ALL_CACHE_NAMES
-    from transformers.integrations.finegrained_fp8 import FP8Linear
+    from transformers.integrations.finegrained_fp8 import FP8Experts, FP8Linear
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
@@ -182,6 +180,32 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
             outputs = lora_model(**self._prepare_for_class(inputs_dict, BailingHybridForCausalLM))
         self.assertEqual(outputs.logits.shape[:2], inputs_dict["input_ids"].shape)
 
+    def test_swiglu_clipping(self):
+        config = self.model_tester.get_config()
+        config.mlp_layer_types = ["sparse"] * config.num_hidden_layers
+        config.expert_swiglu_limit_list = [0, 1.5]
+        config.share_expert_swiglu_limit_list = [2.5, 0]
+        with torch.device("meta"):
+            model = BailingHybridForCausalLM(config)
+
+        gate_up = torch.tensor([[4.0, -4.0, 4.0, -4.0]], device=torch_device)
+        expected = torch.tensor([[15.71222, 0.287779], [2.25, 0.107917]], device=torch_device)
+        for i, layer in enumerate(model.model.layers):
+            torch.testing.assert_close(layer.mlp.experts._apply_gate(gate_up), expected[i : i + 1])
+            shared = layer.mlp.shared_experts.to_empty(device=torch_device)
+            nn.init.constant_(shared.gate_proj.weight, 4 / config.hidden_size)
+            nn.init.constant_(shared.up_proj.weight, 4 / config.hidden_size)
+            nn.init.constant_(shared.down_proj.weight, 1 / shared.intermediate_size)
+            with torch.no_grad():
+                output = shared(torch.ones(1, config.hidden_size, device=torch_device))
+            torch.testing.assert_close(output, torch.full_like(output, [6.25, 15.71222][i]))
+
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config())
+        quantizer._process_model_before_weight_loading(model)
+        for i, layer in enumerate(model.model.layers):
+            self.assertIsInstance(layer.mlp.experts, FP8Experts)
+            torch.testing.assert_close(layer.mlp.experts._apply_gate(gate_up), expected[i : i + 1])
+
     def test_fp8_mixed_precision_modules(self):
         config = self.model_tester.get_config()
         config.q_lora_rank = 12
@@ -293,79 +317,12 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
+@slow
 @require_kernels
-@require_torch
+@require_torch_accelerator_memory(memory=600)
 class BailingHybridIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "inclusionAI/Ling-3.1-flash"
 
-    @require_torch_gpu
-    @require_cuda_capability_at_least(9, 0)
-    def test_fp8_clipping(self):
-        torch.manual_seed(0)
-        config = BailingHybridConfig(
-            vocab_size=32,
-            pad_token_id=0,
-            bos_token_id=1,
-            eos_token_id=31,
-            hidden_size=128,
-            intermediate_size=128,
-            moe_intermediate_size=128,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            head_dim=32,
-            qk_nope_head_dim=16,
-            qk_rope_head_dim=16,
-            v_head_dim=32,
-            kv_lora_rank=16,
-            num_experts=2,
-            num_experts_per_token=2,
-            num_expert_group=1,
-            topk_group=1,
-            num_shared_experts=1,
-            num_nextn_predict_layers=0,
-            first_k_dense_replace=0,
-            short_conv_kernel_size=2,
-            layer_types=["linear_attention", "full_attention"],
-            expert_swiglu_limit_list=[0, 1.5],
-            share_expert_swiglu_limit_list=[2.5, 0],
-        )
-        model = BailingHybridForCausalLM(config).to(dtype=torch.bfloat16)
-        with torch.no_grad():
-            for layer in model.model.layers:
-                for parameter in layer.mlp.experts.parameters():
-                    parameter.normal_(std=0.25)
-                for parameter in layer.mlp.shared_experts.parameters():
-                    parameter.normal_(std=0.25)
-        excluded = ["lm_head"]
-        for i in range(config.num_hidden_layers):
-            excluded.extend(f"model.layers.{i}.{name}" for name in ("attention", "mlp.gate", "mlp.shared_experts"))
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory)
-            model = BailingHybridForCausalLM.from_pretrained(
-                directory,
-                quantization_config=FineGrainedFP8Config(modules_to_not_convert=excluded),
-                device_map=torch_device,
-                dtype=torch.bfloat16,
-                experts_implementation="batched_mm",
-                attn_implementation="eager",
-            ).eval()
-        for layer in model.model.layers:
-            self.assertEqual(layer.mlp.experts.gate_up_proj.dtype, torch.float8_e4m3fn)
-        input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
-        with torch.inference_mode():
-            logits = model(input_ids, use_cache=False).logits[0, -2:, :8].float()
-        expected = torch.tensor(
-            [
-                [-0.1602, 0.1040, 0.0471, 0.2637, -0.6367, 0.2754, -0.2910, 0.2461],
-                [-0.0128, -0.0752, 0.1836, -0.1719, 0.0625, 0.2129, 0.0082, 0.3633],
-            ],
-            device=torch_device,
-        )
-        torch.testing.assert_close(logits, expected, rtol=1e-2, atol=5e-3)
-
-    @slow
-    @require_torch_accelerator_memory(memory=600)
     def test_ling_3_1_flash_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForCausalLM.from_pretrained(

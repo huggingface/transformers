@@ -711,8 +711,6 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    """FP8 experts with an optional per-module limit and config-defined clipping order."""
-
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
 
@@ -745,8 +743,6 @@ class FP8Experts(nn.Module):
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit_after_act = getattr(config, "limit_after_act", False)
         self.limit = swiglu_limit if swiglu_limit is not None else getattr(config, "swiglu_limit", None)
-        if self.limit_after_act:
-            self.limit = self.limit or float("inf")
         self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
         self.up_softcap = getattr(config, "mlp_up_softcap", None)
 
