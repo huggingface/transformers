@@ -425,7 +425,7 @@ class DeferredStopCheck(StopCheck):
         # outputs or if the user passed an explicit Cache object
         self.cache = cache if cache_is_returned else None
         if self.cache is not None:
-            self.cache.activate_past_recording()
+            self.cache.activate_past_recording(recurrent_states_to_keep=1)  # we will crop at most 1 token
         pinned = input_ids.device.type == "cuda"
         self.slots = deque(
             (
@@ -2337,7 +2337,9 @@ class GenerationMixin(ContinuousMixin):
 
         # If we just created a cache for an assistant model, mark it for past recording, as we will need to rollback it
         if generation_config.is_assistant:
-            model_kwargs["cache"].activate_past_recording()
+            model_kwargs["cache"].activate_past_recording(
+                recurrent_states_to_keep=generation_config.num_assistant_tokens
+            )
 
     def _supports_logits_to_keep(self: "GenerativePreTrainedModel") -> bool:
         """
@@ -3976,11 +3978,9 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        # Make sure we can record past on the cache
         cache = model_kwargs.get("cache")
         if cache is None:
             raise RuntimeError("Assisted decoding requires a cache")
-        cache.activate_past_recording()
 
         # Same tensor the stopping criteria are built from
         eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
@@ -3996,6 +3996,10 @@ class GenerationMixin(ContinuousMixin):
             assistant_tokenizer=assistant_tokenizer,
             model_kwargs=model_kwargs,
         )
+
+        # Make sure we can record past on the cache
+        cache.activate_past_recording(recurrent_states_to_keep=candidate_generator.number_of_drafting_tokens)
+
         # init values
         do_sample = generation_config.do_sample
         output_attentions = generation_config.output_attentions

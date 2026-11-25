@@ -208,7 +208,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
         self.record_past = False
 
-    def activate_past_recording(self):
+    def activate_past_recording(self, **kwargs):
         """
         Calling this function will activate past state recording, meaning that a call to `update` will wait for a call to `crop`
         before restricting the size of the `k/v_states` to `sliding_window`, to be able to retrieve previous full states.
@@ -1095,7 +1095,6 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.device = None
         self.dtype = None
         self.record_past = False
-        self.recurrent_states_history = {}
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
@@ -1157,13 +1156,15 @@ class LinearAttentionCacheLayerMixin(ABC):
         """
         return not self.record_past
 
-    def activate_past_recording(self):
+    def activate_past_recording(self, recurrent_states_to_keep: int | None = None):
         """
         Calling this function will activate past state recording, meaning that a call to `update_conv_states` will
         wait for a call to `crop` before restricting the size of the `conv_states` to `conv_kernel_size`, to be able
         to retrieve previous full states.
+        If `recurrent_states_to_keep` is provided, the recurrent states for the last `recurrent_states_to_keep` steps will be recorded.
         """
         self.record_past = True
+        self.recurrent_states_to_keep = recurrent_states_to_keep
         self.recurrent_states_history = {}
 
     def crop(self, tokens_to_remove: int):
@@ -1895,19 +1896,26 @@ class Cache:
         for layer_idx in range(len(self.layers)):
             self.layers[layer_idx].batch_select_indices(indices)
 
-    def activate_past_recording(self):
+    def activate_past_recording(self, **kwargs):
         """
         Calling this function will activate past state recording, meaning that cache with fixed size such as a linear cache will
         wait for a call to `crop` before restricting the size of its cached states, in order to be able to retrieve previous full states.
         """
         for layer_idx in range(len(self.layers)):
             if hasattr(self.layers[layer_idx], "activate_past_recording"):
-                self.layers[layer_idx].activate_past_recording()
+                self.layers[layer_idx].activate_past_recording(**kwargs)
 
     def is_recording_past(self, layer_idx: int) -> bool:
         """Returns a boolean indicating if the layer at index `layer_idx` is recording past states. If the layer cannot
         record past states and is missing the `record_past` attribute, this returns False."""
         return getattr(self.layers[layer_idx], "record_past", False)
+
+    def get_recurrent_states_to_keep(self, layer_idx: int) -> int:
+        """Returns the number of intermediate recurrent states to compute if we are recording the past on a linear layer with recurrent
+        states."""
+        if not self.is_recording_past(layer_idx):
+            return 0
+        return getattr(self.layers[layer_idx], "recurrent_states_to_keep", 0)
 
     @property
     def batch_size(self) -> int:
@@ -2402,8 +2410,8 @@ class EncoderDecoderCache(Cache):
     def is_croppable(self) -> bool:
         return self.self_attention_cache.is_croppable
 
-    def activate_past_recording(self):
-        self.self_attention_cache.activate_past_recording()
+    def activate_past_recording(self, **kwargs):
+        self.self_attention_cache.activate_past_recording(**kwargs)
 
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.

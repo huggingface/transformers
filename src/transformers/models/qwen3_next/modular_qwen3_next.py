@@ -584,11 +584,11 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 **kwargs,
             )
         else:
-            num_intermediate_recurrent_states = 10
-            # Cannot be more than the number of tokens
             num_intermediate_recurrent_states = (
-                min(num_intermediate_recurrent_states, seq_len) if num_intermediate_recurrent_states is not None else 0
+                cache.get_recurrent_states_to_keep(self.layer_idx) if cache is not None else 0
             )
+            # Cannot be more than the number of tokens
+            num_intermediate_recurrent_states = min(num_intermediate_recurrent_states, seq_len)
             # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
             effective_sequence_length = seq_len - num_intermediate_recurrent_states
             chunked_query, sequential_query = torch.tensor_split(query, [effective_sequence_length], dim=1)
