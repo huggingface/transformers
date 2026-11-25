@@ -89,9 +89,6 @@ class AriaTextConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_rowwise",
-        "layers.*.mlp.experts.down_proj": "colwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -691,7 +688,7 @@ class AriaTextMoELayer(nn.Module):
 
 
 class AriaTextAttention(LlamaAttention):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    pass
 
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
@@ -739,10 +736,8 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
-    base_model_prefix = "model"
     _no_split_modules = ["AriaTextDecoderLayer"]
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = True
     input_modalities = ("image", "text")
 
     def _init_weights(self, module):
@@ -903,8 +898,6 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     @auto_docstring
     def get_image_features(
         self,

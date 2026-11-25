@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_essentia_available, is_librosa_available, is_scipy_available, is_torch_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -42,53 +43,43 @@ if is_torch_available():
 
 
 @require_torch
-class Pop2PianoModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        decoder_seq_length=9,
+class Pop2PianoModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 9,
         # For common tests
-        is_training=False,
-        use_attention_mask=True,
-        use_labels=True,
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        eos_token_id=1,
-        pad_token_id=0,
-        decoder_start_token_id=0,
-        scope=None,
-        decoder_layers=None,
-    ):
+        "is_training": False,
+        "use_attention_mask": True,
+        "use_labels": True,
+        "hidden_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "decoder_start_token_id": 0,
+        "decoder_layers": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # For common tests
+        values["seq_length"] = values["decoder_seq_length"]
+        values["scope"] = None
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.scope = None
-        self.decoder_layers = decoder_layers
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -400,6 +391,8 @@ class Pop2PianoModelTester:
 
 @require_torch
 class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Pop2PianoModelTester
+
     all_model_classes = (Pop2PianoForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests. Has custom generation method with a different interface
     all_generative_model_classes = ()

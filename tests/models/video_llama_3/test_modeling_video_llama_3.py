@@ -52,6 +52,7 @@ from transformers.utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -274,37 +275,33 @@ def _test_encoder_eager_matches_sdpa_inference(
                 )
 
 
-class VideoLlama3VisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        patch_size=2,
-        num_channels=3,
-        image_size=14,
-        is_training=True,
-        hidden_size=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class VideoLlama3VisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "patch_size": 2,
+        "num_channels": 3,
+        "image_size": 14,
+        "is_training": True,
+        "hidden_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = (values["image_size"] // values["patch_size"]) ** 2
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.seq_length = (self.image_size // self.patch_size) ** 2
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return VideoLlama3VisionConfig(
@@ -347,6 +344,8 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as SIGLIP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = VideoLlama3VisionModelTester
 
     all_model_classes = (VideoLlama3VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw", "merge_sizes"]
@@ -533,16 +532,15 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-class VideoLlama3VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        image_size=14,
-        is_training=True,
-        text_config={
+class VideoLlama3VisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "num_channels": 3,
+        "image_size": 14,
+        "is_training": True,
+        "text_config": {
             "attention_dropout": 0.0,
             "bos_token_id": 0,
             "eos_token_id": 1,
@@ -563,7 +561,7 @@ class VideoLlama3VisionText2TextModelTester:
             "tie_word_embeddings": True,
             "vocab_size": 99,
         },
-        vision_config={
+        "vision_config": {
             "attention_dropout": 0.0,
             "hidden_act": "gelu_pytorch_tanh",
             "hidden_size": 32,
@@ -575,27 +573,26 @@ class VideoLlama3VisionText2TextModelTester:
             "num_hidden_layers": 2,
             "patch_size": 14,
         },
-        use_token_compression=True,
-        image_token_id=3,
-        video_token_id=4,
-    ):
+        "use_token_compression": True,
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "num_image_tokens": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["patch_size"] = values["vision_config"]["patch_size"]
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.hidden_size = text_config["hidden_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.patch_size = vision_config["patch_size"]
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.use_token_compression = use_token_compression
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.num_image_tokens = 1
-        self.seq_length = seq_length + self.num_image_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return VideoLlama3Config(
@@ -643,6 +640,8 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     """
     Model tester for `VideoLlama3ForConditionalGeneration`.
     """
+
+    model_tester_class = VideoLlama3VisionText2TextModelTester
 
     all_model_classes = (
         (
@@ -735,6 +734,7 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
                 if 0 in inputs_dict["attention_mask"][:, -1]:
                     inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
+                    inputs_dict["input_ids"] = inputs_dict["input_ids"].flip(1)
                 dummy_attention_mask = inputs_dict["attention_mask"]
                 inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
 

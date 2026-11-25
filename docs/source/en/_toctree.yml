@@ -769,6 +769,8 @@
         title: KimiLinear
       - local: model_doc/kolibri1
         title: Kolibri1
+      - local: model_doc/kolibri1_1
+        title: Kolibri1_1
       - local: model_doc/laguna
         title: Laguna
       - local: model_doc/lara_mini
@@ -945,6 +947,8 @@
         title: RWKV
       - local: model_doc/sarvam_mla
         title: SarvamMLA
+      - local: model_doc/sarvam_moe
+        title: SarvamMoE
       - local: model_doc/seed_oss
         title: Seed-Oss
       - local: model_doc/smollm3
@@ -1449,6 +1453,8 @@
         title: Inkling
       - local: model_doc/inkling2
         title: Inkling2
+      - local: model_doc/inkling2_loop
+        title: Inkling2Loop
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/instructblipvideo
@@ -1527,6 +1533,8 @@
         title: OneFormer
       - local: model_doc/ovis2
         title: Ovis2
+      - local: model_doc/ovis2_5
+        title: Ovis2.5
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/owlv2
@@ -1545,6 +1553,8 @@
         title: Phi4 Multimodal
       - local: model_doc/pi0
         title: PI0
+      - local: model_doc/pi05
+        title: PI0.5
       - local: model_doc/pix2struct
         title: Pix2Struct
       - local: model_doc/pixtral

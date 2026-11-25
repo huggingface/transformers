@@ -28,7 +28,7 @@ import torch
 from packaging import version
 
 from ..utils import logging
-from ..utils.import_utils import is_kernels_available, maybe_import_error
+from ..utils.import_utils import is_kernels_available, is_rocm_platform, maybe_import_error
 from .hub_kernels import lazy_load_kernel
 
 
@@ -59,9 +59,9 @@ def is_sonicmoe_loadable(raise_error: bool = False) -> bool:
             "sonic-moe requires the `kernels` package. Use a different `experts_implementation`.",
             raise_error=raise_error,
         )
-    if not torch.cuda.is_available():
+    if is_rocm_platform() or not torch.cuda.is_available():
         return maybe_import_error(
-            "sonic-moe kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`.",
+            "sonic-moe kernel requires CUDA on an NVIDIA GPU. Use a different `experts_implementation`.",
             raise_error=raise_error,
         )
     major = torch.cuda.get_device_capability()[0]

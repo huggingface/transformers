@@ -34,6 +34,7 @@ from transformers.testing_utils import (
 )
 from transformers.video_utils import load_video
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -45,21 +46,28 @@ if is_torch_available():
     from transformers import Cosmos3EdgeTextModel
 
 
-class Cosmos3EdgeTextModelTester:
+class Cosmos3EdgeTextModelTester(ModelTesterConfigMixin):
     """Tiny text-only inputs for the common model-test suite."""
 
-    def __init__(self, parent):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "seq_length": 7,
+        "vocab_size": 97,
+        "hidden_size": 32,
+        "intermediate_size": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "is_training": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = 3
-        self.seq_length = 7
-        self.vocab_size = 97
-        self.hidden_size = 32
-        self.intermediate_size = 64
-        self.num_hidden_layers = 2
-        self.num_attention_heads = 4
-        self.num_key_value_heads = 2
-        self.head_dim = 8
-        self.is_training = True
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return Cosmos3EdgeTextConfig(
@@ -95,6 +103,8 @@ class Cosmos3EdgeTextModelTester:
 
 @require_torch
 class Cosmos3EdgeTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Cosmos3EdgeTextModelTester
+
     all_model_classes = (Cosmos3EdgeTextModel,) if is_torch_available() else ()
 
     def setUp(self):

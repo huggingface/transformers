@@ -1572,6 +1572,24 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
             reloaded_tokenizer(test_sentence, padding="max_length").input_ids,
         )
 
+    def test_model_card_hf_jobs(self):
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = Trainer(model=RegressionPreTrainedModel(config), args=TrainingArguments(output_dir=tmp_dir))
+            readme = Path(tmp_dir) / "README.md"
+
+            with patch.dict(os.environ):
+                os.environ.pop("HF_JOB_ID", None)
+                trainer.create_model_card()
+            self.assertNotIn("hf_jobs", readme.read_text())
+            self.assertNotIn("Hugging Face Jobs", readme.read_text())
+
+            with patch.dict(os.environ, {"HF_JOB_ID": "job-id", "HF_JOB_FLAVOR": "a10g-small"}):
+                trainer.create_model_card(tags="custom")
+            card = ModelCard.load(readme)
+            self.assertEqual(card.data.tags, ["custom", "generated_from_trainer", "hf_jobs"])
+            self.assertIn("on `a10g-small` hardware", card.text)
+
     @require_vision
     @require_torchvision
     def test_trainer_saves_image_processor(self):

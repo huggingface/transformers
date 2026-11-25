@@ -171,6 +171,41 @@ class Ovis2ImageProcessor(TorchvisionBackend):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Ovis2ImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns number patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        images_kwargs = images_kwargs or {}
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        use_covering_area_grid = images_kwargs.get("use_covering_area_grid", self.use_covering_area_grid)
+        size = images_kwargs.get("size", self.size)
+
+        if not crop_to_patches or max_patches <= 1:
+            return 1
+        if use_covering_area_grid:
+            num_columns, num_rows = get_min_tile_covering_grid(
+                (height, width), target_patch_size=size["height"], max_image_tiles=max_patches
+            )
+        else:
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (height, width), (size["height"], size["width"]), min_patches, max_patches
+            )
+        num_blocks = num_columns * num_rows
+        # A thumbnail of the whole image is prepended when there is more than one block
+        return num_blocks + 1 if num_blocks > 1 else 1
+
     def crop_image_to_patches(
         self,
         images: "torch.Tensor",

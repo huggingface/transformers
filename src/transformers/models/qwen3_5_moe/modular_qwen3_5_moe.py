@@ -32,6 +32,7 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
     Qwen3_5MLP,
     Qwen3_5Model,
+    Qwen3_5RMSNorm,
     Qwen3_5TextModel,
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionModel,
@@ -48,7 +49,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextExperts,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
-    Qwen3NextRMSNorm,
     Qwen3NextSparseMoeBlock,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
@@ -97,9 +97,6 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
         "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
@@ -199,8 +196,7 @@ class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
     pass
 
 
-@use_kernel_forward_from_hub("RMSNormZeroCentered")
-class Qwen3_5MoeRMSNorm(Qwen3NextRMSNorm):
+class Qwen3_5MoeRMSNorm(Qwen3_5RMSNorm):
     pass
 
 
