@@ -21,35 +21,17 @@ env:
 permissions: {}
 
 jobs:
-  vllm-test-examples:
-    permissions:
-      contents: read
-    name: Test vLLM examples and weight mapping
-    # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
-    # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
-    runs-on:
-      group: aws-m8i-8xl-cache
-    container:
-      image: huggingface/transformers-torch-light
-      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
-    env:
-      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-    # The vLLM commit (and its date) shown in the Slack report (`vllm-ci-report` job).
-    # TODO: each CPU test job finds the latest vLLM commit with a CPU wheel on its own, when it starts. If a new
-    # nightly wheel is published during the run, jobs can test different vLLM commits, and the one reported (from
-    # this job) is not the one of every job. Fix: find the commit once in a separate job used by all CPU jobs.
+  # The vLLM commit tested by all the CPU jobs: the latest vLLM commit with a built CPU wheel (nightly), found once (each job
+  # used to look it up when it started, so a wheel published during the run made jobs test different vLLM commits), and
+  # its date. Both are shown in the report (`vllm-ci-report`).
+  find-vllm-commit:
+    name: Find the vLLM commit to test
+    runs-on: ubuntu-latest
+    permissions: {}
     outputs:
       vllm_commit: ${{ steps.find-vllm-commit.outputs.vllm_commit }}
       vllm_commit_date: ${{ steps.vllm-commit-date.outputs.vllm_commit_date }}
-
     steps:
-      - name: Checkout Transformers
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          repository: huggingface/transformers
-          persist-credentials: false
-          path: transformers
-
       - name: Find latest vLLM commit with built CPU wheel
         id: find-vllm-commit
         run: |
@@ -65,9 +47,44 @@ jobs:
             echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
             exit 1
           fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vllm_commit=$VLLM_COMMIT" >> $GITHUB_OUTPUT
+          echo "vllm_commit=$VLLM_COMMIT" >> "$GITHUB_OUTPUT"
           echo "vLLM commit: $VLLM_COMMIT"
+
+      - name: Get vLLM commit date
+        id: vllm-commit-date
+        env:
+          VLLM_COMMIT: ${{ steps.find-vllm-commit.outputs.vllm_commit }}
+        run: |
+          # Only the commit itself (no checkout): its date, shown in the report.
+          git init -q vllm
+          git -C vllm fetch -q --depth 1 https://github.com/vllm-project/vllm "$VLLM_COMMIT" || true
+          VLLM_COMMIT_DATE=$(TZ=UTC git -C vllm log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC' FETCH_HEAD || true)
+          echo "vllm_commit_date=$VLLM_COMMIT_DATE" >> "$GITHUB_OUTPUT"
+          echo "vLLM commit date: $VLLM_COMMIT_DATE"
+
+  vllm-test-examples:
+    permissions:
+      contents: read
+    name: Test vLLM examples and weight mapping
+    needs: find-vllm-commit
+    # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
+    # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -76,13 +93,6 @@ jobs:
           ref: ${{ env.VLLM_COMMIT }}
           persist-credentials: false
           path: vllm
-
-      - name: Get vLLM commit date
-        id: vllm-commit-date
-        run: |
-          VLLM_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -C vllm log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC' || true)
-          echo "vllm_commit_date=$VLLM_COMMIT_DATE" >> $GITHUB_OUTPUT
-          echo "vLLM commit date: $VLLM_COMMIT_DATE"
 
       - name: Set up Python 3.12 environment
         run: |
@@ -197,6 +207,7 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -208,6 +219,7 @@ jobs:
         shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -217,22 +229,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -346,6 +342,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -357,6 +354,7 @@ jobs:
         shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -366,22 +364,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -561,6 +543,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -572,6 +555,7 @@ jobs:
         shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
       SHARD_ID: ${{ matrix.shard }}
 
     steps:
@@ -581,22 +565,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -668,6 +636,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM tokenizers, chat templates and configs"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -675,6 +644,7 @@ jobs:
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
 
     steps:
       - name: Checkout Transformers
@@ -683,22 +653,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -812,6 +766,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs (shard ${{ matrix.shard }} / 4)"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -823,6 +778,7 @@ jobs:
         shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
       SHARD_ID: ${{ matrix.shard }}
       # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
       VLLM_CPU_CI_ENV: "1"
@@ -834,22 +790,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -921,7 +861,7 @@ jobs:
             --deselect 'tests/models/multimodal/pooling/test_siglip.py::test_models[float-google/siglip2-giant-opt-patch16-384]'
 
       # A few small language models that vLLM doesn't mark `cpu_model` (same transformers comparison as above). In one shard
-      # (only 3 models). The other models of this file run in "Test: other language models generation".
+      # (only 3 models). The other models of this file run in `vllm-test-hf-comparison-language`.
       - name: "Test: more language models generation"
         if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: vllm
@@ -937,25 +877,6 @@ jobs:
         working-directory: vllm
         run: |
           pytest -v -s tests/samplers/test_beam_search.py::test_beam_search_single_input
-
-      # The other models of tests/models/language/generation/test_common.py that vLLM doesn't mark `cpu_model` (up to 8B),
-      # and Mistral-7B (test_mistral.py), on 2 shards. Not included: MiniCPM4.1-8B and HyperCLOVAX-SEED-Think-14B
-      # (`large_gpu_mark`: skip on CPU), chatglm3-6b (skips with transformers main: `max_transformers_version="4.48"` in
-      # vLLM's tests/models/registry.py).
-      - name: "Test: other language models generation (shard ${{ matrix.shard }} / 4)"
-        if: ${{ !cancelled() && (matrix.shard == 1 || matrix.shard == 2) }}
-        working-directory: vllm
-        run: |
-          case "$SHARD_ID" in
-            1)
-              pytest -v -s tests/models/language/generation/test_common.py tests/models/language/generation/test_mistral.py::test_models \
-                -k "gpt2 or Qwen3-8B or Mistral-7B"
-              ;;
-            2)
-              pytest -v -s tests/models/language/generation/test_common.py \
-                -k "slovak-gpt-j-405M or tiny_starcoder_py or pythia-70m or starcoder2-3b or tiny-mixtral-30m or Apertus-8B or Domyn-Edge-Base"
-              ;;
-          esac
 
       # State-space / hybrid models (Zamba2, Granite 4.0, Falcon-H1, LFM2) vs transformers. In one shard. Not included:
       # - the tests of test_hybrid.py without a transformers reference (vLLM vs vLLM).
@@ -1045,14 +966,19 @@ jobs:
         run: |
           pytest -v -s 'tests/models/language/pooling_mteb_test/test_jina.py::test_embed_models_mteb[model_info2]'
 
-  # Multimodal generation with vLLM's Transformers modeling backend, compared with transformers (`hf_runner`): the
-  # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
-  # file (only ~12 tests in total, so `--num-shards` could leave a shard without tests).
-  vllm-test-multimodal-generation:
+  # The models of tests/models/language/generation/test_common.py that vLLM doesn't mark `cpu_model` (up to 8B; the
+  # `cpu_model` ones and opt-350m / phi-2 / stablelm-3b run in `vllm-test-hf-comparison`), and Mistral-7B
+  # (test_mistral.py), vs transformers. In their own job: after the steps of `vllm-test-hf-comparison` on the same runner,
+  # vLLM's CPU KV cache pre-check failed ("Available memory on node 0 (... GiB) ... is less than requested memory for kv
+  # (32.0 GiB)"): vLLM counts the memory used by the job so far (cgroup usage, incl. the page cache of the model files).
+  # Not included: MiniCPM4.1-8B and HyperCLOVAX-SEED-Think-14B (`large_gpu_mark`: skip on CPU), chatglm3-6b (skips with
+  # transformers main: `max_transformers_version="4.48"` in vLLM's tests/models/registry.py).
+  vllm-test-hf-comparison-language:
     permissions:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
-    name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
+    name: "Test vLLM vs transformers outputs, more language models (shard ${{ matrix.shard }} / 2)"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1061,10 +987,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        modality: [image, video, audio, omni]
+        shard: [0, 1]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-      MODALITY: ${{ matrix.modality }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
+      SHARD_ID: ${{ matrix.shard }}
       # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
       VLLM_CPU_CI_ENV: "1"
 
@@ -1076,21 +1003,98 @@ jobs:
           persist-credentials: false
           path: transformers
 
-      - name: Find latest vLLM commit with built CPU wheel
+      - name: Checkout vLLM at wheel commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: vllm-project/vllm
+          ref: ${{ env.VLLM_COMMIT }}
+          persist-credentials: false
+          path: vllm
+
+      - name: Set up Python 3.12 environment
         run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
+          uv venv /opt/venv312 --python 3.12
+          echo "VIRTUAL_ENV=/opt/venv312" >> $GITHUB_ENV
+          echo "/opt/venv312/bin" >> $GITHUB_PATH
+          echo "UV_PYTHON=" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          # Same as the other CPU jobs (see the comments in `vllm-test-multimodal-processing`).
+          TORCH_VERSION=$(sed -nE 's/^torch==([0-9.]+)\+cpu.*/\1/p' vllm/requirements/cpu.txt | head -n 1)
+          if [ -z "$TORCH_VERSION" ]; then
+            echo "ERROR: could not find the torch==<version>+cpu pin in vllm/requirements/cpu.txt" >&2
             exit 1
           fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
+          echo "torch version required by vLLM: $TORCH_VERSION"
+          uv pip install "torch==${TORCH_VERSION}" torchaudio torchvision torchcodec --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --no-deps timm accelerate
+          uv pip install librosa
+          uv pip install -e 'transformers/[sklearn,sentencepiece,vision,testing,tiktoken,num2words,video]'
+          uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+          uv pip install pytest-random-order 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
+          VLLM_USE_PRECOMPILED=1 VLLM_PRECOMPILED_WHEEL_VARIANT=cpu VLLM_TARGET_DEVICE=cpu VLLM_PRECOMPILED_WHEEL_COMMIT=$VLLM_COMMIT uv pip install --editable vllm/
+          uv pip install tblib pqdm
+          # Reinstall the transformers checkout (see `vllm-test-multimodal-processing`) and check it's the one imported.
+          uv pip install --no-deps -e transformers/
+          python -c "
+          import os, sys, transformers
+          path, expected = os.path.realpath(transformers.__file__), os.path.realpath('transformers/src/transformers')
+          print(f'transformers {transformers.__version__} imported from {path}')
+          if not path.startswith(expected + os.sep):
+              sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
+          "
+
+      - name: Pip freeze
+        run: pip freeze
+
+      - name: "Test: more language models generation (shard ${{ matrix.shard }} / 2)"
+        if: ${{ !cancelled() }}
+        working-directory: vllm
+        run: |
+          case "$SHARD_ID" in
+            0)
+              pytest -v -s tests/models/language/generation/test_common.py tests/models/language/generation/test_mistral.py::test_models \
+                -k "gpt2 or Qwen3-8B or Mistral-7B"
+              ;;
+            1)
+              pytest -v -s tests/models/language/generation/test_common.py \
+                -k "slovak-gpt-j-405M or tiny_starcoder_py or pythia-70m or starcoder2-3b or tiny-mixtral-30m or Apertus-8B or Domyn-Edge-Base"
+              ;;
+          esac
+
+  # Multimodal generation with vLLM's Transformers modeling backend, compared with transformers (`hf_runner`): the
+  # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
+  # file (only ~12 tests in total, so `--num-shards` could leave a shard without tests).
+  vllm-test-multimodal-generation:
+    permissions:
+      contents: read
+    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
+    name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
+    needs: find-vllm-commit
+    runs-on:
+      group: aws-m8i-8xl-cache
+    container:
+      image: huggingface/transformers-torch-light
+      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
+    strategy:
+      fail-fast: false
+      matrix:
+        modality: [image, video, audio, omni]
+    env:
+      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
+      MODALITY: ${{ matrix.modality }}
+      # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
+      VLLM_CPU_CI_ENV: "1"
+
+    steps:
+      - name: Checkout Transformers
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          repository: huggingface/transformers
+          persist-credentials: false
+          path: transformers
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -1161,6 +1165,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM structured output, detokenizer, parsers and video processing"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1168,6 +1173,7 @@ jobs:
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
 
     steps:
       - name: Checkout Transformers
@@ -1176,22 +1182,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -1319,6 +1309,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1330,6 +1321,7 @@ jobs:
         shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
       SHARD_ID: ${{ matrix.shard }}
       # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
       VLLM_CPU_CI_ENV: "1"
@@ -1341,22 +1333,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -1493,6 +1469,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, more multimodal models (shard ${{ matrix.shard }} / 8)"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1504,6 +1481,7 @@ jobs:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
       SHARD_ID: ${{ matrix.shard }}
       # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
       VLLM_CPU_CI_ENV: "1"
@@ -1515,22 +1493,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -1602,6 +1564,7 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, other areas (basic correctness, prompt embeds, tensorizer, quantization)"
+    needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
     container:
@@ -1609,6 +1572,7 @@ jobs:
       options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+      VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
       # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
       VLLM_CPU_CI_ENV: "1"
 
@@ -1619,22 +1583,6 @@ jobs:
           repository: huggingface/transformers
           persist-credentials: false
           path: transformers
-
-      - name: Find latest vLLM commit with built CPU wheel
-        run: |
-          METADATA=$(curl -fsSL https://wheels.vllm.ai/nightly/cpu/vllm/metadata.json)
-          VLLM_COMMIT=$(echo "$METADATA" | python3 -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          wheel = next(w for w in data if 'x86_64' in w['platform_tag'])
-          print(wheel['path'].split('/')[3])
-          ")
-          if [[ ! "$VLLM_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "ERROR: VLLM_COMMIT is not a valid 40-char hex commit hash: $VLLM_COMMIT" >&2
-            exit 1
-          fi
-          echo "VLLM_COMMIT=$VLLM_COMMIT" >> $GITHUB_ENV
-          echo "vLLM commit: $VLLM_COMMIT"
 
       - name: Checkout vLLM at wheel commit
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
@@ -1729,7 +1677,7 @@ jobs:
       image: huggingface/transformers-torch-light
     # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
     if: ${{ !cancelled() }}
-    needs: [vllm-test-examples, vllm-test-init, vllm-test-transformers, vllm-test-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison, vllm-test-multimodal-generation, vllm-test-tokenizer-features, vllm-test-multimodal-hf-comparison, vllm-test-multimodal-hf-comparison-more, vllm-test-hf-comparison-misc]
+    needs: [find-vllm-commit, vllm-test-examples, vllm-test-init, vllm-test-transformers, vllm-test-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison, vllm-test-hf-comparison-language, vllm-test-multimodal-generation, vllm-test-tokenizer-features, vllm-test-multimodal-hf-comparison, vllm-test-multimodal-hf-comparison-more, vllm-test-hf-comparison-misc]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
       actions: read
@@ -1801,8 +1749,8 @@ jobs:
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           # Found by the `vllm-test-examples` job (see the TODO there).
-          VLLM_COMMIT: ${{ needs.vllm-test-examples.outputs.vllm_commit }}
-          VLLM_COMMIT_DATE: ${{ needs.vllm-test-examples.outputs.vllm_commit_date }}
+          VLLM_COMMIT: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
+          VLLM_COMMIT_DATE: ${{ needs.find-vllm-commit.outputs.vllm_commit_date }}
         run: |
           # The transformers checkout of this job is at the run's commit, the one shown in the report.
           TRANSFORMERS_COMMIT_DATE=$(TZ=UTC git -c safe.directory='*' -C transformers log -1 --format=%cd --date=format-local:'%Y/%m/%d %H:%M:%S UTC' || true)
