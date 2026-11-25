@@ -29,6 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, is_flash_attention_requested
+from ...utils.output_capturing import OutputRecorder
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -62,13 +63,8 @@ class HrmTextConfig(LlamaConfig):
     prefix_lm (`bool`, *optional*, defaults to `True`):
         Instruction tokens attend bidirectionally, response tokens attend causally.
     num_layers_per_stack (`int`, *optional*):
-        Real number of transformer blocks inside each
-        of the H / L stacks. Set automatically on first construction: the value passed as
-        `num_hidden_layers` is remembered here and `num_hidden_layers` is then rewritten to
-        `num_layers_per_stack * H_cycles * (L_cycles + 1)` so that
-        `DynamicCache(config=...)` pre-allocates one slot per unique attention invocation
-        under the recurrent forward. Do not set this directly on first construction — pass
-        the real per-stack count as `num_hidden_layers` and let `__post_init__` split it.
+        Number of decoder layers in each of the H and L stacks, so `num_hidden_layers` is `2 * num_layers_per_stack`.
+        Set automatically on first construction from `num_hidden_layers`, which is then the per-stack count.
     """
 
     model_type = "hrm_text"
@@ -113,22 +109,33 @@ class HrmTextConfig(LlamaConfig):
             self.embedding_scale = 1.0 / self.initializer_range
 
         if self.num_layers_per_stack is None:
-            # Initial construction, or legacy checkpoint where `num_hidden_layers` carries the
-            # real per-stack count: remember that value and rewrite `num_hidden_layers` to the
-            # inflated total, so standard HF cache allocation gives us one slot per unique
-            # attention invocation. Serialised configs round-trip as (inflated, real) pairs.
+            # Initial construction, or legacy checkpoint where `num_hidden_layers` carries the per-stack count
             self.num_layers_per_stack = self.num_hidden_layers
-            self.num_hidden_layers = self.num_layers_per_stack * self.H_cycles * (self.L_cycles + 1)
+        self.num_hidden_layers = 2 * self.num_layers_per_stack
 
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     @property
     def cache_layer_map(self) -> list[int]:
         """The `layer_idx` of the layer that owns each cache layer. Each high cycle runs the L stack `L_cycles` times,
-        then the H stack once, and each run has its own cache layers."""
+        then the H stack once. Their first runs use the stacks' own cache layers, later runs one more set each."""
         L_layers = list(range(self.num_layers_per_stack))
-        H_layers = [self.L_cycles * self.num_layers_per_stack + i for i in L_layers]
-        return (L_layers * self.L_cycles + H_layers) * self.H_cycles
+        H_layers = list(range(self.num_layers_per_stack, self.num_hidden_layers))
+        runs = ([L_layers] * self.L_cycles + [H_layers]) * self.H_cycles
+        runs.remove(L_layers)
+        runs.remove(H_layers)
+        return [*L_layers, *H_layers, *(layer_idx for run in runs for layer_idx in run)]
+
+    @property
+    def total_num_hidden_layers(self) -> int:
+        """Total number of decoder layers visited in each forward pass. This takes the stacks' repeated runs into account."""
+        return len(self.cache_layer_map)
+
+    def to_dict(self):
+        output = super().to_dict()
+        # Older versions size the cache from `num_hidden_layers`, so it stores one layer per cache layer
+        output["num_hidden_layers"] = len(self.cache_layer_map)
+        return output
 
     @property
     def _attn_implementation(self):
@@ -264,6 +271,10 @@ class HrmTextStack(nn.Module):
 @auto_docstring
 class HrmTextPreTrainedModel(LlamaPreTrainedModel):
     config: HrmTextConfig
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(HrmTextDecoderLayer, num_hidden_layers_key="total_num_hidden_layers"),
+        "attentions": HrmTextAttention,
+    }
 
     def _check_and_adjust_attn_implementation(
         self, attn_implementation: str | None, is_init_check: bool = False, allow_all_kernels: bool = False
@@ -298,8 +309,7 @@ class HrmTextModel(LlamaModel):
 
         # Recursive module structures
         self.L_module = HrmTextStack(config)
-        # Each stack's `layer_idx`s are the cache layers of its first run, see `HrmTextConfig.cache_layer_map`
-        self.H_module = HrmTextStack(config, config.L_cycles * config.num_layers_per_stack)
+        self.H_module = HrmTextStack(config, config.num_layers_per_stack)
         # Initial state for the low cycle module
         self.z_L_init = nn.Parameter(torch.zeros(config.hidden_size), requires_grad=False)
 
@@ -368,9 +378,12 @@ class HrmTextModel(LlamaModel):
             .contiguous()
         )
 
-        # Each run of a stack has its own cache layers (see `HrmTextConfig.cache_layer_map`), which it reaches through
-        # `cache_offset`. That totals `num_layers_per_stack * H_cycles * (L_cycles + 1)`, i.e. `config.num_hidden_layers`.
+        # Each run of a stack has its own cache layers, see `HrmTextConfig.cache_layer_map`
         num_layers_per_stack = self.config.num_layers_per_stack
+        cache_layer_map = self.config.cache_layer_map
+        first_H_layer = num_layers_per_stack
+        L_offsets = iter([i for i, owner in enumerate(cache_layer_map) if owner == 0])
+        H_offsets = iter([i - first_H_layer for i, owner in enumerate(cache_layer_map) if owner == first_H_layer])
         for high_cycle_idx in range(self.config.H_cycles):
             # `L_bp_cycles` k-step grad trick: only the trailing `num_grad_iterations` of the
             # `L_cycles` inner iterations propagate gradients; earlier iterations run under
@@ -380,7 +393,7 @@ class HrmTextModel(LlamaModel):
             )
             grad_threshold = self.config.L_cycles - num_grad_iterations
             for low_cycle_idx in range(self.config.L_cycles):
-                cache_offset = (high_cycle_idx * (self.config.L_cycles + 1) + low_cycle_idx) * num_layers_per_stack
+                cache_offset = next(L_offsets)
                 ctx = nullcontext() if low_cycle_idx >= grad_threshold else torch.no_grad()
                 with ctx:
                     hidden_states_low_cycle = self.L_module(
@@ -393,7 +406,7 @@ class HrmTextModel(LlamaModel):
                         **kwargs,
                     )
 
-            cache_offset = high_cycle_idx * (self.config.L_cycles + 1) * num_layers_per_stack
+            cache_offset = next(H_offsets)
 
             hidden_states_high_cycle = self.H_module(
                 hidden_states_high_cycle + hidden_states_low_cycle.to(hidden_states_high_cycle.device),

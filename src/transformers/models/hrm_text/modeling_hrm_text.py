@@ -39,7 +39,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import TransformersKwargs, is_flash_attention_requested, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_hrm_text import HrmTextConfig
 
 
@@ -320,7 +320,7 @@ class HrmTextPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": HrmTextDecoderLayer,
+        "hidden_states": OutputRecorder(HrmTextDecoderLayer, num_hidden_layers_key="total_num_hidden_layers"),
         "attentions": HrmTextAttention,
     }
 
@@ -405,8 +405,7 @@ class HrmTextModel(HrmTextPreTrainedModel):
 
         # Recursive module structures
         self.L_module = HrmTextStack(config)
-        # Each stack's `layer_idx`s are the cache layers of its first run, see `HrmTextConfig.cache_layer_map`
-        self.H_module = HrmTextStack(config, config.L_cycles * config.num_layers_per_stack)
+        self.H_module = HrmTextStack(config, config.num_layers_per_stack)
         # Initial state for the low cycle module
         self.z_L_init = nn.Parameter(torch.zeros(config.hidden_size), requires_grad=False)
 
@@ -481,9 +480,12 @@ class HrmTextModel(HrmTextPreTrainedModel):
             .contiguous()
         )
 
-        # Each run of a stack has its own cache layers (see `HrmTextConfig.cache_layer_map`), which it reaches through
-        # `cache_offset`. That totals `num_layers_per_stack * H_cycles * (L_cycles + 1)`, i.e. `config.num_hidden_layers`.
+        # Each run of a stack has its own cache layers, see `HrmTextConfig.cache_layer_map`
         num_layers_per_stack = self.config.num_layers_per_stack
+        cache_layer_map = self.config.cache_layer_map
+        first_H_layer = num_layers_per_stack
+        L_offsets = iter([i for i, owner in enumerate(cache_layer_map) if owner == 0])
+        H_offsets = iter([i - first_H_layer for i, owner in enumerate(cache_layer_map) if owner == first_H_layer])
         for high_cycle_idx in range(self.config.H_cycles):
             # `L_bp_cycles` k-step grad trick: only the trailing `num_grad_iterations` of the
             # `L_cycles` inner iterations propagate gradients; earlier iterations run under
@@ -493,7 +495,7 @@ class HrmTextModel(HrmTextPreTrainedModel):
             )
             grad_threshold = self.config.L_cycles - num_grad_iterations
             for low_cycle_idx in range(self.config.L_cycles):
-                cache_offset = (high_cycle_idx * (self.config.L_cycles + 1) + low_cycle_idx) * num_layers_per_stack
+                cache_offset = next(L_offsets)
                 ctx = nullcontext() if low_cycle_idx >= grad_threshold else torch.no_grad()
                 with ctx:
                     hidden_states_low_cycle = self.L_module(
@@ -506,7 +508,7 @@ class HrmTextModel(HrmTextPreTrainedModel):
                         **kwargs,
                     )
 
-            cache_offset = high_cycle_idx * (self.config.L_cycles + 1) * num_layers_per_stack
+            cache_offset = next(H_offsets)
 
             hidden_states_high_cycle = self.H_module(
                 hidden_states_high_cycle + hidden_states_low_cycle.to(hidden_states_high_cycle.device),

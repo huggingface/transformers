@@ -2003,6 +2003,11 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
             layer_kwargs["number_of_states"] = getattr(layer_config, "number_of_conv_states", 1)
         per_layer_kwargs.append(layer_kwargs)
 
+    # Layers called more than once per forward pass have a cache layer per call
+    if (cache_layer_map := getattr(config, "cache_layer_map", None)) is not None:
+        layer_types = [layer_types[i] for i in cache_layer_map]
+        per_layer_kwargs = [per_layer_kwargs[i] for i in cache_layer_map]
+
     return layer_types, per_layer_kwargs
 
 
@@ -2241,7 +2246,7 @@ class QuantizedCache(Cache):
                 "`QuantizedCache` is only supported for models with only full attention layers. We found the following invalid layer "
                 f"types: {invalid_layer_types}"
             )
-        layers = [layer_class(**layer_kwargs) for _ in range(config.num_hidden_layers)]
+        layers = [layer_class(**layer_kwargs) for _ in layer_types]
         super().__init__(layers=layers)
 
 
