@@ -270,7 +270,8 @@ class GenerationConfig(PushToHubMixin):
         watermarking_config (`BaseWatermarkingConfig` or `dict`, *optional*):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
             tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
-            details. If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
+            details. If passed as `Dict`, it will be converted to a `SynthIDTextWatermarkingConfig` if it contains
+            `ngram_len`, and to a `WatermarkingConfig` otherwise.
 
         > Parameters that define the output variables of generate
 
@@ -435,7 +436,7 @@ class GenerationConfig(PushToHubMixin):
 
         self.watermarking_config = kwargs.pop("watermarking_config", None)
         if isinstance(self.watermarking_config, dict):
-            self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
+            self.watermarking_config = _watermarking_config_from_dict(self.watermarking_config)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", None)
@@ -1361,7 +1362,7 @@ class GenerationConfig(PushToHubMixin):
             elif hasattr(self, key):
                 if not defaults_only or getattr(self, key) is None:
                     if key == "watermarking_config" and isinstance(value, dict):
-                        value = WatermarkingConfig.from_dict(value)
+                        value = _watermarking_config_from_dict(value)
                     setattr(self, key, value)
                     to_remove.append(key)
 
@@ -1626,6 +1627,12 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             skip_first_ngram_calls=self.skip_first_ngram_calls,
             debug_mode=self.debug_mode,
         )
+
+
+def _watermarking_config_from_dict(config_dict: dict[str, Any]) -> BaseWatermarkingConfig:
+    # A serialized watermarking config doesn't store its class, so `ngram_len` (only in SynthID) tells them apart
+    config_class = SynthIDTextWatermarkingConfig if "ngram_len" in config_dict else WatermarkingConfig
+    return config_class.from_dict(config_dict)
 
 
 @dataclass
