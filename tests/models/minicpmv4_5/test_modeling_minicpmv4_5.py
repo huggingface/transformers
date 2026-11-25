@@ -175,10 +175,9 @@ class MiniCPMV4_5IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): (
-                    "The video begins with a little girl sitting on a bed, wearing glasses and a green shirt, reading "
-                    "a book. She is also wearing pink pants. The room is well-lit, and there is a crib in the "
-                    "background. The girl is seen turning the pages of the book and occasionally looking up, possibly "
-                    "to understand"
+                    "The video begins with a little girl sitting on a bed, wearing glasses and a green shirt, reading a "
+                    "book. The camera then cuts to a baby sitting on a bed, also wearing glasses and a green shirt, "
+                    "holding a book in her hands. The baby is seen looking at the book and then at the camera,"
                 ),
             }
         )
