@@ -18,6 +18,7 @@ from torch import nn
 
 from ...modeling_rope_utils import dynamic_rope_update
 from ...utils import auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import no_inherit_decorator
 from ..glm.modeling_glm import rotate_half
 from ..llama.modeling_llama import (
@@ -30,7 +31,6 @@ from .configuration_ernie4_5 import Ernie4_5Config
 
 
 class Ernie4_5RotaryEmbedding(OlmoRotaryEmbedding):
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -101,6 +101,7 @@ class Ernie4_5Attention(LlamaAttention):
 class Ernie4_5ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(self, **super_kwargs):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

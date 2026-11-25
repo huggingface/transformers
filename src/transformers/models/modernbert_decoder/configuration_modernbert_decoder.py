@@ -64,7 +64,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert-decoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     vocab_size: int = 50368

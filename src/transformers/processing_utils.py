@@ -73,6 +73,7 @@ from .utils.chat_template_utils import (
     _CONTROL_TOKEN_END,
     _CONTROL_TOKEN_START,
     _get_template_variables,
+    _normalize_chat_messages,
     render_jinja_template,
 )
 from .utils.type_validators import (
@@ -439,7 +440,8 @@ class AudioKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
         load_audio_backend (`str`, *optional*):
             Backend used by [`~audio_utils.load_audio`] to decode/resample audio referenced by URL/path
-            in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"librosa"`, `"torchaudio"`.
+            in `apply_chat_template`. One of `"auto"`, `"torchcodec"`, `"soundfile"`, `"torchaudio"`
+            (`"librosa"` is a deprecated alias of `"soundfile"`).
     """
 
     sampling_rate: Annotated[int | None, positive_int()]
@@ -2245,7 +2247,7 @@ class ProcessorMixin(PushToHubMixin):
         """Batch a single conversation if needed, drop the keys whose value is None, and convert OpenAI image_url
         blocks to HF image blocks."""
         if isinstance(conversation, (list, tuple)) and (
-            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
         ):
             is_batched = True
             conversations = conversation
@@ -2253,12 +2255,8 @@ class ProcessorMixin(PushToHubMixin):
             is_batched = False
             conversations = [conversation]
 
-        # Normalize: drop the keys whose value is None.
-        # Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`, but many chat templates crash or
-        # produce wrong output (e.g. rendering literal "None") on them, while they handle a missing key.
-        conversations = [
-            [{k: v for k, v in msg.items() if v is not None} for msg in conversation] for conversation in conversations
-        ]
+        # Normalize: convert message objects to dicts and drop the keys whose value is None
+        conversations = [_normalize_chat_messages(conversation) for conversation in conversations]
 
         # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
         # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}

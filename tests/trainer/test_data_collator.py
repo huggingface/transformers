@@ -31,6 +31,7 @@ from transformers import (
     BertTokenizer,
     BertTokenizerFast,
     DataCollatorForLanguageModeling,
+    DataCollatorForMultipleChoice,
     DataCollatorForPermutationLanguageModeling,
     DataCollatorForSeq2Seq,
     DataCollatorForTokenClassification,
@@ -437,6 +438,21 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         batch = collator(features)
         self.assertEqual(batch["labels"].shape, (1, 5))
 
+    def test_empty_example(self):
+        """Test that empty examples are dropped instead of adding a separator to `labels`."""
+        features = [{"input_ids": [10, 11, 12]}, {"input_ids": []}, {"input_ids": [30, 31]}]
+        collator = DataCollatorWithFlattening(return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True)
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"][0].tolist(), [10, 11, 12, 30, 31])
+        self.assertEqual(batch["labels"][0].tolist(), [-100, 11, 12, -100, 31])
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1])
+        self.assertEqual(batch["seq_idx"][0].tolist(), [0, 0, 0, 1, 1])
+        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 5])
+
+        with self.assertRaises(ValueError):
+            collator([{"input_ids": []}, {"input_ids": []}])
+
     def test_numpy_output(self):
         """Test flattening with NumPy output."""
         collator = DataCollatorWithFlattening(return_tensors="np")
@@ -573,6 +589,31 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
         for return_tensors in ["pt", "np"]:
             collator = DataCollatorForTokenClassification(tokenizer, return_tensors=return_tensors)
             self._check_immutability(collator, self._get_features())
+
+
+# =============================================================================
+# DataCollatorForMultipleChoice tests
+# =============================================================================
+
+
+@require_torch
+class TestDataCollatorForMultipleChoice(DataCollatorTestMixin, unittest.TestCase):
+    def test_reusing_examples_preserves_labels(self):
+        collator = DataCollatorForMultipleChoice(BertTokenizer(self.vocab_file))
+        for label_name in ("label", "labels"):
+            with self.subTest(label_name=label_name):
+                features = [
+                    {"input_ids": [[1, 2], [1, 4, 2]], label_name: 1},
+                    {"input_ids": [[1, 4, 2], [1, 2]], label_name: 0},
+                ]
+                original = copy.deepcopy(features)
+
+                for _ in range(2):
+                    batch = collator(features)
+                    self.assertEqual(batch["labels"].tolist(), [1, 0])
+                    self.assertEqual(batch["input_ids"].shape, (2, 2, 3))
+
+                self.assertEqual(features, original)
 
 
 # =============================================================================
@@ -828,22 +869,36 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
             self.assertTrue((batch1["input_ids"] == batch2["input_ids"]).all())
             self.assertTrue((batch1["labels"] == batch2["labels"]).all())
 
+    def test_mlm_seed_with_return_tensors_override(self):
+        tokenizer = BertTokenizer(self.vocab_file)
+        tokenizer.add_tokens([f"token_{i}" for i in range(100)])
+        features = [{"input_ids": list(range(5, 105))}]
+        collator = DataCollatorForLanguageModeling(tokenizer, seed=42)
+        for fmt in ("np", "pt", "np", "pt"):
+            actual = collator(features, return_tensors=fmt)
+            expected = DataCollatorForLanguageModeling(tokenizer, seed=42, return_tensors=fmt)(features)
+            np.testing.assert_array_equal(actual["input_ids"], expected["input_ids"])
+            np.testing.assert_array_equal(actual["labels"], expected["labels"])
+
     def test_mlm_multiworker_dataloader(self):
         """Test seed works with multi-worker DataLoader."""
         tokenizer = BertTokenizer(self.vocab_file)
         features = [{"input_ids": list(range(1000))} for _ in range(10)]
 
+        collator = DataCollatorForLanguageModeling(tokenizer, seed=42)
+        collator(features[:2])
         dataloader = torch.utils.data.DataLoader(
             features,
             batch_size=2,
             num_workers=2,
             generator=torch.Generator().manual_seed(42),
-            collate_fn=DataCollatorForLanguageModeling(tokenizer, seed=42),
+            collate_fn=collator,
         )
 
         batches = [batch["input_ids"] for batch in dataloader]
         result = torch.stack(batches)
         self.assertEqual(result.shape, torch.Size([5, 2, 1000]))
+        self.assertFalse(torch.equal(result[0], result[1]))
 
     def test_missing_pad_token_error(self):
         """Test error when pad token is missing and padding is needed."""

@@ -38,28 +38,17 @@ class SolarOpenModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = SolarOpenModel
 
-    def __init__(
-        self,
-        parent,
-        n_routed_experts=8,
-        n_shared_experts=1,
-        n_group=1,
-        topk_group=1,
-        num_experts_per_tok=2,
-        moe_intermediate_size=16,
-        routed_scaling_factor=1.0,
-        norm_topk_prob=True,
-        use_qk_norm=False,
-    ):
-        super().__init__(parent=parent, num_experts_per_tok=num_experts_per_tok)
-        self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.moe_intermediate_size = moe_intermediate_size
-        self.routed_scaling_factor = routed_scaling_factor
-        self.norm_topk_prob = norm_topk_prob
-        self.use_qk_norm = use_qk_norm
+    small_config_overrides = {
+        "n_routed_experts": 8,
+        "n_shared_experts": 1,
+        "n_group": 1,
+        "topk_group": 1,
+        "num_experts_per_tok": 2,
+        "moe_intermediate_size": 16,
+        "routed_scaling_factor": 1.0,
+        "norm_topk_prob": True,
+        "use_qk_norm": False,
+    }
 
 
 @require_torch

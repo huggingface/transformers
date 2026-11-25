@@ -31,7 +31,6 @@ class DuplicatedMethodConfig(PreTrainedConfig):
     ```"""
 
     model_type = "duplicated_method"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `DuplicatedMethodModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

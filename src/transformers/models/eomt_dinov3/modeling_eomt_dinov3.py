@@ -1076,7 +1076,6 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         "attentions": EomtDinov3Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         super()._init_weights(module)
         std = self.config.initializer_range

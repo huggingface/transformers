@@ -102,7 +102,6 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
     """
 
     model_type = "gemma4_unified_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -193,9 +192,9 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
 
     @property
     def kv_sharing_modes(self) -> list[str | None]:
-        # In this case there are no shared layers
-        if self.num_kv_shared_layers == 0:
-            return [None] * self.num_hidden_layers
+        # In this case all layers are shared
+        if self.num_kv_shared_layers == self.num_hidden_layers:
+            return ["reuse"] * self.num_hidden_layers
 
         # After this index, all layers are consumers
         first_shared_layer = self.num_hidden_layers - self.num_kv_shared_layers

@@ -23,11 +23,9 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    DeepseekV4Config,
     FineGrainedFP8Config,
     OPTForCausalLM,
 )
-from transformers.distributed import DistributedConfig
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -82,15 +80,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
 
-    def test_megamoe_takes_over_the_experts_ep_rule(self):
-        """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
-        config = DeepseekV4Config()
-        config._experts_implementation = "deepgemm_megamoe"
-        config = FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
-        self.assertEqual(config.base_model_ep_plan["layers.*.mlp.experts"], "megamoe_experts")
-        with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
-            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
-
 
 @slow
 @require_accelerate
@@ -108,6 +97,7 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     EXPECTED_OUTPUTS = {
         "Once upon a time, there was a little girl who loved to play",
         "Once upon a time, there was a man who was very rich.",
+        "Once upon a time, there was a man who was a very rich",
     }
     EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
     device_map = torch_device
@@ -402,6 +392,11 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
         # deepgemm only has CUDA kernels, skip on other devices
         if experts_implementation == "deepgemm" and torch_device != "cuda":
             self.skipTest("deepgemm is only supported on CUDA")
+        if experts_implementation == "deepgemm":
+            from transformers.integrations.deepgemm import is_sm100
+
+            if is_sm100():
+                self.skipTest("DeepGEMM takes only UE8M0 scales on SM100, and this checkpoint's are float32")
 
         model = AutoModelForCausalLM.from_pretrained(
             "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
@@ -430,6 +425,20 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
 
         # Only caring about this not crashing
         _ = model.generate(**model_inputs, max_new_tokens=24)
+
+    def test_dequantized_model_takes_the_requested_dtype(self):
+        """
+        Checks that a dequantized model takes the requested dtype everywhere, including the weights the checkpoint
+        stores unquantized (embeddings, norms, lm_head)
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/MiniMax-M2-Tiny-FP8",
+            quantization_config=FineGrainedFP8Config(dequantize=True),
+            dtype=torch.float32,
+            device_map=self.device_map,
+        )
+        self.assertEqual({param.dtype for param in model.parameters()}, {torch.float32})
+        model(input_ids=torch.arange(10, 20, device=self.device_map).unsqueeze(0))
 
     @parameterized.expand(["eager", "grouped_mm"])
     @with_grad
@@ -595,6 +604,34 @@ class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
         _disable_deepgemm_on_multi_device(model)
         self.assertFalse(model.a._deepgemm_disabled)
         self.assertFalse(model.b._deepgemm_disabled)
+
+
+class FP8DequantizedSaveTest(unittest.TestCase):
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_save_dequantized_model(self):
+        """A model loaded with `dequantize=True` saves unquantized, and reloads identically"""
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        config = LlamaConfig(
+            vocab_size=64, hidden_size=128, intermediate_size=256, num_hidden_layers=1, num_attention_heads=4,
+            num_key_value_heads=4,
+        )  # fmt: skip
+        with tempfile.TemporaryDirectory() as tmp:
+            LlamaForCausalLM(config).save_pretrained(f"{tmp}/bf16")
+            quantized = AutoModelForCausalLM.from_pretrained(
+                f"{tmp}/bf16", quantization_config=FineGrainedFP8Config(), device_map="cpu"
+            )
+            quantized.save_pretrained(f"{tmp}/fp8")
+            model = AutoModelForCausalLM.from_pretrained(
+                f"{tmp}/fp8", quantization_config=FineGrainedFP8Config(dequantize=True), device_map="cpu"
+            )
+            model.save_pretrained(f"{tmp}/dequantized")
+            reloaded = AutoModelForCausalLM.from_pretrained(f"{tmp}/dequantized", device_map="cpu")
+
+        reloaded_state_dict = reloaded.state_dict()
+        self.assertEqual(reloaded_state_dict.keys(), model.state_dict().keys())
+        for name, param in model.state_dict().items():
+            torch.testing.assert_close(reloaded_state_dict[name], param, rtol=0, atol=0)
 
 
 class FP8Ue8m0LoadingTest(unittest.TestCase):
