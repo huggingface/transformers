@@ -18,7 +18,7 @@ inputs:
   evict-page-cache:
     description: >-
       "true": load the pytest plugin `evict_page_cache.py` (next to this file) in the job's pytest runs, which drops the
-      page cache of the HF cache files before each test (see the plugin's docstring).
+      page cache of the model files of each test after it (see the plugin's docstring).
     required: false
     default: "false"
 
