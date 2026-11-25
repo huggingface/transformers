@@ -27,7 +27,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
-from ...utils.type_validators import positive_int_field
+from ...utils.type_validators import interval
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -38,6 +38,10 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+
+
+# Keep the interval factory separate for modular config inheritance.
+loop_count_field = interval(min=1)
 
 
 @auto_docstring(checkpoint="Nanbeige/Nanbeige4.2-3B")
@@ -66,7 +70,7 @@ class NanbeigeConfig(LlamaConfig):
     pad_token_id: int | None = 0
     bos_token_id: int | None = 166100
     eos_token_id: int | list[int] | None = 166101
-    num_loops: int = positive_int_field(default=2)
+    num_loops: int = loop_count_field(default=2)
     loop_loss_weights: list[float] | None = None
     skip_loop_final_norm: bool = False
 

@@ -23,7 +23,11 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ...utils.type_validators import interval, positive_int_field
+from ...utils.type_validators import interval
+
+
+# Keep the interval factory separate for modular config inheritance.
+loop_count_field = interval(min=1)
 
 
 @auto_docstring(checkpoint="Nanbeige/Nanbeige4.2-3B")
@@ -78,7 +82,7 @@ class NanbeigeConfig(PreTrainedConfig):
     head_dim: int | None = 128
 
     default_theta = 70_000_000.0
-    num_loops: int = positive_int_field(default=2)
+    num_loops: int = loop_count_field(default=2)
     loop_loss_weights: list[float] | None = None
     skip_loop_final_norm: bool = False
 
