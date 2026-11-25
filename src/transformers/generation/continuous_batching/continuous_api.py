@@ -994,7 +994,16 @@ class ContinuousBatchingManager:
         # RMSNorm kernel (`use_kernels`) is opaque to it, and slower than the fused code (Qwen3-8B on a B300, 64 x
         # 1,024: 11,857 -> 12,572 tok/s without it). The modules get their own forward back
         cb_config = self.continuous_batching_config
-        if cb_config.decode_compile_config is not None or cb_config.varlen_compile_config is not None:
+        # Not for FP8 checkpoints: the model runner keeps their recompile limit low (see `ModelRunner.warmup`), so many
+        # of their layers run eagerly, where the hub kernel is the faster RMSNorm (Qwen3-30B-A3B-FP8 H100 rolling:
+        # 5,874 / 5,903 with it, 4,893 / 4,840 without)
+        quantization = getattr(self.model.config, "quantization_config", None)
+        quant_method = quantization.get("quant_method") if isinstance(quantization, dict) else None
+        quant_method = quant_method or getattr(quantization, "quant_method", None)
+        keep_hub_rms_norm = str(quant_method) in ("fp8", "QuantizationMethod.FP8")
+        keep_hub_rms_norm |= os.environ.get("PROTO_KEEP_HUB_RMSNORM", "0") == "1"  # dev knob: the A/B baseline
+        compiled = cb_config.decode_compile_config is not None or cb_config.varlen_compile_config is not None
+        if compiled and not keep_hub_rms_norm:
             for module in self.model.modules():
                 if type(module).__name__.endswith("RMSNorm") and "forward" in module.__dict__:
                     del module.forward
