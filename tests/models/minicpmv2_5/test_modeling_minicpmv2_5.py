@@ -142,3 +142,52 @@ class MiniCPMV2_5IntegrationTest(unittest.TestCase):
             }
         )
         self.assertEqual(decoded, expected_texts.get_expectation())
+
+    def test_small_model_vision_generation_batched(self):
+        # Two images of different sizes: their slices have different lengths, so the batch exercises the padding
+        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
+        processor.tokenizer.padding_side = "left"
+        model = MiniCPMV2_5ForConditionalGeneration.from_pretrained(
+            self.model_id, revision=self.revision, dtype=torch.float16, device_map=torch_device
+        )
+        image_urls = [
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg",
+        ]
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "url": url_to_local_path(url)},
+                        {"type": "text", "text": "What is in this image?"},
+                    ],
+                }
+            ]
+            for url in image_urls
+        ]
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True},
+        ).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=32, do_sample=False)
+        decoded = processor.post_process_image_text_to_text(output[:, inputs["input_ids"].shape[1] :])
+        expected_texts = Expectations(
+            {
+                ("cuda", None): [
+                    (
+                        "The image depicts two cats lying on a pink blanket. One cat is on the left side, and the other "
+                        "is on the right side. Both cats appear to"
+                    ),
+                    (
+                        "The image depicts a serene natural landscape featuring a wooden dock extending over a calm "
+                        "lake, with a backdrop of towering mountains and a clear blue sky."
+                    ),
+                ],
+            }
+        )
+        self.assertEqual(decoded, expected_texts.get_expectation())
