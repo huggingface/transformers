@@ -1470,16 +1470,21 @@ class GenerationMixin(ContinuousMixin):
                     UserWarning,
                 )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
+            has_prompt_in_input_ids = self.config.is_encoder_decoder or (
+                input_ids_seq_length is not None and input_ids_seq_length > 0
+            )
             mask = (model_kwargs or {}).get(
                 "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
             )
-            padding_lengths = (mask != 0).int().argmax(dim=1) if mask is not None else None
+            padding_lengths = (
+                (mask != 0).int().argmax(dim=1) if (mask is not None and has_prompt_in_input_ids) else None
+            )
             processors.append(
                 RepetitionPenaltyLogitsProcessor(
                     generation_config.repetition_penalty, prompt_ignore_length=padding_lengths
                 )
             )
-            if not self.config.is_encoder_decoder and (input_ids_seq_length is None or input_ids_seq_length == 0):
+            if not has_prompt_in_input_ids:
                 warnings.warn(
                     "Passing `repetition_penalty` with `inputs_embeds` and without `input_ids` to `generate` will "
                     "apply the penalty only to newly generated tokens, not to the prompt.",

@@ -3718,6 +3718,32 @@ class GenerationIntegrationTests(unittest.TestCase):
                 )
             )
 
+    def test_repetition_penalty_with_inputs_embeds_and_left_padding(self):
+        """Regression test for #51093: repetition_penalty should not skip newly generated tokens when inputs_embeds has left padding."""
+        torch.manual_seed(14)
+        config = LlamaConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            pad_token_id=0,
+            bos_token_id=None,
+            eos_token_id=None,
+        )
+        model = LlamaForCausalLM(config).eval().to(torch_device)
+        embed = model.get_input_embeddings()
+        kwargs = {"max_new_tokens": 8, "do_sample": False, "repetition_penalty": 2.0}
+
+        alone = torch.tensor([[5, 6]], device=torch_device)
+        batch = torch.tensor([[0, 0, 0, 5, 6], [7, 8, 9, 10, 11]], device=torch_device)
+
+        out_alone = model.generate(inputs_embeds=embed(alone), attention_mask=torch.ones_like(alone), **kwargs)
+        out_batch = model.generate(inputs_embeds=embed(batch), attention_mask=(batch != 0).long(), **kwargs)
+
+        self.assertEqual(out_alone[0].tolist(), out_batch[0].tolist())
+
     @slow
     def test_beam_search_early_stop_heuristic(self):
         """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""
