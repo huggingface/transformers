@@ -936,7 +936,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             with patch("kernels._internals.layer.layer.get_local_kernel", return_value=mock_kernel) as mock_load:
                 layer_cls = repo.load()
 
-            mock_load.assert_called_once_with(repo_path)
+            mock_load.assert_called_once_with(repo_path, check_arch=True)
             self.assertIs(layer_cls, MockRMSNorm)
             self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
