@@ -1316,7 +1316,6 @@ class Zamba2Model(Zamba2PreTrainedModel):
 @auto_docstring
 class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
