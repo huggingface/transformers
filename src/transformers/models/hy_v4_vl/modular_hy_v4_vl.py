@@ -34,7 +34,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import MultiModalData, Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring
+from ...utils import TensorType, TransformersKwargs, auto_docstring, no_inherit_decorator
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 from ..ernie4_5.modeling_ernie4_5 import apply_rotary_pos_emb  # noqa: F401
@@ -821,6 +821,9 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
             resample=resample,
         )
 
+    def _resized_size(self, *args, **kwargs):
+        raise AttributeError("Not needed for HY-V4-VL")
+
     def patchify(
         self,
         videos: "torch.Tensor",
@@ -856,6 +859,7 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         )
         return flatten_patches, grid_t, grid_h, grid_w
 
+    @no_inherit_decorator
     def _preprocess(
         self,
         videos: list["torch.Tensor"],

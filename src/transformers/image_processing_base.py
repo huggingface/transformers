@@ -139,7 +139,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
             use_kernels (`bool`, *optional*, defaults to `False`):
-                Whether to run the processing ops with Hub kernels when one is registered for them, and to fall
+                Whether to run the processing ops with Hub kernels when the processor supports them, and to fall
                 back to the default implementation otherwise. Requires the torchvision backend and a CUDA device.
                 This is a runtime flag, it is not saved by
                 [`~image_processing_utils.ImageProcessingMixin.save_pretrained`].

@@ -33,6 +33,7 @@ from transformers import (
     Ernie4_5_VLMoeImageProcessor,
     GlmImageImageProcessor,
     HunYuanVLImageProcessor,
+    HYV4VLImageProcessor,
     LevitImageProcessor,
     MiniMaxM3VLImageProcessor,
     PaddleOCRVLImageProcessor,
@@ -61,6 +62,7 @@ PATCHIFY_KERNEL_PROCESSORS = [
     Ernie4_5_VLMoeImageProcessor,
     GlmImageImageProcessor,
     HunYuanVLImageProcessor,
+    HYV4VLImageProcessor,
     MiniMaxM3VLImageProcessor,
     PaddleOCRVLImageProcessor,
 ]
