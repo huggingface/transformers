@@ -746,8 +746,8 @@ _PROTO_EXPERTS_TRTLLM_ROUTING = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_
 # once per process, when the first CB batch processor is created (`_proto_autotune_fp8_experts`), never in band
 _PROTO_EXPERTS_TRTLLM_AUTOTUNE = _PROTO_EXPERTS_TRTLLM and os.environ.get("PROTO_EXPERTS_TRTLLM_AUTOTUNE", "0") == "1"
 _proto_trtllm_tuned = False
-_PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "0") in ("1", "fold")
-_PROTO_EXPERTS_DECODE_FOLD = os.environ.get("PROTO_EXPERTS_DECODE", "0") == "fold"
+_PROTO_EXPERTS_DECODE = os.environ.get("PROTO_EXPERTS_DECODE", "1") in ("1", "fold")
+_PROTO_EXPERTS_DECODE_FOLD = os.environ.get("PROTO_EXPERTS_DECODE", "1") == "fold"
 
 
 def _proto_experts_supported(module: "FP8Experts") -> bool:
