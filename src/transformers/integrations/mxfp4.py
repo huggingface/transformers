@@ -225,6 +225,10 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
     if w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] == 10:
         constraints = {"is_persistent": True, "epilogue_subtile": 1}
         triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
+    # [scratch] Ampere / Ada: the default prefill tiles (128 x 256 x 128) took ~350 ms a layer on an A100
+    elif w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] < 9:
+        constraints = {"block_k": 64, "num_stages": 2}
+        triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
     w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     return w, w_scale
 
