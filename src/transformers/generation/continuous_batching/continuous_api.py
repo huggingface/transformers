@@ -1012,10 +1012,12 @@ class ContinuousBatchingManager:
         if not is_flash and not is_paged and model._supports_flash_attn and auto_switch_to_flash:
             # Try to use FA3 (Hopper), then FA4 (B200/B300: its paged KV and sinks are not on SM120 GPUs like the RTX PRO
             # 6000), then FA2, then give up. Both regular package or kernels is fine.
+            # MLA models attend with 192-dim values (padded to the key dim), which FA4 does not take
             is_blackwell = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] == 10
+            is_mla = getattr(model.config.get_text_config(), "kv_lora_rank", None) is not None
             if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
-            elif is_blackwell and is_flash_attn_4_available(kernels_fallback_ok=True):
+            elif is_blackwell and not is_mla and is_flash_attn_4_available(kernels_fallback_ok=True):
                 version = 4
             elif is_flash_attn_2_available(kernels_fallback_ok=True):
                 version = 2
