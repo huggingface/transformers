@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma4 model."""
 
+import gc
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -208,6 +209,23 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_model_training(self):
         pass
+
+    def test_activation_checkpointing_no_memory_leak(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma4ForCausalLM(config)
+        model.to(torch_device)
+        model.activation_checkpointing_enable()
+        model.train()
+
+        inputs_dict["labels"] = inputs_dict["input_ids"]
+        gc.collect()
+        counts = []
+        for _ in range(4):
+            out = model(**inputs_dict)
+            del out
+            gc.collect()
+            counts.append(sum(1 for o in gc.get_objects() if torch.is_tensor(o)))
+        self.assertEqual(counts[-1], counts[0], f"Memory leak detected under activation checkpointing: {counts}")
 
     @unittest.skip(
         "Under non-bf16 dtypes, MoE grouped_mm falls back to "

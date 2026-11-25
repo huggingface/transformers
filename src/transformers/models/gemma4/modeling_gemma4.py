@@ -1193,10 +1193,10 @@ class Gemma4TextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: KVSharingDict,
+        shared_kv_states: KVSharingDict | None = None,
         cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor, torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -1228,7 +1228,11 @@ class Gemma4TextAttention(nn.Module):
                 key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         if self.store_full_length_kv:
-            shared_kv_states[self.layer_type] = key_states, value_states
+            stored_kv = (key_states, value_states)
+            if shared_kv_states is not None:
+                shared_kv_states[self.layer_type] = stored_kv
+        else:
+            stored_kv = None
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -1248,7 +1252,7 @@ class Gemma4TextAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+        return attn_output, attn_weights, stored_kv
 
 
 @use_experts_implementation
@@ -1367,12 +1371,13 @@ class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
+        return_stored_kv: bool = False,
         **kwargs,
-    ) -> torch.Tensor:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
+        hidden_states, _, stored_kv = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
@@ -1415,6 +1420,8 @@ class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
             hidden_states = residual + hidden_states
 
         hidden_states *= self.layer_scalar
+        if return_stored_kv:
+            return hidden_states, stored_kv
         return hidden_states
 
 
@@ -1683,16 +1690,30 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
 
             per_layer_input = per_layer_inputs[:, :, i, :] if per_layer_inputs is not None else None
 
-            hidden_states = decoder_layer(
+            # Only pass shared_kv_states to layers that actually read from it (is_kv_shared_layer)
+            # to avoid retaining references to checkpointed decoder-layer inputs/outputs.
+            is_kv_shared = decoder_layer.self_attn.is_kv_shared_layer
+            layer_skv = shared_kv_states if is_kv_shared else None
+            store_kv = decoder_layer.self_attn.store_full_length_kv
+
+            layer_outputs = decoder_layer(
                 hidden_states,
                 per_layer_input,
-                shared_kv_states=shared_kv_states,
+                shared_kv_states=layer_skv,
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 cache=cache,
+                return_stored_kv=store_kv,
                 **kwargs,
             )
+
+            if store_kv:
+                hidden_states, stored_kv = layer_outputs
+                if stored_kv is not None:
+                    shared_kv_states[self.config.layer_types[i]] = stored_kv
+            else:
+                hidden_states = layer_outputs
 
         hidden_states = self.norm(hidden_states)
 
