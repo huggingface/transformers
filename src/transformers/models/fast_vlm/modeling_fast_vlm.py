@@ -133,14 +133,10 @@ class FastVlmModel(FastVlmPreTrainedModel, MultimodalMixin):
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
         selected_image_feature = image_outputs.last_hidden_state
         selected_image_feature = selected_image_feature.flatten(2).permute(0, 2, 1)
-        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=image_outputs.pooler_output.new_full(
-                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        features = self.multi_modal_projector(selected_image_feature)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -210,8 +206,7 @@ class FastVlmModel(FastVlmPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

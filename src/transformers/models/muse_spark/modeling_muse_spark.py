@@ -1441,16 +1441,14 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1501,9 +1499,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
             token_mask = positions[None, :] < num_tokens[:, None]
             audio_features, split_sizes = audio_features[token_mask], num_tokens
         else:
-            split_sizes = audio_features.new_full(
-                (audio_features.shape[0],), audio_features.shape[1], dtype=torch.long
-            )
+            split_sizes = torch.full(audio_features.shape[:1], audio_features.shape[1], device=audio_features.device)
             audio_features = audio_features.flatten(0, 1)
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
         return BaseModelOutputWithSplitSizes(

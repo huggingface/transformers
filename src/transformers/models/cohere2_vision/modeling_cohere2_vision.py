@@ -144,16 +144,10 @@ class Cohere2VisionModel(Cohere2VisionPreTrainedModel, MultimodalMixin):
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         pooler_output = self.multi_modal_projector(selected_image_feature)
-        image_outputs.pooler_output = pooler_output.reshape(
-            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
-        )
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=image_outputs.pooler_output.new_full(
-                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        features = pooler_output.reshape(selected_image_feature.shape[0], -1, self.config.text_config.hidden_size)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     def get_placeholder_mask(

@@ -969,8 +969,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_sizes, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
         if input_values is not None:
             audio_outputs = self.get_audio_embeddings(input_values, padding_mask, return_dict=True)
             audio_features = audio_outputs.pooler_output

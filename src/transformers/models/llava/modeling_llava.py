@@ -161,9 +161,7 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
             ).prod(dim=-1)
             image_features = image_features.squeeze(0)
         else:
-            split_sizes = image_features.new_full(
-                (image_features.shape[0],), image_features.shape[1], dtype=torch.long
-            )
+            split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
             image_features = image_features.flatten(0, 1)
         image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = image_features
@@ -233,8 +231,7 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

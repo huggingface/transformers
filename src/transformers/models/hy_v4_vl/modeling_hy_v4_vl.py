@@ -1399,7 +1399,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         merge = self.config.vision_config.spatial_merge_size
         vision_outputs = BaseModelOutputWithSplitSizes(
             **vision_outputs,
-            split_sizes=(image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)),
+            split_sizes=image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1),
         )
         return vision_outputs
 

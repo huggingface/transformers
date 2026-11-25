@@ -308,11 +308,10 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
         video_features = video_features.reshape(batch_size, self.config.num_query_tokens * frames, -1)
-        vision_outputs.pooler_output = video_features
-        vision_outputs.split_sizes = vision_outputs.pooler_output.new_full(
-            (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
+        vision_outputs.split_sizes = torch.full(
+            video_features.shape[:1], video_features.shape[1], device=video_features.device
         )
-        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
+        vision_outputs.pooler_output = video_features.flatten(0, 1)
         return vision_outputs
 
     def get_image_embeddings(**super_kwargs):

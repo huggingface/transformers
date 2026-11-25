@@ -163,14 +163,9 @@ class PerceptionLMModel(LlavaModel):
         if self.config.vision_use_cls_token:
             last_hidden_state = last_hidden_state[:, 1:, :]
         image_features = self.multi_modal_projector(last_hidden_state)
-        image_outputs.pooler_output = image_features
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=image_outputs.pooler_output.new_full(
-                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = image_features.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple

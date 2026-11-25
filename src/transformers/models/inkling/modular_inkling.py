@@ -1135,13 +1135,10 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=image_outputs.pooler_output.new_full(
-                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        features = image_outputs.pooler_output
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple
@@ -1162,8 +1159,8 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
             audio_input_ids = audio_input_ids[audio_input_ids_mask.bool()]
             split_sizes = audio_input_ids_mask.sum(-1)
         else:
-            split_sizes = audio_input_ids.new_full(
-                (audio_input_ids.shape[0],), audio_input_ids.shape[1], dtype=torch.long
+            split_sizes = torch.full(
+                audio_input_ids.shape[:1], audio_input_ids.shape[1], device=audio_input_ids.device
             )
             audio_input_ids = audio_input_ids.flatten(0, 1)
         audio_outputs = self.audio_tower(audio_input_ids)
@@ -1259,8 +1256,7 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True, **kwargs)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds, image_embeds, self.config.image_token_id
             )

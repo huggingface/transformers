@@ -266,7 +266,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         low_res_outputs = self.get_low_res_image_features(pixel_values, **kwargs)
         high_res_outputs = self.get_high_res_image_features(high_res_pixel_values, **kwargs)
         image_features = self.aligner(low_res_outputs.last_hidden_state, high_res_outputs.last_hidden_state)
-        split_sizes = image_features.new_full((image_features.shape[0],), image_features.shape[1], dtype=torch.long)
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
         pooler_output = image_features.flatten(0, 1)
         return BaseModelOutputWithHighResVisionEncodings(
             last_hidden_state=low_res_outputs.last_hidden_state,

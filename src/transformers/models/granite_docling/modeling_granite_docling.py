@@ -1122,8 +1122,7 @@ class GraniteDoclingModel(GraniteDoclingPreTrainedModel, MultimodalMixin):
                     pixel_values, pixel_attention_mask, tile_fine_mask=tile_fine_mask, return_dict=True
                 )
             image_outputs = mm_encoder_outputs["image"]
-            image_hidden_states = image_outputs.pooler_output
-            image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_hidden_states = image_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [

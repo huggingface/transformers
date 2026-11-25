@@ -633,18 +633,6 @@ class EmbeddingGemma2ModelOutput(MultimodalBaseModelOutputWithPast):
         return self.audio_outputs.pooler_output
 
 
-def get_video_split_sizes(
-    tokens_per_frame: torch.LongTensor, num_frames_per_video: torch.LongTensor
-) -> torch.LongTensor:
-    """Each video's number of tokens, the sum of its frames' `tokens_per_frame`, without a host sync."""
-    video_index = torch.repeat_interleave(
-        torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-        num_frames_per_video.to(tokens_per_frame.device),
-        output_size=len(tokens_per_frame),
-    )
-    return tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(0, video_index, tokens_per_frame)
-
-
 @auto_docstring(
     custom_intro="""
     The EmbeddingGemma 2 model: a vision backbone, an audio backbone and a text backbone whose final hidden
@@ -912,10 +900,11 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
         last_hidden_state = vision_outputs.last_hidden_state
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         k_squared = self.config.vision_config.pooling_kernel_size**2
+        # Each video's tokens are the sum of its frames', read at each video's last frame
         tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
-        )
+        video_ends = tokens_per_frame.cumsum(0)[num_frames_per_video.to(tokens_per_frame.device).cumsum(0) - 1]
+        split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         return vision_outputs
 
     @can_return_tuple

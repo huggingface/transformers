@@ -927,18 +927,6 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     return block_sequence_ids
 
 
-def get_video_split_sizes(
-    tokens_per_frame: torch.LongTensor, num_frames_per_video: torch.LongTensor
-) -> torch.LongTensor:
-    """Each video's number of tokens, the sum of its frames' `tokens_per_frame`, without a host sync."""
-    video_index = torch.repeat_interleave(
-        torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-        num_frames_per_video.to(tokens_per_frame.device),
-        output_size=len(tokens_per_frame),
-    )
-    return tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(0, video_index, tokens_per_frame)
-
-
 @auto_docstring(
     custom_intro="""
     The base Gemma 4 model comprising a vision backbone, an audio backbone, and a language model without a
@@ -997,8 +985,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
 
         # Flatten valid patches: keep only non-padding patches across the batch
         # The final output shape is (total_valid_patches, text_hidden_size)
-        pooler_output = vision_outputs.pooler_output[non_pad_mask]
-        vision_outputs.pooler_output = pooler_output
+        vision_outputs.pooler_output = vision_outputs.pooler_output[non_pad_mask]
         vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=non_pad_mask.sum(dim=-1))
         return vision_outputs
 
@@ -1108,8 +1095,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -1130,8 +1116,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -1236,12 +1221,13 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across all frames
-        pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
-        vision_outputs.pooler_output = pooler_output
-        tokens_per_frame = non_pad_mask.sum(dim=-1)
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
-        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output[
+            non_pad_mask
+        ]  # (total_valid_patches, text_hidden_size)
+        # Each video's tokens are the sum of its frames', read at each video's last frame
+        video_ends = non_pad_mask.sum(dim=-1).cumsum(0)[num_frames_per_video.to(non_pad_mask.device).cumsum(0) - 1]
+        split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         return vision_outputs
 
     @can_return_tuple
@@ -1273,7 +1259,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
             input_features_mask = input_features_mask.to(audio_embeds.device)
             pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
         else:
-            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            split_sizes = torch.full(audio_embeds.shape[:1], audio_embeds.shape[1], device=audio_embeds.device)
             pooler_output = audio_embeds.flatten(0, 1)
         return Gemma4UnifiedAudioModelOutput(
             pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes

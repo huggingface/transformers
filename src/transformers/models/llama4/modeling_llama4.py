@@ -1183,8 +1183,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, MultimodalMixin, Gen
     ) -> tuple | BaseModelOutputWithSplitSizes:
         image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
-        split_sizes = last_hidden_state.new_full(
-            (last_hidden_state.shape[0],), last_hidden_state.shape[1], dtype=torch.long
+        split_sizes = torch.full(
+            last_hidden_state.shape[:1], last_hidden_state.shape[1], device=last_hidden_state.device
         )
         image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state.flatten(0, 1))
