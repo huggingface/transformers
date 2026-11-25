@@ -152,6 +152,10 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return False
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        if not self.quantization_config.dequantize:  # [scratch] Blackwell: TRT-LLM's MoE, see `_proto_trtllm_mxfp4`
+            from ..integrations._proto_trtllm_mxfp4 import maybe_prepare_model
+
+            maybe_prepare_model(model)
         # clean cache due to triton ops
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

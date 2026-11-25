@@ -347,6 +347,7 @@ class Mxfp4GptOssExperts(nn.Module):
         self.gate_up_proj_precision_config = None
         self.down_proj_precision_config = None
         self.limit = getattr(config, "swiglu_limit", 7.0)
+        self._proto_trtllm = None  # [scratch] TRT-LLM tensors on Blackwell, see `_proto_trtllm_mxfp4`
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -447,6 +448,14 @@ class Mxfp4GptOssMLP(nn.Module):
 
     @torch.compiler.disable  # [scratch] triton_kernels' routing and matmul_ogs do not trace under dynamo
     def _routed(self, hidden_states, router_logits):
+        if self.experts._proto_trtllm is not None:  # [scratch] Blackwell: TRT-LLM's routed MoE
+            from ._proto_trtllm_mxfp4 import trtllm_gpt_oss_experts
+
+            top_k_logits, top_k_index = torch.topk(router_logits, self.router.top_k, dim=-1)
+            top_k_weights = torch.softmax(top_k_logits.float(), dim=-1).to(torch.bfloat16)
+            return trtllm_gpt_oss_experts(
+                self.experts._proto_trtllm, hidden_states, top_k_index.to(torch.int32), top_k_weights
+            )
         with on_device(router_logits.device):
             routing_data, gather_idx, scatter_idx = triton_kernels_hub.routing.routing(router_logits, self.router.top_k)
         return self.experts.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
