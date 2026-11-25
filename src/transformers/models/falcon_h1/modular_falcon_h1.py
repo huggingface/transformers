@@ -318,11 +318,11 @@ class FalconH1Mixer(BambaMixer):
             all_outputs = []
             # First, perform the fast scan computation (if we don't need only sequential)
             scan_output = mamba2_chunk_scan(
-                chunked_hidden_states.view(batch_size, effective_sequence_length, -1, self.head_dim),
+                chunked_hidden_states.view(batch_size, effective_sequence_length, self.num_heads, self.head_dim),
                 chunked_dt,
                 A,
-                chunked_B.view(batch_size, effective_sequence_length, self.n_groups, -1),
-                chunked_C.view(batch_size, effective_sequence_length, self.n_groups, -1),
+                chunked_B.view(batch_size, effective_sequence_length, self.n_groups, self.ssm_state_size),
+                chunked_C.view(batch_size, effective_sequence_length, self.n_groups, self.ssm_state_size),
                 chunk_size=self.chunk_size,
                 D=self.D,
                 z=None,
