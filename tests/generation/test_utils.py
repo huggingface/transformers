@@ -716,7 +716,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "git",
                 "prophetnet",
                 "mllama",  # special cache sizes
-                "blip2",  # overridden `generate()` all BLIP models
+                "blip_2",  # overridden `generate()` all BLIP models
                 "instructblip",
                 "instructblipvideo",
                 "zamba",  # special loop, and no real need to add support for now
@@ -888,7 +888,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 "git",
                 "prophetnet",
                 "mllama",  # special cache sizes
-                "blip2",  # overridden `generate()` all BLIP models
+                "blip_2",  # overridden `generate()` all BLIP models
                 "instructblip",
                 "instructblipvideo",
                 "zamba",  # special loop, and no real need to add support for now
