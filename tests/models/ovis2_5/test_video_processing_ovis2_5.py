@@ -1,0 +1,163 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+import numpy as np
+
+from transformers.testing_utils import require_torch, require_torchvision, require_vision
+from transformers.utils import is_torchvision_available
+from transformers.video_utils import get_video_size
+
+from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
+
+
+if is_torchvision_available():
+    from transformers import Ovis2_5VideoProcessor
+    from transformers.models.ovis2_5.image_processing_ovis2_5 import smart_resize
+
+
+class Ovis2_5VideoProcessingTester:
+    def __init__(
+        self,
+        batch_size=3,
+        num_frames=4,
+        num_channels=3,
+        min_resolution=32,
+        max_resolution=96,
+        size=None,
+        patch_size=16,
+        temporal_patch_size=1,
+        merge_size=2,
+    ):
+        self.batch_size = batch_size
+        self.num_frames = num_frames
+        self.num_channels = num_channels
+        self.min_resolution = min_resolution
+        self.max_resolution = max_resolution
+        self.size = size if size is not None else {"shortest_edge": 32 * 32, "longest_edge": 96 * 96}
+        self.patch_size = patch_size
+        self.temporal_patch_size = temporal_patch_size
+        self.merge_size = merge_size
+
+    def prepare_video_processor_dict(self):
+        return {
+            "size": self.size,
+            "patch_size": self.patch_size,
+            "temporal_patch_size": self.temporal_patch_size,
+            "merge_size": self.merge_size,
+        }
+
+    def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
+        return prepare_video_inputs(
+            batch_size=self.batch_size,
+            num_frames=self.num_frames,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            return_tensors=return_tensors,
+        )
+
+    def expected_output(self, videos):
+        grids = []
+        for video in videos:
+            height, width = get_video_size(np.asarray(video))
+            height, width = smart_resize(
+                height,
+                width,
+                factor=self.patch_size * self.merge_size,
+                min_pixels=self.size["shortest_edge"],
+                max_pixels=self.size["longest_edge"],
+            )
+            grids.append(
+                [
+                    len(video) // self.temporal_patch_size,
+                    height // self.patch_size,
+                    width // self.patch_size,
+                ]
+            )
+
+        num_patches = sum(np.prod(grid) for grid in grids)
+        patch_dim = 3 * self.temporal_patch_size * self.patch_size**2
+        return (num_patches, patch_dim), grids
+
+    def expected_output_video_shape(self, videos):
+        return self.expected_output(videos)[0]
+
+
+@require_torch
+@require_vision
+@require_torchvision
+class Ovis2_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
+    fast_video_processing_class = Ovis2_5VideoProcessor if is_torchvision_available() else None
+
+    def setUp(self):
+        super().setUp()
+        self.video_processor_tester = Ovis2_5VideoProcessingTester()
+
+    @property
+    def video_processor_dict(self):
+        return self.video_processor_tester.prepare_video_processor_dict()
+
+    def assert_expected_videos_shape(self, encoded_videos, expected_output_video_shape, num_videos):
+        # The patches of every video are concatenated along one axis instead of stacked on a `num_videos` axis.
+        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
+
+    def test_video_processor_from_dict_with_kwargs(self):
+        overridden_size = {"shortest_edge": 64 * 64, "longest_edge": 128 * 128}
+        video_processor = self.fast_video_processing_class.from_dict(
+            self.video_processor_dict,
+            size=overridden_size,
+        )
+        self.assertEqual(video_processor.size, overridden_size)
+
+    def _check_input_type(self, video_inputs, **kwargs):
+        for video_processing_class in self.video_processor_list:
+            video_processor = video_processing_class(**self.video_processor_dict)
+            for inputs in (video_inputs[:1], video_inputs):
+                with self.subTest(video_processor=video_processing_class.__name__, batch_size=len(inputs)):
+                    output = video_processor(inputs[0] if len(inputs) == 1 else inputs, return_tensors="pt", **kwargs)
+                    expected_shape, expected_grid = self.video_processor_tester.expected_output(inputs)
+                    self.assertEqual(tuple(output[self.input_name].shape), expected_shape)
+                    self.assertEqual(output.video_grid_thw.tolist(), expected_grid)
+
+    def test_call_numpy_4_channels(self):
+        self.video_processor_tester.num_channels = 4
+        video_inputs = self.video_processor_tester.prepare_video_inputs(
+            equal_resolution=False,
+            return_tensors="np",
+        )
+        # Ovis2.5 always converts visual inputs to the checkpoint's three-channel RGB representation.
+        self._check_input_type(video_inputs, input_data_format="channels_last")
+
+    def test_call_sample_frames(self):
+        """Ovis2.5 does not sample frames, even when sampling arguments are provided."""
+        video_inputs = self.video_processor_tester.prepare_video_inputs(
+            equal_resolution=False,
+            return_tensors="torch",
+        )
+        self._check_input_type(video_inputs, num_frames=2)
+
+    def test_temporal_patch_padding(self):
+        video = np.zeros((3, 64, 96, 3), dtype=np.uint8)
+        video_processor = self.fast_video_processing_class(
+            size={"shortest_edge": 64 * 96, "longest_edge": 64 * 96},
+            temporal_patch_size=2,
+        )
+        output = video_processor(video, return_tensors="pt")
+
+        self.assertEqual(tuple(output.pixel_values_videos.shape), (48, 1536))
+        self.assertEqual(output.video_grid_thw.tolist(), [[2, 4, 6]])
+        self.assertEqual(video_processor.get_number_of_video_patches(3, 64, 96), 48)
