@@ -29,6 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations import (
     use_experts_implementation,
     use_kernel_forward_from_hub,
@@ -36,6 +37,7 @@ from ...integrations import (
     use_kernelized_func,
 )
 from ...integrations.accelerate import force_accelerate_hooks
+from ...integrations.linear_attention_paged import causal_conv1d_varlen
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -573,6 +575,79 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         init.ones_(self.D)
         init.ones_(self.dt_bias)
 
+    def cache_states(self) -> list[tuple[tuple[int, ...], torch.dtype]]:
+        """[scratch] The shape and dtype of the states continuous batching keeps per request for this layer: the last
+        inputs of the causal convolution, then the SSM state."""
+        return [
+            ((self.conv_dim, self.conv_kernel_size - 1), self.conv1d.weight.dtype),
+            ((self.num_heads, self.head_dim, self.ssm_state_size), torch.float32),
+        ]
+
+    def _paged_forward(self, hidden_states: torch.Tensor, cache: PagedAttentionCache, kwargs) -> torch.Tensor:
+        """[scratch] Continuous batching: the batch is one row of packed sequences, each continuing from the states its
+        request left in the paged cache. Single-token sequences take the recurrent update together, longer ones the
+        chunked scan one at a time."""
+        dtype = hidden_states.dtype
+        conv_state, ssm_state = cache.read_cache_states(self.layer_idx, kwargs)
+        cu_seqlens = kwargs["cu_seq_lens_q"]
+        gate, hidden_states_B_C, dt = self.in_proj(hidden_states).split(
+            [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
+        )
+        hidden_states_B_C, conv_state = causal_conv1d_varlen(
+            hidden_states_B_C.transpose(1, 2), conv_state, cu_seqlens, self.conv1d.weight.squeeze(1),
+            self.conv1d.bias, self.activation,
+        )  # fmt: skip
+        x, B, C = torch.split(
+            hidden_states_B_C.transpose(1, 2)[0],
+            [self.intermediate_size, self.n_groups * self.ssm_state_size, self.n_groups * self.ssm_state_size],
+            dim=-1,
+        )
+        dt = dt[0]
+        num_tokens, num_sequences = x.shape[0], ssm_state.shape[0]
+        heads, head_dim, groups, state = self.num_heads, self.head_dim, self.n_groups, self.ssm_state_size
+        A = -torch.exp(self.A_log.float())
+        out = torch.zeros(num_tokens, heads, head_dim, dtype=x.dtype, device=x.device)
+
+        def recurrent(states, tokens):
+            """One token per sequence: `states` [n, heads, head_dim, state] updated in place, at `tokens`."""
+            n = states.shape[0]
+            return mamba2_selective_state_update(
+                states, x[tokens].view(n, heads, head_dim), dt[tokens][:, :, None].expand(-1, -1, head_dim),
+                A[:, None, None].expand(-1, head_dim, state), B[tokens].view(n, groups, state),
+                C[tokens].view(n, groups, state), self.D[:, None].expand(-1, head_dim), z=None,
+                dt_bias=self.dt_bias[:, None].expand(-1, head_dim), dt_softplus=True,
+            ).view(n, heads, head_dim)  # fmt: skip
+
+        if kwargs["max_length_q"] == 1:  # decode: token i is the one token of sequence i
+            n = min(num_tokens, num_sequences)
+            states = ssm_state[:n]
+            out[:n] = recurrent(states, slice(0, n))
+        else:
+            bounds = cu_seqlens.tolist()
+            lengths = [end - start for start, end in zip(bounds[:-1], bounds[1:])]
+            singles = [i for i, length in enumerate(lengths) if length == 1]
+            if singles:
+                seqs = torch.tensor(singles, device=x.device)
+                tokens = torch.tensor([bounds[i] for i in singles], device=x.device)
+                states = ssm_state[seqs]
+                out[tokens] = recurrent(states, tokens)
+                ssm_state[seqs] = states
+            for i, length in enumerate(lengths):
+                if length < 2:
+                    continue
+                start, end = bounds[i], bounds[i + 1]
+                scan, final = mamba2_chunk_scan(
+                    x[start:end].view(1, length, heads, head_dim), dt[None, start:end], A,
+                    B[start:end].view(1, length, groups, state), C[start:end].view(1, length, groups, state),
+                    chunk_size=self.chunk_size, D=self.D, z=None, dt_bias=self.dt_bias, dt_softplus=True,
+                    initial_states=ssm_state[i : i + 1], dt_limit=self.time_step_limit, return_final_states=True,
+                )  # fmt: skip
+                out[start:end] = scan.view(length, heads, head_dim)
+                ssm_state[i] = final[0].to(ssm_state.dtype)
+        cache.write_cache_states(self.layer_idx, (conv_state, ssm_state), kwargs)
+        scan_output = self.norm(out.view(1, num_tokens, -1), gate)
+        return self.out_proj(scan_output.to(dtype))
+
     @force_accelerate_hooks("conv1d")
     @deprecate_kwarg("cache_params", "5.40.0", new_name="cache")
     def forward(
@@ -582,6 +657,8 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs,
     ):
+        if isinstance(cache, PagedAttentionCache):
+            return self._paged_forward(hidden_states, cache, kwargs)
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
         # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
