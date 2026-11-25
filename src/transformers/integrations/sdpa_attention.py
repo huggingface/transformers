@@ -1,6 +1,5 @@
 import os
 from collections.abc import Callable
-from typing import cast
 
 import torch
 
@@ -12,8 +11,6 @@ logger = logging.get_logger(__name__)
 
 
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
-_is_torch_greater_or_equal_than_2_11 = is_torch_greater_or_equal("2.11", accept_dev=True)
-_is_torch_greater_or_equal_than_2_12 = is_torch_greater_or_equal("2.12", accept_dev=True)
 _is_torch_greater_or_equal_than_2_13 = is_torch_greater_or_equal("2.13", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
@@ -95,79 +92,30 @@ def create_position_bias_mask(
     return position_bias_mask.contiguous()
 
 
-def sdpa_varlen_attention_forward(
+def sdpa_packed_sequences_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
     cu_seq_lens_q: torch.Tensor,
     cu_seq_lens_k: torch.Tensor | None = None,
-    max_length_q: int | None = None,
-    max_length_k: int | None = None,
-    dropout: float = 0.0,
-    scaling: float | None = None,
     is_causal: bool | None = None,
     sliding_window: int | None = None,
     sequence_lengths: list[int] | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     """
-    Attention over sequences packed along the length, `(batch, heads, length, head_dim)`, delimited by `cu_seq_lens_q`
-    (and `cu_seq_lens_k`) over the flattened batch.
-
-    Runs torch's varlen kernel when it supports the inputs: CUDA, half precision, no dropout, and a head size that is a
-    multiple of 8 up to 256, the same for values. Otherwise, reads the lengths on the host and attends over each
-    sequence separately.
+    SDPA over sequences packed along the length, `(batch, heads, length, head_dim)`, delimited by `cu_seq_lens_q` (and
+    `cu_seq_lens_k`) over the flattened batch: one call per sequence, instead of a dense mask over the whole rows.
     """
     batch_size, num_heads, _, head_dim = query.shape
     cu_seq_lens_k = cu_seq_lens_q if cu_seq_lens_k is None else cu_seq_lens_k
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
     # One packed row of all the sequences: a view for a batch of one
     query, key, value = (states.transpose(0, 1).flatten(1, 2)[None] for states in (query, key, value))
-    use_varlen = (
-        _is_torch_greater_or_equal_than_2_11
-        and query.is_cuda
-        and query.dtype in (torch.float16, torch.bfloat16)
-        and dropout == 0.0
-        # Head sizes the flash kernel supports, the same for values (unlike MLA's)
-        and head_dim % 8 == 0
-        and head_dim <= 256
-        and value.shape[-1] == head_dim
-    )
-    if use_varlen:
-        from torch.nn.attention.varlen import varlen_attn
-
-        # The kernel only uses the maximum lengths to size its launch: without precomputed ones, the total lengths are
-        # valid bounds that need no host sync
-        max_length_q = query.shape[2] if max_length_q is None else max_length_q
-        max_length_k = key.shape[2] if max_length_k is None else max_length_k
-        # Keys a query sees on its left and right, -1 for all of them
-        window_size = (-1 if sliding_window is None else sliding_window - 1, 0 if is_causal else -1)
-        varlen_kwargs = {}
-        if query.shape[1] != key.shape[1]:
-            if _is_torch_greater_or_equal_than_2_12:
-                varlen_kwargs["enable_gqa"] = True
-            else:
-                key = repeat_kv(key, query.shape[1] // key.shape[1])
-                value = repeat_kv(value, query.shape[1] // value.shape[1])
-        # Without `return_aux`, a single tensor
-        attn_output = cast(
-            torch.Tensor,
-            varlen_attn(
-                query[0].transpose(0, 1),
-                key[0].transpose(0, 1),
-                value[0].transpose(0, 1),
-                cu_seq_lens_q.to(torch.int32),
-                cu_seq_lens_k.to(torch.int32),
-                max_length_q,
-                max_length_k,
-                scale=scaling,
-                window_size=window_size,
-                **varlen_kwargs,
-            ),
-        )
-        return attn_output.view(batch_size, -1, num_heads, head_dim), None
-
+    # The varlen kwargs of flash attention, unused here
+    for name in ("max_length_q", "max_length_k", "packed_block_mask"):
+        kwargs.pop(name, None)
     attn_output, _ = per_sequence_attention_forward(
         sdpa_attention_forward,
         module,
@@ -179,8 +127,6 @@ def sdpa_varlen_attention_forward(
         sequence_lengths=sequence_lengths,
         is_causal=is_causal,
         sliding_window=sliding_window,
-        dropout=dropout,
-        scaling=scaling,
         **kwargs,
     )
     return attn_output.view(batch_size, -1, num_heads, head_dim), None
@@ -312,7 +258,7 @@ def sdpa_attention_forward(
         kwargs["cu_seq_lens_q"] = kwargs["cu_seq_lens_k"] = attention_mask
         attention_mask = None
     if kwargs.get("cu_seq_lens_q") is not None and attention_mask is None:
-        return sdpa_varlen_attention_forward(
+        return sdpa_packed_sequences_attention_forward(
             module, query, key, value, dropout=dropout, scaling=scaling, is_causal=is_causal, **kwargs
         )
 

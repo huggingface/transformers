@@ -1576,7 +1576,7 @@ class PreTrainedModel(
                             f"{preface} FlashAttention{flash_attn_version} requires compute capability >= {cuda_min_major_version}, but found {torch.cuda.get_device_capability()} with compute capability {major}.x"
                         )
 
-    def _flash_attn_can_dispatch(self, flash_attn_version: int, is_init_check: bool = False) -> bool:
+    def _flash_attn_can_dispatch(self, flash_attn_version: int | str, is_init_check: bool = False) -> bool:
         """
         Check the availability of Flash Attention for a given model.
 
@@ -1596,7 +1596,7 @@ class PreTrainedModel(
                 " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
             )
 
-        if flash_attn_version not in [2, 3, 4]:
+        if flash_attn_version not in FLASH_ATTENTION_COMPATIBILITY_MATRIX:
             raise ValueError(f"Requested Flash Attention {flash_attn_version} which is not supported.")
 
         # Check if we can even use the FA version based on the env of the user
@@ -1604,7 +1604,7 @@ class PreTrainedModel(
 
         # Check for attention dropout, which is incompatible with newer FA versions
         # (many should not really care about dropout as it is not super effective, hence warning for now)
-        if flash_attn_version > 2:
+        if flash_attn_version != 2:
             if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
                 logger.warning_once(
                     f"You are attempting to use Flash Attention {flash_attn_version} with dropout. "
@@ -1789,6 +1789,7 @@ class PreTrainedModel(
         if (
             self._supports_flash_attn
             and requested_original_flash_attn
+            and attn_implementation in FLASH_ATTN_KERNEL_FALLBACK
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
@@ -1823,7 +1824,7 @@ class PreTrainedModel(
             except Exception as e:
                 # raise the proper exception for requested flash attention
                 if requested_original_flash_attn:
-                    fa_version = int(attn_implementation[-1])  # "flash_attention_(2|3|...)"
+                    fa_version = int(attn_implementation[-1])  # "flash_attention_(2|3|4)", which have kernels
                     self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
 
                 # error properly out if a kernel was specifically requested
@@ -1873,9 +1874,10 @@ class PreTrainedModel(
 
         # Perform relevant checks
         if is_flash_attention_requested(requested_attention_implementation=applicable_attention) and (
-            fa_matched := re.search(r"^flash_attention_(\d)$", applicable_attention)
+            fa_matched := re.search(r"^flash_attention_(\d|torch)$", applicable_attention)
         ):
-            fa_version = int(fa_matched.group(1))  # last digit
+            fa_version = fa_matched.group(1)
+            fa_version = int(fa_version) if fa_version.isdigit() else fa_version
             self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
         elif "flex_attention" in applicable_attention:
             self._flex_attn_can_dispatch(is_init_check)
@@ -4002,6 +4004,7 @@ class PreTrainedModel(
                     - `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention))
                     - `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper))
                     - `"flash_attention_4"` (using [Dao-AILab/flash-attention/flash_attn/cute](https://github.com/Dao-AILab/flash-attention/tree/main/flash_attn/cute)).
+                    - `"flash_attention_torch"` (using torch's native [varlen attention](https://docs.pytorch.org/docs/stable/nn.attention.varlen.html)).
                 By default, if available, SDPA will be used. The default is otherwise the manual `"eager"` implementation.
 
                 Accept HF kernel references in the form:
@@ -5251,6 +5254,7 @@ class AttentionInterface(GeneralInterface):
     # a new instance is created (in order to locally override a given function)
     _global_mapping = {
         "flash_attention_4": flash_attention_forward,
+        "flash_attention_torch": flash_attention_forward,
         "flash_attention_3": flash_attention_forward,
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,

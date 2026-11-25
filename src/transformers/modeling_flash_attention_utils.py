@@ -73,6 +73,10 @@ FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_4": "kernels-community/flash-attn4",
 }
 
+# Torch's varlen attention gained `scale` and `window_size` in 2.11, and GQA in 2.12
+_is_torch_greater_or_equal_than_2_11 = is_torch_greater_or_equal("2.11", accept_dev=True)
+_is_torch_greater_or_equal_than_2_12 = is_torch_greater_or_equal("2.12", accept_dev=True)
+
 FLASH_ATTN_KERNEL_VERSIONS = {
     # v4 was only tested on 2.10 and upwards
     "kernels-community/flash-attn2": 4 if is_torch_greater_or_equal("2.10", accept_dev=True) else 3,
@@ -143,6 +147,13 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
     },
+    # Torch's native varlen attention, the Flash Attention kernel built into torch
+    "torch": {
+        "flash_attn_version": "torch",
+        "general_availability_check": lambda: _is_torch_greater_or_equal_than_2_11 and is_torch_cuda_available(),
+        "pkg_availability_check": lambda *args, **kwargs: _is_torch_greater_or_equal_than_2_11,
+        "supported_devices": ((is_torch_cuda_available, "cuda"),),
+    },
 }
 
 
@@ -166,6 +177,62 @@ _hf_api_to_flash_mapping = {
 _flash_api_alternative_names = {"s_aux": "learnable_sink", "block_table": "page_table"}
 
 
+def _torch_flash_attn_varlen_func(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    cu_seqlens_q: torch.Tensor,
+    cu_seqlens_k: torch.Tensor,
+    max_seqlen_q: int,
+    max_seqlen_k: int,
+    dropout_p: float = 0.0,
+    softmax_scale: float | None = None,
+    causal: bool = False,
+    window_size: tuple[int, int] = (-1, -1),
+    s_aux: torch.Tensor | None = None,
+) -> torch.Tensor:
+    """`flash_attn_varlen_func` on torch's native varlen attention, for `flash_attention_torch`."""
+    if dropout_p != 0.0 or s_aux is not None:
+        raise ValueError(
+            "`flash_attention_torch` supports neither attention dropout nor attention sinks. Try using another "
+            "attention implementation, or turn off the dropout (e.g. with `model.eval()`)."
+        )
+    from torch.nn.attention.varlen import varlen_attn
+
+    varlen_kwargs = {}
+    if q.shape[1] != k.shape[1]:
+        if _is_torch_greater_or_equal_than_2_12:
+            varlen_kwargs["enable_gqa"] = True
+        else:
+            k = k.repeat_interleave(q.shape[1] // k.shape[1], dim=1)
+            v = v.repeat_interleave(q.shape[1] // v.shape[1], dim=1)
+    # Torch has no causal flag: causal attention is a window without keys on the right
+    window_size = (window_size[0], 0) if causal else window_size
+    return varlen_attn(
+        q,
+        k,
+        v,
+        cu_seqlens_q.to(torch.int32),
+        cu_seqlens_k.to(torch.int32),
+        max_seqlen_q,
+        max_seqlen_k,
+        scale=softmax_scale,
+        window_size=window_size,
+        **varlen_kwargs,
+    )
+
+
+def _torch_flash_attn_func(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, **kwargs) -> torch.Tensor:
+    """`flash_attn_func` on torch's native varlen attention, for `flash_attention_torch`: the batch as sequences of
+    the same length."""
+    batch_size, q_length, k_length = q.shape[0], q.shape[1], k.shape[1]
+    cu_seqlens_q = torch.arange(0, (batch_size + 1) * q_length, q_length, dtype=torch.int32, device=q.device)
+    cu_seqlens_k = torch.arange(0, (batch_size + 1) * k_length, k_length, dtype=torch.int32, device=q.device)
+    q, k, v = (states.flatten(0, 1) for states in (q, k, v))
+    out = _torch_flash_attn_varlen_func(q, k, v, cu_seqlens_q, cu_seqlens_k, q_length, k_length, **kwargs)
+    return out.view(batch_size, q_length, *out.shape[1:])
+
+
 def _lazy_imports(
     implementation: str | None, attention_wrapper: Callable | None = None, allow_all_kernels: bool = False
 ) -> tuple[Callable, Callable, Callable, Callable, Callable]:
@@ -187,8 +254,12 @@ def _lazy_imports(
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
+    if implementation == "flash_attention_torch":
+        flash_attn_func, flash_attn_varlen_func = _torch_flash_attn_func, _torch_flash_attn_varlen_func
+        flash_attn_with_kvcache = None  # not supported yet
+
     # If we are on NPU, use the NPU-specific flash functions. No need to check other branches, is_fa is False on NPU
-    if is_torch_npu_available():
+    elif is_torch_npu_available():
         # Package `flash-attn` is unavailable on Ascend NPU, which will cause ImportError
         # Flash-Attention2 related apis for Ascend NPU must be imported from `.integrations.npu_flash_attention` module
         from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
