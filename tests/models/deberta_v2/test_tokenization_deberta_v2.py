@@ -134,3 +134,11 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         sep_indices = [i for i, t in enumerate(tokens_pair) if t == "[SEP]"]
         self.assertEqual(len(sep_indices), 2)
         self.assertEqual(sep_indices[-1], len(tokens_pair) - 1)
+
+    def test_sentencepiece_nfkc_normalization(self):
+        # The checkpoint's SentencePiece model normalizes with nmt_nfkc (its precompiled charsmap). Without it,
+        # compatibility characters (ligatures, Roman numerals, circled digits, fullwidth letters) are not folded
+        # and encode to [UNK]. Expected tokens are the original SentencePiece tokenizer's output.
+        tokenizer = DebertaV2Tokenizer.from_pretrained(self.from_pretrained_id[0])
+        tokens = tokenizer.convert_ids_to_tokens(tokenizer("ﬁ Ⅻ ① ｆｕｌｌｗｉｄｔｈ")["input_ids"])
+        self.assertListEqual(tokens, ["[CLS]", "▁fi", "▁XII", "▁1", "▁full", "width", "[SEP]"])
