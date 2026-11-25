@@ -71,11 +71,10 @@ class JambaRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        # Don't pass the weight to rms_norm: scaling after the cast to the input dtype (autocast runs rms_norm in
+        # fp32) keeps the rounding and output dtype of the original implementations, fusing it shifts the logits
+        normalized = nn.functional.rms_norm(hidden_states, hidden_states.shape[-1:], eps=self.variance_epsilon)
+        return self.weight * normalized.to(hidden_states.dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -262,30 +261,6 @@ def causal_conv1d_fn(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub_with_fallback("mamba_inner_fn", "mamba_ssm")
-def mamba_inner_fn(
-    xz: torch.Tensor,
-    conv1d_weight: torch.Tensor,
-    conv1d_bias: torch.Tensor | None,
-    x_proj_weight: torch.Tensor,
-    delta_proj_weight: torch.Tensor,
-    out_proj_weight: torch.Tensor,
-    out_proj_bias: torch.Tensor | None,
-    A: torch.Tensor,
-    B: torch.Tensor | None = None,
-    C: torch.Tensor | None = None,
-    D: torch.Tensor | None = None,
-    delta_bias: torch.Tensor | None = None,
-    delta_softplus: bool = True,
-    b_rms_weight: torch.Tensor | None = None,
-    c_rms_weight: torch.Tensor | None = None,
-    dt_rms_weight: torch.Tensor | None = None,
-    b_c_dt_rms_eps: float = 1e-6,
-    **kwargs,
-):
-    return None
-
-
 @use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
 def mamba_selective_state_update(
     state: torch.Tensor,
@@ -440,9 +415,7 @@ def mamba_selective_scan(
     return scan_output
 
 
-@use_kernelized_func(
-    [mamba_inner_fn, mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update]
-)
+@use_kernelized_func([mamba_selective_scan, mamba_selective_state_update, causal_conv1d_fn, causal_conv1d_update])
 class JambaMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.

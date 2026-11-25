@@ -37,6 +37,7 @@ from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -470,6 +471,35 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = Owlv2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self,
+        name,
+        dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
+    ):
+        # `logits_per_text` is scaled by `exp(logit_scale)` (~14), which amplifies the bf16 eager/sdpa difference
+        atols = {
+            ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 5e-2,  # this was relaxed
+            ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 5e-2,  # this was relaxed
+            ("cuda", False, torch.float32): 1e-6,
+            ("cuda", False, torch.bfloat16): 5e-2,  # this was relaxed
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-6,
+            ("cuda", True, torch.bfloat16): 5e-2,  # this was relaxed
+            ("cuda", True, torch.float16): 5e-3,
+        }
+        _test_eager_matches_sdpa_inference(
+            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+        )
 
     @slow
     def test_model_from_pretrained(self):
