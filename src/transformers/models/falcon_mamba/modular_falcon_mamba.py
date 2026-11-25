@@ -159,7 +159,6 @@ class FalconMambaMixer(MambaMixer):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
-        A = -torch.exp(self.A_log.float())
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation
