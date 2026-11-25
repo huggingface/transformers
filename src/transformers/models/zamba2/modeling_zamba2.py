@@ -872,7 +872,7 @@ class Zamba2MambaMixer(nn.Module):
             if cache is not None:
                 scan_output, last_scan_recurrent_state = scan_output
             # Collect it
-            all_outputs.append(scan_output)
+            all_outputs.append(scan_output.reshape(batch_size, effective_sequence_length, self.intermediate_size))
 
             # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
             intermediate_recurrent_states = []
@@ -886,11 +886,11 @@ class Zamba2MambaMixer(nn.Module):
                 # last_recurrent_state = last_recurrent_state.clone()
                 local_output = mamba2_selective_state_update(
                     last_recurrent_state,
-                    sequential_hidden_states[..., i].view(batch_size, self.num_heads, self.head_dim),
-                    sequential_dt[..., i].transpose(1, 2).expand(-1, -1, self.head_dim),
+                    sequential_hidden_states[:, i].view(batch_size, self.num_heads, self.head_dim),
+                    sequential_dt[:, i : i + 1].transpose(1, 2).expand(-1, -1, self.head_dim),
                     A[:, None, None].expand(-1, self.head_dim, self.ssm_state_size),
-                    sequential_B[..., i].view(batch_size, self.n_groups, self.ssm_state_size),
-                    sequential_C[..., i].view(batch_size, self.n_groups, self.ssm_state_size),
+                    sequential_B[:, i].view(batch_size, self.n_groups, self.ssm_state_size),
+                    sequential_C[:, i].view(batch_size, self.n_groups, self.ssm_state_size),
                     self.D[:, None].expand(-1, self.head_dim),
                     z=None,
                     dt_bias=self.dt_bias[:, None].expand(-1, self.head_dim),
@@ -898,12 +898,12 @@ class Zamba2MambaMixer(nn.Module):
                     **kwargs,
                 )
                 # Combine them
-                all_outputs.append(local_output)
+                all_outputs.append(local_output.view(batch_size, 1, -1))
                 # Note that we need to copy here since it's updated in-place
                 intermediate_recurrent_states.append(last_recurrent_state.clone())
 
             # Cat all outputs
-            scan_output = torch.cat(all_outputs, dim=2).reshape(batch_size, seq_len, -1)
+            scan_output = torch.cat(all_outputs, dim=1)
 
             # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
             last_recurrent_state = (
