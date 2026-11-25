@@ -191,7 +191,8 @@ def trtllm_experts_forward(prepared, hidden_states, top_k_index, top_k_weights):
     import flashinfer
     from flashinfer.fused_moe import Fp8QuantizationType, WeightLayout
 
-    CALLS["trtllm"] += 1
+    if not torch.compiler.is_compiling():  # a traced count is a guard: dynamo recompiled on every call
+        CALLS["trtllm"] += 1
     w13, s13, w2, s2 = prepared
     num_experts, _, two_i, _ = w13.shape
     num_tokens, hidden = hidden_states.shape
@@ -238,7 +239,8 @@ def trtllm_experts_forward_routing(
     import flashinfer
     from flashinfer.fused_moe import Fp8QuantizationType, WeightLayout
 
-    CALLS["trtllm"] += 1
+    if not torch.compiler.is_compiling():  # a traced count is a guard: dynamo recompiled on every call
+        CALLS["trtllm"] += 1
     w13, s13, w2, s2 = prepared
     num_experts, _, two_i, _ = w13.shape
     num_tokens, hidden = hidden_states.shape
@@ -1003,7 +1005,8 @@ def decode_experts_forward(
 ):
     """Block-FP8 routed experts: route, activation quant, gate_up, (requant for narrow tiles), down, top-k sum.
     Returns `(num_tokens, hidden)` in the input dtype."""
-    CALLS["decode"] += 1
+    if not torch.compiler.is_compiling():  # a traced count is a guard: dynamo recompiled on every call
+        CALLS["decode"] += 1
     num_experts = gate_up.shape[0]
     num_top_k = top_k_index.shape[-1]
     if gate_up_config is None:
