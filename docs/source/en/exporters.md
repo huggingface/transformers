@@ -891,8 +891,8 @@ config = OnnxConfig(ort_fusions="dml")
 
 | | `"cpu"` | `"cuda"` | `"webgpu"` | `"dml"` |
 |---|---|---|---|---|
-| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
-| Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
+| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now (slower) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
+| Other attention | plain ops for now (slower) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
 | Mixture of experts | unfused | `MoE`, opted into | unfused | unfused |
 | CUDA graphs | — | static exports can replay | — | — |
 
