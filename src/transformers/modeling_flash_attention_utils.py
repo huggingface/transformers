@@ -890,9 +890,11 @@ def _flash_attention_forward(
         q, k, v = (x.reshape(-1, 1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
         # NOTE: here k.size(0) is the number of sequences because this is decode only (for now)
         cache_seqlens = cu_seq_lens_k[1 : k.size(0) + 1] - cu_seq_lens_k[: k.size(0)] - 1
+        # The keys span every page the block table addresses, so a sliding window layer gets its window
         flash_kwargs = flash_kwargs_fn(
-            max_seqlen_q=max_length_q, max_seqlen_k=max_length_k, block_table=block_table, cache_seqlens=cache_seqlens
-        )
+            key_length=block_table.size(1) * k_cache.size(1), max_seqlen_q=max_length_q, max_seqlen_k=max_length_k,
+            block_table=block_table, cache_seqlens=cache_seqlens,
+        )  # fmt: skip
         out = flash_kvcache_fn(q, k_cache, v_cache, k, v, **flash_kwargs)
         out = out[0] if isinstance(out, tuple) else out
         return out.view(batch_size, -1, *out.shape[-2:])

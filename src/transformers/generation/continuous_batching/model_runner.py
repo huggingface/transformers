@@ -785,8 +785,15 @@ class ModelRunner:
             # Warm up the decode fast path if it is available
             if self.cache.max_decode_fast_path_length > 0:
                 num_requests = 1
+                self._warmup_failed = False
                 while True:
                     total_duration += self.run_one_warmup(model=model, num_q_tokens=num_requests, max_kv_read=None)
+                    # Some models' layers do not compile or capture at decode sizes: their decode steps stay varlen
+                    if self._warmup_failed:
+                        logger.warning("The decode fast path failed to warm up, decode steps go through the varlen path.")
+                        self.cache.max_decode_fast_path_length = 0
+                        self.cache.use_varlen_block_table = False
+                        break
                     if num_requests >= self.cb_config.max_requests_per_batch:
                         break
                     num_requests = min(2 * num_requests, self.cb_config.max_requests_per_batch)
@@ -915,6 +922,7 @@ class ModelRunner:
         # Exception handling
         except Exception as e:
             duration = 0.0
+            self._warmup_failed = True
             logger.warning(f"Failed to warm up: {e}.\nGraph pool may fragment and OOM under load.")
 
         # In any case, free the blocks allocated for the fake warmup requests

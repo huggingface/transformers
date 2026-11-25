@@ -595,7 +595,11 @@ class ContinuousBatchingIOs:
 
             # Accumulate the key sequence lengths for the current request
             for layer_type, cache_allocator in self.cache.cache_allocators.items():
-                seqlen_k = cache_allocator.get_seqlen_k(past_length, query_length)
+                # The block table path reads the cache by position, so every layer type sees the whole sequence
+                if self.use_block_table:
+                    seqlen_k = past_length + query_length
+                else:
+                    seqlen_k = cache_allocator.get_seqlen_k(past_length, query_length)
                 cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + seqlen_k)
                 self.max_length_k[layer_type] = max(self.max_length_k[layer_type], seqlen_k)
 
