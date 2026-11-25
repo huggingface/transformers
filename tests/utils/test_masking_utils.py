@@ -589,6 +589,10 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertIsNone(create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, cache=None))
 
     def test_create_masks_for_generate_hybrid_sliding(self):
+        """
+        Verify that `create_masks_for_generate` maps `"hybrid_sliding"` layers to
+        `create_sliding_window_causal_mask` (not `create_causal_mask`) when pre-building masks for `StaticCache`.
+        """
         config = LlamaConfig(
             num_hidden_layers=2,
             hidden_size=32,

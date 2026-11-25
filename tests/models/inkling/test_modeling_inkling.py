@@ -125,6 +125,23 @@ class InklingTextModelTests(CausalLMModelTest, unittest.TestCase):
         self.assertEqual(weights.dtype, dtype)
         self.assertEqual(gammas.dtype, dtype)
 
+    def test_generate_static_cache_matches_dynamic_cache(self):
+        """
+        Verify that greedy generation with `cache_implementation="static"` succeeds and matches
+        `cache_implementation="dynamic"` when sequence length exceeds `sliding_window_size` on `hybrid_sliding` layers.
+        """
+        config = self.model_tester.get_config()
+        config.sliding_window = 4
+        config.sliding_window_size = 4
+        config._attn_implementation = "eager"
+
+        model = InklingForCausalLM(config).to(torch_device).eval()
+        input_ids = ids_tensor([1, 6], config.vocab_size)
+
+        out_dynamic = model.generate(input_ids, max_new_tokens=5, cache_implementation="dynamic", do_sample=False)
+        out_static = model.generate(input_ids, max_new_tokens=5, cache_implementation="static", do_sample=False)
+        torch.testing.assert_close(out_static, out_dynamic)
+
 
 class InklingAudio2TextModelTester(ALMModelTester):
     base_model_class = InklingModel
