@@ -1004,8 +1004,9 @@ class ContinuousBatchingIOs:
         use_varlen_block_table = self.use_block_table and self.cache.use_varlen_block_table
         if use_padding:  # TODO: add per-path padding
             # Keep max_length_q > 1 so FA skips the seqlen_q==1 GQA reshape on padded q, except for the decode-only
-            # steps of the varlen block table path, where max_length_q = 1 picks FA's decode kernel
-            if not (use_varlen_block_table and self.max_length_q == 1):
+            # steps of the varlen block table path, where max_length_q = 1 picks FA's decode kernel (and of latent
+            # attention, see `PagedAttentionCache.latent_attention`)
+            if not ((use_varlen_block_table or self.cache.latent_attention) and self.max_length_q == 1):
                 self.max_length_q = q_size
             # Additionally, if there are CUDA graphs, we need to pad max_length_k so graph capture will work regardless
             # of the future Q / KV lengths of the next batches
@@ -1070,7 +1071,7 @@ class ContinuousBatchingIOs:
         # Keys for varlen path
         if self.mtp_mode:
             return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values(), self._get_num_sequences(True))
-        return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values())
+        return (self.num_q_tokens, self.max_kv_read, *self.max_length_k.values(), self.max_length_q == 1)
 
     def get_graph(self, prefix: str = "") -> torch.cuda.CUDAGraph | None:
         key = self._get_graph_key()

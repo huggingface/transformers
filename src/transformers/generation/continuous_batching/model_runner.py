@@ -782,6 +782,11 @@ class ModelRunner:
                 max_kv_read = max(0, infer_max_single_request_tokens(self.cache) - num_q_tokens)
                 total_duration += self.run_one_warmup(model=model, num_q_tokens=num_q_tokens, max_kv_read=max_kv_read)
 
+            # [scratch] Latent attention: its decode-only varlen steps (max_length_q = 1) compile apart, warm them up
+            if self.cache.latent_attention and self.cache.max_decode_fast_path_length == 0:
+                num_requests = self.cb_config.max_requests_per_batch
+                total_duration += self.run_one_warmup(model, num_requests, None, decode_varlen=True)
+
             # Warm up the decode fast path if it is available
             if self.cache.max_decode_fast_path_length > 0:
                 num_requests = 1
@@ -853,13 +858,20 @@ class ModelRunner:
                         self.cache.free_blocks(fs.state.request_id)
         return captured
 
-    def run_one_warmup(self, model: nn.Module, num_q_tokens: int, max_kv_read: int | None) -> float:
+    def run_one_warmup(
+        self, model: nn.Module, num_q_tokens: int, max_kv_read: int | None, decode_varlen: bool = False
+    ) -> float:
         """Warms up the decode fast path (if max_kv_read is None) or varlen path (if max_kv_read is an int) for a
         specific number of query and cache-resident tokens. `max_kv_read` is the number of tokens already in cache,
-        matching the terminology used by `prepare_batch_tensors` and the scheduler."""
+        matching the terminology used by `prepare_batch_tensors` and the scheduler. With `decode_varlen`, a decode-only
+        step of `num_q_tokens` requests goes through the varlen path."""
         # Make up fake request states according to the chosen path
-        use_decode_fast_path = max_kv_read is None or self.cache.use_varlen_block_table
-        if max_kv_read is None:
+        use_decode_fast_path = not decode_varlen and (max_kv_read is None or self.cache.use_varlen_block_table)
+        if decode_varlen:
+            num_requests, num_q_tokens = num_q_tokens, 1
+            status = RequestStatus.DECODING
+            max_kv_read = self.cb_config.page_size
+        elif max_kv_read is None:
             num_requests = num_q_tokens
             status = RequestStatus.DECODING
             num_q_tokens = _CB_MTP_QUERY if _CB_MTP_BT else 1  # gap3-mtp prototype: the last token and the draft
