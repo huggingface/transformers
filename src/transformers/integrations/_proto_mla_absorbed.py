@@ -12,10 +12,10 @@ import triton.language as tl
 @triton.jit
 def _mla_varlen_kernel(
     Q, KV, ReadIndex, Out, PartialOut, PartialLse, CuSeqlensQ, CuSeqlensK, scale,
-    stride_q_t, stride_q_h, stride_kv_t, stride_o_t, stride_o_h, num_rows,
+    stride_q_t, stride_q_h, stride_kv_t, stride_o_t, stride_o_h, num_rows, stride_bt,
     NUM_HEADS: tl.constexpr, D_LATENT: tl.constexpr, D_ROPE: tl.constexpr, D_LATENT_P: tl.constexpr,
     D_ROPE_P: tl.constexpr, HAS_INDEX: tl.constexpr, BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
-    NUM_SPLITS: tl.constexpr,
+    NUM_SPLITS: tl.constexpr, HAS_BLOCK_TABLE: tl.constexpr, PAGE: tl.constexpr,
 ):  # fmt: skip
     """One program per (sequence, block of BLOCK_M (query token, head) rows, split of the keys). Rows attend causally,
     bottom-right aligned: the query token i of a sequence with q_len new tokens and kv_len keys sees the keys
@@ -55,7 +55,10 @@ def _mla_varlen_kernel(
     for n0 in range(lo, hi, BLOCK_N):
         keys = n0 + tl.arange(0, BLOCK_N)
         key_mask = keys < k_len
-        if HAS_INDEX:  # the rows of the sequence are read in place in the cache, at their physical indices
+        if HAS_BLOCK_TABLE:  # key `o` of the sequence is at row `table[seq, o // PAGE] * PAGE + o % PAGE`
+            pages = tl.load(ReadIndex + seq * stride_bt + keys // PAGE, mask=key_mask, other=0)
+            kv_rows = pages.to(tl.int64) * PAGE + keys % PAGE
+        elif HAS_INDEX:  # the rows of the sequence are read in place in the cache, at their physical indices
             kv_rows = tl.load(ReadIndex + k_start + keys, mask=key_mask, other=0)
         else:
             kv_rows = k_start + keys
@@ -63,7 +66,7 @@ def _mla_varlen_kernel(
         k_lat = tl.load(kv_base + offs_l[None, :], mask=key_mask[:, None] & lat_mask[None, :], other=0.0)
         k_rope = tl.load(kv_base + D_LATENT + offs_r[None, :], mask=key_mask[:, None] & rope_mask[None, :], other=0.0)
         s = tl.dot(q_lat, tl.trans(k_lat)) + tl.dot(q_rope, tl.trans(k_rope))
-        s = s * scale
+        s = (s * scale).to(tl.float32)  # under torch.compile, `scale` comes in as an fp64 scalar
         s = tl.where((keys[None, :] <= limit[:, None]) & key_mask[None, :], s, float("-inf"))
         m_new = tl.maximum(m_i, tl.max(s, 1))
         alpha = tl.exp(m_i - m_new)
@@ -109,10 +112,13 @@ _NUM_SMS = torch.cuda.get_device_properties(torch.cuda.current_device()).multi_p
 _PREFILL_BLOCK_M = 32 if torch.cuda.get_device_capability()[0] == 10 else 64
 
 
-def mla_varlen_attention(q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, scale, d_latent):
+def mla_varlen_attention(
+    q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, scale, d_latent, block_table=None, page_size=1
+):
     """`q` [tokens, heads, d_latent + d_rope] absorbed queries, `kv` [rows, d_latent + d_rope] latent rows: the keys of
     the sequences are the rows `read_index[cu_seqlens_k[b]:cu_seqlens_k[b + 1]]`, or the rows `cu_seqlens_k[b]` onward
-    when `read_index` is None. Returns the latent output [tokens, heads, d_latent]."""
+    when `read_index` is None, or with a `block_table` [sequences, pages] key `o` of sequence `b` is the row
+    `block_table[b, o // page_size] * page_size + o % page_size`. Returns the latent output [tokens, heads, d_latent]."""
     num_tokens, num_heads, d_qk = q.shape
     out = torch.empty(num_tokens, num_heads, d_latent, dtype=q.dtype, device=q.device)
     num_seqs = cu_seqlens_q.shape[0] - 1
@@ -130,12 +136,15 @@ def mla_varlen_attention(q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seql
     if num_splits > 1:
         partial_out = torch.empty(num_splits, num_tokens * num_heads, d_latent_p, dtype=torch.float32, device=q.device)
         partial_lse = torch.empty(num_splits, num_tokens * num_heads, dtype=torch.float32, device=q.device)
+    index = block_table if block_table is not None else (kv if read_index is None else read_index)
     _mla_varlen_kernel[(num_seqs, row_blocks, num_splits)](
-        q, kv, kv if read_index is None else read_index, out, partial_out, partial_lse, cu_seqlens_q, cu_seqlens_k,
+        q, kv, index, out, partial_out, partial_lse, cu_seqlens_q, cu_seqlens_k,
         scale, q.stride(0), q.stride(1), kv.stride(0), out.stride(0), out.stride(1), num_tokens * num_heads,
+        block_table.stride(0) if block_table is not None else 0,
         NUM_HEADS=num_heads, D_LATENT=d_latent, D_ROPE=d_qk - d_latent,
         D_LATENT_P=d_latent_p, D_ROPE_P=max(16, triton.next_power_of_2(d_qk - d_latent)),
         HAS_INDEX=read_index is not None, BLOCK_M=block_m, BLOCK_N=block_n, NUM_SPLITS=num_splits,
+        HAS_BLOCK_TABLE=block_table is not None, PAGE=page_size,
         num_warps=8 if block_m == 64 and not decode else 4, num_stages=3 if decode else 2,
     )  # fmt: skip
     if num_splits > 1:
@@ -146,6 +155,9 @@ def mla_varlen_attention(q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seql
     return out
 
 
+# The cache writes and the views of the cache rows do not survive inductor's functionalization (illegal address under
+# `default_compile_level`), and the varlen path was never compiled: the steps capture it as it runs eagerly
+@torch.compiler.disable
 def absorbed_mla_forward(attn, q_nope, q_rope, kv_nope, k_rope, cache, kwargs):
     """A continuous batching step of DeepSeek-V2 / V3 attention on the cached latents: `q_nope` [1, heads, tokens,
     nope], `q_rope` [1, heads, tokens, rope], and the new latents `kv_nope` [1, 1, tokens, kv_lora_rank], `k_rope`
@@ -155,12 +167,22 @@ def absorbed_mla_forward(attn, q_nope, q_rope, kv_nope, k_rope, cache, kwargs):
 
     allocator = cache.layer_to_allocator[attn.layer_idx]
     latent_cache, rope_cache = allocator._latent_token_views[attn.layer_idx]
-    write_index = kwargs["write_index"][allocator.index]
-    read_index = kwargs["read_index"][allocator.index]
+    cu_seqlens_k = kwargs["cu_seq_lens_k"][allocator.layer_type].to(torch.int32)
+    block_table = kwargs.get("block_table")
+    if block_table is not None:  # the step reads and writes the cache through the block table
+        block_table = block_table[allocator.index]
+        if attn.layer_idx == allocator.layer_indices[0]:  # the rows the new tokens go to, the same for every layer
+            allocator._step_write_rows = _block_table_write_rows(
+                block_table, kwargs["cu_seq_lens_q"], cu_seqlens_k, kv_nope.shape[2], allocator.tokens_per_page,
+                allocator.write_trash_index,
+            )  # fmt: skip
+        write_index, read_index = allocator._step_write_rows, None
+    else:
+        write_index = kwargs["write_index"][allocator.index]
+        read_index = kwargs["read_index"][allocator.index]
     latent_cache.index_copy_(0, write_index, kv_nope.flatten(0, 2))
     rope_cache.index_copy_(0, write_index, k_rope.flatten(0, 2))
-    cu_seqlens_k = kwargs["cu_seq_lens_k"][allocator.layer_type].to(torch.int32)
-    if read_index.numel() == 0:  # nothing cached to read: the new tokens are the whole sequences
+    if block_table is None and read_index.numel() == 0:  # nothing cached to read: the new tokens are the sequences
         kv, read_index = torch.cat([kv_nope[0, 0], k_rope[0, 0]], dim=-1), None
     else:
         kv = latent_cache.as_strided((latent_cache.shape[0], allocator.row_numel), (latent_cache.stride(0), 1))
@@ -173,6 +195,20 @@ def absorbed_mla_forward(attn, q_nope, q_rope, kv_nope, k_rope, cache, kwargs):
     q = torch.cat([torch.einsum("htn,hnc->thc", q_nope[0], w_uk), q_rope[0].transpose(0, 1)], dim=-1)
     out = mla_varlen_attention(
         q, kv, read_index, kwargs["cu_seq_lens_q"], cu_seqlens_k, kwargs["max_length_q"], attn.scaling,
-        attn.kv_lora_rank,
+        attn.kv_lora_rank, block_table, allocator.tokens_per_page,
     )  # fmt: skip
     return torch.einsum("thc,hvc->thv", out, w_uv).reshape(1, out.shape[0], -1)
+
+
+def _block_table_write_rows(block_table, cu_seqlens_q, cu_seqlens_k, num_tokens, page_size, trash_row):
+    """The cache row of each new token of a block table step: token `t` of sequence `b` is at position
+    `seqlen_k[b] - seqlen_q[b] + t` of its sequence. Padding tokens (after the last sequence's) go to the trash row."""
+    cu_q, cu_k = cu_seqlens_q.long(), cu_seqlens_k.long()
+    num_seqs = block_table.shape[0]
+    token = torch.arange(num_tokens, device=block_table.device)
+    seq = torch.searchsorted(cu_q[1 : num_seqs + 1].contiguous(), token, right=True)
+    real = seq < num_seqs
+    seq = seq.clamp(max=num_seqs - 1)
+    position = (cu_k[seq + 1] - cu_k[seq]) - (cu_q[seq + 1] - cu_q[seq]) + (token - cu_q[seq])
+    page = block_table.long()[seq, (position // page_size).clamp(0, block_table.shape[1] - 1)]
+    return torch.where(real & (page >= 0), page * page_size + position % page_size, trash_row)

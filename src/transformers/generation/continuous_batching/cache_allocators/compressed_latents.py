@@ -55,6 +55,10 @@ class MLACacheAllocator(FullAttentionCacheAllocator):
         """Initializes the cache allocator for a group of MLA layers. The arguments are the ones of the parent class,
         `num_key_value_heads` is unused since the latents are cached before they are expanded to heads."""
         self.kv_lora_rank = config.kv_lora_rank
+        # [scratch] DeepSeek-V2 / V3's absorbed attention (`integrations/_proto_mla_absorbed.py`) reads and writes the
+        # latents through the block table: every step goes through it, with graph keys free of the context lengths
+        if type(self) is MLACacheAllocator and getattr(config, "model_type", None) in ("deepseek_v2", "deepseek_v3"):
+            self.supports_block_table = os.environ.get("PROTO_MLA_ABSORB", "1") == "1"
         self.latents_numel = config.kv_lora_rank + config.qk_rope_head_dim
         self.row_numel = self.latents_numel + self.index_head_dim
         self.cache_dtype = cache_dtype
