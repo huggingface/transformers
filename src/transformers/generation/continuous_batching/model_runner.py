@@ -306,6 +306,10 @@ class ModelRunner:
             host_io = io.io_pairs[io.current_pair].host_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
             if use_cuda_graph and self.cache.use_varlen_block_table and not self.use_cuda_graph_varlen:
                 use_cuda_graph = host_io.max_length_q == 1
+                # Nor is it compiled: those layers break the graph on every call, and each new batch made dynamo
+                # recompile (Qwen3-Next rolling: ~170 ms of host time per mixed step)
+                if not use_cuda_graph:
+                    forward_fn = self._forward_process_and_sample
             # [scratch] Latent attention: steps with prompts attend through flash attention on decompressed keys, which
             # reads the step's lengths on the host (see `utils.MLA_PREFILL_MIN_TOKENS`): they run eagerly
             if use_cuda_graph and self.cache.latent_attention and host_io.num_q_tokens >= MLA_PREFILL_MIN_TOKENS:
