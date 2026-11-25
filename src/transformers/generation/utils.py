@@ -1882,12 +1882,6 @@ class GenerationMixin(ContinuousMixin):
                     "num_return_sequences has to be 1 when doing assisted generate, "
                     f"but is {generation_config.num_return_sequences}."
                 )
-            if self._is_stateful:
-                # In assisted generation we need the ability to confirm whether the model would pick certain tokens,
-                # which is not possible with stateful models (they can't reset to a previous subset of generated text)
-                raise ValueError(
-                    f"assisted generation is not supported with stateful models, such as {self.__class__.__name__}"
-                )
 
         if (
             assistant_model := generation_mode_kwargs.get("assistant_model")

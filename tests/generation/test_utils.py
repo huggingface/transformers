@@ -418,12 +418,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         """Greedy decoding with a cache must produce what recomputing the whole sequence produces.
 
         The two tests above run both configurations but only check their own shapes, so a cache that feeds
-        its layers the wrong positions or a mask of the wrong width passes both. Models whose state *is*
-        their cache (`_is_stateful`) have no cacheless form to compare against and are skipped.
+        its layers the wrong positions or a mask of the wrong width passes both.
         """
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason=f"{model_class.__name__} keeps recurrent state, so decode has no cacheless form")
             # Only the weights are pinned; the testers draw inputs from a `global_rng` this does not touch,
             # so the input varies per process — the invariant has to hold for any input.
             set_seed(42)
@@ -708,8 +705,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # - assisted_decoding does not support `batch_size > 1`
 
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
             if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
@@ -806,8 +801,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # This test is mostly a copy of test_assisted_decoding_matches_greedy_search
 
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
             old_models = [  # models that we won't commit resources fixing because they are old and have little usage
                 # reformer: has a different cache format
                 "reformer",
@@ -886,8 +879,6 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
         # different shapes, see https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
         for model_class in self.all_generative_model_classes:
-            if model_class._is_stateful:
-                self.skipTest(reason="Stateful models don't support assisted generation")
             if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
