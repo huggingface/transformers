@@ -768,7 +768,8 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
 def packed_sequences_cu_seq_lens(
     config: PreTrainedConfig,
     packed_sequence_mask: torch.Tensor | None,
-    needs_dense_mask: bool,
+    allow_is_causal_skip: bool,
+    mask_overlays: tuple,
 ) -> torch.Tensor | None:
     """
     Packed rows are attended over by `varlen_attention` with one varlen kernel call, which takes the cumulative lengths
@@ -780,7 +781,9 @@ def packed_sequences_cu_seq_lens(
     if (
         packed_sequence_mask is None
         or config._attn_implementation != "varlen_attention"
-        or needs_dense_mask
+        # A mask the caller needs materialized, or that combines other masks
+        or not allow_is_causal_skip
+        or any(overlay is not None for overlay in mask_overlays)
         # Sparse-attention indexers (`index_topk`) select their keys on the dense mask
         or getattr(config, "index_topk", None) is not None
         # The number of sequences is data-dependent
@@ -993,11 +996,8 @@ def create_causal_mask(
     if early_exit:
         return attention_mask
 
-    # A mask the caller needs materialized, or that combines other masks, stays dense
-    needs_dense_mask = not allow_is_causal_skip or any(
-        overlay is not None for overlay in (or_mask_function, and_mask_function, block_sequence_ids)
-    )
-    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, needs_dense_mask)
+    overlays = (or_mask_function, and_mask_function, block_sequence_ids)
+    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, allow_is_causal_skip, overlays)
     if cu_seq_lens is not None:
         return cu_seq_lens
 
@@ -1232,11 +1232,8 @@ def create_sliding_window_causal_mask(
     if early_exit:
         return attention_mask
 
-    # A mask the caller needs materialized, or that combines other masks, stays dense
-    needs_dense_mask = not allow_is_causal_skip or any(
-        overlay is not None for overlay in (or_mask_function, and_mask_function, block_sequence_ids)
-    )
-    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, needs_dense_mask)
+    overlays = (or_mask_function, and_mask_function, block_sequence_ids)
+    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, allow_is_causal_skip, overlays)
     if cu_seq_lens is not None:
         return cu_seq_lens
 

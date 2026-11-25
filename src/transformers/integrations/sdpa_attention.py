@@ -92,55 +92,13 @@ def create_position_bias_mask(
     return position_bias_mask.contiguous()
 
 
-def sdpa_packed_sequences_attention_forward(
-    module: torch.nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    cu_seq_lens_q: torch.Tensor,
-    cu_seq_lens_k: torch.Tensor | None = None,
-    is_causal: bool | None = None,
-    sliding_window: int | None = None,
-    sequence_lengths: list[int] | None = None,
-    **kwargs,
-) -> tuple[torch.Tensor, None]:
-    """
-    SDPA over sequences packed along the length, `(batch, heads, length, head_dim)`, delimited by `cu_seq_lens_q` (and
-    `cu_seq_lens_k`) over the flattened batch: one call per sequence, instead of a dense mask over the whole rows.
-    """
-    batch_size, num_heads, _, head_dim = query.shape
-    cu_seq_lens_k = cu_seq_lens_q if cu_seq_lens_k is None else cu_seq_lens_k
-    is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
-    # One packed row of all the sequences: a view for a batch of one
-    query, key, value = (states.transpose(0, 1).flatten(1, 2)[None] for states in (query, key, value))
-    # The varlen kwargs of flash attention, unused here
-    for name in ("max_length_q", "max_length_k", "packed_block_mask"):
-        kwargs.pop(name, None)
-    attn_output, _ = per_sequence_attention_forward(
-        sdpa_attention_forward,
-        module,
-        query,
-        key,
-        value,
-        cu_seq_lens_q,
-        cu_seq_lens_k,
-        sequence_lengths=sequence_lengths,
-        is_causal=is_causal,
-        sliding_window=sliding_window,
-        **kwargs,
-    )
-    # Values may have their own head size (MLA)
-    return attn_output.view(batch_size, -1, num_heads, attn_output.shape[-1]), None
-
-
 def per_sequence_attention_forward(
     attention_fn: Callable,
     module: torch.nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    cu_seq_lens_q: torch.Tensor,
-    cu_seq_lens_k: torch.Tensor,
+    cu_seqlens: torch.Tensor,
     sequence_lengths: list[int] | None = None,
     is_causal: bool = True,
     sliding_window: int | None = None,
@@ -148,26 +106,18 @@ def per_sequence_attention_forward(
     **kwargs,
 ) -> tuple[torch.Tensor, list[torch.Tensor] | None]:
     """
-    Calls `attention_fn` on each of the sequences packed along the length of a batch of one, with a mask only for a
-    (causal) window narrower than the sequence. Returns the outputs concatenated along the length, `(1, length, heads,
-    head_dim)`, and each sequence's weights if `return_attention_weights` (otherwise freed as it goes).
+    Calls `attention_fn` on each of the sequences packed along the length of a batch of one, delimited by `cu_seqlens`,
+    with a mask only for a (causal) window narrower than the sequence. Returns the outputs concatenated along the length,
+    `(1, length, heads, head_dim)`, and each sequence's weights if `return_attention_weights` (otherwise freed as it goes).
     """
-    # Splitting needs the lengths on the host: read once per forward when the model passes them (shared by queries
-    # and keys), here otherwise
-    if sequence_lengths is not None:
-        lengths_q = lengths_k = sequence_lengths
-    else:
-        # One host read (and one graph break when compiled) for self-attention, where both are the same lengths
-        lengths_q = (cu_seq_lens_q[1:] - cu_seq_lens_q[:-1]).tolist()
-        lengths_k = lengths_q if cu_seq_lens_k is cu_seq_lens_q else (cu_seq_lens_k[1:] - cu_seq_lens_k[:-1]).tolist()
+    # Splitting needs the lengths on the host: read once per forward when the model passes them, here otherwise
+    lengths = sequence_lengths if sequence_lengths is not None else (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
     attn_outputs, attn_weights = [], []
-    for q, k, v in zip(query.split(lengths_q, dim=2), key.split(lengths_k, dim=2), value.split(lengths_k, dim=2)):
+    for q, k, v in zip(query.split(lengths, dim=2), key.split(lengths, dim=2), value.split(lengths, dim=2)):
         mask = None
         if sliding_window is not None and k.shape[2] > sliding_window:
-            visible = torch.ones(q.shape[2], k.shape[2], dtype=torch.bool, device=q.device)
-            visible = (visible.tril() if is_causal else visible).triu(1 - sliding_window)
-            mask = torch.zeros(visible.shape, dtype=q.dtype, device=q.device)
-            mask = mask.masked_fill(~visible, torch.finfo(q.dtype).min)[None, None]
+            mask = torch.ones(q.shape[2], k.shape[2], dtype=torch.bool, device=q.device)
+            mask = (mask.tril() if is_causal else mask).triu(1 - sliding_window)[None, None]
         attn_output, weights = attention_fn(module, q, k, v, mask, is_causal=is_causal, **kwargs)
         attn_outputs.append(attn_output)
         if return_attention_weights:
@@ -198,15 +148,28 @@ def sdpa_attention_forward(
             " Please set your attention to `eager` if you want any of these features."
         )
 
-    # Sequences packed along the length, delimited by their cumulative lengths rather than by a mask: passed as the mask
-    # itself, 1D, for packed text rows (`create_causal_mask`), or as `cu_seq_lens_q` (packed encoders)
-    if attention_mask is not None and attention_mask.ndim == 1:
-        kwargs["cu_seq_lens_q"] = kwargs["cu_seq_lens_k"] = attention_mask
-        attention_mask = None
-    if kwargs.get("cu_seq_lens_q") is not None and attention_mask is None:
-        return sdpa_packed_sequences_attention_forward(
-            module, query, key, value, dropout=dropout, scaling=scaling, is_causal=is_causal, **kwargs
+    # Sequences packed along the length, delimited by their cumulative lengths rather than by a mask (packed encoders, and
+    # `varlen_attention`'s fallback): one call per sequence, over the flattened batch
+    if (cu_seqlens := kwargs.pop("cu_seq_lens_q", None)) is not None and attention_mask is None:
+        batch_size, num_heads = query.shape[:2]
+        # The varlen kwargs of flash attention and the other packed implementations, unused here
+        for name in ("cu_seq_lens_k", "max_length_q", "max_length_k", "packed_block_mask"):
+            kwargs.pop(name, None)
+        query, key, value = (states.transpose(0, 1).flatten(1, 2)[None] for states in (query, key, value))
+        attn_output, _ = per_sequence_attention_forward(
+            sdpa_attention_forward,
+            module,
+            query,
+            key,
+            value,
+            cu_seqlens,
+            is_causal=is_causal if is_causal is not None else getattr(module, "is_causal", True),
+            dropout=dropout,
+            scaling=scaling,
+            **kwargs,
         )
+        # Values may have their own head size (MLA)
+        return attn_output.view(batch_size, -1, num_heads, attn_output.shape[-1]), None
 
     sdpa_kwargs = {}
     q_length = query.shape[2]

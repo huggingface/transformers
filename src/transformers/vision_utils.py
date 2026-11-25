@@ -196,7 +196,6 @@ def packed_sequences_attention_forward(
         key,
         value,
         cu_seqlens,
-        cu_seqlens,
         sequence_lengths=sequence_lengths,
         is_causal=kwargs.pop("is_causal", False),
         return_attention_weights=return_attention_weights,

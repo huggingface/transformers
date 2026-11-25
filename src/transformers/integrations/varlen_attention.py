@@ -68,9 +68,14 @@ def varlen_attention_forward(
     cu_seq_lens_q = cast(torch.Tensor, cu_seq_lens_q)
     cu_seq_lens_k = cu_seq_lens_q if cu_seq_lens_k is None else cu_seq_lens_k
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
-    if key.shape[1] != num_heads and not _is_torch_greater_or_equal_than_2_12:
-        key = repeat_kv(key, num_heads // key.shape[1])
-        value = repeat_kv(value, num_heads // value.shape[1])
+    # Grouped-query attention natively from torch 2.12, by repeating the keys and values before
+    gqa_kwargs = {}
+    if key.shape[1] != num_heads:
+        if _is_torch_greater_or_equal_than_2_12:
+            gqa_kwargs["enable_gqa"] = True
+        else:
+            key = repeat_kv(key, num_heads // key.shape[1])
+            value = repeat_kv(value, num_heads // value.shape[1])
     # One packed row of all the sequences, `(total_length, heads, head_dim)`
     query, key, value = (states.transpose(1, 2).flatten(0, 1) for states in (query, key, value))
     # The kernel only uses the maximum lengths to size its launch: without precomputed ones, the total lengths are
@@ -92,7 +97,7 @@ def varlen_attention_forward(
             max_length_k,
             scale=scaling,
             window_size=window_size,
-            **({"enable_gqa": True} if key.shape[1] != num_heads else {}),
+            **gqa_kwargs,
         ),
     )
     return attn_output.view(batch_size, -1, num_heads, head_dim), None
