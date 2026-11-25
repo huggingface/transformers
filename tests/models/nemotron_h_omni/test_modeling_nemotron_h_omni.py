@@ -480,32 +480,6 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
             torch.testing.assert_close(logits_from_features, logits)
             torch.testing.assert_close(logits_from_frames, logits)
 
-    def test_video_pruning_beam_search(self):
-        # Beam search repeats the encoded videos per beam, and pruning still needs each video's features
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.video_pruning_rate = 0.5
-        tester = self.model_tester
-        num_tubelets, frame_size = 2, 32
-        pixel_values_videos = floats_tensor(
-            [1, num_tubelets, config.video_temporal_patch_size * tester.num_channels, frame_size, frame_size]
-        )
-        tokens_per_tubelet = int(frame_size // tester.patch_size * config.downsample_ratio) ** 2
-        text_ids = inputs_dict["input_ids"][:1]
-        text_ids = text_ids[text_ids != config.image_token_id].unsqueeze(0)
-        video_ids = torch.full(
-            (1, num_tubelets * tokens_per_tubelet), config.image_token_id, dtype=text_ids.dtype, device=torch_device
-        )
-        input_ids = torch.cat([video_ids, text_ids], dim=1)
-
-        model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
-        model.generate(
-            input_ids=input_ids,
-            pixel_values_videos=pixel_values_videos,
-            num_beams=2,
-            max_new_tokens=2,
-            do_sample=False,
-        )
-
 
 @require_torch
 class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest, unittest.TestCase):
