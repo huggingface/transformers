@@ -1194,8 +1194,11 @@ class LinearAttentionCacheLayerMixin(ABC):
                 self.conv_states[i] = self.conv_states[i][
                     ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
                 ]
-                # Reassign the recurrent states, and drop all the history
-                self.recurrent_states[i] = self.recurrent_states_history[i][-tokens_to_remove]
+                # Reassign the recurrent states (if they exist, as recurrent state is optional)
+                if self.is_recurrent_states_initialized[i]:
+                    self.recurrent_states[i] = self.recurrent_states_history[i][-tokens_to_remove]
+            # Drop all the history
+            if self.is_recurrent_states_initialized[i]:
                 self.recurrent_states_history[i] = []
 
     def get_max_length(self) -> int:
