@@ -845,7 +845,6 @@ class Step3p7MLP(DeepseekV4MLP):
 class Step3p7Experts(DeepseekV4Experts):
     def __init__(self, config, layer_idx):
         super().__init__(config)
-        self.layer_idx = layer_idx
         self.intermediate_dim = config.moe_intermediate_size
         self.limit = (config.swiglu_limits[layer_idx] if config.swiglu_limits else None) or float("inf")
         self.limit_after_act = config.limit_after_act

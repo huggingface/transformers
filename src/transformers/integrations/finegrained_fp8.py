@@ -711,7 +711,7 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    """FP8 experts supporting scalar or per-layer clipping limits, before or after activation."""
+    """FP8 experts with an optional per-module limit and config-defined clipping order."""
 
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
@@ -725,7 +725,7 @@ class FP8Experts(nn.Module):
         has_bias: bool = False,
         has_gate: bool = True,
         expert_dtype: str = "fp8",
-        layer_idx: int | None = None,
+        swiglu_limit: float | None = None,
     ):
         super().__init__()
 
@@ -744,10 +744,7 @@ class FP8Experts(nn.Module):
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit_after_act = getattr(config, "limit_after_act", False)
-        limits = getattr(config, "swiglu_limits", None)
-        if limits is not None and layer_idx is None:
-            raise ValueError("Per-layer SwiGLU limits require a layer index.")
-        self.limit = limits[layer_idx] if limits is not None else getattr(config, "swiglu_limit", None)
+        self.limit = swiglu_limit if swiglu_limit is not None else getattr(config, "swiglu_limit", None)
         if self.limit_after_act:
             self.limit = self.limit or float("inf")
         self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
@@ -974,7 +971,7 @@ def replace_with_fp8_linear(
             if module_name.endswith(".experts"):
                 has_gate = getattr(module, "has_gate", True)
                 has_bias = getattr(module, "has_bias", False)
-                layer_idx = getattr(module, "layer_idx", None)
+                swiglu_limit = getattr(module, "limit", None)
                 config = getattr(module, "config", model.config.get_text_config())
                 new_class = use_experts_implementation(
                     experts_class=FP8Experts,
@@ -990,7 +987,7 @@ def replace_with_fp8_linear(
                     has_bias=has_bias,
                     has_gate=has_gate,
                     expert_dtype=quantization_config.expert_dtype,
-                    layer_idx=layer_idx,
+                    swiglu_limit=swiglu_limit,
                 )
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FP8Linear swap.

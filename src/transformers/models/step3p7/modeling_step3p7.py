@@ -552,7 +552,6 @@ class Step3p7Experts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
         self.limit = (config.swiglu_limits[layer_idx] if config.swiglu_limits else None) or float("inf")
-        self.layer_idx = layer_idx
         self.limit_after_act = config.limit_after_act
 
     def forward(
