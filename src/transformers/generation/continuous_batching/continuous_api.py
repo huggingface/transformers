@@ -52,7 +52,7 @@ from .model_runner import ModelRunner
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, logger, stream_context
+from .utils import ThreadLocalCounter, WorkloadHints, drain_queue, find_head_dim, logger, stream_context
 
 
 """
@@ -1019,9 +1019,11 @@ class ContinuousBatchingManager:
             # MLA models attend with 192-dim values (padded to the key dim), which FA4 does not take
             is_blackwell = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] == 10
             is_mla = getattr(model.config.get_text_config(), "kv_lora_rank", None) is not None
+            # [scratch] FA4's SM100 kernels for 256-dim heads take no `seqused_k`, which the paged path needs (Qwen3-Next)
+            fa4_head_dim = find_head_dim(text_config) <= 128
             if is_flash_attn_3_available(kernels_fallback_ok=True):
                 version = 3
-            elif is_blackwell and not is_mla and is_flash_attn_4_available(kernels_fallback_ok=True):
+            elif is_blackwell and not is_mla and fa4_head_dim and is_flash_attn_4_available(kernels_fallback_ok=True):
                 version = 4
             elif is_flash_attn_2_available(kernels_fallback_ok=True):
                 version = 2
