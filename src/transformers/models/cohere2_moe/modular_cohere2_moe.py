@@ -29,7 +29,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
-from ..cohere.modeling_cohere import CohereLayerNorm
+from ..cohere.modeling_cohere import CohereLayerNorm, CohereRotaryEmbedding
 from ..cohere2.modeling_cohere2 import (
     Cohere2Attention,
     Cohere2DecoderLayer,
@@ -37,7 +37,6 @@ from ..cohere2.modeling_cohere2 import (
     Cohere2MLP,
     Cohere2Model,
     Cohere2PreTrainedModel,
-    Cohere2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -191,7 +190,7 @@ class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):
         )
 
 
-class Cohere2MoeRotaryEmbedding(Cohere2RotaryEmbedding):
+class Cohere2MoeRotaryEmbedding(CohereRotaryEmbedding):
     pass
 
 

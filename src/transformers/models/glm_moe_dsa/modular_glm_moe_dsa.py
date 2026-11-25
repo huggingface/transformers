@@ -38,9 +38,8 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32Indexer,
     DeepseekV32Model,
     DeepseekV32PreTrainedModel,
-    DeepseekV32RotaryEmbedding,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -127,7 +126,7 @@ class GlmMoeDsaRMSNorm(LlamaRMSNorm):
     pass
 
 
-class GlmMoeDsaRotaryEmbedding(DeepseekV32RotaryEmbedding):
+class GlmMoeDsaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

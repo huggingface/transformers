@@ -28,7 +28,6 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
     GraniteMoeSharedAttention,
@@ -41,6 +40,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
 
@@ -105,7 +105,7 @@ class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
     pass
 
 
-class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
+class GraniteMoeHybridRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

@@ -961,7 +961,7 @@ class Dots3NoteVisionModel(Dots3NoteVisionPreTrainedModel, Qwen2VisionTransforme
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
         hidden_states = self.patch_embed(pixel_values)
-        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for block in self.blocks:
             hidden_states = block(

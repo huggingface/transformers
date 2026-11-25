@@ -32,7 +32,7 @@ from ..dinov3_vit.modeling_dinov3_vit import (
     DINOv3ViTEmbeddings,
     DINOv3ViTLayer,
     DINOv3ViTLayerScale,
-    DINOv3ViTRopePositionEmbedding,
+    DINOv3ViTRotaryEmbedding,
 )
 from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
@@ -145,7 +145,7 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
 
 
 # FIXME: this is simple axial rope, too much hassle to refactor - maybe some contrib stumbles upon it :)
-class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
+class EomtDinov3RotaryEmbedding(DINOv3ViTRotaryEmbedding):
     inv_freq: Tensor
 
     def __init__(self, config: EomtDinov3Config):
@@ -229,7 +229,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
         self.embeddings = EomtDinov3Embeddings(config)
         self.embeddings.register_parameter("mask_token", None)
 
-        self.rope_embeddings = EomtDinov3RotaryEmbedding(config)
+        self.rotary_emb = EomtDinov3RotaryEmbedding(config)
         self.layers = nn.ModuleList([EomtDinov3Layer(config) for _ in range(config.num_hidden_layers)])
 
         self.post_init()
@@ -259,7 +259,7 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
 
         hidden_states = self.dropout(self.embeddings(pixel_values))
-        position_embeddings = self.rope_embeddings(pixel_values.to(hidden_states.dtype))
+        position_embeddings = self.rotary_emb(pixel_values.to(hidden_states.dtype))
         attention_mask = None
 
         for idx, layer_module in enumerate(self.layers):

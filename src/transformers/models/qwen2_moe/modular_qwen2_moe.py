@@ -38,8 +38,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma.modeling_gemma import GemmaMLP
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
@@ -53,7 +52,7 @@ class Qwen2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen2MoeRotaryEmbedding(Gemma2RotaryEmbedding):
+class Qwen2MoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

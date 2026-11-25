@@ -27,6 +27,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
 from ...utils.deprecation import deprecate_kwarg
 from ..aria.modeling_aria import AriaModelOutputWithPast
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -36,7 +37,6 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5TextModel,
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionModel,
-    Qwen3_5VisionRotaryEmbedding,
     causal_conv1d_fn,
     causal_conv1d_update,
     torch_chunk_gated_delta_rule,
@@ -158,7 +158,7 @@ class Qwen3_5MoeBaseModelOutputWithPast(AriaModelOutputWithPast):
     pass
 
 
-class Qwen3_5MoeVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
+class Qwen3_5MoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

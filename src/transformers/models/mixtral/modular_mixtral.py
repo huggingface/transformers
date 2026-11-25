@@ -34,7 +34,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,
@@ -43,7 +43,6 @@ from ..mistral.modeling_mistral import (
     MistralForTokenClassification,
     MistralModel,
     MistralPreTrainedModel,
-    MistralRotaryEmbedding,
 )
 from .configuration_mixtral import MixtralConfig
 
@@ -204,7 +203,7 @@ class MixtralRMSNorm(LlamaRMSNorm):
     pass
 
 
-class MixtralRotaryEmbedding(MistralRotaryEmbedding):
+class MixtralRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

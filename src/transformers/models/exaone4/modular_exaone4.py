@@ -34,7 +34,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
@@ -43,6 +42,7 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -144,7 +144,7 @@ class Exaone4RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Exaone4RotaryEmbedding(Gemma2RotaryEmbedding):
+class Exaone4RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

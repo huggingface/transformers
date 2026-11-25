@@ -33,12 +33,11 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3Model,
-    DeepseekV3RotaryEmbedding,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralTopKRouter
 from .configuration_longcat_flash import LongcatFlashConfig
 
@@ -50,7 +49,7 @@ class LongcatFlashRMSNorm(LlamaRMSNorm):
     pass
 
 
-class LongcatFlashRotaryEmbedding(DeepseekV3RotaryEmbedding):
+class LongcatFlashRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
