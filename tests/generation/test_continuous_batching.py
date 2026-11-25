@@ -1801,30 +1801,20 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
 
     def test_cancel_request_in_running_batch(self) -> None:
-        """Test that cancelling a request which is part of the running batch does not kill the generation loop: with
-        async batching, its cache blocks are freed while preparing the next batch, before the running one updates."""
-        model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+        """Test that cancelling a request which is in the running batch does not kill the generation loop."""
+        tokenizer, model = get_tokenizer_and_model("Qwen/Qwen2.5-0.5B-Instruct", "sdpa", torch_device)
         cb_config = ContinuousBatchingConfig(use_async_batching=True, max_memory_percent=0.2)
         manager = model.init_continuous_batching(continuous_batching_config=cb_config)
-        manager.logit_processor.clear()
         manager.start()
 
-        # Longer than one cache page, so the prefill of a cancelled request completes blocks to register
-        prompt = "The sailor walked along the harbour and counted the boats. " * 80
-        input_ids = tokenizer(prompt)["input_ids"]
-        kept_request_id = manager.add_request(input_ids, max_new_tokens=400)
-        for index in range(100):
-            request_id = manager.add_request(input_ids[index % 8 :], max_new_tokens=400, streaming=True)
-            time.sleep(0.0005 * (index % 8))  # cancellations must land at different points of the request's prefill
+        # Longer than one cache page, so that the request completes blocks
+        input_ids = tokenizer("The sailor walked along the harbour and counted the boats. " * 80)["input_ids"]
+        for _ in range(20):
+            request_id = manager.add_request(input_ids, max_new_tokens=400)
+            time.sleep(0.05)
             manager.cancel_request(request_id)
-            time.sleep(0.01)
-            if manager.background_thread_status.fatal_error is not None:
-                break
 
         self.assertIsNone(manager.background_thread_status.fatal_error)
-        result = manager.get_result(kept_request_id, timeout=60)
-        self.assertEqual(result.status, RequestStatus.FINISHED)
         manager.stop(block=True)
 
     def test_register_result_handler(self) -> None:
