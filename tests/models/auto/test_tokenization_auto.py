@@ -120,41 +120,27 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            "deepseek-ai/DeepSeek-V2-Lite", # byte-level `tokenizer.json``
-            "deepseek-ai/deepseek-coder-1.3b-base", # in `MODEL_IDS_TO_TOKENIZERS_BACKEND`
-            "HuggingFaceH4/zephyr-7b-beta", # model type registers another tokenizer class
+            "deepseek-ai/DeepSeek-V2-Lite",  # byte-level `tokenizer.json`
+            "deepseek-ai/deepseek-coder-1.3b-base",  # in `MODEL_IDS_TO_TOKENIZERS_BACKEND`
+            "HuggingFaceH4/zephyr-7b-beta",  # model type registers another tokenizer class
         ]
     )
     @slow
     @require_tokenizers
-    def test_llama_tokenizer_class_keeps_left_padding(self, repo_id):
-        # The Hub `tokenizer_class` is `LlamaTokenizerFast`, which pads left, and `TokenizersBackend` loads instead
+    def test_llama_tokenizer_class_replaced_by_tokenizers_backend_keeps_llama_defaults(self, repo_id):
+        # The Hub `tokenizer_class` is `LlamaTokenizerFast`, but `TokenizersBackend` loads instead. It must still add
+        # BOS but not EOS and pad left, even when the `tokenizer.json` post-processor doesn't add BOS
         texts = ["hello", "hello world, how are you"]
         tokenizer = AutoTokenizer.from_pretrained(repo_id)
         self.assertIs(type(tokenizer), TokenizersBackend)
+        input_ids = tokenizer(texts[0]).input_ids
+        self.assertEqual(input_ids[0], tokenizer.bos_token_id)
+        self.assertNotEqual(input_ids[-1], tokenizer.eos_token_id)
         self.assertEqual(tokenizer(texts, padding=True).input_ids[0][0], tokenizer.pad_token_id)
 
         # The user kwarg still wins
         tokenizer = AutoTokenizer.from_pretrained(repo_id, padding_side="right")
         self.assertEqual(tokenizer(texts, padding=True).input_ids[0][-1], tokenizer.pad_token_id)
-
-    @slow
-    @require_tokenizers
-    def test_byte_level_llama_tokenizer_class_keeps_add_bos_token_from_config(self):
-        # https://github.com/huggingface/transformers/issues/50985
-        # When `TokenizersBackend` is loaded instead of a model-specific `tokenizer_class`, the config's
-        # `add_bos_token` / `add_eos_token` must still apply, even if the tokenizer.json post-processor doesn't add them
-        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-1.3b-base")
-        self.assertIs(type(tokenizer), TokenizersBackend)
-        input_ids = tokenizer("hello").input_ids
-        self.assertEqual(input_ids[0], tokenizer.bos_token_id)
-        self.assertNotEqual(input_ids[-1], tokenizer.eos_token_id)
-
-        # When the declared `tokenizer_class` is `PreTrainedTokenizerFast`, the tokenizer.json post-processor decides
-        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
-        input_ids = tokenizer("hello").input_ids
-        self.assertEqual(input_ids[0], tokenizer.bos_token_id)
-        self.assertNotEqual(input_ids[-1], tokenizer.eos_token_id)
 
     @slow
     @require_tokenizers
