@@ -265,10 +265,12 @@ if is_torch_distributed_available():
                 launch_with_pdl=_FLASHINFER_PDL,
                 trigger_completion_at_end=x2d.shape[0] > 16,
             )
-            _FLASHINFER["calls"]["flashinfer"] += 1
+            if not torch.compiler.is_compiling():  # a traced count is a guard: dynamo recompiled on every call
+                _FLASHINFER["calls"]["flashinfer"] += 1
             return out.view(x.shape)
         dist.all_reduce(x, group=process_group)
-        _FLASHINFER["calls"]["nccl"] += 1
+        if not torch.compiler.is_compiling():  # a traced count is a guard: dynamo recompiled on every call
+            _FLASHINFER["calls"]["nccl"] += 1
         return x
 
     def tp_all_reduce_add_rms_norm(partial, residual, norm):
@@ -308,7 +310,8 @@ if is_torch_distributed_available():
                 weight_bias=0.0,
                 trigger_completion_at_end=x2d.shape[0] > 16,
             )
-            _FLASHINFER["calls"]["flashinfer_fused"] += 1
+            if not torch.compiler.is_compiling():  # a traced count is a guard: dynamo recompiled on every call
+                _FLASHINFER["calls"]["flashinfer_fused"] += 1
             return normed.view(partial.shape), new_residual.view(partial.shape)
         if torch.is_grad_enabled() and partial.requires_grad:
             partial = _AllReduceForward.apply(partial, process_group)
