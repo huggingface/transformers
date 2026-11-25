@@ -91,8 +91,17 @@ class ThreadLocalCounter(threading.local):
 _PROTO_NO_MASK = os.environ.get("CB_PROTO_NO_MASK", "0") == "1"
 
 
+# [scratch] Latent attention (DeepSeek-V2 / V3 absorbed MLA): block table steps with at least this many (padded) query
+# tokens hold prompts. They run eagerly, and their prompts attend through flash attention on decompressed keys and
+# values, as vLLM's MLA prefill does (see `integrations/_proto_mla_absorbed.py`)
+MLA_PREFILL_MIN_TOKENS = int(os.environ.get("PROTO_MLA_PREFILL_MIN_TOKENS", 2048))
+
+
 def proto_no_mask(config: PreTrainedConfig) -> bool:
-    """PROTOTYPE: True when CB_PROTO_NO_MASK=1 and the model caches MLA latents."""
+    """PROTOTYPE: True when CB_PROTO_NO_MASK=1 and the model caches MLA latents, and by default for GLM-5.x
+    (glm_moe_dsa), whose per-request indexer (on by default) and block table decode never read the mask."""
+    if getattr(config, "model_type", None) == "glm_moe_dsa":
+        return True
     return _PROTO_NO_MASK and getattr(config, "kv_lora_rank", None) is not None
 
 

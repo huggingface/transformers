@@ -27,7 +27,7 @@ from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
 from .cache_allocators import LINEAR_ATTENTION
-from .cache_allocators.compressed_latents import _PROTO_MLA_BLOCK_TABLE
+from .cache_allocators.compressed_latents import mla_block_table_enabled
 from .utils import WorkloadHints, get_accelerator_graph_name, logger, proto_no_mask
 
 
@@ -63,6 +63,7 @@ def resolve_continuous_batching_config(
     user_requested_decode_path = cb_config.max_blocks_per_request is not None
     # Same for cuda graphs, if the user signals they want CUDA graphs via any padding/cached-graph parameter
     cuda_graph_requested = any([cb_config.q_padding_interval_size, cb_config.kv_padding_interval_size])
+    user_use_cuda_graph = cb_config.use_cuda_graph
 
     # FA3's and FA4's paged kernels take any page size, FA2's needs multiples of 256. MLA models (latent cache, their
     # own kernels) keep 256 until measured. Must happen before anything counts pages.
@@ -95,6 +96,10 @@ def resolve_continuous_batching_config(
     # The chunked kernel of the linear attention layers reads the sequence lengths on the host, which a graph cannot
     # capture: only the decode path, which runs the recurrent kernel, can use graphs on a model with such layers
     if LINEAR_ATTENTION in group_layers_by_attn_type(config):
+        cb_config.use_cuda_graph = (False, cb_config.cuda_graph_booleans[1])
+    # [scratch] GLM-5.x: varlen graph keys hold the context lengths (a capture every few steps), and their pools did not
+    # fit next to GLM-5.3 on four B300: unless asked for, only the block table decode steps replay graphs
+    if getattr(config, "model_type", None) == "glm_moe_dsa" and user_use_cuda_graph is None:
         cb_config.use_cuda_graph = (False, cb_config.cuda_graph_booleans[1])
 
     # Decide if asynchronous batching should be used. Should happen after CUDA graphs are decided.
@@ -155,7 +160,7 @@ def ensure_decode_fast_path_is_available(
         cb_config.max_blocks_per_request = 0
 
     # PROTOTYPE: the MLA prototype attention reads the cache through the block table itself, no flash kernel needed
-    if cb_config.max_blocks_per_request != 0 and _PROTO_MLA_BLOCK_TABLE and getattr(config, "kv_lora_rank", None):
+    if cb_config.max_blocks_per_request != 0 and mla_block_table_enabled(config) and getattr(config, "kv_lora_rank", None):
         return
 
     # Then, if the decode fast path is not turned off, check if it is available

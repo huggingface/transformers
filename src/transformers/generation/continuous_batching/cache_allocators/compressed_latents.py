@@ -30,6 +30,13 @@ _PROTO_MLA_BLOCK_TABLE = os.environ.get("CB_PROTO_MLA_BLOCK_TABLE", "0") in ("1"
 _PROTO_MLA_BLOCK_TABLE_CHECK = os.environ.get("CB_PROTO_MLA_BLOCK_TABLE", "0") == "check"
 
 
+def mla_block_table_enabled(config: PreTrainedConfig) -> bool:
+    """[scratch] Whether MLA decode batches take the prototype block table path: with CB_PROTO_MLA_BLOCK_TABLE=1, and by
+    default for GLM-5.x (glm_moe_dsa), whose attention reads the cache through the block table (decode steps then
+    replay graphs keyed on the batch size, not on its context)."""
+    return _PROTO_MLA_BLOCK_TABLE or getattr(config, "model_type", None) == "glm_moe_dsa"
+
+
 class MLACacheAllocator(FullAttentionCacheAllocator):
     """Cache allocator for a group of MLA layers, which cache two single-head latents per token instead of regular
     keys and values: the compressed KV latent, then the rotated key. Blocks, pages and indices work like they do in
@@ -59,6 +66,8 @@ class MLACacheAllocator(FullAttentionCacheAllocator):
         # latents through the block table: every step goes through it, with graph keys free of the context lengths
         if type(self) is MLACacheAllocator and getattr(config, "model_type", None) in ("deepseek_v2", "deepseek_v3"):
             self.supports_block_table = os.environ.get("PROTO_MLA_ABSORB", "1") == "1"
+        elif mla_block_table_enabled(config):
+            self.supports_block_table = True
         self.latents_numel = config.kv_lora_rank + config.qk_rope_head_dim
         self.row_numel = self.latents_numel + self.index_head_dim
         self.cache_dtype = cache_dtype

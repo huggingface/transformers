@@ -355,7 +355,7 @@ class ContinuousBatchingIOs:
         other.total_seqlen_k = dict(self.total_seqlen_k)
         other.max_length_q = self.max_length_q
         other.max_length_k = dict(self.max_length_k)
-        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+        if self.use_block_table and self.cache.proto_mla_block_table:
             other._proto_len_k_bucket = self._proto_len_k_bucket
         # Transfer static tensors
         with stream_context(stream):
@@ -437,7 +437,7 @@ class ContinuousBatchingIOs:
         """PROTOTYPE: True when the current batch takes the one-upload decode path."""
         return (
             _PROTO_ONE_UPLOAD
-            and _PROTO_MLA_BLOCK_TABLE
+            and self.cache.proto_mla_block_table
             and self.use_block_table
             and len(self.cumulative_seqlens_k) == 1
             and self._bulk_input_tensor.shape[0] == self.static_inputs  # no logits processor rows
@@ -448,7 +448,7 @@ class ContinuousBatchingIOs:
         in one go on the device, which also resets it)."""
         if 0 < self.num_q_tokens <= _PROTO_SKIP_MASK_MAX_Q:
             return True
-        if _PROTO_MLA_BLOCK_TABLE and self.use_block_table:
+        if self.cache.proto_mla_block_table and self.use_block_table:
             return True
         return _PROTO_DEVICE_MASK == "1" and getattr(self.config, "sliding_window", None) is None
 
@@ -611,7 +611,7 @@ class ContinuousBatchingIOs:
 
             # We extend the read and write indices for the cache, or fill the block table if the kernel can read and
             # write the cache itself
-            if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+            if self.use_block_table and self.cache.proto_mla_block_table:
                 pass  # uploaded once for the whole batch after the loop
             elif self.use_block_table:
                 self.cache.fill_block_table(state.request_id, past_length, query_length, block_table[:, i])
@@ -689,7 +689,7 @@ class ContinuousBatchingIOs:
 
         # PROTOTYPE: one block table upload for the batch, and the bucket of the longest request (the prototype
         # attention sizes its per-request key window with it, so it is part of the graph key)
-        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+        if self.use_block_table and self.cache.proto_mla_block_table:
             width = self.block_table.shape[-1]
             proto_one_upload = self._proto_one_upload()
             for allocator in allocators:
@@ -1054,7 +1054,7 @@ class ContinuousBatchingIOs:
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
             kwargs["cu_seq_lens_k"][layer_type] = seqlens_k[: num_sequences + 1]
             kwargs["max_length_k"][layer_type] = 1 if self.use_block_table else self.max_length_k[layer_type]
-            if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+            if self.use_block_table and self.cache.proto_mla_block_table:
                 kwargs["max_length_k"][layer_type] = self._proto_len_k_bucket
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.total_seqlen_k[layer_type]
@@ -1077,7 +1077,7 @@ class ContinuousBatchingIOs:
 
     def _get_graph_key(self) -> tuple[int, ...]:
         # Keys for decode fast path
-        if self.use_block_table and _PROTO_MLA_BLOCK_TABLE:
+        if self.use_block_table and self.cache.proto_mla_block_table:
             return (self.num_q_tokens, self._proto_len_k_bucket)
         # Keys for the block table path: with varlen block tables, decode-only steps (max_length_q = 1) get their own
         if self.use_block_table:

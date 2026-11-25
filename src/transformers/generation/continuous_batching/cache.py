@@ -38,6 +38,7 @@ from .cache_allocators import (
     SlidingAttentionCacheAllocator,
     StateSpec,
 )
+from .cache_allocators.compressed_latents import mla_block_table_enabled
 from .cache_allocators.cache_allocator import compute_block_hash
 from .distributed import DistributedHelper
 from .requests import RequestState, RequestStatus
@@ -287,6 +288,10 @@ class PagedAttentionCache:
         # [scratch] Every layer attends on compressed latents (MLA): the decode-only steps of the varlen path keep
         # max_length_q = 1, so the absorbed attention can split their keys over the SMs
         self.latent_attention = all(type(a) is MLACacheAllocator for a in self.cache_allocators.values())
+        # [scratch] MLA decode batches take the prototype block table upload (see `mla_block_table_enabled`)
+        self.proto_mla_block_table = mla_block_table_enabled(self.config) and all(
+            isinstance(a, MLACacheAllocator) for a in self.cache_allocators.values()
+        )
         # The most new tokens a request brings to a step: a longer prompt is split over several steps
         self.max_request_step_tokens = self.max_batch_tokens
         # The new tokens of a step are all written to the pages before attention: a sliding window ring then also holds
