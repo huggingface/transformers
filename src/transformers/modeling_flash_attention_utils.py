@@ -854,6 +854,14 @@ def _flash_attention_forward(
         **kwargs,
     )
 
+    # [scratch] FA2 takes attention sinks only through the continuous batching paged branch below (log-sum-exp)
+    if (
+        kwargs.get("s_aux") is not None
+        and is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
+        and not (is_fa_with_paged_kwargs and cache_seqlens is not None)
+    ):
+        raise ValueError("Attention sinks with flash attention 2 are only supported by continuous batching.")
+
     # Varlen queries on the paged cache (FA3): each sequence appends its new K/V to its pages and attends over them. The
     # padded tail of the queries belongs to no sequence (cu_seq_lens_q plateaus) and max_length_q is the padded size
     if is_fa_with_paged_kwargs and cache_seqlens is not None:
@@ -892,18 +900,29 @@ def _flash_attention_forward(
             from .integrations._proto_paged_kv_write import paged_kv_write
 
             seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
+            # [scratch] FA2 takes no attention sinks: they join through the log-sum-exp, out * sigmoid(lse - sink)
+            sinks = flash_kwargs_fn.keywords.get("s_aux")
             if max_length_q == 1:
                 num_sequences = block_table.size(0)
                 flash_kwargs = flash_kwargs_fn(max_seqlen_q=1, block_table=block_table, cache_seqlens=seqused)
+                if sinks is not None:
+                    flash_kwargs["return_softmax_lse"] = True
+                res = flash_kvcache_fn(q[:num_sequences, None], k_cache, v_cache, **flash_kwargs)
+                if sinks is not None:  # out [sequences, 1, heads, dim], lse [sequences, heads, 1]
+                    res = res[0] * torch.sigmoid(res[1].transpose(1, 2) - sinks.float())[..., None].to(res[0].dtype)
                 out = torch.empty_like(q)
-                out[:num_sequences] = flash_kvcache_fn(q[:num_sequences, None], k_cache, v_cache, **flash_kwargs)[:, 0]
+                out[:num_sequences] = res[:, 0]
             else:
                 cu_seqlens_k = F.pad(seqused.cumsum(0, dtype=torch.int32), (1, 0))
                 max_seqlen_k = block_table.size(1) * k_cache.size(1)
                 flash_kwargs = partial(process_flash_kwargs_fn, **flash_kwargs_fn.keywords)(block_table=block_table)
+                if sinks is not None:
+                    flash_kwargs["return_attn_probs"] = True
                 out = flash_varlen_fn(
                     q, k_cache, v_cache, cu_seq_lens_q, cu_seqlens_k, max_length_q, max_seqlen_k, **flash_kwargs
                 )
+                if sinks is not None:  # lse [heads, tokens]
+                    out = out[0] * torch.sigmoid(out[1].transpose(0, 1) - sinks.float())[..., None].to(out[0].dtype)
             out = out[0] if isinstance(out, tuple) else out
             return out.view(batch_size, -1, *out.shape[-2:])
         if _PROTO_KV_WRITE:  # [scratch] write the new K/V first, then a plain paged call

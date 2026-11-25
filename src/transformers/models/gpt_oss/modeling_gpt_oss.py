@@ -393,6 +393,8 @@ class GptOssPreTrainedModel(PreTrainedModel):
         "flash_attention_4",
         "kernels-community/metal-flash-sdpa",
         "kernels-community/aiter-flash-attn",
+        "flash_attention_2",  # [scratch] continuous batching only: sinks through the log-sum-exp
+        "kernels-community/flash-attn2",
     ]
 
     def _init_weights(self, module):

@@ -317,6 +317,8 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
         "flash_attention_4",
         "kernels-community/metal-flash-sdpa",
         "kernels-community/aiter-flash-attn",
+        "flash_attention_2",  # [scratch] continuous batching only: sinks through the log-sum-exp
+        "kernels-community/flash-attn2",
     ]
     _can_record_outputs = {
         "router_logits": OutputRecorder(GptOssTopKRouter, index=0),
