@@ -3112,18 +3112,19 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
 class TestPrefixCache(unittest.TestCase):
     """GenerateManager reuses the KV cache of the previous request for the prompt prefix the next one shares."""
 
+    # MIC fixtures (https://huggingface.co/huggingface-mic): small models with the real checkpoints' architecture
+    DENSE = ("huggingface-mic/Qwen3-0.6B-mic", "6d5e5c5e3e0f0c2e11e4bd0563aa620f97d910b8")
+    MOE = ("huggingface-mic/Qwen3-30B-A3B-mic", "770fd1fa927f6e229fb86961c631c85d24350419")
+    HYBRID = ("huggingface-mic/Qwen3-Next-80B-A3B-Instruct-mic", "7eb57dd61582f58fc530063458ea6b53fc2e21a9")
+
     @staticmethod
-    def _model(**config_kwargs):
+    def _model(fixture=DENSE):
         import torch
 
-        from transformers import LlamaConfig, LlamaForCausalLM, MistralConfig, MistralForCausalLM
+        from transformers import AutoModelForCausalLM
 
-        torch.manual_seed(0)
-        common = {"vocab_size": 128, "hidden_size": 32, "intermediate_size": 64, "num_hidden_layers": 2}
-        common.update(num_attention_heads=4, num_key_value_heads=2, pad_token_id=0, eos_token_id=None)
-        if "sliding_window" in config_kwargs:
-            return MistralForCausalLM(MistralConfig(**common, **config_kwargs)).eval()
-        return LlamaForCausalLM(LlamaConfig(**common, **config_kwargs)).eval()
+        model_id, revision = fixture
+        return AutoModelForCausalLM.from_pretrained(model_id, revision=revision, dtype=torch.float32).eval()
 
     @staticmethod
     def _run(manager, model, ids, max_new_tokens=6):
@@ -3139,9 +3140,13 @@ class TestPrefixCache(unittest.TestCase):
         return reuse, out[0].tolist()
 
     def test_second_turn_reuses_the_conversation(self):
+        for fixture in (self.DENSE, self.MOE):
+            with self.subTest(fixture[0]):
+                self._check_second_turn(self._model(fixture))
+
+    def _check_second_turn(self, model):
         from transformers.cli.serving.utils import GenerateManager
 
-        model = self._model()
         cached, fresh = GenerateManager(), GenerateManager(prefix_cache=False)
         first = list(range(5, 25))
         reuse, turn1 = self._run(cached, model, first)
@@ -3171,10 +3176,11 @@ class TestPrefixCache(unittest.TestCase):
         self.assertEqual(cached._prefix_cache.reused_tokens, len(other) - 1)
         self.assertEqual(again, out)
 
-    def test_sliding_window_model_is_not_cached(self):
+    def test_hybrid_model_is_not_cached(self):
+        """Linear-attention layers keep a running state that can't be cropped back to a shared prefix."""
         from transformers.cli.serving.utils import GenerateManager
 
-        model = self._model(sliding_window=8)
+        model = self._model(self.HYBRID)
         manager = GenerateManager()
         _, first = self._run(manager, model, list(range(5, 25)))
         self.assertIsNone(manager._prefix_cache._cache)
