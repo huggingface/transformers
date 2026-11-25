@@ -30,7 +30,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -136,7 +136,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -159,9 +159,8 @@ class VipLlavaModel(VipLlavaPreTrainedModel, MultimodalMixin):
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
         split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = image_features.flatten(0, 1)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

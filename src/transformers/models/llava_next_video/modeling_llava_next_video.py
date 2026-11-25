@@ -34,7 +34,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -469,7 +469,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -516,8 +516,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         image_outputs.pooler_output = torch.cat([image_features, image_newline[None]])[
             pack_index.to(image_features.device)
         ]
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -658,7 +657,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor]` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
@@ -695,9 +694,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel, MultimodalMixin):
         video_features = self.multi_modal_projector(video_features)
         features = video_features.unflatten(0, (batch_size, frames)).flatten(1, 2)
         split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
-        video_outputs = BaseModelOutputWithSplitSizes(**video_outputs, split_sizes=split_sizes)
         video_outputs.pooler_output = features.flatten(0, 1)
-        return video_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**video_outputs, split_sizes=split_sizes)
 
 
 @auto_docstring(

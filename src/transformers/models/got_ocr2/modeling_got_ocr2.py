@@ -34,7 +34,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -58,7 +58,7 @@ logger = logging.get_logger(__name__)
     """
 )
 @dataclass
-class GotOcr2VisionEncoderOutput(BaseModelOutputWithSplitSizes):
+class GotOcr2VisionEncoderOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     image_embeds (`torch.Tensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
         The image embeddings obtained by applying the projection layer to the pooler_output.
@@ -528,7 +528,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel, MultimodalMixin):
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         features = self.multi_modal_projector(last_hidden_state)

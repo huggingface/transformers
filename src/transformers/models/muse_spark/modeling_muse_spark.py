@@ -37,7 +37,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -1296,7 +1296,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
@@ -1306,10 +1306,8 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         vision_features = self.vision_projection(vision_features)
         vision_features = self.perception_emb_norm(vision_features)
         vision_outputs.pooler_output = vision_features
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
-        )
-        return vision_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -1319,7 +1317,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
@@ -1501,7 +1499,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
         input_values: torch.Tensor,
         input_values_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_values_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
             Which entries of `input_values` are real audio rather than padding, as produced by
@@ -1523,7 +1521,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel, MultimodalMixin):
             split_sizes = torch.full(audio_features.shape[:1], audio_features.shape[1], device=audio_features.device)
             audio_features = audio_features.flatten(0, 1)
         audio_features = self.get_input_embeddings().embed_norm(audio_features)
-        return BaseModelOutputWithSplitSizes(
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=last_hidden_state,
             pooler_output=audio_features,
             hidden_states=audio_outputs.hidden_states,

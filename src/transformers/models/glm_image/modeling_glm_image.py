@@ -37,7 +37,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -557,7 +557,7 @@ class GlmImageVQVAEVectorQuantizer(nn.Module):
 
 @auto_docstring
 @dataclass
-class GlmImageVQVAEModelOutput(BaseModelOutputWithSplitSizes):
+class GlmImageVQVAEModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     quantized_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
@@ -1126,13 +1126,11 @@ class GlmImageModel(GlmImagePreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         pixel_values = pixel_values.type(self.visual.dtype)
         image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
-        )
-        return image_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1384,7 +1382,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of each source image's patch grid.

@@ -28,6 +28,7 @@ from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -896,7 +897,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of each source image's patch grid.

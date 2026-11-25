@@ -28,7 +28,11 @@ from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -449,7 +453,7 @@ class Gemma3nConfig(PreTrainedConfig):
 
 @auto_docstring
 @dataclass
-class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithSplitSizes):
+class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     audio_mel_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`
@@ -2070,7 +2074,7 @@ class Gemma3nModel(PaliGemmaModel):
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         # Convert from (batch, channels, height, width) to (batch, height * width, channels) where:
@@ -2084,9 +2088,8 @@ class Gemma3nModel(PaliGemmaModel):
         last_hidden_state *= self.config.vision_config.hidden_size**0.5
         features = self.embed_vision(inputs_embeds=last_hidden_state)
         split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         vision_outputs.pooler_output = features.flatten(0, 1)
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,

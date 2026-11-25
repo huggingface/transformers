@@ -35,7 +35,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -956,7 +956,7 @@ class Step3p7Model(Step3p7PreTrainedModel, MultimodalMixin):
         pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
             All local patches flattened across the batch, or `None` if no local views.
@@ -986,10 +986,12 @@ class Step3p7Model(Step3p7PreTrainedModel, MultimodalMixin):
             cur_feature.append(image_features[i].view(-1, image_features.shape[-1]))
             cur_patch_idx += num_patch
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
-        return BaseModelOutputWithSplitSizes(
+        pooler_output = torch.cat(merged, dim=0)
+        split_sizes = torch.tensor([len(features) for features in merged], device=merged[0].device)
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=vision_output.last_hidden_state,
-            pooler_output=torch.cat(merged, dim=0),
-            split_sizes=torch.tensor([len(features) for features in merged], device=merged[0].device),
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=vision_output.hidden_states,
             attentions=vision_output.attentions,
         )

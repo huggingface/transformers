@@ -43,7 +43,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -1044,13 +1044,12 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
         features = image_outputs.pooler_output
         split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = features.flatten(0, 1)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects discretized dMel bin tokens into the language model space.")
@@ -1058,7 +1057,7 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
         self,
         audio_input_ids: torch.LongTensor,
         audio_input_ids_mask: torch.Tensor | None = None,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
             Batch of (padded) dMel bin tokens produced by [`InklingProcessor`].
@@ -1075,8 +1074,7 @@ class InklingModel(InklingPreTrainedModel, MultimodalMixin):
             )
             audio_input_ids = audio_input_ids.flatten(0, 1)
         audio_outputs = self.audio_tower(audio_input_ids)
-        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=split_sizes)
-        return audio_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,

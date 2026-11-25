@@ -49,7 +49,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -157,7 +157,7 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
 
 @auto_docstring
 @dataclass
-class Gemma4AudioModelOutput(BaseModelOutputWithSplitSizes):
+class Gemma4AudioModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`. True for valid positions, False for padding.
@@ -2254,7 +2254,7 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -2268,10 +2268,8 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = int((image_position_ids.shape[1] // output_length) ** 0.5) ** 2
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=(image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        )
-        return vision_outputs
+        split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -2535,7 +2533,7 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
@@ -2565,8 +2563,7 @@ class Gemma4Model(Gemma4PreTrainedModel, MultimodalMixin):
         tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
         video_ends = tokens_per_frame.cumsum(0)[num_frames_per_video.to(tokens_per_frame.device).cumsum(0) - 1]
         split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
 
 @auto_docstring(

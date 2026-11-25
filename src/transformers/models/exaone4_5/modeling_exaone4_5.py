@@ -33,7 +33,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -681,13 +681,11 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         pixel_values = pixel_values.type(self.visual.dtype)
         image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
-        )
-        return image_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -697,7 +695,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def get_placeholder_mask(

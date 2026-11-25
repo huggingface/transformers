@@ -25,7 +25,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_utils import slice_logits_to_keep
@@ -174,7 +174,7 @@ class VoxtralModel(VoxtralPreTrainedModel, MultimodalMixin):
     )
     def get_audio_embeddings(
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor`):
             Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
@@ -189,13 +189,10 @@ class VoxtralModel(VoxtralPreTrainedModel, MultimodalMixin):
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         audio_outputs.pooler_output = audio_embeds
         # Each 30-second chunk of `input_features` gives the same number of rows
-        audio_outputs = BaseModelOutputWithSplitSizes(
-            **audio_outputs,
-            split_sizes=audio_embeds.new_full(
-                input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
-            ),
+        split_sizes = audio_embeds.new_full(
+            input_features.shape[:1], audio_embeds.shape[0] // input_features.shape[0], dtype=torch.long
         )
-        return audio_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor

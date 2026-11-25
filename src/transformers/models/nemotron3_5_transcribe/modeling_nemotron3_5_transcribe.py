@@ -35,8 +35,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     ModelOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -95,7 +94,7 @@ class Nemotron3_5TranscribeCausalLMOutputWithPast(ModelOutput):
 
 @auto_docstring
 @dataclass
-class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithSplitSizes):
+class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(num_audio_tokens, text_config.hidden_size)`, *optional*):
         Projected audio embeddings of the valid encoder frames of every recording, in batch order: the embeddings that
@@ -667,7 +666,7 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel, Multimoda
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor`):
             Float values of mel features extracted from the raw speech waveform.

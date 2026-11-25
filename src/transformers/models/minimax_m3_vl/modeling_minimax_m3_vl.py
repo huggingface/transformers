@@ -35,7 +35,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -1350,17 +1350,15 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         # Return the raw vision-tower output (so callers can inspect hidden states /
         # attentions) while stashing the projected + spatially-merged features —
         # ready to scatter into the text embeddings — in `pooler_output`.
         vision_outputs = self.vision_tower(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_features = self.multi_modal_projector(vision_outputs.last_hidden_state.squeeze(0))
         vision_outputs.pooler_output = image_features
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
-        )
-        return vision_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.multi_modal_projector.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1479,7 +1477,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 

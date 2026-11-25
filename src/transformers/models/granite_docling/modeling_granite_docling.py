@@ -36,7 +36,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
@@ -84,7 +84,7 @@ class GraniteDoclingCausalLMOutputWithPast(MultimodalMoeCausalLMOutputWithPast):
     """
 )
 @dataclass
-class GraniteDoclingImageFeaturesOutput(BaseModelOutputWithSplitSizes):
+class GraniteDoclingImageFeaturesOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     pooler_output (`tuple[torch.FloatTensor]` of length `batch_size`):
         Image tokens of each sample, in tile order, projected to the text hidden size. Each tensor has shape

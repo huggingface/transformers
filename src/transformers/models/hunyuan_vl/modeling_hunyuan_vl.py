@@ -38,7 +38,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -1016,15 +1016,15 @@ class HunYuanVLModel(HunYuanVLPreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_outputs.pooler_output[0]
         # Include row separators and image boundary tokens in each split.
         merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=merged_h * (merged_w + 1) + 2)
-        return image_outputs
+        split_sizes = merged_h * (merged_w + 1) + 2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,

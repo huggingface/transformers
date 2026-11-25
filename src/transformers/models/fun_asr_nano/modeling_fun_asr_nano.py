@@ -34,8 +34,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     ModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -420,7 +419,7 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel, MultimodalMixin):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor`):
             Audio features `(batch, time, feature_dim)` produced by the feature extractor (after LFR stacking).
@@ -443,12 +442,13 @@ class FunAsrNanoModel(FunAsrNanoPreTrainedModel, MultimodalMixin):
         audio_embeds = self.multi_modal_projector(encoder_out, input_features_mask, **kwargs)
         pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
-        return BaseModelOutputWithSplitSizes(
+        split_sizes = input_features_mask.sum(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=encoder_out,
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            split_sizes=input_features_mask.sum(-1),
+            split_sizes=split_sizes,
         )
 
     def get_placeholder_mask(

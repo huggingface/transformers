@@ -33,7 +33,11 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -1236,15 +1240,15 @@ class HunYuanVLModel(Qwen2VLModel):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_dtype = next(self.vision_tower.parameters()).dtype
         pixel_values = pixel_values.to(vision_dtype)
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_outputs.pooler_output = image_outputs.pooler_output[0]
         # Include row separators and image boundary tokens in each split.
         merged_h, merged_w = (image_grid_thw[:, 1:] // self.config.vision_config.spatial_merge_size).unbind(-1)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=merged_h * (merged_w + 1) + 2)
-        return image_outputs
+        split_sizes = merged_h * (merged_w + 1) + 2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,

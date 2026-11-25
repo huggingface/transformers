@@ -26,7 +26,11 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -47,7 +51,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class Emu3VQVAEModelOutput(BaseModelOutputWithSplitSizes):
+class Emu3VQVAEModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     image_tokens (`torch.LongTensor` of shape `(batch_size, config.vocab_size`):
         Indices of the image tokens predicted by the VQ-VAE model.

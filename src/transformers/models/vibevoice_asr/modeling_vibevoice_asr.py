@@ -28,7 +28,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithSplitSizes, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPoolingAndSplitSizes, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
@@ -379,7 +379,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel, MultimodalMixin):
                 combined_features.shape[:1], combined_features.shape[1], device=combined_features.device
             )
             combined_features = combined_features.flatten(0, 1)
-        return BaseModelOutputWithSplitSizes(
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=acoustic_latents, pooler_output=combined_features, split_sizes=split_sizes
         )
 

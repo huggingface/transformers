@@ -32,7 +32,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -683,7 +683,7 @@ class Florence2Model(Florence2PreTrainedModel, MultimodalMixin):
     )
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -691,9 +691,8 @@ class Florence2Model(Florence2PreTrainedModel, MultimodalMixin):
         image_outputs = self.vision_tower(pixel_values, **kwargs)
         features = self.multi_modal_projector(image_outputs.last_hidden_state)
         split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = features.flatten(0, 1)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

@@ -26,7 +26,12 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithSplitSizes, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    ModelOutput,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging, torch_compilable_check
@@ -451,7 +456,7 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel, MultimodalMixin):
         input_features: torch.Tensor,
         feature_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithSplitSizes:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor` of shape `(num_audios, num_mel_bins, feature_sequence_length)`):
             Float values of mel features extracted from the raw speech waveform.
@@ -492,9 +497,10 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel, MultimodalMixin):
         # Only each audio's real tokens, without the padding
         valid_mask = torch.arange(audio_embeds.shape[1], device=audio_embeds.device)[None, :]
         valid_mask = valid_mask < audio_output_lengths.to(audio_embeds.device)[:, None]
-        return BaseModelOutputWithSplitSizes(
+        pooler_output = audio_embeds[valid_mask]
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=selected_audio_feature,
-            pooler_output=audio_embeds[valid_mask],
+            pooler_output=pooler_output,
             hidden_states=audio_outputs.hidden_states,
             attentions=audio_outputs.attentions,
             split_sizes=audio_output_lengths,
