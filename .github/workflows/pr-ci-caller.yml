@@ -25,26 +25,27 @@ jobs:
   # previous run of the same PR is not cancelled. No context exposes `<N>` alone and expressions can't extract it, so we
   # compute it here and use it in a job-level concurrency group below.
   concurrency-key:
-    runs-on: ubuntu-22.04
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-slim
     outputs:
       key: ${{ steps.key.outputs.key }}
     steps:
       - id: key
         env:
           REF: ${{ github.ref }}
-          RUN_ID: ${{ github.run_id }}
         run: |
           if [[ "$REF" =~ ^refs/heads/gh-readonly-queue/(.+)/pr-([0-9]+)-[0-9a-f]+$ ]]; then
             echo "key=merge-queue-${BASH_REMATCH[1]}-pr-${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
-          else
-            # Other events: unique per run, i.e. no job-level cancellation (the workflow-level group handles them).
-            echo "key=run-$RUN_ID" >> "$GITHUB_OUTPUT"
           fi
 
   pr-ci:
     needs: concurrency-key
+    # `concurrency-key` is skipped for non-merge-queue events: without a status function here, `pr-ci` would be skipped too.
+    if: ${{ !cancelled() && needs.concurrency-key.result != 'failure' }}
     concurrency:
-      group: ${{ github.workflow }}-${{ needs.concurrency-key.outputs.key }}
+      # Without a key (non-merge-queue events, or an unexpected ref), the group is unique per run, so there is no
+      # job-level cancellation; the workflow-level group above still handles those events.
+      group: ${{ github.workflow }}-${{ needs.concurrency-key.outputs.key || format('run-{0}', github.run_id) }}
       cancel-in-progress: true
     # DON'T use commit sha here before the CI migration is finished
     uses: huggingface/transformers-ci/.github/workflows/pr-ci_dynamic_caller_example.yml@main # main
