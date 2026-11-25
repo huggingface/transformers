@@ -278,12 +278,8 @@ class PeftAdapterMixin:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
             inject_adapter_in_model(peft_config, self, adapter_name)
 
-        adapter_key_markers = {adapter_name}
-        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
-            adapter_key_markers.add(peft_config.peft_type.value.lower())
-
         def is_adapter_key(key: str) -> bool:
-            return any(marker in key for marker in adapter_key_markers)
+            return adapter_name in key.split(".")
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
@@ -424,13 +420,6 @@ class PeftAdapterMixin:
 
         if peft_config.inference_mode:
             self._set_peft_inference_mode()
-
-        adapter_key_markers = {adapter_name}
-        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
-            adapter_key_markers.add(peft_config.peft_type.value.lower())
-
-        def is_adapter_key(key: str) -> bool:
-            return any(marker in key for marker in adapter_key_markers)
 
         loading_info.missing_keys = {k for k in loading_info.missing_keys if is_adapter_key(k)}
 
