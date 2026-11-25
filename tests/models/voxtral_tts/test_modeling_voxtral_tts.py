@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Voxtral TTS model."""
 
 import unittest
+from unittest import mock
 
 from transformers import (
     VoxtralTtsAcousticTransformerConfig,
@@ -249,6 +250,30 @@ class VoxtralTtsModelTest(ModelTesterMixin, unittest.TestCase):
         again = model.generate(**inputs, max_new_frames=5, generator=torch.Generator(torch_device).manual_seed(0))
         torch.testing.assert_close(again.audio_codes, outputs.audio_codes)
 
+    def test_generate_decodes_audio_in_chunks(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_with_voice()
+        model = VoxtralTtsForTextToSpeech(config).to(torch_device).eval()
+        # Never predict `[END_AUDIO]`, so every frame is decoded
+        semantic_head = model.acoustic_transformer.get_semantic_logits
+
+        def get_semantic_logits(hidden_states):
+            logits = semantic_head(hidden_states)
+            logits[..., 1] = logits.min() - 1
+            return logits
+
+        with mock.patch.object(model.acoustic_transformer, "get_semantic_logits", get_semantic_logits):
+            outputs = model.generate(
+                **inputs, max_new_frames=5, codec_chunk_size=2, generator=torch.Generator(torch_device).manual_seed(0)
+            )
+        self.assertEqual(outputs.audio_lengths.tolist(), [5] * self.model_tester.batch_size)
+        codec_codes = outputs.audio_codes - config.acoustic_transformer_config.num_special_audio_tokens
+        with torch.no_grad():
+            expected = torch.cat(
+                [model.codec_model.decode(codec_codes[:, i : i + 2]).audio_values for i in range(0, 5, 2)], dim=-1
+            )
+        for audio, expected_audio in zip(outputs.audio, expected):
+            torch.testing.assert_close(audio, expected_audio)
+
     def test_generate_stops_on_end_audio(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_with_voice()
         model = VoxtralTtsForTextToSpeech(config).to(torch_device).eval()
@@ -296,28 +321,91 @@ class VoxtralTtsModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @require_mistral_common
 class VoxtralTtsIntegrationTest(unittest.TestCase):
+    """
+    Expected values come from the original model (a transcription of the vllm-omni reference implementation), which
+    generates these frames for `"Paris is a beautiful city!"` with the `casual_male` voice (Whisper transcribes the
+    audio as "Paris is a beautiful city."). The free-running bf16 generation is too sensitive to numerics to compare
+    across devices, so the model is checked with teacher forcing on the reference frames instead.
+    """
+
     # TODO: point to the Transformers-format files once they are on the Hub
     checkpoint = "mistralai/Voxtral-4B-TTS-2603"
+    text = "Paris is a beautiful city!"
+    voice = "casual_male"
+    # fmt: off
+    expected_semantic_codes = [855, 806, 7096, 6114, 1438, 855, 10, 10, 6226, 663, 3950, 2072, 8023, 8023, 8023, 10, 10, 10, 3684, 3684, 7973, 1645, 1]
+    expected_first_frames = [
+        [855, 2, 15, 6, 6, 16, 10, 6, 6, 18, 5, 18, 5, 7, 20, 13, 11, 9, 6, 17, 10, 16, 7, 8, 14, 9, 9, 18, 21, 16, 20, 4, 6, 6, 17, 3, 4],
+        [806, 12, 9, 12, 9, 19, 10, 11, 12, 18, 11, 15, 2, 7, 12, 17, 7, 11, 13, 9, 15, 16, 12, 9, 15, 12, 18, 20, 15, 9, 15, 13, 12, 5, 15, 5, 8],
+        [7096, 19, 16, 20, 20, 18, 5, 10, 4, 18, 6, 13, 5, 12, 14, 12, 6, 10, 10, 12, 13, 12, 9, 18, 13, 11, 12, 16, 18, 18, 21, 6, 7, 16, 19, 3, 3],
+        [6114, 8, 6, 15, 4, 10, 18, 10, 11, 17, 7, 9, 13, 18, 18, 14, 4, 4, 8, 21, 3, 15, 7, 19, 15, 7, 20, 15, 19, 15, 5, 7, 9, 20, 14, 4, 2],
+        [1438, 16, 12, 18, 19, 13, 18, 7, 3, 17, 9, 6, 14, 9, 17, 5, 4, 9, 13, 20, 9, 14, 13, 9, 20, 20, 13, 7, 17, 12, 5, 10, 15, 7, 15, 5, 4],
+        [855, 16, 4, 6, 16, 21, 10, 7, 14, 8, 8, 20, 14, 8, 10, 17, 13, 10, 9, 15, 9, 16, 9, 16, 14, 10, 14, 22, 20, 10, 10, 18, 9, 10, 13, 10, 10],
+    ]
+    # fmt: on
 
-    def tearDown(self):
+    @classmethod
+    def setUpClass(cls):
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
+        cls.model = VoxtralTtsForTextToSpeech.from_pretrained(
+            cls.checkpoint, dtype=torch.bfloat16, device_map=torch_device
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
         cleanup(torch_device, gc_collect=True)
 
-    def test_generate_casual_male(self):
-        """
-        Reproducer, values obtained on CPU (bf16): the original model (a transcription of the vllm-omni reference) and
-        this port generate the same 23 frames for this prompt, which Whisper transcribes as "Paris is a beautiful city."
-        """
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        model = VoxtralTtsForTextToSpeech.from_pretrained(
-            self.checkpoint, dtype=torch.bfloat16, device_map=torch_device
-        )
-        inputs = processor("Paris is a beautiful city!", voice="casual_male").to(torch_device)
-        outputs = model.generate(**inputs, generator=torch.Generator(torch_device).manual_seed(0))
+    def test_teacher_forced_semantic_codes(self):
+        inputs = self.processor(self.text, voice=self.voice).to(torch_device)
+        frames = torch.tensor(self.expected_first_frames, device=torch_device)
+        with torch.no_grad():
+            outputs = self.model(**inputs, audio_codes=frames[None])
+        prompt_length = inputs["input_ids"].shape[1]
+        semantic_logits = outputs.semantic_logits[0, prompt_length - 1 :].float().cpu()
 
-        # fmt: off
-        expected_semantic_codes = [855, 7008, 7096, 6071, 1438, 855, 10, 10, 6226, 663, 3950, 2072, 8023, 8023, 8023, 10, 10, 10, 3684, 3684, 7973, 5246, 1]
-        expected_first_frame = [855, 2, 15, 6, 6, 16, 10, 6, 6, 18, 5, 18, 5, 7, 20, 13, 11, 9, 6, 17, 10, 15, 7, 8, 14, 9, 9, 18, 21, 16, 20, 4, 6, 6, 17, 3, 4]
-        # fmt: on
-        self.assertEqual(outputs.audio_codes[0, :, 0].tolist(), expected_semantic_codes)
-        self.assertEqual(outputs.audio_codes[0, 0].tolist(), expected_first_frame)
-        self.assertEqual(outputs.audio[0].shape, (22 * model.config.codec_config.hop_length,))
+        # Values obtained on CPU
+        expected_logits_slice = torch.tensor([-5.38, 1.3, -4.56, 6.56, -4.91, -5.06, 8.94, -7.09])
+        torch.testing.assert_close(semantic_logits[0, :8], expected_logits_slice, rtol=0, atol=0.15)
+
+        # Restricted to the valid semantic codes, as in generation
+        semantic_logits[:, 0] = -float("inf")
+        semantic_logits[:, 2 + self.model.config.acoustic_transformer_config.semantic_codebook_size :] = -float("inf")
+        predicted = semantic_logits.argmax(-1).tolist()
+        expected = self.expected_semantic_codes[: len(predicted)]
+        num_matches = sum(p == e for p, e in zip(predicted, expected))
+        # Near-ties of the bf16 logits may flip a code
+        self.assertGreaterEqual(num_matches, len(expected) - 1, f"{predicted} != {expected}")
+
+    def test_acoustic_codes_from_reference_noise(self):
+        # Seeded flow-matching noise for the first frame, as drawn by `generate` with a CPU generator seeded at 0
+        inputs = self.processor(self.text, voice=self.voice).to(torch_device)
+        with torch.no_grad():
+            hidden_state = self.model(**inputs).last_hidden_state[:, -1]
+            noise = torch.randn(1, 36, generator=torch.Generator().manual_seed(0)).to(torch_device)
+            frame = self.model.acoustic_transformer.generate_frame(hidden_state, noise=noise)[0].tolist()
+        expected = self.expected_first_frames[0]
+        self.assertEqual(frame[0], expected[0])
+        # Acoustic codes are FSQ levels: bf16 differences may move a few of them by one level
+        self.assertLessEqual(max(abs(a - b) for a, b in zip(frame[1:], expected[1:])), 1)
+        self.assertGreaterEqual(sum(a == b for a, b in zip(frame[1:], expected[1:])), 30)
+
+    def test_codec_decode(self):
+        codes = torch.tensor(self.expected_first_frames, device=torch_device) - 2
+        with torch.no_grad():
+            audio = self.model.codec_model.decode(codes[None]).audio_values[0].float().cpu()
+        self.assertEqual(audio.shape, (6 * self.model.config.codec_config.hop_length,))
+        # Values obtained on CPU
+        expected_slice = torch.tensor(
+            [0.00134, -0.00433, -0.00812, -0.00854, -0.00485, -0.00123, 0.00084, -0.00067, -0.00409, -0.00568]
+        )
+        torch.testing.assert_close(audio[4000:4010], expected_slice, rtol=0, atol=1e-3)
+
+    def test_generate(self):
+        inputs = self.processor(self.text, voice=self.voice).to(torch_device)
+        outputs = self.model.generate(**inputs, generator=torch.Generator(torch_device).manual_seed(0))
+        # The sentence lasts about 1.8 s (22 frames of 80 ms) and generation stops on `[END_AUDIO]`
+        num_frames = int(outputs.audio_lengths[0])
+        self.assertTrue(15 <= num_frames <= 30, num_frames)
+        self.assertEqual(int(outputs.audio_codes[0, num_frames, 0]), 1)
+        self.assertEqual(outputs.audio[0].shape, (num_frames * self.model.config.codec_config.hop_length,))

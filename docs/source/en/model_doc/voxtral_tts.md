@@ -73,6 +73,10 @@ for i, audio in enumerate(outputs.audio):
 frames of each sample (`outputs.audio_lengths`). The classifier-free guidance scale of the flow matching can be set
 with `cfg_alpha` (defaults to 1.2), and `generator` makes the generation reproducible.
 
+As in the reference implementation, the codec decodes the audio in independent chunks of 375 frames (30 s), which
+bounds the memory of its attention for long generations (`codec_chunk_size`, set it to `None` to decode all frames at
+once).
+
 ## VoxtralTtsConfig
 
 [[autodoc]] VoxtralTtsConfig

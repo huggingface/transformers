@@ -51,6 +51,7 @@ class VoxtralTtsGenerationMixin:
         cfg_alpha: float = 1.2,
         generator: torch.Generator | None = None,
         output_audio: bool = True,
+        codec_chunk_size: int | None = 375,
         **kwargs,
     ) -> VoxtralTtsGenerateOutput:
         r"""
@@ -75,6 +76,9 @@ class VoxtralTtsGenerationMixin:
                 Random generator for the flow-matching noise, for reproducible generations.
             output_audio (`bool`, *optional*, defaults to `True`):
                 Whether to decode the generated codes into waveforms with the codec.
+            codec_chunk_size (`int`, *optional*, defaults to 375):
+                The codec decodes the audio in independent chunks of this many frames (30 s), as the reference
+                implementation does, which bounds the memory of its attention. `None` decodes all frames at once.
 
         Returns:
             [`VoxtralTtsGenerateOutput`]
@@ -138,7 +142,14 @@ class VoxtralTtsGenerationMixin:
             num_special = self.config.acoustic_transformer_config.num_special_audio_tokens
             codec_codes = (audio_codes - num_special).clamp(min=0)
             # The codec is causal, so frames past the end of a sequence do not affect its waveform
-            audio_values = self.codec_model.decode(codec_codes).audio_values
+            chunk_size = codec_chunk_size or codec_codes.shape[1]
+            audio_values = torch.cat(
+                [
+                    self.codec_model.decode(codec_codes[:, start : start + chunk_size]).audio_values
+                    for start in range(0, codec_codes.shape[1], chunk_size)
+                ],
+                dim=-1,
+            )
             hop_length = self.config.codec_config.hop_length
             audio = [audio_values[i, : int(audio_lengths[i]) * hop_length] for i in range(batch_size)]
 
