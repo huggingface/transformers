@@ -365,21 +365,29 @@ class GlmMoeDsaIndexer(nn.Module):
         if cache is not None:
             k = cache.update_indexer(k, self.layer_idx)
 
-        scores = torch.matmul(q.float(), k.transpose(-1, -2).float().unsqueeze(1)) * self.softmax_scale
-        scores = F.relu(scores)
-
-        # Weight per head and sum across heads: [B, S, 1, H] @ [B, S, H, T] → [B, S, T]
         weights = self.weights_proj(hidden_states.to(self.weights_proj.weight.dtype)).float() * (self.n_heads**-0.5)
-        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
+        topk = min(self.index_topk, k.shape[-2])
+        key_t = k.transpose(-1, -2).float().unsqueeze(1)
+        # [scratch] By chunks of queries: the fp32 scores of a whole continuous batching step ([B, S, H, T], with T every
+        # key of the step's sequences) took 24 GiB at 8k queries on GLM-5.3 and ran out of memory
+        indices = []
+        for start in range(0, seq_len, _INDEXER_QUERY_CHUNK):
+            end = min(start + _INDEXER_QUERY_CHUNK, seq_len)
+            scores = F.relu(torch.matmul(q[:, start:end].float(), key_t) * self.softmax_scale)
+            # Weight per head and sum across heads: [B, s, 1, H] @ [B, s, H, T] → [B, s, T]
+            index_scores = torch.matmul(weights[:, start:end].unsqueeze(-2), scores).squeeze(-2)
+            del scores
+            # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
+            mask = attention_mask[..., start:end, :] if attention_mask.shape[-2] == seq_len else attention_mask
+            if mask.dtype == torch.bool:
+                index_scores = index_scores.masked_fill(~mask, float("-inf"))
+            else:
+                index_scores = index_scores + mask
+            indices.append(index_scores.topk(topk, dim=-1).indices.to(torch.int32))
+        return torch.cat(indices, dim=1)  # [B, S, topk]
 
-        # Causality needs to be taken into account when computing scores so padding tokens don't affect computation
-        if attention_mask.dtype == torch.bool:
-            index_scores = index_scores.masked_fill(~attention_mask, float("-inf"))
-        else:
-            index_scores = index_scores + attention_mask
 
-        topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+_INDEXER_QUERY_CHUNK = 1024
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
