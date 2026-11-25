@@ -472,7 +472,8 @@ class MiniCPMV4_5Resampler(nn.Module):
             temporal = self.get_temporal_pos_embed(temporal_ids)
             position_embeddings = position_embeddings.unflatten(1, (temporal_ids.shape[1], -1)) + temporal[:, :, None]
             position_embeddings = position_embeddings.flatten(1, 2)
-        position_embeddings = position_embeddings * pixel_attention_mask[..., None]
+        # Cast before the attention, so the float32 embeddings of all frames are freed first
+        position_embeddings = (position_embeddings * pixel_attention_mask[..., None]).to(key_value_states.dtype)
         query_states = self.ln_q(self.query).unsqueeze(0).expand(key_value_states.shape[0], -1, -1)
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -484,7 +485,7 @@ class MiniCPMV4_5Resampler(nn.Module):
             query_states,
             key_value_states,
             attention_mask=attention_mask,
-            encoder_position_embeddings=position_embeddings.to(key_value_states.dtype),
+            encoder_position_embeddings=position_embeddings,
             **kwargs,
         )
         return self.ln_post(attention_output) @ self.proj
