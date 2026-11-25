@@ -834,6 +834,12 @@ class _MPSHostRouter:
             # Experiment: read-ahead for `nxt` may run while the GPU is in `nxt`'s pass 1. Evicting a
             # resident `nxt` expert then overwrites a slot pass 1 may read (e6e0218 KeyError / silent
             # wrong output). Keep every resident expert of `nxt` for this install.
+            # Without the pin this is not theoretical: Qwen3.8-Flash-Next on a 32 GB M5 with a 6 GiB expert cache
+            # crashes in the first eager generate (host thread: KeyError ('model.layers.25.mlp.experts', 506) at the
+            # `stamps[...] = counter` line in `_resolve`): an expert pass 1 counted as a hit was evicted by this
+            # read-ahead before `nxt` resolved. The KeyError is the visible case; when pass 1 reads the slot while
+            # this install overwrites it with another expert, the layer computes with the wrong weights and nothing
+            # fails. The smaller the cache (the more evictions), the likelier; 16 GiB runs did not hit it.
             if self.GUESS or os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_PIN_AHEAD", "0") == "1":
                 keep = keep | wanted | {key for key in npool.cache if key[0] == nxt}
             else:
