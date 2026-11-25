@@ -340,6 +340,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
     @property
     def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
         return self.num_assistant_tokens
 
 
@@ -1159,6 +1160,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
     @property
     def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
         return self.num_output_tokens
 
 
@@ -1368,6 +1370,7 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
 
     @property
     def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
         return self.num_assistant_tokens
 
 
@@ -1504,6 +1507,7 @@ class MTPCandidateGenerator(CandidateGenerator):
 
     @property
     def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
         return self.num_mtp_layers
 
 
@@ -1694,6 +1698,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
     @property
     def num_drafting_tokens(self):
+        """Describe how many new tokens will be drafted by this CandidateGenerator every iteration"""
         return self.block_size
 
 
