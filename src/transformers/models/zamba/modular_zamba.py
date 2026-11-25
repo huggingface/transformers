@@ -99,6 +99,7 @@ class ZambaAttention(JambaAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if cache is not None:
+            # Diff from Jamba: one attention block is shared across layers, so `layer_idx` comes from the caller
             key_states, value_states = cache.update(key_states, value_states, layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -629,7 +630,7 @@ class ZambaModel(ZambaPreTrainedModel):
 
 
 class ZambaForCausalLM(LlamaForCausalLM):
-    _tp_plan = {}
+    _tp_plan = AttributeError()
 
     def forward(self, **super_kwargs):
         r"""

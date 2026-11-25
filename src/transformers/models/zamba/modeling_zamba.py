@@ -194,6 +194,7 @@ class ZambaAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if cache is not None:
+            # Diff from Jamba: one attention block is shared across layers, so `layer_idx` comes from the caller
             key_states, value_states = cache.update(key_states, value_states, layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -1000,7 +1001,6 @@ class ZambaModel(ZambaPreTrainedModel):
 @auto_docstring
 class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
