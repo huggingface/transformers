@@ -72,12 +72,12 @@ class NanbeigeConfig(LlamaConfig):
     num_hidden_layers: int = 22
     num_attention_heads: int = 48
     num_key_value_heads: int | None = 8
-    head_dim: int | None = 128
     max_position_embeddings: int = 262144
     rms_norm_eps: float = 1e-5
     pad_token_id: int | None = 0
     bos_token_id: int | None = 166100
     eos_token_id: int | list[int] | None = 166101
+    head_dim: int | None = 128
     num_loops: int = loop_count_field(default=2)
     loop_loss_weights: list[float] | None = None
     skip_loop_final_norm: bool = False
@@ -110,11 +110,15 @@ class NanbeigeAttention(LlamaAttention):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, self.layer_idx + cache_offset)
+            # Each pass writes to its own cache slot.
+            key_states, value_states = cache.update(
+                key_states, value_states, self.layer_idx + cache_offset, kwargs=kwargs
+            )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
