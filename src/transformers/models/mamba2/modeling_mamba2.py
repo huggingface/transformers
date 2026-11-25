@@ -573,31 +573,85 @@ class Mamba2Mixer(nn.Module):
 
         # Chunk form
         else:
-            output_final_state = cache is not None
-            scan_result = mamba2_chunk_scan(
-                hidden_states.view(batch_size, seq_len, self.num_heads, self.head_dim),
-                dt,
-                A,
-                B.view(batch_size, seq_len, self.n_groups, self.ssm_state_size),
-                C.view(batch_size, seq_len, self.n_groups, self.ssm_state_size),
-                chunk_size=self.chunk_size,
-                D=self.D,
-                z=None,
-                return_final_states=output_final_state,
-                dt_bias=self.dt_bias,
-                dt_softplus=True,
-                initial_states=recurrent_state,
-                dt_limit=self.time_step_limit,
-                **kwargs,
+            num_intermediate_recurrent_states = (
+                10 if cache is not None and cache.is_recording_past(self.layer_idx) else 0
             )
+            # Cannot be more than the number of tokens
+            num_intermediate_recurrent_states = (
+                min(num_intermediate_recurrent_states, seq_len) if num_intermediate_recurrent_states is not None else 0
+            )
+            # Since we want the last num_intermediate_recurrent_states, we need to artifically remove them from the chunks, and split the inputs
+            effective_sequence_length = seq_len - num_intermediate_recurrent_states
+            chunked_hidden_states, sequential_hidden_states = torch.tensor_split(
+                hidden_states, [effective_sequence_length], dim=1
+            )
+            chunked_dt, sequential_dt = torch.tensor_split(dt, [effective_sequence_length], dim=1)
+            chunked_B, sequential_B = torch.tensor_split(B, [effective_sequence_length], dim=1)
+            chunked_C, sequential_C = torch.tensor_split(C, [effective_sequence_length], dim=1)
 
-            if output_final_state:
-                scan_output, final_state = scan_result
-                cache.update_recurrent_state(final_state, layer_idx=self.layer_idx)
-            else:
-                scan_output = scan_result
+            all_outputs = []
+            last_scan_recurrent_state = recurrent_state
+            # First, perform the fast scan computation (if we don't need only sequential)
+            if chunked_hidden_states.numel() > 0:
+                scan_output = mamba2_chunk_scan(
+                    chunked_hidden_states.view(batch_size, effective_sequence_length, self.num_heads, self.head_dim),
+                    chunked_dt,
+                    A,
+                    chunked_B.view(batch_size, effective_sequence_length, self.n_groups, self.ssm_state_size),
+                    chunked_C.view(batch_size, effective_sequence_length, self.n_groups, self.ssm_state_size),
+                    chunk_size=self.chunk_size,
+                    D=self.D,
+                    z=None,
+                    return_final_states=cache is not None,
+                    dt_bias=self.dt_bias,
+                    dt_softplus=True,
+                    initial_states=recurrent_state,
+                    dt_limit=self.time_step_limit,
+                    **kwargs,
+                )
+                # The number of outputs varies depending on the flag
+                if cache is not None:
+                    scan_output, last_scan_recurrent_state = scan_output
+                # Collect it
+                all_outputs.append(scan_output)
 
-            scan_output = scan_output.reshape(batch_size, seq_len, -1)
+            # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
+            intermediate_recurrent_states = []
+            last_recurrent_state = (
+                last_scan_recurrent_state
+                if last_scan_recurrent_state is not None
+                else A.new_zeros(B.shape[0], *A.shape)
+            )
+            for i in range(num_intermediate_recurrent_states):
+                # Since it updates the state in-place, we need to copy a new one every step
+                # last_recurrent_state = last_recurrent_state.clone()
+                local_output = mamba2_selective_state_update(
+                    last_recurrent_state,
+                    sequential_hidden_states[..., i].view(batch_size, self.num_heads, self.head_dim),
+                    sequential_dt[..., i].transpose(1, 2).expand(-1, -1, self.head_dim),
+                    A[:, None, None].expand(-1, self.head_dim, self.ssm_state_size),
+                    sequential_B[..., i].view(batch_size, self.n_groups, self.ssm_state_size),
+                    sequential_C[..., i].view(batch_size, self.n_groups, self.ssm_state_size),
+                    self.D[:, None].expand(-1, self.head_dim),
+                    z=None,
+                    dt_bias=self.dt_bias[:, None].expand(-1, self.head_dim),
+                    dt_softplus=True,
+                    **kwargs,
+                )
+                # Combine them
+                all_outputs.append(local_output)
+                # Note that we need to copy here since it's updated in-place
+                intermediate_recurrent_states.append(last_recurrent_state.clone())
+
+            # Cat all outputs
+            scan_output = torch.cat(all_outputs, dim=2).reshape(batch_size, seq_len, -1)
+
+            # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
+            last_recurrent_state = (
+                intermediate_recurrent_states if len(intermediate_recurrent_states) > 0 else last_scan_recurrent_state
+            )
+            if cache is not None:
+                cache.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         scan_output = self.norm(scan_output, gate)
 

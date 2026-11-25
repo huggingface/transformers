@@ -1095,7 +1095,7 @@ class LinearAttentionCacheLayerMixin(ABC):
         self.device = None
         self.dtype = None
         self.record_past = False
-        self.recurrent_states_history = None
+        self.recurrent_states_history = {}
 
     def __repr__(self):
         return f"{self.__class__.__name__}"
