@@ -717,6 +717,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     "blip2",  # overridden `generate()` all BLIP models
                     "instructblip",
                     "instructblipvideo",
+                    "zamba",  # special loop, and no real need to add support for now
+                    "zaya",  # a bit specific, could work but need a bit more work and no need rn
+                    "xlstm",  # extremely special cache mechanism, won't fix
+                    "rwkv",  # does not use cache classes, won't fix
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -891,6 +895,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
+                    "zamba",  # special loop, and no real need to add support for now
+                    "zaya",  # a bit specific, could work but need a bit more work and no need rn
+                    "xlstm",  # extremely special cache mechanism, won't fix
+                    "rwkv",  # does not use cache classes, won't fix
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
