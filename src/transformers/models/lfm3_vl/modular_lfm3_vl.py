@@ -275,7 +275,7 @@ class Lfm3VlVisionModel(Qwen2VisionTransformerPretrainedModel):
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
         # diff -> the convolution reshapes each frame to its grid, which needs host-side sizes
         grid_thw_list = grid_thw.tolist()  # trf-ignore: TRF056
 
@@ -290,6 +290,7 @@ class Lfm3VlVisionModel(Qwen2VisionTransformerPretrainedModel):
                 grid_thw=grid_thw_list,
                 max_seqlen=max_seqlen,
                 packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

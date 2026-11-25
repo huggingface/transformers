@@ -37,6 +37,7 @@ import torch.nn.functional as F
 from .configuration_utils import PreTrainedConfig
 from .utils import logging
 from .utils.generic import get_max_seqlen, is_flash_attention_requested
+from .utils.import_utils import is_tracing
 
 
 if TYPE_CHECKING:
@@ -77,34 +78,44 @@ def get_packed_sequences_inputs(
     config: PreTrainedConfig,
     kwargs: dict | None = None,
     window: bool = False,
-) -> tuple[int | None, BlockMask | None]:
+) -> tuple[int | None, BlockMask | None, list[int] | None]:
     """Get what the attention implementation needs besides `cu_seqlens` to attend within each packed sequence.
 
-    Built once per forward for all the layers, rather than in each. Each value can also be precomputed (e.g. by
-    `get_data_dependent_inputs`) and is then popped from `kwargs`, which keeps the host syncs they need out of the
-    forward.
+    Built once per forward for all the layers, rather than in each. Outside of tracing, the sequence lengths are read on
+    the host here, once: Flash Attention takes its maximum length from them, and eager and SDPA's fallback split the
+    sequences with them instead of reading them in each layer. Each value can also be precomputed (e.g. by
+    `get_data_dependent_inputs`) and is then popped from `kwargs`, which keeps the host syncs out of the forward.
 
     Args:
         cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
         config: model configuration used to determine the attention implementation.
         kwargs: optional caller kwargs containing precomputed values.
         window: whether `cu_seqlens` delimits the windows of window attention, whose precomputed values are popped
-            from `max_window_seqlen` and `packed_window_block_mask` instead.
+            from `max_window_seqlen`, `packed_window_block_mask` and `window_sequence_lengths` instead.
 
     Returns:
-        Flash Attention's maximum sequence length and Flex Attention's block mask, each `None` for other attention
-        implementations.
+        Flash Attention's maximum sequence length, Flex Attention's block mask (each `None` for other attention
+        implementations), and the sequence lengths on the host (`None` when tracing).
     """
     prefix = "window_" if window else ""
     kwargs = {} if kwargs is None else kwargs
-    max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs, kwarg_name=f"max_{prefix}seqlen")
+    sequence_lengths = kwargs.pop(f"{prefix}sequence_lengths", None)
+    if sequence_lengths is None and not is_tracing(cu_seqlens):
+        sequence_lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+
+    max_seqlen = kwargs.pop(f"max_{prefix}seqlen", None)
+    if max_seqlen is None and sequence_lengths is not None and is_flash_attention_requested(config):
+        max_seqlen = max(sequence_lengths)
+    elif max_seqlen is None:
+        max_seqlen = get_max_seqlen(cu_seqlens, config)
+
     block_mask = kwargs.pop(f"packed_{prefix}block_mask", None)
     if block_mask is None and config._attn_implementation == "flex_attention":
         from .integrations.flex_attention import create_packed_block_mask
 
-        length = int(cu_seqlens[-1])
+        length = sum(sequence_lengths) if sequence_lengths is not None else int(cu_seqlens[-1])
         block_mask = create_packed_block_mask(cu_seqlens, None, length, length)
-    return max_seqlen, block_mask
+    return max_seqlen, block_mask, sequence_lengths
 
 
 def get_vision_attention_seqlens(
@@ -129,6 +140,7 @@ def packed_sequences_attention_forward(
     cu_seqlens: torch.Tensor,
     max_seqlen: int | None = None,
     packed_block_mask: BlockMask | None = None,
+    sequence_lengths: list[int] | None = None,
     return_attention_weights: bool = False,
     **kwargs,
 ) -> tuple[torch.Tensor, tuple[torch.Tensor, ...] | torch.Tensor | None]:
@@ -144,7 +156,7 @@ def packed_sequences_attention_forward(
         key: `(1, num_key_value_heads, total_length, head_dim)` keys of all the packed sequences.
         value: `(1, num_key_value_heads, total_length, head_dim)` values of all the packed sequences.
         cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
-        max_seqlen, packed_block_mask: as returned by [`get_packed_sequences_inputs`].
+        max_seqlen, packed_block_mask, sequence_lengths: as returned by [`get_packed_sequences_inputs`].
         return_attention_weights: whether eager keeps each sequence's attention weights. They are otherwise freed as it
             goes, as they add up to the score matrices of all the sequences.
         kwargs: passed to `attention_interface` (e.g. `scaling`, `dropout`, `is_causal`).
@@ -168,10 +180,11 @@ def packed_sequences_attention_forward(
             max_length_q=max_seqlen,
             max_length_k=max_seqlen,
             packed_block_mask=packed_block_mask,
+            sequence_lengths=sequence_lengths,
             **kwargs,
         )
 
-    lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+    lengths = sequence_lengths if sequence_lengths is not None else (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
     attn_outputs, attn_weights = [], []
     for sequence_query, sequence_key, sequence_value in zip(
         query.split(lengths, dim=2), key.split(lengths, dim=2), value.split(lengths, dim=2)

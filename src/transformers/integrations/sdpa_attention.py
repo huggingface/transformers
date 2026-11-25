@@ -105,6 +105,7 @@ def sdpa_varlen_attention_forward(
     dropout: float = 0.0,
     scaling: float | None = None,
     is_causal: bool | None = None,
+    sequence_lengths: list[int] | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     """
@@ -151,9 +152,13 @@ def sdpa_varlen_attention_forward(
         )
         return attn_output.unsqueeze(0), None
 
-    # The fallback splits the sequences, which needs their lengths on the host
-    lengths_q = (cu_seq_lens_q[1:] - cu_seq_lens_q[:-1]).tolist()
-    lengths_k = (cu_seq_lens_k[1:] - cu_seq_lens_k[:-1]).tolist()
+    # The fallback splits the sequences, which needs their lengths on the host: read once per forward when the model
+    # passes them (shared by queries and keys), here otherwise
+    if sequence_lengths is not None:
+        lengths_q = lengths_k = sequence_lengths
+    else:
+        lengths_q = (cu_seq_lens_q[1:] - cu_seq_lens_q[:-1]).tolist()
+        lengths_k = (cu_seq_lens_k[1:] - cu_seq_lens_k[:-1]).tolist()
     attn_outputs = [
         sdpa_attention_forward(module, q, k, v, None, dropout=dropout, scaling=scaling, is_causal=is_causal, **kwargs)
         for q, k, v in zip(query.split(lengths_q, dim=2), key.split(lengths_k, dim=2), value.split(lengths_k, dim=2))

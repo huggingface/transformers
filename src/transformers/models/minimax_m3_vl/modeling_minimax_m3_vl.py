@@ -1223,7 +1223,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=self.merge_temporal, kwargs=kwargs)
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
         position_ids = get_vision_position_ids(
             grid_thw, self.spatial_merge_size, include_temporal=self.include_temporal, kwargs=kwargs
         )
@@ -1236,6 +1236,7 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 **kwargs,
             )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])

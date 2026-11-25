@@ -552,7 +552,7 @@ class Cosmos3EdgeEncoder(nn.Module):
             The temporal, height, and width patch-grid dimensions for every packed image or video.
         """
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -560,6 +560,7 @@ class Cosmos3EdgeEncoder(nn.Module):
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 **kwargs,
             )
 

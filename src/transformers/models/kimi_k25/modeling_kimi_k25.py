@@ -496,7 +496,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=True, kwargs=kwargs)
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         for block in self.layers:
             hidden_states = block(
@@ -504,6 +504,7 @@ class Kimi_K25VisionModel(Kimi_K25PreTrainedModel):
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

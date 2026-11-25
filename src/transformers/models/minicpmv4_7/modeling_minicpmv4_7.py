@@ -410,13 +410,14 @@ class MiniCPMV4_7VisionModel(MiniCPMV4_7VisionPreTrainedModel):
         cu_seqlens = F.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(device), (1, 0)
         )
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config)
 
         downsampled_kwargs = {
             "attention_mask": None,
             "cu_seqlens": cu_seqlens,
             "max_seqlen": max_seqlen,
             "packed_block_mask": block_mask,
+            "sequence_lengths": sequence_lengths,
             **kwargs,
         }
         return downsampled_kwargs, target_sizes, cu_seqlens
@@ -444,13 +445,14 @@ class MiniCPMV4_7VisionModel(MiniCPMV4_7VisionPreTrainedModel):
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(hidden_states.device),
             (1, 0),
         )
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         attn_kwargs = {
             "attention_mask": None,
             "cu_seqlens": cu_seqlens,
             "max_seqlen": max_seqlen,
             "packed_block_mask": block_mask,
+            "sequence_lengths": sequence_lengths,
             **kwargs,
         }
 

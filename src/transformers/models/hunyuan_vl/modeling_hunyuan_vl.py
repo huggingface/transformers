@@ -687,7 +687,7 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
         """
         hidden_states = self.embeddings(pixel_values, grid_thw)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         for layer in self.layers:
             hidden_states = layer(
@@ -695,6 +695,7 @@ class HunYuanVLVisionTransformer(HunYuanVLPreTrainedModel):
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 attention_mask=None,
                 **kwargs,
             )

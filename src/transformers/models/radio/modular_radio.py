@@ -362,11 +362,14 @@ class RadioModel(RadioPreTrainedModel):
         # a single image is a plain dense sequence and needs no packed attention
         packed_kwargs = {"cu_seqlens": None}
         if len(sequence_lengths) > 1:
-            max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+            max_seqlen, block_mask, packed_lengths = get_packed_sequences_inputs(
+                cu_seqlens, self.config, kwargs=kwargs
+            )
             packed_kwargs = {
                 "cu_seqlens": cu_seqlens,
                 "max_seqlen": max_seqlen,
                 "packed_block_mask": block_mask,
+                "sequence_lengths": packed_lengths,
             }
         encoder_outputs: BaseModelOutput = self.encoder(hidden_states, **packed_kwargs, **kwargs)
         last_hidden_state = encoder_outputs.last_hidden_state[0]

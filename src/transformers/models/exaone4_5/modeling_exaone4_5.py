@@ -558,7 +558,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
             spatial_merge_size=self.spatial_merge_size,
@@ -566,7 +566,7 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
             patch_size=self.patch_size,
             kwargs=kwargs,
         )
-        max_window_seqlen, window_block_mask = get_packed_sequences_inputs(
+        max_window_seqlen, window_block_mask, window_sequence_lengths = get_packed_sequences_inputs(
             cu_window_seqlens, self.config, kwargs=kwargs, window=True
         )
 
@@ -585,16 +585,19 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
                 cu_seqlens_now = cu_seqlens
                 max_seqlen_now = max_seqlen
                 block_mask_now = block_mask
+                sequence_lengths_now = sequence_lengths
             else:
                 cu_seqlens_now = cu_window_seqlens
                 max_seqlen_now = max_window_seqlen
                 block_mask_now = window_block_mask
+                sequence_lengths_now = window_sequence_lengths
 
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
                 packed_block_mask=block_mask_now,
+                sequence_lengths=sequence_lengths_now,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

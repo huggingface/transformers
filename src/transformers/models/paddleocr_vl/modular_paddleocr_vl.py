@@ -573,7 +573,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
         position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(
@@ -589,6 +589,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

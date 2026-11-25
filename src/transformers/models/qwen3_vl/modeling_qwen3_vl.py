@@ -660,7 +660,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
-        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
@@ -677,6 +677,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
                 packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
