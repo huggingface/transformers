@@ -33,7 +33,7 @@ from .configuration_sam3_video import Sam3VideoConfig
 
 
 if is_kernels_available():
-    from ...integrations.hub_kernels import get_kernel
+    from ...integrations.hub_kernels import lazy_load_kernel
 
 logger = logging.get_logger(__name__)
 
@@ -55,7 +55,7 @@ def _load_cv_utils_kernel_once():
         return
 
     try:
-        cv_utils_kernel = get_kernel("kernels-community/cv-utils", version=1)
+        cv_utils_kernel = lazy_load_kernel("cv-utils") or False
     except Exception as e:
         logger.warning_once(
             f"Failed to load cv_utils kernel (your torch/cuda setup may not be supported): {e}. "

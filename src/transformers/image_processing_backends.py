@@ -53,7 +53,7 @@ from .image_utils import (
     is_valid_image,
     load_image_as_tensor,
 )
-from .integrations.hub_processing_kernels import run_processing_kernel, use_processing_kernel
+from .integrations.hub_processing_kernels import kernel_can_resize, load_cv_utils_kernel, use_processing_kernel
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     TensorType,
@@ -67,6 +67,7 @@ from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling, is_t
 
 if is_vision_available():
     from .image_utils import PILImageResampling
+    from .integrations.hub_processing_kernels import KERNEL_INTERPOLATIONS
 
 if is_torch_available():
     import torch
@@ -105,7 +106,14 @@ def resize_normalize_with_kernel(
         getattr(type(processor), name) is getattr(TorchvisionBackend, name)
         for name in ("resize", "center_crop", "rescale_and_normalize", "rescale", "normalize")
     )
-    if not (uses_default_resize_and_normalize and do_resize and do_rescale and do_normalize and not do_pad):
+    if not (
+        uses_default_resize_and_normalize
+        and do_resize
+        and do_rescale
+        and do_normalize
+        and not do_pad
+        and kernel_can_resize(images, resample)
+    ):
         return None
     sizes = [processor._resize_output_size(image, size) for image in images]
     crop = None
@@ -113,11 +121,18 @@ def resize_normalize_with_kernel(
         crop = (crop_size.height, crop_size.width)
         if any(crop[0] > height or crop[1] > width for height, width in sizes):
             return None
-    pixel_values = run_processing_kernel(
-        "resize_normalize", images, sizes, crop, resample, rescale_factor, image_mean, image_std
-    )
-    if pixel_values is None:
+    kernel = load_cv_utils_kernel(images[0].device)
+    if kernel is None:
         return None
+    pixel_values = kernel.resize_normalize(
+        images,
+        sizes,
+        image_mean=image_mean,
+        image_std=image_std,
+        rescale_factor=rescale_factor,
+        resample=KERNEL_INTERPOLATIONS[resample],
+        crop_size=crop,
+    )
     return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
 

@@ -336,7 +336,7 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct", use_kerne
 inputs = processor(text=prompt, images=images, return_tensors="pt", device="cuda")
 ```
 
-[`AutoProcessor`] passes the flag to its image and video processors. Kernels run on the device of the inputs, so pass `device="cuda"`. The processor keeps its default implementation when the inputs are on CPU, when the kernel fails to load, or when the kernel does not support the arguments.
+[`AutoProcessor`] passes the flag to its image and video processors. Kernels run on the device of the inputs, so pass `device="cuda"`. Loading a processor with `use_kernels=True` raises an error when `kernels` is not installed. The processor keeps its default implementation when the inputs are on CPU, when the kernel fails to load, or when the kernel does not support the arguments.
 
 The resize kernels are antialiased and round to `uint8` after each pass, like the torchvision path, but in a different order. On photos the mean difference stays below a quarter of a `uint8` level. Bicubic resampling can differ by several levels on a few pixels near sharp edges.
 
@@ -344,32 +344,20 @@ When both sides are upsampled at least 2x, the upsample and argmax kernel runs o
 
 ### Adding a processing kernel
 
-A processing kernel has two levels in `integrations/hub_processing_kernels.py`.
-
-`register_processing_kernel` maps an operation to a kernel of `_HUB_KERNEL_MAPPING`, so each operation can come from its own kernel repository. The adapter receives the loaded kernel module and the arguments of the operation. It checks what the kernel supports, such as the device, and returns `None` for arguments the kernel cannot handle. `run_processing_kernel` loads the kernel and calls the adapter, or returns `None` when the kernel does not load.
-
-`use_processing_kernel` connects a processor method to an operation. It decorates the method with a function that receives the processor and the named arguments of the method. That function returns the result, or `None` to run the method as usual. It only runs when the processor was loaded with `use_kernels=True`. For example, this is how semantic segmentation post-processing uses `upsample_argmax`:
+`use_processing_kernel` connects a processor method to a kernel. It decorates the method with a function that receives the processor and the named arguments of the method. That function returns the result, or `None` to run the method as usual. It only runs when the processor was loaded with `use_kernels=True`. `load_cv_utils_kernel(device)` returns the cv-utils kernel for tensors on `device`, or `None` when they are not on a CUDA device or the kernel does not load. For example, this is how semantic segmentation post-processing uses `upsample_argmax`:
 
 ```py
 from transformers import TorchvisionBackend
-from transformers.integrations.hub_processing_kernels import (
-    register_processing_kernel,
-    run_processing_kernel,
-    use_processing_kernel,
-)
-
-
-@register_processing_kernel("upsample_argmax", kernel_name="cv-utils")
-def _upsample_argmax_kernel(kernel, logits, target_sizes):
-    if logits.device.type != "cuda":
-        return None
-    return kernel.upsample_argmax(logits, target_sizes)
+from transformers.integrations.hub_processing_kernels import load_cv_utils_kernel, use_processing_kernel
 
 
 def upsample_argmax_with_kernel(processor, outputs, target_sizes, return_segmentation_scores, **kwargs):
     if return_segmentation_scores or target_sizes is None:
         return None
-    return run_processing_kernel("upsample_argmax", outputs.logits, target_sizes)
+    kernel = load_cv_utils_kernel(outputs.logits.device)
+    if kernel is None:
+        return None
+    return kernel.upsample_argmax(outputs.logits, target_sizes)
 
 
 class MyImageProcessor(TorchvisionBackend):

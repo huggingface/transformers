@@ -122,6 +122,10 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         max_pixels: int | None = None,
         **kwargs,
     ) -> dict:
+        # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+        # resampling argument, which uses BICUBIC for RGB images. Its config has
+        # `resample=1` (LANCZOS), but the original implementation never uses it.
+        kwargs["resample"] = PILImageResampling.BICUBIC
         if min_pixels is not None or max_pixels is not None:
             warnings.warn(
                 "Passing `min_pixels` and `max_pixels` to a processor call is deprecated and will be removed in v5.23. "
@@ -158,10 +162,7 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         return super().resize(
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
-            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
-            # resampling argument, which uses BICUBIC for RGB images. Its config has
-            # `resample=1` (LANCZOS), but the original implementation never uses it.
-            resample=PILImageResampling.BICUBIC,
+            resample=resample,
         )
 
     def _resized_size(self, height, width, size, factor):

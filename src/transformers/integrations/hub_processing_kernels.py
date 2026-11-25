@@ -30,35 +30,14 @@ if is_vision_available():
     KERNEL_INTERPOLATIONS = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
 
 
-_PROCESSING_KERNEL_ADAPTERS: dict[str, tuple[str, Callable]] = {}
 _KERNEL_DEVICE_TYPE = "cuda"
 
 
-def register_processing_kernel(name: str, kernel_name: str):
-    """
-    Register the kernel `kernel_name` of `_HUB_KERNEL_MAPPING` as an implementation of the processing op `name`.
-
-    Processing ops have no common signature to swap, so the decorated function is an adapter: it receives the loaded
-    kernel module followed by the arguments of the op, and returns the kernel result, or `None` when the kernel
-    cannot handle these arguments so that the caller keeps its default implementation.
-    """
-
-    def register(adapter: Callable) -> Callable:
-        _PROCESSING_KERNEL_ADAPTERS[name] = (kernel_name, adapter)
-        return adapter
-
-    return register
-
-
-def run_processing_kernel(name: str, *args, **kwargs):
-    """Run the kernel registered for the processing op `name`, or return `None` if the default path should be used."""
-    if not is_torch_available() or name not in _PROCESSING_KERNEL_ADAPTERS:
+def load_cv_utils_kernel(device):
+    """The `kernels-community/cv-utils` kernel for tensors on `device`, or `None` to keep the default path."""
+    if device.type != _KERNEL_DEVICE_TYPE:
         return None
-    kernel_name, adapter = _PROCESSING_KERNEL_ADAPTERS[name]
-    kernel = lazy_load_kernel(kernel_name)
-    if kernel is None:
-        return None
-    return adapter(kernel, *args, **kwargs)
+    return lazy_load_kernel("cv-utils")
 
 
 def kernel_can_resize(images, resample):
@@ -74,61 +53,6 @@ def kernel_can_resize(images, resample):
             for image in images
         )
     )
-
-
-@register_processing_kernel("connected_component_areas", kernel_name="cv-utils")
-def _connected_component_areas_kernel(kernel, regions):
-    """Area of the 8-connected component of every pixel of a boolean `(batch_size, 1, height, width)` tensor."""
-    if regions.device.type != _KERNEL_DEVICE_TYPE:
-        return None
-    return kernel.connected_component_areas(regions)
-
-
-@register_processing_kernel("resize_normalize", kernel_name="cv-utils")
-def _resize_normalize_kernel(kernel, images, sizes, crop_size, resample, rescale_factor, image_mean, image_std):
-    """Resize every image to its size in `sizes`, center crop to `crop_size` when given, then rescale and normalize."""
-    if not kernel_can_resize(images, resample):
-        return None
-    return kernel.resize_normalize(
-        images, sizes, image_mean, image_std, rescale_factor, KERNEL_INTERPOLATIONS[resample], crop_size=crop_size
-    )
-
-
-@register_processing_kernel("resize_normalize_patchify", kernel_name="cv-utils")
-def _resize_normalize_patchify_kernel(
-    kernel,
-    inputs,
-    target_sizes,
-    resample,
-    rescale_factor,
-    image_mean,
-    image_std,
-    patch_size,
-    patch_block_size,
-    temporal_patch_size,
-):
-    """Resize every `(T, C, H, W)` input to its target frame size, normalize, and write its patches in order."""
-    if not kernel_can_resize(inputs, resample):
-        return None
-    return kernel.resize_normalize_patchify(
-        inputs,
-        target_sizes,
-        image_mean,
-        image_std,
-        rescale_factor,
-        KERNEL_INTERPOLATIONS[resample],
-        patch_size,
-        patch_block_size,
-        temporal_patch_size,
-    )
-
-
-@register_processing_kernel("upsample_argmax", kernel_name="cv-utils")
-def _upsample_argmax_kernel(kernel, logits, target_sizes):
-    """Class of every pixel of `logits` `(B, C, h, w)` upsampled to `target_sizes`, without the upsampled logits."""
-    if logits.device.type != _KERNEL_DEVICE_TYPE:
-        return None
-    return kernel.upsample_argmax(logits, target_sizes)
 
 
 def use_processing_kernel(run_with_kernel: Callable):
@@ -178,7 +102,10 @@ def resize_normalize_patchify_images_with_kernel(
     **kwargs,
 ):
     """`pixel_values` and `image_grid_thw` of the Qwen2-VL image pipeline, from one kernel call for the batch."""
-    if not (do_resize and do_rescale and do_normalize):
+    if not (do_resize and do_rescale and do_normalize and kernel_can_resize(images, resample)):
+        return None
+    kernel = load_cv_utils_kernel(images[0].device)
+    if kernel is None:
         return None
     target_sizes = [
         processor._resized_size(
@@ -186,21 +113,17 @@ def resize_normalize_patchify_images_with_kernel(
         )
         for image in images
     ]
-    kernel_output = run_processing_kernel(
-        "resize_normalize_patchify",
+    pixel_values, image_grid_thw = kernel.resize_normalize_patchify(
         [image[None] for image in images],
         target_sizes,
-        resample,
-        rescale_factor,
-        image_mean,
-        image_std,
-        patch_size,
-        getattr(processor, "patch_block_size", merge_size),
-        temporal_patch_size,
+        image_mean=image_mean,
+        image_std=image_std,
+        rescale_factor=rescale_factor,
+        resample=KERNEL_INTERPOLATIONS[resample],
+        patch_size=patch_size,
+        block_size=getattr(processor, "patch_block_size", merge_size),
+        temporal_patch_size=temporal_patch_size,
     )
-    if kernel_output is None:
-        return None
-    pixel_values, image_grid_thw = kernel_output
     if not getattr(processor, "flatten_patches", True):
         pixel_values = pixel_values.view(-1, images[0].shape[0] * temporal_patch_size, patch_size, patch_size)
     return BatchFeature(
@@ -227,7 +150,10 @@ def resize_normalize_patchify_videos_with_kernel(
     **kwargs,
 ):
     """`pixel_values_videos` and `video_grid_thw` of the Qwen2-VL video pipeline, from one kernel call for all frames."""
-    if not (do_resize and do_rescale and do_normalize):
+    if not (do_resize and do_rescale and do_normalize and kernel_can_resize(videos, resample)):
+        return None
+    kernel = load_cv_utils_kernel(videos[0].device)
+    if kernel is None:
         return None
     target_sizes = [
         processor._resized_size(
@@ -241,21 +167,17 @@ def resize_normalize_patchify_videos_with_kernel(
         )
         for video in videos
     ]
-    kernel_output = run_processing_kernel(
-        "resize_normalize_patchify",
+    pixel_values_videos, video_grid_thw = kernel.resize_normalize_patchify(
         videos,
         target_sizes,
-        resample,
-        rescale_factor,
-        image_mean,
-        image_std,
-        patch_size,
-        getattr(processor, "patch_block_size", merge_size),
-        temporal_patch_size,
+        image_mean=image_mean,
+        image_std=image_std,
+        rescale_factor=rescale_factor,
+        resample=KERNEL_INTERPOLATIONS[resample],
+        patch_size=patch_size,
+        block_size=getattr(processor, "patch_block_size", merge_size),
+        temporal_patch_size=temporal_patch_size,
     )
-    if kernel_output is None:
-        return None
-    pixel_values_videos, video_grid_thw = kernel_output
     return BatchFeature(
         data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw}, tensor_type=return_tensors
     )
@@ -265,4 +187,7 @@ def upsample_argmax_with_kernel(processor, outputs, target_sizes, return_segment
     """Class maps of `outputs.logits` upsampled to `target_sizes`, without storing the upsampled logits."""
     if return_segmentation_scores or target_sizes is None:
         return None
-    return run_processing_kernel("upsample_argmax", outputs.logits, target_sizes)
+    kernel = load_cv_utils_kernel(outputs.logits.device)
+    if kernel is None:
+        return None
+    return kernel.upsample_argmax(outputs.logits, target_sizes)

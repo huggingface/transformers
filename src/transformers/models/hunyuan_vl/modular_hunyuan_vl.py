@@ -13,21 +13,20 @@
 # limitations under the License.
 
 import itertools
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...image_processing_backends import PilBackend, TorchvisionBackend
+from ...image_processing_backends import PilBackend
 from ...image_utils import PILImageResampling, SizeDict
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
@@ -349,25 +348,18 @@ class HunYuanVLImageProcessor(Qwen2VLImageProcessor):
         """Patches are written row by row, not in `merge_size` blocks."""
         return 1
 
-    def resize(
+    def _standardize_kwargs(
         self,
-        images: "torch.Tensor",
-        size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
-        factor: int,
+        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
         **kwargs,
-    ) -> "torch.Tensor":
-        """Resize dynamically based on input image aspect ratio."""
-        resized_height, resized_width = self._resized_size(*images.shape[-2:], size, factor)
-        return TorchvisionBackend.resize(
-            self,
-            image=images,
-            size=SizeDict(height=resized_height, width=resized_width),
-            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
-            # resampling argument, which uses BICUBIC for RGB images. Its config has
-            # `resample=1` (LANCZOS), but the original implementation never uses it.
-            resample=PILImageResampling.BICUBIC,
-        )
+    ) -> dict:
+        # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+        # resampling argument, which uses BICUBIC for RGB images. Its config has
+        # `resample=1` (LANCZOS), but the original implementation never uses it.
+        kwargs["resample"] = PILImageResampling.BICUBIC
+        return super()._standardize_kwargs(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
 
     def patchify(
         self,

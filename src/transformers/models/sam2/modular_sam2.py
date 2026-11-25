@@ -34,7 +34,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...integrations.hub_processing_kernels import run_processing_kernel
+from ...integrations.hub_processing_kernels import load_cv_utils_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -259,20 +259,22 @@ class Sam2ImageProcessor(SamImageProcessor):
         return output_masks
 
     def _remove_small_regions(self, masks, mask_threshold, max_hole_area, max_sprinkle_area):
-        """Fill holes up to `max_hole_area` pixels and drop islands up to `max_sprinkle_area`, with the cv-utils kernel."""
+        """Fill holes up to `max_hole_area` pixels and drop islands up to `max_sprinkle_area`, both found on `masks`."""
+        kernel = load_cv_utils_kernel(masks.device) if self.use_kernels else None
+        if kernel is None:
+            raise ValueError(
+                "`max_hole_area` and `max_sprinkle_area` need the connected components kernel: load the processor "
+                "with `use_kernels=True` and pass masks on a CUDA device."
+            )
         regions = masks.flatten(0, 1).unsqueeze(1)
+        output = regions
         for max_area, is_foreground, score_offset in ((max_hole_area, False, 10.0), (max_sprinkle_area, True, -10.0)):
             if max_area <= 0:
                 continue
             region = regions > mask_threshold if is_foreground else regions <= mask_threshold
-            areas = run_processing_kernel("connected_component_areas", region) if self.use_kernels else None
-            if areas is None:
-                raise ValueError(
-                    "`max_hole_area` and `max_sprinkle_area` need the connected components kernel: load the processor "
-                    "with `use_kernels=True` and pass masks on a CUDA device."
-                )
-            regions = torch.where(region & (areas <= max_area), mask_threshold + score_offset, regions)
-        return regions.reshape_as(masks)
+            areas = kernel.connected_component_areas(region)
+            output = torch.where(region & (areas <= max_area), mask_threshold + score_offset, output)
+        return output.reshape_as(masks)
 
     def _get_preprocess_shape(self):
         raise NotImplementedError("No _get_preprocess_shape for SAM 2.")

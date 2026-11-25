@@ -34,10 +34,12 @@ from .image_utils import (
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
     auto_docstring,
+    is_kernels_available,
     is_torchvision_available,
     is_vision_available,
     logging,
 )
+from .utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
 
 
 if is_vision_available():
@@ -194,6 +196,12 @@ class BaseImageProcessor(ImageProcessingMixin):
     model_input_names = ["pixel_values"]
 
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
+        if kwargs.get("use_kernels") and not is_kernels_available():
+            raise ValueError(
+                "Kernels are not available. "
+                f"Please install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
+                f"e.g. `pip install kernels=={KERNELS_MIN_VERSION}`"
+            )
         super().__init__(**kwargs)
         # We don't call self._set_attributes in BaseImageProcessor for backward compatibility with remote code
         # We call it instead in the backend subclasses' __init__ methods.

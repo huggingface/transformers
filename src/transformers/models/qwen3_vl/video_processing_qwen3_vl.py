@@ -191,7 +191,7 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
-        temporal_factor: int,
+        temporal_factor: int = 2,
         cap_pixels_per_frame: bool | None = None,
         **kwargs,
     ) -> "torch.Tensor":

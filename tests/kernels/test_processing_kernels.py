@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import torch
+from parameterized import parameterized
 from tokenizers import Tokenizer, models
 
 from transformers import (
@@ -46,7 +47,7 @@ from transformers import (
 )
 from transformers.image_utils import PILImageResampling, SizeDict, load_image
 from transformers.integrations.hub_kernels import lazy_load_kernel
-from transformers.integrations.hub_processing_kernels import kernel_can_resize, run_processing_kernel
+from transformers.integrations.hub_processing_kernels import kernel_can_resize, load_cv_utils_kernel
 from transformers.testing_utils import TestCasePlus, require_kernels, require_torch_gpu, slow, torch_device
 from transformers.video_processing_utils import BaseVideoProcessor
 
@@ -88,7 +89,7 @@ def patchify_kernel_layout_reference(
     image_mean,
     image_std,
     rescale_factor,
-    interpolation,
+    resample,
     patch_size,
     block_size,
     temporal_patch_size,
@@ -146,6 +147,9 @@ class TestProcessingKernels(TestCasePlus):
 
     def setUp(self):
         super().setUp()
+        kernels_available = patch("transformers.image_processing_utils.is_kernels_available", return_value=True)
+        kernels_available.start()
+        self.addCleanup(kernels_available.stop)
         # One 8x8 object with a 2x2 hole, and a 1 pixel island away from it.
         self.mask_logits = torch.full((1, 1, 16, 16), -1.0)
         self.mask_logits[..., 2:10, 2:10] = 1.0
@@ -156,15 +160,33 @@ class TestProcessingKernels(TestCasePlus):
         processor = Sam2ImageProcessor(use_kernels=use_kernels)
         return processor.post_process_masks([self.mask_logits.clone()], [(16, 16)], **kwargs)[0]
 
-    def test_run_processing_kernel_falls_back(self):
-        regions = torch.zeros(1, 1, 4, 4, dtype=torch.bool)
-        kernel = MagicMock()
-        with patch(f"{HUB_PROCESSING_KERNELS}.lazy_load_kernel", return_value=kernel):
-            self.assertIsNone(run_processing_kernel("connected_component_areas", regions))
-        kernel.connected_component_areas.assert_not_called()
+    def test_load_cv_utils_kernel_skips_other_devices(self):
+        with patch(f"{HUB_PROCESSING_KERNELS}.lazy_load_kernel") as lazy_load:
+            self.assertIsNone(load_cv_utils_kernel(torch.device("cpu")))
+        lazy_load.assert_not_called()
         with loaded_kernel(None):
-            self.assertIsNone(run_processing_kernel("connected_component_areas", regions))
-        self.assertIsNone(run_processing_kernel("not_a_registered_op", regions))
+            self.assertIsNone(load_cv_utils_kernel(torch.device("cpu")))
+
+    def test_use_kernels_needs_kernels(self):
+        with patch("transformers.image_processing_utils.is_kernels_available", return_value=False):
+            with self.assertRaisesRegex(ValueError, "Kernels are not available"):
+                ViTImageProcessor(use_kernels=True)
+            with self.assertRaisesRegex(ValueError, "Kernels are not available"):
+                Qwen2VLVideoProcessor(use_kernels=True)
+            ViTImageProcessor(use_kernels=False)
+
+    def test_sam2_finds_holes_and_sprinkles_on_the_input_masks(self):
+        # A 3x3 ring around a 1 pixel hole: like upstream SAM 2, the hole is filled and the ring is a sprinkle.
+        mask_logits = torch.full((1, 1, 9, 9), -1.0)
+        mask_logits[..., 3:6, 3:6] = 1.0
+        mask_logits[..., 4, 4] = -1.0
+        with loaded_kernel(ReferenceConnectedComponentsKernel()):
+            masks = Sam2ImageProcessor(use_kernels=True).post_process_masks(
+                [mask_logits], [(9, 9)], max_hole_area=1, max_sprinkle_area=8
+            )[0]
+        expected = torch.zeros(1, 1, 9, 9, dtype=torch.bool)
+        expected[..., 4, 4] = True
+        self.assertTrue(torch.equal(masks, expected))
 
     def test_sam2_fills_holes_and_removes_sprinkles(self):
         kernel = ReferenceConnectedComponentsKernel()
@@ -184,18 +206,25 @@ class TestProcessingKernels(TestCasePlus):
 
     def test_kernel_can_resize(self):
         image = torch.zeros(3, 4, 4, dtype=torch.uint8)
-        unsupported = {
-            "lanczos": ([image], PILImageResampling.LANCZOS),
-            "no_images": ([], PILImageResampling.BICUBIC),
-            "float_images": ([torch.rand(3, 4, 4)], PILImageResampling.BICUBIC),
-            "mixed_channels": ([image, torch.zeros(1, 4, 4, dtype=torch.uint8)], PILImageResampling.BICUBIC),
-        }
         self.assertFalse(kernel_can_resize([image, image], PILImageResampling.BICUBIC))
         with patch(f"{HUB_PROCESSING_KERNELS}._KERNEL_DEVICE_TYPE", "cpu"):
-            for name, (inputs, resample) in unsupported.items():
-                with self.subTest(name):
-                    self.assertFalse(kernel_can_resize(inputs, resample))
             self.assertTrue(kernel_can_resize([image, image], PILImageResampling.BICUBIC))
+
+    @parameterized.expand(
+        [
+            ("lanczos", [torch.zeros(3, 4, 4, dtype=torch.uint8)], PILImageResampling.LANCZOS),
+            ("no_images", [], PILImageResampling.BICUBIC),
+            ("float_images", [torch.rand(3, 4, 4)], PILImageResampling.BICUBIC),
+            (
+                "mixed_channels",
+                [torch.zeros(3, 4, 4, dtype=torch.uint8), torch.zeros(1, 4, 4, dtype=torch.uint8)],
+                PILImageResampling.BICUBIC,
+            ),
+        ]
+    )
+    def test_kernel_cannot_resize(self, name, inputs, resample):
+        with patch(f"{HUB_PROCESSING_KERNELS}._KERNEL_DEVICE_TYPE", "cpu"):
+            self.assertFalse(kernel_can_resize(inputs, resample))
 
     def test_semantic_segmentation_calls_the_upsample_argmax_kernel(self):
         kernel = MagicMock()
@@ -223,8 +252,8 @@ class TestProcessingKernels(TestCasePlus):
         kernel, output = self.run_vit_with_kernel(do_center_crop=True, crop_size={"height": 6, "width": 6})
         self.assertIs(output["pixel_values"], kernel.resize_normalize.return_value)
         kernel.resize_normalize.assert_called_once()
-        self.assertEqual(kernel.resize_normalize.call_args.kwargs, {"crop_size": (6, 6)})
-        self.assertEqual(kernel.resize_normalize.call_args.args[5], "bilinear")
+        self.assertEqual(kernel.resize_normalize.call_args.kwargs["crop_size"], (6, 6))
+        self.assertEqual(kernel.resize_normalize.call_args.kwargs["resample"], "bilinear")
 
     def test_resize_normalize_falls_back_on_a_crop_larger_than_the_resize(self):
         kernel, output = self.run_vit_with_kernel(
@@ -233,27 +262,27 @@ class TestProcessingKernels(TestCasePlus):
         kernel.resize_normalize.assert_not_called()
         self.assertEqual(tuple(output["pixel_values"][0].shape), (3, 8, 10))
 
-    def test_resize_normalize_receives_the_sizes_of_resize(self):
+    @parameterized.expand(
+        [
+            ("shortest_edge", {"shortest_edge": 20}),
+            ("shortest_and_longest_edge", {"shortest_edge": 20, "longest_edge": 25}),
+            ("max_height_and_width", {"max_height": 20, "max_width": 20}),
+            ("height_and_width", {"height": 16, "width": 24}),
+        ]
+    )
+    def test_resize_normalize_receives_the_sizes_of_resize(self, name, size):
         images = [
             torch.randint(0, 255, (3, 40, 60), dtype=torch.uint8),
             torch.randint(0, 255, (3, 50, 30), dtype=torch.uint8),
         ]
-        size_dicts = {
-            "shortest_edge": {"shortest_edge": 20},
-            "shortest_and_longest_edge": {"shortest_edge": 20, "longest_edge": 25},
-            "max_height_and_width": {"max_height": 20, "max_width": 20},
-            "height_and_width": {"height": 16, "width": 24},
-        }
         processor = ViTImageProcessor(use_kernels=True)
-        for name, size in size_dicts.items():
-            with self.subTest(name):
-                kernel = MagicMock()
-                with loaded_kernel(kernel):
-                    processor(images, size=size, do_center_crop=False, return_tensors=None)
-                self.assertEqual(
-                    [tuple(size) for size in kernel.resize_normalize.call_args.args[1]],
-                    [tuple(processor.resize(image, SizeDict(**size)).shape[-2:]) for image in images],
-                )
+        kernel = MagicMock()
+        with loaded_kernel(kernel):
+            processor(images, size=size, do_center_crop=False, return_tensors=None)
+        self.assertEqual(
+            [tuple(kernel_size) for kernel_size in kernel.resize_normalize.call_args.args[1]],
+            [tuple(processor.resize(image, SizeDict(**size)).shape[-2:]) for image in images],
+        )
 
     def test_qwen2_vl_uses_the_patchify_kernel_output(self):
         images = [torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)]
@@ -264,9 +293,25 @@ class TestProcessingKernels(TestCasePlus):
             output = Qwen2VLImageProcessor(use_kernels=True)(images, return_tensors="pt")
             Qwen2VLImageProcessor(use_kernels=False)(images, return_tensors="pt")
         kernel.resize_normalize_patchify.assert_called_once()
-        self.assertEqual(kernel.resize_normalize_patchify.call_args.args[6:], (14, 2, 2))
+        call_kwargs = kernel.resize_normalize_patchify.call_args.kwargs
+        self.assertEqual(
+            (call_kwargs["patch_size"], call_kwargs["block_size"], call_kwargs["temporal_patch_size"]), (14, 2, 2)
+        )
         self.assertIs(output["pixel_values"], pixel_values)
         self.assertEqual(output["image_grid_thw"].tolist(), [[1, 4, 6]])
+
+    def test_hunyuan_vl_kernel_resizes_bicubic_like_its_default_path(self):
+        self.assertEqual(
+            HunYuanVLImageProcessor(resample=PILImageResampling.BILINEAR).resample, PILImageResampling.BICUBIC
+        )
+        kernel = MagicMock()
+        kernel.resize_normalize_patchify.return_value = (torch.zeros(0), torch.zeros(1, 3))
+        images = [torch.randint(0, 256, (3, 64, 96), dtype=torch.uint8)]
+        with loaded_kernel(kernel):
+            HunYuanVLImageProcessor(use_kernels=True)(
+                images, resample=PILImageResampling.BILINEAR, return_tensors="pt"
+            )
+        self.assertEqual(kernel.resize_normalize_patchify.call_args.kwargs["resample"], "bicubic")
 
     def test_qwen2_vl_video_passes_one_target_size_per_video(self):
         videos = [
@@ -285,46 +330,54 @@ class TestProcessingKernels(TestCasePlus):
         self.assertEqual(output["video_grid_thw"].tolist(), [[2, 4, 6], [1, 2, 2]])
 
     def test_processor_overriding_resize_does_not_use_the_resize_kernel(self):
-        with patch("transformers.image_processing_backends.run_processing_kernel", self.fail):
+        kernel = MagicMock()
+        with loaded_kernel(kernel):
             output = LevitImageProcessor(use_kernels=True)([torch.randint(0, 255, (3, 64, 96), dtype=torch.uint8)])
+        kernel.resize_normalize.assert_not_called()
         self.assertIn("pixel_values", output)
 
-    def test_processors_reaching_the_patchify_kernel_use_its_layout(self):
-        qwen3_vl_image_settings = {"patch_size": 16, "image_mean": [0.5, 0.5, 0.5], "image_std": [0.5, 0.5, 0.5]}
-        cases = [(processor_class, {}) for processor_class in PATCHIFY_KERNEL_PROCESSORS]
-        cases.append((Qwen2VLImageProcessor, qwen3_vl_image_settings))
-        for processor_class, settings in cases:
-            with self.subTest(processor_class=processor_class.__name__, **settings):
-                is_video = issubclass(processor_class, BaseVideoProcessor)
+    @parameterized.expand(
+        [(processor_class.__name__, processor_class, {}) for processor_class in PATCHIFY_KERNEL_PROCESSORS]
+        + [
+            (
+                "Qwen2VLImageProcessor_qwen3_vl_settings",
+                Qwen2VLImageProcessor,
+                {"patch_size": 16, "image_mean": [0.5, 0.5, 0.5], "image_std": [0.5, 0.5, 0.5]},
+            )
+        ]
+    )
+    def test_processors_reaching_the_patchify_kernel_use_its_layout(self, name, processor_class, settings):
+        is_video = issubclass(processor_class, BaseVideoProcessor)
 
-                def run(height, width):
-                    """The arguments the kernel receives, and the output of the processor without kernels."""
-                    kernel = MagicMock()
-                    kernel.resize_normalize_patchify.return_value = (torch.zeros(0), torch.zeros(1, 3))
-                    shape = (3, 3, height, width) if is_video else (3, height, width)
-                    inputs = [torch.randint(0, 256, shape, dtype=torch.uint8)]
-                    call_kwargs = {"do_sample_frames": False} if is_video else {}
-                    with loaded_kernel(kernel):
-                        processor_class(use_kernels=True, **settings)(inputs, return_tensors="pt", **call_kwargs)
-                    self.assertTrue(kernel.resize_normalize_patchify.called, "the processor did not call the kernel")
-                    output = processor_class(use_kernels=False, **settings)(inputs, return_tensors="pt", **call_kwargs)
-                    output_name = "pixel_values_videos" if is_video else "pixel_values"
-                    return kernel.resize_normalize_patchify.call_args.args, output[output_name]
+        def run(height, width):
+            """The arguments the kernel receives, and the output of the processor without kernels."""
+            kernel = MagicMock()
+            kernel.resize_normalize_patchify.return_value = (torch.zeros(0), torch.zeros(1, 3))
+            shape = (3, 3, height, width) if is_video else (3, height, width)
+            inputs = [torch.randint(0, 256, shape, dtype=torch.uint8)]
+            call_kwargs = {"do_sample_frames": False} if is_video else {}
+            with loaded_kernel(kernel):
+                processor_class(use_kernels=True, **settings)(inputs, return_tensors="pt", **call_kwargs)
+            self.assertTrue(kernel.resize_normalize_patchify.called, "the processor did not call the kernel")
+            output = processor_class(use_kernels=False, **settings)(inputs, return_tensors="pt", **call_kwargs)
+            output_name = "pixel_values_videos" if is_video else "pixel_values"
+            return kernel.resize_normalize_patchify.call_args, output[output_name]
 
-                height, width = 112, 168
-                for _ in range(4):
-                    kernel_arguments, pixel_values = run(height, width)
-                    if tuple(kernel_arguments[1][0]) == (height, width):
-                        break
-                    height, width = kernel_arguments[1][0]
-                kernel_inputs, target_sizes = kernel_arguments[:2]
-                self.assertEqual(
-                    [tuple(input_frames.shape[-2:]) for input_frames in kernel_inputs],
-                    [tuple(size) for size in target_sizes],
-                )
-                torch.testing.assert_close(
-                    pixel_values.reshape(-1), patchify_kernel_layout_reference(*kernel_arguments).reshape(-1)
-                )
+        height, width = 112, 168
+        for _ in range(4):
+            kernel_call, pixel_values = run(height, width)
+            if tuple(kernel_call.args[1][0]) == (height, width):
+                break
+            height, width = kernel_call.args[1][0]
+        kernel_inputs, target_sizes = kernel_call.args
+        self.assertEqual(
+            [tuple(input_frames.shape[-2:]) for input_frames in kernel_inputs],
+            [tuple(size) for size in target_sizes],
+        )
+        torch.testing.assert_close(
+            pixel_values.reshape(-1),
+            patchify_kernel_layout_reference(*kernel_call.args, **kernel_call.kwargs).reshape(-1),
+        )
 
     def test_use_kernels_is_a_runtime_flag(self):
         processor = Sam2ImageProcessor(use_kernels=True)
@@ -381,8 +434,6 @@ class TestUpsampleArgmaxKernel(TestCasePlus):
     def test_matches_default(self):
         kernel = lazy_load_kernel("cv-utils")
         self.assertIsNotNone(kernel, "the cv-utils kernel did not load")
-        if not hasattr(kernel, "upsample_argmax"):
-            self.skipTest("`upsample_argmax` is not available in this build of cv-utils")
         logits = torch.nn.functional.avg_pool2d(torch.randn(2, 150, 64, 64), 5, stride=1, padding=2) * 5
         outputs = SimpleNamespace(logits=logits.to(torch_device))
         target_sizes = [(256, 341), (480, 640)]
@@ -415,8 +466,6 @@ class TestResizeKernels(TestCasePlus):
     def assert_kernel_matches_default(self, operation, processor_class, call):
         kernel = lazy_load_kernel("cv-utils")
         self.assertIsNotNone(kernel, "the cv-utils kernel did not load")
-        if not hasattr(kernel, operation):
-            self.skipTest(f"`{operation}` is not available in this build of cv-utils")
         with patch.object(kernel, operation, wraps=getattr(kernel, operation)) as kernel_operation:
             with_kernels = call(processor_class(use_kernels=True))
         kernel_operation.assert_called_once()
