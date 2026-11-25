@@ -24,7 +24,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     ModelOutput,
 )
 from ...modeling_utils import slice_logits_to_keep
@@ -293,7 +293,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel, MultimodalMixin):
                 combined_features.shape[:1], combined_features.shape[1], device=combined_features.device
             )
             combined_features = combined_features.flatten(0, 1)
-        return BaseModelOutputWithSplitSizes(
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=acoustic_latents, pooler_output=combined_features, split_sizes=split_sizes
         )
 

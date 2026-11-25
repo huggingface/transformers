@@ -31,12 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
-    ModelOutput,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPoolingAndSplitSizes, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -229,7 +224,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel, MultimodalMixin):
         input_features_mask: torch.Tensor,
         input_ids: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
@@ -252,9 +247,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel, MultimodalMixin):
         # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
-        audio_output = BaseModelOutputWithSplitSizes(**audio_output, split_sizes=post_lengths)
-
-        return audio_output
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_output, split_sizes=post_lengths)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor

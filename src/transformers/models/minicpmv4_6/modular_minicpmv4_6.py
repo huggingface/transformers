@@ -28,7 +28,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -551,7 +551,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         target_sizes: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         target_sizes (`torch.IntTensor` of shape `(num_images, 2)`):
             Height and width (in patches) of each image.
@@ -574,11 +574,8 @@ class MiniCPMV4_6Model(Lfm2VlModel):
             target_sizes = target_sizes // 2
         merged = self.merger(vision_output.last_hidden_state, target_sizes)
         vision_output.pooler_output = torch.cat(merged, dim=0)
-        vision_output = BaseModelOutputWithSplitSizes(
-            **vision_output,
-            split_sizes=torch.tensor([len(features) for features in merged], device=target_sizes.device),
-        )
-        return vision_output
+        split_sizes = torch.tensor([len(features) for features in merged], device=target_sizes.device)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_output, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(
@@ -590,7 +587,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(1, channels, patch_size, seq_len)`):
             NaViT-packed pixel patches for all video frames. The video processor concatenates

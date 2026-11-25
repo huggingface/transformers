@@ -34,7 +34,7 @@ from ...image_utils import (
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, logging
@@ -500,7 +500,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_aspect_ratio: str | None = None,
         batch_num_images: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Actual image size of each images (H, W).
@@ -558,9 +558,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             vision_aspect_ratio=vision_aspect_ratio,
         )
         image_outputs.pooler_output = torch.cat(image_features, dim=0)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=feature_lens)
-
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=feature_lens)
 
     @merge_with_config_defaults
     @can_return_tuple
@@ -574,7 +572,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor]` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
@@ -612,9 +610,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
         features = torch.cat((video_features, image_newline), dim=1)
         split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         vision_outputs.pooler_output = features.flatten(0, 1)
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @merge_with_config_defaults
     @can_return_tuple

@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -66,7 +66,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithSplitSizes):
+class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     local_last_hidden_state (`torch.Tensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.
@@ -1398,7 +1398,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel, MultimodalMixin):
         pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_local (`torch.Tensor` of shape `(total_patches, 3, height, width)`, *optional*):
             All local patches flattened across the batch, or `None` if no local views.

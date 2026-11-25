@@ -26,7 +26,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
@@ -369,7 +369,7 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel, MultimodalMixin):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features_mask (`torch.Tensor`, *optional*):
             Mask of the projected audio features that fill the prompt's audio tokens.
@@ -384,9 +384,8 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel, MultimodalMixin):
                 projected_embeds.shape[:1], projected_embeds.shape[1], device=projected_embeds.device
             )
             pooler_output = projected_embeds.flatten(0, 1)
-        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=split_sizes)
         audio_outputs.pooler_output = pooler_output
-        return audio_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor

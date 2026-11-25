@@ -31,7 +31,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
@@ -200,7 +200,7 @@ class Mistral3Model(Mistral3PreTrainedModel, MultimodalMixin):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(
             pixel_values,
             image_sizes=image_sizes,
@@ -217,12 +217,9 @@ class Mistral3Model(Mistral3PreTrainedModel, MultimodalMixin):
 
         image_features = self.multi_modal_projector(selected_image_feature.squeeze(0), image_sizes)
         downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=(torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1),
-        )
+        split_sizes = (torch.as_tensor(image_sizes, device=image_features.device) // downsample_ratio).prod(dim=-1)
         image_outputs.pooler_output = image_features.squeeze(0)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

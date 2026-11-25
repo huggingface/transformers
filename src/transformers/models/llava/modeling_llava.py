@@ -24,7 +24,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -129,7 +129,7 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
         vision_feature_select_strategy: str | None = None,
         image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         if image_sizes is not None:  # pass only when not-None, not all vision backbones accept it
             kwargs["image_sizes"] = image_sizes
         image_outputs = self.vision_tower(
@@ -163,7 +163,7 @@ class LlavaModel(LlavaPreTrainedModel, MultimodalMixin):
         else:
             split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
             image_features = image_features.flatten(0, 1)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs = BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = image_features
 
         return image_outputs

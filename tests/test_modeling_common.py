@@ -6011,6 +6011,7 @@ class ModelTesterMixin(ExportTesterMixin):
     @parameterized.expand([True, False, None])
     def test_get_video_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
+            # Models taking no video still get a `get_video_features` from `MultimodalMixin`
             if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
@@ -6089,6 +6090,7 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_model_classes:
             if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
                 continue
+            # Models taking no video still get a `get_video_features` from `MultimodalMixin`
             if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
@@ -6130,6 +6132,7 @@ class ModelTesterMixin(ExportTesterMixin):
             self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
 
         for model_class in self.all_model_classes:
+            # Models taking no video still get a `get_video_features` from `MultimodalMixin`
             if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 
@@ -6172,6 +6175,7 @@ class ModelTesterMixin(ExportTesterMixin):
             return
 
         for model_class in self.all_model_classes:
+            # Models taking no video still get a `get_video_features` from `MultimodalMixin`
             if "video" not in model_class.input_modalities or not hasattr(model_class, "get_video_features"):
                 continue
 

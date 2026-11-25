@@ -98,7 +98,7 @@ class BaseModelOutputWithPooling(ModelOutput):
 
 
 @dataclass
-class BaseModelOutputWithSplitSizes(BaseModelOutputWithPooling):
+class BaseModelOutputWithPoolingAndSplitSizes(BaseModelOutputWithPooling):
     """
     Outputs of a multimodal model's encoder (`get_image_embeddings`, `get_video_embeddings`, `get_audio_embeddings`):
     the features of all its images, videos or audios as one sequence, and each item's number of rows.

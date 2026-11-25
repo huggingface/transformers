@@ -44,7 +44,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -79,7 +79,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class UnlimitedOcrModelOutputWithPooling(BaseModelOutputWithSplitSizes):
+class UnlimitedOcrModelOutputWithPooling(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     local_last_hidden_state (`torch.Tensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
         Last hidden state from the vision encoder for local (cropped) patches.

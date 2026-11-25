@@ -36,7 +36,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
@@ -1181,8 +1181,9 @@ class Dots3NoteAudioModel(Dots3NoteAudioPreTrainedModel):
         padding_mask = padding_mask.to(hidden_states.device)
         pooled_output = self.adapter(hidden_states[padding_mask])
 
-        return BaseModelOutputWithSplitSizes(
-            last_hidden_state=hidden_states, pooler_output=pooled_output, split_sizes=padding_mask.sum(-1)
+        split_sizes = padding_mask.sum(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
+            last_hidden_state=hidden_states, pooler_output=pooled_output, split_sizes=split_sizes
         )
 
 
@@ -1591,7 +1592,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         outputs = self.vision_tower(
             pixel_values,
             grid_thw=image_grid_thw,
@@ -1599,10 +1600,8 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
             **kwargs,
         )
 
-        outputs = BaseModelOutputWithSplitSizes(
-            **outputs, split_sizes=image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
-        )
-        return outputs
+        split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring
@@ -1611,7 +1610,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
         input_features: torch.Tensor,
         chunk_sample_lengths: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         chunk_sample_lengths (`torch.Tensor`):
             Number of waveform samples represented by each feature chunk.
@@ -1733,7 +1732,7 @@ class Dots3NoteModel(Dots3NotePreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.Tensor,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
 

@@ -118,6 +118,7 @@ if is_torch_available():
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, DeferredStopCheck, _speculative_sampling
     from transformers.modeling_layers import MtpModel
+    from transformers.modeling_multimodal_utils import split_modality_outputs
 
 from unittest.mock import patch
 
@@ -1635,6 +1636,34 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
             # We still can pass inputs with no multimodal data at all - raw or precomputed
             model.generate(**inputs_dict_with_encoded_outputs, **generation_kwargs)
+
+    @pytest.mark.generate
+    def test_forward_with_per_item_multimodal_encoder_outputs(self):
+        """Tests that the deprecated per-item `mm_encoder_outputs` give the forward of the flat ones, which only holds
+        with `@merge_mm_encoder_outputs` on the forward."""
+        for model_class in self.all_generative_model_classes:
+            if not any(modality in model_class.input_modalities for modality in ["image", "video"]):
+                self.skipTest("Model takes no images or videos")
+            if "blip" in model_class.__name__.lower():
+                self.skipTest(reason="Won't fix: old model whose forward requires `pixel_values`")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder:
+                self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
+            model = model_class(config).to(torch_device).eval()
+            if not model._supports_mm_encoder_outputs():
+                self.skipTest(reason=f"{model_class.__name__}.forward does not accept `mm_encoder_outputs`")
+            with torch.no_grad():
+                inputs_dict = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
+                flat = inputs_dict.pop("mm_encoder_outputs")
+                if not flat:
+                    self.skipTest(reason="The tester's inputs give no multimodal outputs")
+                if any(getattr(outputs, "split_sizes", None) is None for outputs in flat.values()):
+                    self.skipTest(reason="The model has no flat getter (e.g. GLM-Image)")
+                per_item = {modality: split_modality_outputs(outputs) for modality, outputs in flat.items()}
+                expected = model(**inputs_dict, mm_encoder_outputs=flat).logits
+                logits = model(**inputs_dict, mm_encoder_outputs=per_item).logits
+            torch.testing.assert_close(logits, expected)
 
     @pytest.mark.generate
     @require_torch_accelerator

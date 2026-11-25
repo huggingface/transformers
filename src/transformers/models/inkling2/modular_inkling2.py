@@ -38,7 +38,11 @@ from ...masking_utils import (
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    MoeModelOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -1424,11 +1428,11 @@ class Inkling2Model(InklingModel):
     @auto_docstring(custom_intro="Encodes images into language model embeddings, one per image token.")
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, image_grid_thw: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_grid_thw = image_grid_thw.cpu()
         image_outputs = self.vision_tower(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=image_grid_thw.prod(-1))
-        return image_outputs
+        split_sizes = image_grid_thw.prod(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_audio_embeddings(self):
         raise AttributeError("Not needed for Inkling2")

@@ -19,7 +19,11 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.auto.modeling_auto import AutoModel
 from ...processing_utils import Unpack
@@ -111,7 +115,7 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
     @auto_docstring
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -121,7 +125,7 @@ class FuyuModel(FuyuPreTrainedModel, MultimodalMixin):
         images_patches = patch_embeddings if patch_embeddings.ndim == 3 else patch_embeddings[None]
         split_sizes = torch.full(images_patches.shape[:1], images_patches.shape[1], device=images_patches.device)
         pooler_output = images_patches.flatten(0, 1)
-        return BaseModelOutputWithSplitSizes(
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=patch_embeddings, pooler_output=pooler_output, split_sizes=split_sizes
         )
 

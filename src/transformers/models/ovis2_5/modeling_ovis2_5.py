@@ -31,7 +31,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -593,7 +593,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel, MultimodalMixin):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithSplitSizes:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
@@ -603,9 +603,8 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel, MultimodalMixin):
         )
         visual_features = self.multi_modal_projector(vision_outputs.hidden_states[-1])
         split_sizes = image_grid_thw.prod(dim=1) // self.vision_tower.config.spatial_merge_size**2
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         vision_outputs.pooler_output = visual_features
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -741,7 +740,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithSplitSizes:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_frames, channels, height, width)`):
             The tensors corresponding to the input videos.
@@ -757,7 +756,7 @@ class Ovis2_5Model(Ovis2_5PreTrainedModel, MultimodalMixin):
         self,
         input_ids: torch.LongTensor | None,
         inputs_embeds: torch.Tensor,
-        visual_outputs: BaseModelOutputWithSplitSizes,
+        visual_outputs: BaseModelOutputWithPoolingAndSplitSizes,
         is_video: bool,
     ) -> torch.Tensor:
         """Replace visual placeholders and start/end tokens with their visual embeddings."""

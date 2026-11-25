@@ -39,7 +39,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -109,7 +109,7 @@ class Granite4VisionCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
     """
 )
 @dataclass
-class Granite4VisionImageFeaturesOutput(BaseModelOutputWithSplitSizes):
+class Granite4VisionImageFeaturesOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     deepstack_features (`list[torch.Tensor]`, *optional*):
         The features the deepstack and spatial projectors add to the decoder layers: one

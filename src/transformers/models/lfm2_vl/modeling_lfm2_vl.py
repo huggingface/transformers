@@ -29,7 +29,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -145,7 +145,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel, MultimodalMixin):
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -184,8 +184,8 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel, MultimodalMixin):
         patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
         image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
         image_outputs.pooler_output = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=(spatial_shapes // factor).prod(-1))
-        return image_outputs
+        split_sizes = (spatial_shapes // factor).prod(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

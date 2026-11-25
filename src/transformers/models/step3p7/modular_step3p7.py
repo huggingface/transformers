@@ -29,8 +29,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -1069,7 +1068,7 @@ class Step3p7Model(DeepseekOcr2Model):
         pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_output = self.vision_model(pixel_values, **kwargs)
         image_features = self.multi_modal_projector(vision_output.last_hidden_state)
         patch_image_features = (
@@ -1093,10 +1092,12 @@ class Step3p7Model(DeepseekOcr2Model):
             cur_feature.append(image_features[i].view(-1, image_features.shape[-1]))
             cur_patch_idx += num_patch
             merged.append(torch.cat(cur_feature) if len(cur_feature) > 1 else cur_feature[0])
-        return BaseModelOutputWithSplitSizes(
+        pooler_output = torch.cat(merged, dim=0)
+        split_sizes = torch.tensor([len(features) for features in merged], device=merged[0].device)
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=vision_output.last_hidden_state,
-            pooler_output=torch.cat(merged, dim=0),
-            split_sizes=torch.tensor([len(features) for features in merged], device=merged[0].device),
+            pooler_output=pooler_output,
+            split_sizes=split_sizes,
             hidden_states=vision_output.hidden_states,
             attentions=vision_output.attentions,
         )

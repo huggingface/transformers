@@ -1123,7 +1123,7 @@ class GenerationMixin(ContinuousMixin):
 
         return decoder_input_ids, model_kwargs
 
-    def _placeholder_token_id(self: "GenerativePreTrainedModel", modality: str) -> int:
+    def _modality_token_id(self: "GenerativePreTrainedModel", modality: str) -> int:
         """The token whose positions in the text hold the features of `modality`, to count each sample's rows when
         repeating them for beams. Models whose videos reuse the image token (GLM-4V, Nemotron-H Omni) override it."""
         return getattr(self.config, f"{modality}_token_id")
@@ -1174,7 +1174,7 @@ class GenerationMixin(ContinuousMixin):
                 continue
 
             # 1. compute cumulative number of placeholder tokens per sample and per each encoded mm-data
-            token_id = self._placeholder_token_id(modality)
+            token_id = self._modality_token_id(modality)
             if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.full((), token_id, dtype=torch.long, device=inputs_embeds.device)
@@ -1190,7 +1190,7 @@ class GenerationMixin(ContinuousMixin):
                 rows = repeat_groups(num_image_tokens_in_text, features.shape[0])
                 map_features(modality_outputs, lambda features: features[rows.to(features.device)])
                 # The items follow their rows: find each item's sample from where its rows start, then repeat them
-                split_sizes = cast(torch.LongTensor, modality_outputs.split_sizes).to(features.device)
+                split_sizes = modality_outputs.split_sizes.to(features.device)
                 item_start = split_sizes.cumsum(0) - split_sizes
                 item_sample = torch.searchsorted(num_image_tokens_in_text.cumsum(0), item_start, right=True)
                 items_per_sample = torch.zeros_like(num_image_tokens_in_text).scatter_add_(
