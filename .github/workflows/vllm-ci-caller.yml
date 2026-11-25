@@ -66,7 +66,6 @@ jobs:
     permissions:
       contents: read
     name: Test vLLM examples and weight mapping
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     # aws-m8i-8xl-cache (128 GiB): needed for sufficient RAM and for the writable
     # shared cache mount (/mnt/cache). The 2xl runner has the same mount read-only.
@@ -128,7 +127,6 @@ jobs:
     # but we use 8xl anyway in case we add a few larger tests in the future, and to avoid
     # the read-only shared cache mount issue on the 2xl runner.
     name: "Test vLLM initialization (small subset, shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -171,7 +169,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM transformers backend (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -321,7 +318,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM multimodal processing (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -369,7 +365,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM tokenizers, chat templates and configs"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -469,7 +464,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [2]  # [Temporary] trial run
+        shard: [0, 1, 2, 3]
     env:
       HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
       SHARD_ID: ${{ matrix.shard }}
@@ -498,33 +493,8 @@ jobs:
           # pytest-asyncio: the async tests of tests/entrypoints/pooling
           extra-packages: pytest-shard sentence-transformers mteb[bm25s]>=2,<3 peft pytest-asyncio
 
-      - name: "[Temporary] page cache eviction test"
-        run: |
-          mem() { echo "$1: memory.current=$(( $(cat /sys/fs/cgroup/memory.current) / 1073741824 )) GiB, file=$(awk '$1=="file"{print int($2/1073741824)}' /sys/fs/cgroup/memory.stat) GiB"; }
-          mem "start"
-          find /mnt/cache/hub -type f -size +500M 2>/dev/null | head -12 > /tmp/files.txt
-          wc -l /tmp/files.txt
-          xargs -a /tmp/files.txt cat > /dev/null
-          mem "after reading the files"
-          mount | grep cgroup || true
-          (echo 200G > /sys/fs/cgroup/memory.reclaim && echo "memory.reclaim: write OK") || echo "memory.reclaim: write FAILED"
-          mem "after memory.reclaim"
-          xargs -a /tmp/files.txt cat > /dev/null
-          mem "after reading again"
-          python3 -c "
-          import os
-          for f in open('/tmp/files.txt').read().split():
-              fd = os.open(f, os.O_RDONLY)
-              os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
-              os.close(fd)
-          print('posix_fadvise DONTNEED done')
-          "
-          mem "after posix_fadvise"
-          (sync; echo 1 > /proc/sys/vm/drop_caches && echo "drop_caches: write OK") || echo "drop_caches: write FAILED"
-          mem "after drop_caches"
-
       - name: "Test: language models generation and pooling (shard ${{ matrix.shard }} / 4)"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() }}
         working-directory: vllm
         run: |
           # Not included from vLLM's CPU command: tests/v1/e2e/test_cpu_linear_attn_chunked_prefix.py (no transformers),
@@ -536,7 +506,7 @@ jobs:
 
       # Only ~5 tests: run them all in shard 0 (with `--num-shards`, a shard could get no test, and pytest fails then).
       - name: "Test: CLIP / SigLIP pooling"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
           # siglip2-giant-opt: vLLM's CPU attention kernel doesn't support its head_dim (72)
@@ -547,7 +517,7 @@ jobs:
       # A few small language models that vLLM doesn't mark `cpu_model` (same transformers comparison as above). In one shard
       # (only 3 models). The other models of this file run in "Test: other language models generation".
       - name: "Test: more language models generation"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: vllm
         run: |
           pytest -v -s tests/models/language/generation/test_common.py \
@@ -557,7 +527,7 @@ jobs:
       # transformers reference (e.g. test_beam_search_with_concurrency_limit compares vLLM with vLLM), and
       # test_beam_search_passes_multimodal_data (7B audio model; vLLM's CI excludes it too).
       - name: "Test: beam search"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
           pytest -v -s tests/samplers/test_beam_search.py::test_beam_search_single_input
@@ -567,7 +537,7 @@ jobs:
       # (`large_gpu_mark`: skip on CPU), chatglm3-6b (skips with transformers main: `max_transformers_version="4.48"` in
       # vLLM's tests/models/registry.py).
       - name: "Test: other language models generation (shard ${{ matrix.shard }} / 4)"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && (matrix.shard == 1 || matrix.shard == 2) }}
         working-directory: vllm
         run: |
           case "$SHARD_ID" in
@@ -589,7 +559,7 @@ jobs:
       # - test_models[Zamba2-1.2B-instruct]: ~26 min on CPU (too slow); Zamba2 is still compared with transformers in
       #   test_full_cuda_graph and test_fp32_cache_state.
       - name: "Test: hybrid and state-space models"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
           pytest -v -s \
@@ -604,7 +574,7 @@ jobs:
       # V1 sampler vs transformers. Only the tests that compare with the transformers reference (`hf_model` fixture). In one
       # shard.
       - name: "Test: pooling API and logprobs"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
           pytest -v -s \
@@ -626,7 +596,7 @@ jobs:
       # More pooling models / features vs transformers (`hf_runner`): token classification, multi-label classification,
       # chunked prefill, prefix caching (models up to ~1.5B). In one shard.
       - name: "Test: more language pooling models"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 0 }}
         working-directory: vllm
         run: |
           # Not included:
@@ -648,7 +618,7 @@ jobs:
       # The tests / models of test_embedding.py and test_classification.py that vLLM doesn't mark `cpu_model` (the
       # `cpu_model` ones run in the step above), and multi-vector retrieval (bge-m3). In one shard.
       - name: "Test: more language embedding and classification models"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 2 }}
         working-directory: vllm
         run: |
           # Not included: the 2 LFM2 tests of test_embedding.py (vLLM's model only, no transformers reference).
@@ -664,7 +634,7 @@ jobs:
       # tests/models/language/pooling_mteb_test compare with a score stored in the test file (no transformers reference).
       # `model_info2` = jina-embeddings-v5-text-nano (3rd entry of EMBEDDING_MODELS). In one shard.
       - name: "Test: MTEB pooling (jina-embeddings-v5-text-nano)"
-        if: false  # [Temporary] trial run
+        if: ${{ !cancelled() && matrix.shard == 3 }}
         working-directory: vllm
         run: |
           pytest -v -s 'tests/models/language/pooling_mteb_test/test_jina.py::test_embed_models_mteb[model_info2]'
@@ -677,7 +647,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM Transformers backend multimodal generation (${{ matrix.modality }})"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -732,7 +701,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM structured output, detokenizer, parsers and video processing"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -836,7 +804,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, multimodal models (shard ${{ matrix.shard }} / 4)"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -957,7 +924,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, more multimodal models (shard ${{ matrix.shard }} / 8)"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -1013,7 +979,6 @@ jobs:
       contents: read
     # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
     name: "Test vLLM vs transformers outputs, other areas (basic correctness, prompt embeds, tensorizer, quantization)"
-    if: false  # [Temporary] trial run
     needs: find-vllm-commit
     runs-on:
       group: aws-m8i-8xl-cache
@@ -1167,7 +1132,7 @@ jobs:
           python3 transformers/utils/ci_report_notify.py \
             --reports-dir ./vllm-ci-reports \
             --hub-repo hf-internal-testing/transformers_vllm_ci \
-            --slack-channel "#transformers-ci-dummy" \
+            --slack-channel "#transformers-ci-vllm" \
             --commit "vllm=vllm-project/vllm@$VLLM_COMMIT" \
             --commit-date "transformers=$TRANSFORMERS_COMMIT_DATE" \
             --commit-date "vllm=$VLLM_COMMIT_DATE"
