@@ -31,6 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...generation.continuous_batching.cache import PagedAttentionCache
 from ...integrations import (
+    lazy_load_kernel,
     use_experts_implementation,
     use_kernel_forward_from_hub,
     use_kernel_func_from_hub_with_fallback,
@@ -585,17 +586,38 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             ((self.num_heads, self.head_dim, self.ssm_state_size), self.conv1d.weight.dtype),
         ]
 
-    def _paged_recurrent(self, states, x, dt, A, B, C):
+    def _paged_recurrent(self, states, x, dt, A, B, C, update_fn=None, state_indices=None):
         """[scratch] One token per sequence: `states` [n, heads, head_dim, state] updated in place, outputs [n, heads,
-        head_dim]."""
-        n = states.shape[0]
+        head_dim]. With `state_indices` [n] (and the hub kernel as `update_fn`), `states` holds every slot and sequence
+        i updates `states[state_indices[i]]`."""
+        n = x.shape[0]
         heads, head_dim, groups, state = self.num_heads, self.head_dim, self.n_groups, self.ssm_state_size
-        return mamba2_selective_state_update(
+        extra = {} if state_indices is None else {"state_batch_indices": state_indices}
+        return (update_fn or mamba2_selective_state_update)(
             states, x.view(n, heads, head_dim), dt[:, :, None].expand(-1, -1, head_dim),
             A[:, None, None].expand(-1, head_dim, state), B.view(n, groups, state), C.view(n, groups, state),
             self.D[:, None].expand(-1, head_dim), z=None, dt_bias=self.dt_bias[:, None].expand(-1, head_dim),
-            dt_softplus=True,
+            dt_softplus=True, **extra,
         ).view(n, heads, head_dim)  # fmt: skip
+
+    @torch.compiler.disable  # writes into views of the cache tensor, which inductor would functionalize (copy)
+    def _paged_decode_update(self, ssm_view, conv_view, rows, conv_state, x, dt, A, B, C):
+        """[scratch] Decode: the SSM states are updated in place at their cache rows (2 MiB a layer and request on
+        Granite-4.0-H-Small, the gather and scatter around the update took ~40% of the GPU time), the new conv states
+        written back. The hub kernel takes the rows itself (the kernel layer of `mamba2_selective_state_update` drops
+        that argument); without it, the states are gathered and scattered."""
+        n = x.shape[0]
+        kernel = lazy_load_kernel("mamba-ssm")
+        if kernel is not None:
+            out = self._paged_recurrent(
+                ssm_view, x, dt, A, B, C, update_fn=kernel.selective_state_update, state_indices=rows[:n]
+            )
+        else:
+            states = ssm_view[rows[:n]]
+            out = self._paged_recurrent(states, x, dt, A, B, C)
+            ssm_view.index_copy_(0, rows[:n], states)
+        conv_view.index_copy_(0, rows, conv_state.to(conv_view.dtype))
+        return out
 
     @torch.compiler.disable  # reads the sequence lengths on the host: compiled, it recompiled for every new batch
     def _paged_varlen_scan(self, x, dt, A, B, C, ssm_state, cu_seqlens, out, cache):
@@ -635,7 +657,14 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         request left in the paged cache. Single-token sequences take the recurrent update together, longer ones the
         chunked scan one at a time."""
         dtype = hidden_states.dtype
-        conv_state, ssm_state = cache.read_cache_states(self.layer_idx, kwargs)
+        decode = kwargs["max_length_q"] == 1
+        if decode:  # the SSM states are updated in place in the cache (2 MiB a layer and request: no copies)
+            allocator = cache.layer_to_allocator[self.layer_idx]
+            conv_view, ssm_view = allocator.state_views(self.layer_idx)
+            rows = cache._linear_attention_state_index(allocator, kwargs, write=True)
+            conv_state = conv_view[rows]
+        else:
+            conv_state, ssm_state = cache.read_cache_states(self.layer_idx, kwargs)
         cu_seqlens = kwargs["cu_seq_lens_q"]
         gate, hidden_states_B_C, dt = self.in_proj(hidden_states).split(
             [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
@@ -650,16 +679,16 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             dim=-1,
         )
         dt = dt[0]
-        num_tokens, num_sequences = x.shape[0], ssm_state.shape[0]
+        num_tokens = x.shape[0]
         A = -torch.exp(self.A_log.float())
         out = torch.zeros(num_tokens, self.num_heads, self.head_dim, dtype=x.dtype, device=x.device)
 
-        if kwargs["max_length_q"] == 1:  # decode: token i is the one token of sequence i
-            n = min(num_tokens, num_sequences)
-            out[:n] = self._paged_recurrent(ssm_state[:n], x[:n], dt[:n], A, B[:n], C[:n])
+        if decode:  # token i is the one token of sequence i
+            n = min(num_tokens, rows.shape[0])
+            out[:n] = self._paged_decode_update(ssm_view, conv_view, rows, conv_state, x[:n], dt[:n], A, B[:n], C[:n])
         else:
             self._paged_varlen_scan(x, dt, A, B, C, ssm_state, cu_seqlens, out, cache)
-        cache.write_cache_states(self.layer_idx, (conv_state, ssm_state), kwargs)
+            cache.write_cache_states(self.layer_idx, (conv_state, ssm_state), kwargs)
         scan_output = self.norm(out.view(1, num_tokens, -1), gate)
         return self.out_proj(scan_output.to(dtype))
 
