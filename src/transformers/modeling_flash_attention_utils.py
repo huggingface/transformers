@@ -854,11 +854,13 @@ def _flash_attention_forward(
         **kwargs,
     )
 
-    # [scratch] FA2 takes attention sinks only through the continuous batching paged branch below (log-sum-exp)
+    # [scratch] FA2 takes attention sinks only in the continuous batching branches below (paged, varlen), through the
+    # log-sum-exp
     if (
         kwargs.get("s_aux") is not None
         and is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
         and not (is_fa_with_paged_kwargs and cache_seqlens is not None)
+        and not (is_fa_with_varlen_kwargs and not is_fa_with_paged_kwargs and attention_mask is None)
     ):
         raise ValueError("Attention sinks with flash attention 2 are only supported by continuous batching.")
 
@@ -986,14 +988,19 @@ def _flash_attention_forward(
         # [scratch] FA3 takes attention sinks on Hopper only, elsewhere they join through the log-sum-exp (its varlen
         # call returns it), as in the paged branch above
         sinks = flash_kwargs_fn.keywords.get("s_aux")
-        sinks_by_lse = (
-            sinks is not None
-            and is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=3)
-            and (_PROTO_SINKS_BY_LSE or torch.cuda.get_device_capability()[0] != 9)
+        fa2 = is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=2)
+        sinks_by_lse = sinks is not None and (
+            fa2
+            or (
+                is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=3)
+                and (_PROTO_SINKS_BY_LSE or torch.cuda.get_device_capability()[0] != 9)
+            )
         )
         if sinks_by_lse:
             flash_kwargs_fn = partial(flash_kwargs_fn.func, **{**flash_kwargs_fn.keywords, "s_aux": None})
         flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
+        if sinks_by_lse and fa2:  # FA2's varlen call returns the log-sum-exp with its attention probabilities
+            flash_kwargs["return_attn_probs"] = True
         out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
         if sinks_by_lse:  # lse is [heads, tokens]
             out = out[0] * torch.sigmoid(out[1].transpose(0, 1) - sinks.float())[..., None].to(out[0].dtype)
