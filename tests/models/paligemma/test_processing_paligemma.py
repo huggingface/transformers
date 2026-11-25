@@ -83,6 +83,22 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("labels" in inputs)
         self.assertEqual(len(inputs["labels"][0]), len(inputs["input_ids"][0]))
 
+    def test_unpadded_batch_with_suffix(self):
+        processor = self.get_processor()
+        images = self.prepare_images_inputs(batch_size=2)
+        text = ["<image>Describe the image.", "<image>Describe the image in more detail."]
+        suffix = ["A cat.", "A cat sitting on a wooden bench."]
+
+        inputs = processor(images=images, text=text, suffix=suffix)
+
+        self.assertNotEqual(len(inputs["input_ids"][0]), len(inputs["input_ids"][1]))
+        for index in range(2):
+            single = processor(images=images[index], text=text[index], suffix=suffix[index])
+            self.assertEqual(inputs["input_ids"][index], single["input_ids"][0])
+            self.assertEqual(list(inputs["labels"][index]), list(single["labels"][0]))
+            self.assertIn(-100, inputs["labels"][index])
+            self.assertTrue(any(label != -100 for label in inputs["labels"][index]))
+
     def test_text_with_image_tokens(self):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
