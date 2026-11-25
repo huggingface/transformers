@@ -4229,10 +4229,7 @@ class GenerationMixin(ContinuousMixin):
                 if output_hidden_states:
                     if self.config.is_encoder_decoder:
                         decoder_hidden_states = _split_model_outputs(
-                            decoder_hidden_states,
-                            outputs.decoder_hidden_states,
-                            cur_len,
-                            newly_added_length,
+                            decoder_hidden_states, outputs.decoder_hidden_states, cur_len, newly_added_length
                         )
                     else:
                         input_shape = (
