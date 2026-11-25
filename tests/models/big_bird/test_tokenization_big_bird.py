@@ -31,12 +31,8 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "google/bigbird-roberta-base"
     tokenizer_class = BigBirdTokenizer
 
-    # These three were wrong before any change in this PR: the real
-    # SentencePiece model keeps a real "\n" between "Hello" and "<s>" in
-    # the integration string below (confirmed directly against the real
-    # google/bigbird-roberta-base spiece.model) -- the old baseline here
-    # silently dropped it, the same bug this PR's Strip(right=True) fix
-    # addresses. Regenerated from the real, now-fixed tokenizer.
+    # Regenerated against the real spiece.model: it keeps the "\n" between "Hello" and "<s>",
+    # which the old baseline dropped because of the Strip(right=True) normalizer.
     integration_expected_tokens = ['▁This', '▁is', '▁a', '▁test', '▁', '😊\n', 'I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '\n生活的真谛是\n', 'Hi', '▁Hello', '\n', 'Hi', '▁Hello', '\n\n', '▁', '\n', '▁', '\n', '▁Hello', '\n', '<s>', '▁', '\n', 'hi', '<s>', '▁there', '\n', 'The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '\n', 'But', '▁', 'ird', '▁and', '▁', 'ปี', '▁', 'ird', '▁', 'ด\n', 'Hey', '▁how', '▁are', '▁you', '▁doing']  # fmt: skip
     integration_expected_token_ids = [871, 419, 358, 1433, 321, 100, 141, 474, 4743, 388, 961, 11125, 112, 391, 529, 419, 27908, 266, 114, 100, 17351, 18536, 100, 17351, 18536, 100, 321, 100, 321, 100, 18536, 100, 2, 321, 100, 5404, 2, 713, 100, 565, 1809, 4832, 916, 408, 6206, 30341, 126, 18536, 114, 100, 1638, 321, 1548, 391, 321, 100, 321, 1548, 321, 100, 10915, 804, 490, 446, 1905]  # fmt: skip
     expected_tokens_from_ids = ['▁This', '▁is', '▁a', '▁test', '▁', '<unk>', 'I', '▁was', '▁born', '▁in', '▁9', '2000', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '<unk>', 'Hi', '▁Hello', '<unk>', 'Hi', '▁Hello', '<unk>', '▁', '<unk>', '▁', '<unk>', '▁Hello', '<s>', '▁', '<unk>', 'hi', '<s>', '▁there', '<unk>', 'The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '<unk>', 'But', '▁', 'ird', '▁and', '▁', '<unk>', '▁', 'ird', '▁', '<unk>', 'Hey', '▁how', '▁are', '▁you', '▁doing']  # fmt: skip
