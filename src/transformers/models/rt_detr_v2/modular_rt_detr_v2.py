@@ -29,6 +29,7 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
     RTDetrDecoderLayer,
     RTDetrForObjectDetection,
+    RTDetrForObjectDetectionCriterion,
     RTDetrMLPPredictionHead,
     RTDetrModel,
     RTDetrPreTrainedModel,
@@ -424,6 +425,10 @@ class RTDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
     pass
 
 
+class RTDetrV2ForObjectDetectionCriterion(RTDetrForObjectDetectionCriterion):
+    pass
+
+
 class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedModel):
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
@@ -447,6 +452,7 @@ class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedMod
         )
         self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
         self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
+        self.criterion = RTDetrV2ForObjectDetectionCriterion(config)
 
         # Initialize weights and apply final processing
         self.post_init()
