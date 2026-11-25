@@ -990,6 +990,14 @@ class ContinuousBatchingManager:
         )
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
+        # [scratch] When the steps are compiled, inductor fuses each RMSNorm with the residual add before it: the hub
+        # RMSNorm kernel (`use_kernels`) is opaque to it, and slower than the fused code (Qwen3-8B on a B300, 64 x
+        # 1,024: 11,857 -> 12,572 tok/s without it). The modules get their own forward back
+        cb_config = self.continuous_batching_config
+        if cb_config.decode_compile_config is not None or cb_config.varlen_compile_config is not None:
+            for module in self.model.modules():
+                if type(module).__name__.endswith("RMSNorm") and "forward" in module.__dict__:
+                    del module.forward
 
         # For MPS, warn if the torch version is old enough to cause performance issues
         if self.model.device.type == "mps" and not is_torch_greater_or_equal("2.14", accept_dev=True):
