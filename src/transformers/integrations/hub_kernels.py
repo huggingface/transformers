@@ -498,8 +498,19 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
     return mapping[kernel_name]
 
 
-# NOTE: Add suppressed layers here if they are dynamically added like gguf kernel layers
-@suppress_kernels_logging(layers={"RMSNormZeroCentered", "SoftmaxTopKRouter", "Qwen3_5GatedDeltaNet"})
+# NOTE: Add suppressed layers here if they are dynamically added like gguf kernel layers or handled by other engines like vLLM
+@suppress_kernels_logging(
+    layers={
+        # gguf
+        "RMSNormZeroCentered",
+        "SoftmaxTopKRouter",
+        "Qwen3_5GatedDeltaNet",
+        # vLLM
+        "causal_conv1d_forward",
+        "mamba_scan_forward",
+        "mamba2_scan_forward",
+    }
+)
 def kernelize(
     model: "PreTrainedModel",
     mode: "Mode | None" = None,
