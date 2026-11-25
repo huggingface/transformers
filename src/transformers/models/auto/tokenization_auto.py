@@ -509,8 +509,8 @@ def _keep_llama_tokenizer_defaults(tokenizer, tokenizer_config: dict, kwargs: di
     """When the hub declares `LlamaTokenizer` but `AutoTokenizer` loads another class, keep the v4 llama defaults:
     add bos, no eos, pad left. User-passed kwargs, `tokenizer_config.json` and `tokenizer.json` padding still win.
     See https://github.com/huggingface/transformers/pull/51078"""
-    for name, default in (("add_bos_token", True), ("add_eos_token", False)):
-        setattr(tokenizer, name, kwargs.get(name, tokenizer_config.get(name, default)))
+    tokenizer.add_bos_token = kwargs.get("add_bos_token", tokenizer_config.get("add_bos_token", True))
+    tokenizer.add_eos_token = kwargs.get("add_eos_token", tokenizer_config.get("add_eos_token", False))
     if (
         "padding_side" not in kwargs
         and "padding_side" not in tokenizer_config
