@@ -211,6 +211,12 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        "Its forward reshapes each image's features into a map for the image tokenizer, sized by its grid read on the host"
+    )
+    def test_model_forward_compile_fullgraph_with_data_dependent_inputs(self):
+        pass
+
     def test_training(self):
         # Model isn't in any auto-mapping so we need to build labels manually
         if not self.model_tester.is_training:
