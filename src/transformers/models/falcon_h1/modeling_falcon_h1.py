@@ -856,7 +856,7 @@ class FalconH1Mixer(nn.Module):
                 intermediate_recurrent_states.append(last_recurrent_state.clone())
 
             # Cat all outputs
-            scan_output = torch.cat(all_outputs, dim=2)
+            scan_output = torch.cat(all_outputs, dim=1)
 
             # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
             last_recurrent_state = (
