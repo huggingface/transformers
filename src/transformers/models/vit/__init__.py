@@ -25,6 +25,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_vit import *
+    from .image_processing_dali_vit import *
     from .image_processing_pil_vit import *
     from .image_processing_vit import *
     from .modeling_vit import *
