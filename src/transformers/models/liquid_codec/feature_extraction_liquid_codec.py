@@ -46,7 +46,7 @@ class LiquidCodecFeatureExtractor(SequenceFeatureExtractor):
             Length of the overlapping windows for the STFT.
         win_length (`int`, *optional*, defaults to 1280):
             The window length for the STFT computation.
-        frame_stack (`int`, *optional*, defaults to 6):
+        subsampling_factor (`int`, *optional*, defaults to 6):
             Spectrogram frames per codec frame; clips are zero-padded to whole codec frames.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the spectrograms of a batch.
@@ -60,7 +60,7 @@ class LiquidCodecFeatureExtractor(SequenceFeatureExtractor):
         n_fft=1280,
         hop_length=320,
         win_length=1280,
-        frame_stack=6,
+        subsampling_factor=6,
         padding_value=0.0,
         **kwargs,
     ):
@@ -72,7 +72,7 @@ class LiquidCodecFeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.win_length = win_length
-        self.frame_stack = frame_stack
+        self.subsampling_factor = subsampling_factor
 
     def _torch_extract_fbank_features(self, waveform: torch.Tensor, device: str = "cpu") -> torch.Tensor:
         window = torch.hann_window(self.win_length, device=device)
@@ -181,7 +181,7 @@ class LiquidCodecFeatureExtractor(SequenceFeatureExtractor):
         # per clip: zero-pad to whole codec frames, then reflect-pad its ends
         total_pad = self.win_length - self.hop_length
         clips = []
-        frame_size = self.hop_length * self.frame_stack
+        frame_size = self.hop_length * self.subsampling_factor
         for clip in audio:
             clip = F.pad(clip, (0, -len(clip) % frame_size))
             clips.append(F.pad(clip[None], (total_pad // 2, total_pad - total_pad // 2), mode="reflect")[0])

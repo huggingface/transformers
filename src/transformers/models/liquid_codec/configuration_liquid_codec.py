@@ -41,12 +41,10 @@ class LiquidCodecEncoderConfig(PreTrainedConfig):
         Whether the attention layers scale each head's output by a sigmoid gate computed from the layer input.
     n_fft (`int`, *optional*, defaults to 1280):
         FFT size; the input spectrogram has `3 * (n_fft // 2 + 1)` channels.
-    frame_stack (`int`, *optional*, defaults to 6):
-        Spectrogram frames per codec frame.
-    embedder_hidden_size (`int`, *optional*, defaults to 256):
-        Embedder channels.
-    embedder_hidden_act (`str`, *optional*, defaults to `"silu"`):
-        Embedder activation.
+    subsampling_factor (`int`, *optional*, defaults to 6):
+        Spectrogram frames per codec frame: stride of the convolutional subsampler.
+    subsampling_conv_channels (`int`, *optional*, defaults to 256):
+        Channels of the convolutional subsampler before the backbone.
     quantization_dim (`int`, *optional*, defaults to 256):
         Width of the latent given to the quantizer.
     """
@@ -77,9 +75,8 @@ class LiquidCodecEncoderConfig(PreTrainedConfig):
     attention_dropout: float = 0.0
     base_config_key = "encoder_config"
     n_fft: int = 1280
-    frame_stack: int = 6
-    embedder_hidden_size: int = 256
-    embedder_hidden_act: str = "silu"
+    subsampling_factor: int = 6
+    subsampling_conv_channels: int = 256
     quantization_dim: int = 256
 
     def __post_init__(self, **kwargs):
@@ -123,8 +120,8 @@ class LiquidCodecDecoderConfig(PreTrainedConfig):
         Synthesis FFT size.
     hop_length (`int`, *optional*, defaults to 320):
         Synthesis hop length.
-    frame_stack (`int`, *optional*, defaults to 6):
-        STFT frames per codec frame.
+    upsampling_factor (`int`, *optional*, defaults to 6):
+        STFT frames per codec frame: each codec frame is repeated this many times before the backbone.
     quantization_dim (`int`, *optional*, defaults to 256):
         Width of the latent from the quantizer.
     """
@@ -156,7 +153,7 @@ class LiquidCodecDecoderConfig(PreTrainedConfig):
     base_config_key = "decoder_config"
     n_fft: int = 1280
     hop_length: int = 320
-    frame_stack: int = 6
+    upsampling_factor: int = 6
     quantization_dim: int = 256
 
     def __post_init__(self, **kwargs):
@@ -198,8 +195,8 @@ class LiquidCodecConfig(PreTrainedConfig):
         Width of the quantizer's latent.
     quantization_levels (`list[int]`, *optional*, defaults to `[8, 7, 6, 6]`):
         Levels per FSQ dimension; their product is the codebook size.
-    num_quantizers (`int`, *optional*, defaults to 12):
-        Number of codebooks.
+    num_codebooks (`int`, *optional*, defaults to 12):
+        Number of parallel FSQ codebooks: the latent is split into this many groups, each quantized separately.
     """
 
     model_type = "liquid_codec"
@@ -212,7 +209,7 @@ class LiquidCodecConfig(PreTrainedConfig):
     decoder_config: dict | PreTrainedConfig | None = field(default_factory=dict)
     quantization_dim: int = 256
     quantization_levels: list[int] | tuple[int, ...] = (8, 7, 6, 6)
-    num_quantizers: int = 12
+    num_codebooks: int = 12
     sampling_rate: int = 24_000
     initializer_range: float = 0.02
 

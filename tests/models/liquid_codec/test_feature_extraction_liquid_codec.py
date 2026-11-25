@@ -45,7 +45,7 @@ class LiquidCodecFeatureExtractionTester:
             "n_fft": self.n_fft,
             "hop_length": 10,
             "win_length": self.n_fft,
-            "frame_stack": 6,
+            "subsampling_factor": 6,
         }
 
     def prepare_inputs_for_common(self, equal_length=False, numpify=False):

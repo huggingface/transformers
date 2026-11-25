@@ -55,11 +55,11 @@ class LiquidCodecModelTester:
         num_attention_heads=2,
         num_key_value_heads=1,
         head_dim=16,
-        embedder_hidden_size=8,
+        subsampling_conv_channels=8,
         sliding_window=8,
         max_position_embeddings=512,
         quantization_dim=16,
-        num_quantizers=4,
+        num_codebooks=4,
         quantization_levels=[3, 3],
     ):
         self.parent = parent
@@ -74,11 +74,11 @@ class LiquidCodecModelTester:
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim
-        self.embedder_hidden_size = embedder_hidden_size
+        self.subsampling_conv_channels = subsampling_conv_channels
         self.sliding_window = sliding_window
         self.max_position_embeddings = max_position_embeddings
         self.quantization_dim = quantization_dim
-        self.num_quantizers = num_quantizers
+        self.num_codebooks = num_codebooks
         self.quantization_levels = quantization_levels
 
     def get_backbone_config(self):
@@ -102,17 +102,17 @@ class LiquidCodecModelTester:
 
     def get_config(self):
         return LiquidCodecConfig(
-            encoder_config={**self.get_backbone_config(), "embedder_hidden_size": self.embedder_hidden_size},
+            encoder_config={**self.get_backbone_config(), "subsampling_conv_channels": self.subsampling_conv_channels},
             decoder_config=self.get_backbone_config(),
             quantization_dim=self.quantization_dim,
-            num_quantizers=self.num_quantizers,
+            num_codebooks=self.num_codebooks,
             quantization_levels=self.quantization_levels,
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
         feature_extractor = LiquidCodecFeatureExtractor()
-        frame_size = feature_extractor.frame_stack * feature_extractor.hop_length
+        frame_size = feature_extractor.subsampling_factor * feature_extractor.hop_length
 
         # partial frames; last clip one frame shorter
         num_samples = [(self.num_frames - 1) * frame_size + 100] * self.batch_size
@@ -129,12 +129,12 @@ class LiquidCodecModelTester:
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = LiquidCodecModel(config=config).to(torch_device).eval()
-        frame_size = config.decoder_config.frame_stack * config.decoder_config.hop_length
+        frame_size = config.decoder_config.upsampling_factor * config.decoder_config.hop_length
 
         with torch.no_grad():
             result = model(**inputs_dict)
 
-        self.parent.assertEqual(result.audio_codes.shape, (self.batch_size, self.num_quantizers, self.num_frames))
+        self.parent.assertEqual(result.audio_codes.shape, (self.batch_size, self.num_codebooks, self.num_frames))
         self.parent.assertTrue(
             bool((result.audio_codes >= 0).all() and (result.audio_codes < config.codebook_size).all())
         )

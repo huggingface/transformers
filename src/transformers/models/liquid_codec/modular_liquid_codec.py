@@ -50,12 +50,10 @@ class LiquidCodecEncoderConfig(Lfm3Config):
         Whether the attention layers scale each head's output by a sigmoid gate computed from the layer input.
     n_fft (`int`, *optional*, defaults to 1280):
         FFT size; the input spectrogram has `3 * (n_fft // 2 + 1)` channels.
-    frame_stack (`int`, *optional*, defaults to 6):
-        Spectrogram frames per codec frame.
-    embedder_hidden_size (`int`, *optional*, defaults to 256):
-        Embedder channels.
-    embedder_hidden_act (`str`, *optional*, defaults to `"silu"`):
-        Embedder activation.
+    subsampling_factor (`int`, *optional*, defaults to 6):
+        Spectrogram frames per codec frame: stride of the convolutional subsampler.
+    subsampling_conv_channels (`int`, *optional*, defaults to 256):
+        Channels of the convolutional subsampler before the backbone.
     quantization_dim (`int`, *optional*, defaults to 256):
         Width of the latent given to the quantizer.
     """
@@ -80,9 +78,8 @@ class LiquidCodecEncoderConfig(Lfm3Config):
     use_cache: bool = False
     sliding_window: int | None = None
     n_fft: int = 1280
-    frame_stack: int = 6
-    embedder_hidden_size: int = 256
-    embedder_hidden_act: str = "silu"
+    subsampling_factor: int = 6
+    subsampling_conv_channels: int = 256
     quantization_dim: int = 256
 
     def __post_init__(self, **kwargs):
@@ -111,8 +108,8 @@ class LiquidCodecDecoderConfig(Lfm3Config):
         Synthesis FFT size.
     hop_length (`int`, *optional*, defaults to 320):
         Synthesis hop length.
-    frame_stack (`int`, *optional*, defaults to 6):
-        STFT frames per codec frame.
+    upsampling_factor (`int`, *optional*, defaults to 6):
+        STFT frames per codec frame: each codec frame is repeated this many times before the backbone.
     quantization_dim (`int`, *optional*, defaults to 256):
         Width of the latent from the quantizer.
     """
@@ -138,7 +135,7 @@ class LiquidCodecDecoderConfig(Lfm3Config):
     sliding_window: int | None = 30
     n_fft: int = 1280
     hop_length: int = 320
-    frame_stack: int = 6
+    upsampling_factor: int = 6
     quantization_dim: int = 256
 
     def __post_init__(self, **kwargs):
@@ -165,8 +162,8 @@ class LiquidCodecConfig(PreTrainedConfig):
         Width of the quantizer's latent.
     quantization_levels (`list[int]`, *optional*, defaults to `[8, 7, 6, 6]`):
         Levels per FSQ dimension; their product is the codebook size.
-    num_quantizers (`int`, *optional*, defaults to 12):
-        Number of codebooks.
+    num_codebooks (`int`, *optional*, defaults to 12):
+        Number of parallel FSQ codebooks: the latent is split into this many groups, each quantized separately.
     """
 
     model_type = "liquid_codec"
@@ -179,7 +176,7 @@ class LiquidCodecConfig(PreTrainedConfig):
     decoder_config: dict | PreTrainedConfig | None = field(default_factory=dict)
     quantization_dim: int = 256
     quantization_levels: list[int] | tuple[int, ...] = (8, 7, 6, 6)
-    num_quantizers: int = 12
+    num_codebooks: int = 12
     sampling_rate: int = 24_000
     initializer_range: float = 0.02
 
@@ -359,17 +356,22 @@ class LiquidCodecOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-class LiquidCodecEncoderEmbedder(nn.Module):
+class LiquidCodecEncoderSubsampler(nn.Module):
     def __init__(self, config: LiquidCodecEncoderConfig):
         super().__init__()
         # 3 features per frequency bin: log-magnitude, cos(phase), sin(phase)
-        self.in_proj = nn.Conv1d(3 * (config.n_fft // 2 + 1), config.embedder_hidden_size, kernel_size=1)
+        self.in_proj = nn.Conv1d(3 * (config.n_fft // 2 + 1), config.subsampling_conv_channels, kernel_size=1)
         # causal: left-pad 2, right padding cut
-        self.conv = nn.Conv1d(config.embedder_hidden_size, config.embedder_hidden_size, kernel_size=3, padding=2)
-        self.out_proj = nn.Conv1d(
-            config.embedder_hidden_size, config.hidden_size, kernel_size=config.frame_stack, stride=config.frame_stack
+        self.conv = nn.Conv1d(
+            config.subsampling_conv_channels, config.subsampling_conv_channels, kernel_size=3, padding=2
         )
-        self.act = ACT2FN[config.embedder_hidden_act]
+        self.out_proj = nn.Conv1d(
+            config.subsampling_conv_channels,
+            config.hidden_size,
+            kernel_size=config.subsampling_factor,
+            stride=config.subsampling_factor,
+        )
+        self.act = ACT2FN["silu"]
 
     def forward(self, input_features: torch.Tensor) -> torch.Tensor:
         hidden_states = self.act(self.in_proj(input_features))
@@ -377,16 +379,18 @@ class LiquidCodecEncoderEmbedder(nn.Module):
         return self.out_proj(hidden_states).transpose(1, 2)
 
 
-class LiquidCodecDecoderEmbedder(nn.Module):
+class LiquidCodecDecoderUpsampler(nn.Module):
     def __init__(self, config: LiquidCodecDecoderConfig):
         super().__init__()
-        self.frame_stack = config.frame_stack
+        self.upsampling_factor = config.upsampling_factor
         self.proj = nn.Linear(config.quantization_dim, config.hidden_size)
 
     def forward(self, latents: torch.Tensor) -> torch.Tensor:
-        embeddings = self.proj(latents.transpose(1, 2).to(self.proj.weight.dtype))
-        embeddings = F.interpolate(embeddings.transpose(1, 2), scale_factor=self.frame_stack, mode="nearest-exact")
-        return embeddings.transpose(1, 2)
+        hidden_states = self.proj(latents.transpose(1, 2).to(self.proj.weight.dtype))
+        hidden_states = F.interpolate(
+            hidden_states.transpose(1, 2), scale_factor=self.upsampling_factor, mode="nearest-exact"
+        )
+        return hidden_states.transpose(1, 2)
 
 
 class LiquidCodecFiniteScalarQuantization(Xcodec2FiniteScalarQuantization):
@@ -396,7 +400,7 @@ class LiquidCodecFiniteScalarQuantization(Xcodec2FiniteScalarQuantization):
 class LiquidCodecQuantizer(nn.Module):
     def __init__(self, config: LiquidCodecConfig):
         super().__init__()
-        self.num_codebooks = config.num_quantizers
+        self.num_codebooks = config.num_codebooks
         self.codebook_dim = len(config.quantization_levels)
 
         self.quantizer = LiquidCodecFiniteScalarQuantization(config)
@@ -536,7 +540,7 @@ class LiquidCodecEncoderModel(Lfm3Model):
 
     def __init__(self, config: LiquidCodecEncoderConfig):
         super().__init__(config)
-        self.embedder = LiquidCodecEncoderEmbedder(config)
+        self.subsampler = LiquidCodecEncoderSubsampler(config)
         self.output_proj = nn.Linear(config.hidden_size, config.quantization_dim)
 
         del self.padding_idx
@@ -557,7 +561,7 @@ class LiquidCodecEncoderModel(Lfm3Model):
         input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Valid spectrogram frames of each clip (right-padded); returns `latents_mask`.
         """
-        hidden_states = self.embedder(input_features)
+        hidden_states = self.subsampler(input_features)
 
         position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None]
         mask_kwargs = {
@@ -596,7 +600,7 @@ class LiquidCodecEncoderModel(Lfm3Model):
 
         latents_mask = None
         if input_features_mask is not None:
-            num_frames = input_features_mask.sum(-1, keepdim=True) // self.config.frame_stack
+            num_frames = input_features_mask.sum(-1, keepdim=True) // self.config.subsampling_factor
             latents_mask = torch.arange(latents.shape[-1], device=latents.device) < num_frames.to(latents.device)
 
         return LiquidCodecEncoderModelOutput(latents=latents, latents_mask=latents_mask)
@@ -615,7 +619,7 @@ class LiquidCodecDecoderModel(Lfm3Model):
 
     def __init__(self, config: LiquidCodecDecoderConfig):
         super().__init__(config)
-        self.embedder = LiquidCodecDecoderEmbedder(config)
+        self.upsampler = LiquidCodecDecoderUpsampler(config)
         self.head = LiquidCodecISTFTHead(config)
 
         del self.padding_idx
@@ -641,7 +645,7 @@ class LiquidCodecDecoderModel(Lfm3Model):
         overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*):
             Overlap-add cache from the previous chunk.
         """
-        hidden_states = self.embedder(latents)
+        hidden_states = self.upsampler(latents)
 
         if position_ids is None:
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0
@@ -685,7 +689,7 @@ class LiquidCodecDecoderModel(Lfm3Model):
 
         frames_mask = None
         if latents_mask is not None:
-            frames_mask = latents_mask.repeat_interleave(self.config.frame_stack, dim=-1)
+            frames_mask = latents_mask.repeat_interleave(self.config.upsampling_factor, dim=-1)
         audio_values, audio_values_mask = self.head(
             hidden_states, frames_mask=frames_mask, overlap_add_cache=overlap_add_cache
         )
@@ -757,7 +761,7 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
     ) -> LiquidCodecDecoderOutput:
         r"""
         audio_codes (`torch.LongTensor` of shape `(batch_size, num_codebooks, num_frames)`):
-            Codes to decode; `hop_length * frame_stack` samples per frame.
+            Codes to decode; `hop_length * upsampling_factor` samples per frame.
         audio_codes_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Valid frames of each clip (right-padded): each clip decoded as alone; returns `audio_values_mask`.
             When streaming: the chunk's frames.
@@ -802,7 +806,6 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
         input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Valid spectrogram frames of each clip (right-padded): each clip decoded as alone.
         """
-        # the recorded hidden states and attentions are the encoder's, as for an encoder-decoder model's encoder outputs
         encoded = self.encode(input_features, input_features_mask, return_dict=True, **kwargs)
         decoded = self.decode(encoded.audio_codes, encoded.audio_codes_mask, return_dict=True)
 
