@@ -315,30 +315,6 @@ def causal_conv1d_forward(
     return hidden_states
 
 
-@use_kernel_func_from_hub_with_fallback("mamba_inner_fn", "mamba_ssm")
-def mamba_inner_fn(
-    xz: torch.Tensor,
-    conv1d_weight: torch.Tensor,
-    conv1d_bias: torch.Tensor | None,
-    x_proj_weight: torch.Tensor,
-    delta_proj_weight: torch.Tensor,
-    out_proj_weight: torch.Tensor,
-    out_proj_bias: torch.Tensor | None,
-    A: torch.Tensor,
-    B: torch.Tensor | None = None,
-    C: torch.Tensor | None = None,
-    D: torch.Tensor | None = None,
-    delta_bias: torch.Tensor | None = None,
-    delta_softplus: bool = True,
-    b_rms_weight: torch.Tensor | None = None,
-    c_rms_weight: torch.Tensor | None = None,
-    dt_rms_weight: torch.Tensor | None = None,
-    b_c_dt_rms_eps: float = 1e-6,
-    **kwargs,
-):
-    return None
-
-
 @use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
 def mamba_selective_state_update(
     state: torch.Tensor,
@@ -571,7 +547,6 @@ def mamba_scan_forward(
 
 @use_kernelized_func(
     [
-        mamba_inner_fn,
         mamba_selective_scan,
         mamba_selective_state_update,
         mamba_scan_forward,

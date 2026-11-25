@@ -124,9 +124,6 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
 
     model_type = "qwen4_exp_text"
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
@@ -301,11 +298,11 @@ class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
 
 @no_inherit_decorator
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
-    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
-        super().__init__(dim, eps=eps)
+    def __init__(self, hidden_size: int, group_size: int | None = None, eps: float = 1e-6):
+        super().__init__(hidden_size, eps=eps)
         self.group_size = group_size
-        if group_size is not None and dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
+        if group_size is not None and hidden_size % group_size != 0:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
 
     def _norm(self, x: torch.Tensor) -> torch.Tensor:
         if self.group_size is not None:
@@ -1037,7 +1034,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
-    config: Qwen4ExpTextConfig
+    pass
 
 
 @auto_docstring

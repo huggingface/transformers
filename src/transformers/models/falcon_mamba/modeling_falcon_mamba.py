@@ -47,18 +47,18 @@ from .configuration_falcon_mamba import FalconMambaConfig
 class FalconMambaWeightlessRMSNorm(torch.nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         # Dummy weights that are not used (only for imitating the kernels path)
         self.weight = nn.Buffer(torch.ones(hidden_size, requires_grad=False), persistent=False)
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
 
     def extra_repr(self):
-        return f"eps={self.eps}"
+        return f"eps={self.variance_epsilon}"
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
@@ -167,30 +167,6 @@ def causal_conv1d_forward(
     if cache is not None:
         hidden_states = hidden_states[:, :, -seq_len:]
     return hidden_states
-
-
-@use_kernel_func_from_hub_with_fallback("mamba_inner_fn", "mamba_ssm")
-def mamba_inner_fn(
-    xz: torch.Tensor,
-    conv1d_weight: torch.Tensor,
-    conv1d_bias: torch.Tensor | None,
-    x_proj_weight: torch.Tensor,
-    delta_proj_weight: torch.Tensor,
-    out_proj_weight: torch.Tensor,
-    out_proj_bias: torch.Tensor | None,
-    A: torch.Tensor,
-    B: torch.Tensor | None = None,
-    C: torch.Tensor | None = None,
-    D: torch.Tensor | None = None,
-    delta_bias: torch.Tensor | None = None,
-    delta_softplus: bool = True,
-    b_rms_weight: torch.Tensor | None = None,
-    c_rms_weight: torch.Tensor | None = None,
-    dt_rms_weight: torch.Tensor | None = None,
-    b_c_dt_rms_eps: float = 1e-6,
-    **kwargs,
-):
-    return None
 
 
 @use_kernel_func_from_hub_with_fallback("selective_state_update", "mamba_ssm")
@@ -425,7 +401,6 @@ def mamba_scan_forward(
 
 @use_kernelized_func(
     [
-        mamba_inner_fn,
         mamba_selective_scan,
         mamba_selective_state_update,
         mamba_scan_forward,
@@ -437,9 +412,12 @@ def mamba_scan_forward(
 class FalconMambaMixer(nn.Module):
     """
     Compute ∆, A, B, C, and D the state space parameters and compute the `contextualized_states`.
-    A, D are input independent (see FalconMamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
-    ∆, B, C are input-dependent (this is a key difference between FalconMamba and the linear time invariant S4,
-    and is why FalconMamba is called **selective** state spaces)
+    A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
+    ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
+    and is why Mamba is called **selective** state spaces)
+
+    NOTE: unlike Mamba, there is no fused `mamba_inner_fn` path: it can only normalize dt after `dt_proj`, while
+    FalconMamba normalizes it before, see https://github.com/huggingface/transformers/pull/51184
     """
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int, initialize_mixer_weights: bool = True):
@@ -530,32 +508,6 @@ class FalconMambaMixer(nn.Module):
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
         A = -torch.exp(self.A_log.float())
-        if self.training and cache is None:
-            fused_output = mamba_inner_fn(
-                projected_states,
-                self.conv1d.weight,
-                self.conv1d.bias if self.use_conv_bias else None,
-                self.x_proj.weight,
-                self.dt_proj.weight,
-                self.out_proj.weight,
-                self.out_proj.bias.float() if self.use_bias else None,
-                A,
-                None,  # input-dependent B
-                None,  # input-dependent C
-                self.D.float(),
-                delta_bias=self.dt_proj.bias.float(),
-                delta_softplus=True,
-                # Key difference: norms on B, C, and dt
-                b_rms_weight=self.b_layernorm.weight,
-                c_rms_weight=self.c_layernorm.weight,
-                dt_rms_weight=self.dt_layernorm.weight,
-                b_c_dt_rms_eps=self.rms_eps,
-            )
-
-            # Only kernels can use this shortcircuit, fallback to normal torch otherwise
-            if fused_output is not None:
-                return fused_output
-
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
         # 2. Convolution sequence transformation

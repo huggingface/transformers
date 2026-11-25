@@ -146,6 +146,7 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     model_tester_class = Lfm2VlModelTester
     _is_composite = True
+    additional_model_inputs = ["spatial_shapes", "pixel_attention_mask"]
 
     def setUp(self):
         self.model_tester = Lfm2VlModelTester(self)

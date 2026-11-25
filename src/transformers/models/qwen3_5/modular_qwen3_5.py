@@ -44,6 +44,7 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto import AutoModel
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
@@ -54,7 +55,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextMLP,
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
-    Qwen3NextRMSNorm,
     apply_mask_to_padding_states,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
@@ -338,7 +338,7 @@ class Qwen3_5MLP(Qwen3NextMLP):
 
 
 @use_kernel_forward_from_hub("RMSNormZeroCentered")
-class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
+class Qwen3_5RMSNorm(GemmaRMSNorm):
     pass
 
 

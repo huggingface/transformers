@@ -114,12 +114,7 @@ class Inkling2TextConfig(InklingTextConfig):
     """
 
     model_type = "inkling2_text"
-    base_model_tp_plan = {
-        "embed_tokens": "replicate",
-        "layers.*.mlp.experts.gate_up_proj": "colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-    }
+    base_model_tp_plan = {"embed_tokens": "replicate"}
     base_model_pp_plan = AttributeError()
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -270,7 +265,9 @@ class Inkling2UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
-        hidden_states = hidden_states * torch.rsqrt(hidden_states.square().mean(-1, keepdim=True) + self.eps)
+        hidden_states = hidden_states * torch.rsqrt(
+            hidden_states.square().mean(-1, keepdim=True) + self.variance_epsilon
+        )
         return hidden_states.to(input_dtype)
 
 

@@ -68,7 +68,7 @@ quantization_config = FineGrainedFP8Config(
 )
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config,
 )
