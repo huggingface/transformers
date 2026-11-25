@@ -43,13 +43,12 @@ class MiniCPMV2_5VisionText2TextModelTester(VLMModelTester):
 
     small_config_overrides = {
         "batch_size": 2,
-        "image_token_id": 100,
+        "image_token_id": 3,  # low id, so it survives tests that shrink the embedding table
         "image_size": 32,
         "patch_size": 8,  # each test image is one 4x4-patch slice
         "resampler_n_latents": 4,  # ... which the resampler turns into 4 tokens
         "resampler_n_heads": 4,
         "num_image_tokens": 4,
-        "vocab_size": 256,
         "hidden_size": 128,
         "intermediate_size": 37,
         "num_hidden_layers": 2,

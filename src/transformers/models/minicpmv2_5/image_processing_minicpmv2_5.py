@@ -220,27 +220,35 @@ class MiniCPMV2_5ImageProcessor(TorchvisionBackend):
             )
             grids.append(best_grid if best_grid is not None else [0, 0])
 
-        # Pad every slice to the longest one; the mask marks real patches, the position ids give each one's (row, col)
+        return BatchFeature(
+            data={**self.pad_slices(slices, slice_sizes, patch_size), "grids": grids},
+            tensor_type=return_tensors,
+            skip_tensor_conversion=["grids"],
+        )
+
+    def pad_slices(
+        self, slices: list["torch.Tensor"], slice_sizes: list[tuple[int, int]], patch_size: int
+    ) -> dict[str, "torch.Tensor"]:
+        """
+        Pad every slice (one row of patches each) to the longest one. Returns the stacked `pixel_values`, the
+        `pixel_attention_mask` of real patches, and each patch's `(row, col)` in its slice in `patch_position_ids` (0 for
+        padding).
+        """
         num_patches = [height * width for height, width in slice_sizes]
         max_patches = max(num_patches)
         device = slices[0].device
         pixel_values = torch.stack(
-            [F.pad(s, (0, (max_patches - n) * patch_size)) for s, n in zip(slices, num_patches)]
+            [F.pad(patches, (0, (max_patches - n) * patch_size)) for patches, n in zip(slices, num_patches)]
         )
         patch_index = torch.arange(max_patches, device=device)[None, :]
         pixel_attention_mask = patch_index < torch.tensor(num_patches, device=device)[:, None]
         widths = torch.tensor([width for _, width in slice_sizes], device=device)[:, None]
         patch_position_ids = torch.stack([patch_index // widths, patch_index % widths], dim=-1)
-        return BatchFeature(
-            data={
-                "pixel_values": pixel_values,
-                "pixel_attention_mask": pixel_attention_mask,
-                "patch_position_ids": patch_position_ids * pixel_attention_mask[..., None],
-                "grids": grids,
-            },
-            tensor_type=return_tensors,
-            skip_tensor_conversion=["grids"],
-        )
+        return {
+            "pixel_values": pixel_values,
+            "pixel_attention_mask": pixel_attention_mask,
+            "patch_position_ids": patch_position_ids * pixel_attention_mask[..., None],
+        }
 
 
 __all__ = ["MiniCPMV2_5ImageProcessor"]

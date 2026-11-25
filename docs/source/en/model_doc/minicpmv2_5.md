@@ -61,15 +61,6 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 
 [[autodoc]] MiniCPMV2_5Config
 
-## MiniCPMV2_5VisionConfig
-
-[[autodoc]] MiniCPMV2_5VisionConfig
-
-## MiniCPMV2_5VisionTransformer
-
-[[autodoc]] MiniCPMV2_5VisionTransformer
-    - forward
-
 ## MiniCPMV2_5Model
 
 [[autodoc]] MiniCPMV2_5Model

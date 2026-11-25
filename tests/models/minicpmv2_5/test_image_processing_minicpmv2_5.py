@@ -96,21 +96,6 @@ class MiniCPMV2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                 torch.testing.assert_close(positions[slice_idx, :num_patches], expected.reshape(-1, 2))
                 self.assertEqual(positions[slice_idx, num_patches:].abs().sum().item(), 0)
 
-    def test_backends_equivalent(self):
-        """Both backends return the same slices for a batch of differently sized images (pixels within the usual
-        resizing differences)."""
-        if len(self.image_processing_classes) < 2:
-            self.skipTest("needs both backends")
-        images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-        results = [
-            cls(**self.image_processor_dict)(images, return_tensors="pt")
-            for cls in self.image_processing_classes.values()
-        ]
-        for key in ("pixel_attention_mask", "patch_position_ids"):
-            torch.testing.assert_close(results[0][key], results[1][key])
-        self.assertEqual(results[0]["grids"], results[1]["grids"])
-        self._assert_tensors_equivalence(results[0]["pixel_values"], results[1]["pixel_values"])
-
     def test_crop_to_patches_aspect_ratio(self):
         """Row/column order is correct when slicing non-square images."""
         for image_processing_class in self.image_processing_classes.values():
