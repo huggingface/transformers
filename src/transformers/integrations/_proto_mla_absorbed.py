@@ -105,6 +105,8 @@ def _mla_combine_kernel(
 
 
 _NUM_SMS = torch.cuda.get_device_properties(torch.cuda.current_device()).multi_processor_count
+# Blocks of 64 rows fault on Blackwell (misaligned address, B300, any key block and warp count): 32 rows there
+_PREFILL_BLOCK_M = 32 if torch.cuda.get_device_capability()[0] == 10 else 64
 
 
 def mla_varlen_attention(q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, scale, d_latent):
@@ -118,7 +120,7 @@ def mla_varlen_attention(q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seql
     # Decode steps take a block of the sequence's heads, and their keys are split so the programs fill the SMs: one
     # program per sequence left most of them idle
     decode = max_seqlen_q == 1
-    block_m = min(64, max(16, triton.next_power_of_2(num_heads))) if decode else 64
+    block_m = min(_PREFILL_BLOCK_M, max(16, triton.next_power_of_2(num_heads))) if decode else _PREFILL_BLOCK_M
     block_n = 32
     row_blocks = triton.cdiv((1 if decode else max_seqlen_q) * num_heads, block_m)
     num_splits = 1
@@ -134,7 +136,7 @@ def mla_varlen_attention(q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seql
         NUM_HEADS=num_heads, D_LATENT=d_latent, D_ROPE=d_qk - d_latent,
         D_LATENT_P=d_latent_p, D_ROPE_P=max(16, triton.next_power_of_2(d_qk - d_latent)),
         HAS_INDEX=read_index is not None, BLOCK_M=block_m, BLOCK_N=block_n, NUM_SPLITS=num_splits,
-        num_warps=4 if decode else 8, num_stages=3 if decode else 2,
+        num_warps=8 if block_m == 64 and not decode else 4, num_stages=3 if decode else 2,
     )  # fmt: skip
     if num_splits > 1:
         _mla_combine_kernel[(num_tokens * num_heads,)](
