@@ -1,0 +1,98 @@
+name: Self-hosted runner scale set (AMD strix-halo scheduled CI caller)
+
+# gfx1151 (AMD Ryzen "Strix Halo") daily CI, same shape as the MI300 caller. The
+# DevLab Dispatch pool is label-addressed, so we pass runs_on (the label set) instead
+# of runner_group for runner selection; runner_group is kept only as the report
+# gpu_name. runs_on / machine_types / hf_cache_dir / pytest_k / extra_pytest_args /
+# job_timeout_minutes are added to the shared reusable in huggingface/hf-workflows.
+#
+# Do not pin the reusable to a SHA: AMD runner groups only route jobs for workflows
+# referenced at @main (a SHA makes jobs wait for a runner until the 24h timeout).
+
+on:
+  workflow_run:
+    workflows: ["Self-hosted runner (AMD scheduled CI caller)"]
+    branches: ["main"]
+    types: [completed]
+  push:
+    branches:
+      - run_amd_scheduled_ci_caller*
+  workflow_dispatch:
+    inputs:
+      prev_workflow_run_id:
+        description: 'previous workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+      other_workflow_run_id:
+        description: 'other workflow run id to compare'
+        type: string
+        required: false
+        default: ""
+
+
+# Used for `push` to easily modify the target workflow runs to compare against
+env:
+    prev_workflow_run_id: ""
+    other_workflow_run_id: ""
+
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    permissions: {}
+    name: Setup
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Setup
+        env:
+          prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
+          other_workflow_run_id: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
+        run: |
+          mkdir "setup_values"
+          echo "$prev_workflow_run_id" > "setup_values/prev_workflow_run_id.txt"
+          echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: setup_values
+          path: setup_values
+
+  model-ci:
+    name: Model CI
+    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled_arc_scale_set.yaml@main
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-dummy"
+      # DevLab Dispatch is label-addressed; runner_group kept only as the report gpu_name.
+      runner_group: strix-halo
+      runs_on: '["self-hosted", "Linux", "devlab-dispatch", "strix-halo"]'
+      machine_types: '["1gpu"]'
+      hf_cache_dir: /mnt/scratch/cache/hf
+      docker: huggingface/transformers-pytorch-amd-gpu-gfx1151
+      ci_event: Scheduled CI (AMD) - strix-halo
+      report_repo_id: hf-transformers-bot/transformers-ci-dummy
+      # Skip list and timeouts from #50191 (big checkpoints gfx1151 cannot hold, and the
+      # flex-attention test that segfaults). --timeout is pytest-timeout's per-test cap.
+      pytest_k: >-
+        not test_flex_attention_with_grads
+        and not AriaForConditionalGenerationIntegrationTest
+        and not Cohere2IntegrationTest and not Cohere2MoeIntegrationTest
+        and not DeepseekV32IntegrationTest and not DeepseekV4IntegrationTest
+        and not DeepseekV4FlashIntegrationTest and not DeepseekV4FlashBaseIntegrationTest
+        and not Ernie4_5_VLMoeIntegrationTest and not Exaone4_5_IntegrationTest
+        and not Glm4MoeIntegrationTest and not Glm4vMoeIntegrationTest
+        and not HunYuanMoEV1IntegrationTest and not HyperCLOVAXVisionV2IntegrationTest
+        and not KimiLinearIntegrationTest and not Llama4IntegrationTest
+        and not LongcatFlashIntegrationTest and not MiniMaxM3VLIntegrationTest
+        and not Mistral4IntegrationTest and not NemotronH_Omni_Reasoning_V3IntegrationTest
+        and not PhimoeIntegrationTest and not Qwen3MoeIntegrationTest
+        and not Qwen3OmniModelIntegrationTest and not Qwen3VLMoeIntegrationTest
+        and not SeedOssIntegrationTest and not test_cwm_sliding_window_long_sequence
+      extra_pytest_args: "--timeout=1200 --timeout-method=signal"
+      job_timeout_minutes: 380
+      commit_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
+    secrets: inherit
