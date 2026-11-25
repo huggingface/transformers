@@ -1108,13 +1108,19 @@ class GenerationState:
         """
         if not self._continuous_batching:
             return False
-        can = hasattr(model, "init_continuous_batching") and modality == Modality.LLM
-        if not can:
+        from transformers.generation.continuous_batching.cache import unsupported_layer_types
+
+        reason = None
+        if not hasattr(model, "init_continuous_batching") or modality != Modality.LLM:
+            reason = "it is not a text-only language model"
+        elif unsupported := unsupported_layer_types(model.config):
+            reason = f"its {', '.join(unsupported)} layers have no continuous batching cache"
+        if reason is not None:
             logger.warning_once(
-                f"{model.__class__.__name__} does not support continuous batching. "
+                f"{model.__class__.__name__} does not support continuous batching: {reason}. "
                 "Falling back to sequential generation."
             )
-        return can
+        return reason is None
 
     def get_manager(self, model_id: str, use_cb: bool = False) -> BaseGenerateManager:
         """Return a per-model generation manager, lazily created on first request.

@@ -41,6 +41,13 @@ ATTN_TYPE_TO_ALLOCATOR = {
 }
 
 
+def unsupported_layer_types(config: PreTrainedConfig) -> list[str]:
+    """The layer types of ``config`` that continuous batching has no cache for (e.g. ``linear_attention``), in order of
+    first appearance. Empty if the model can run with continuous batching."""
+    layer_types = getattr(config, "layer_types", None) or []
+    return list(dict.fromkeys(t for t in layer_types if t not in ATTN_TYPE_TO_ALLOCATOR))
+
+
 def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
     """Groups layers depending on their attention type.
 
@@ -59,10 +66,14 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> dict[str, list[int]]:
         return {FULL_ATTENTION: list(range(config.num_hidden_layers))}
 
     # Otherwise simply count the number of layers of each type, making sure they are supported at the same time
+    unsupported = unsupported_layer_types(config)
+    if unsupported:
+        raise ValueError(
+            f"Continuous batching does not support {', '.join(unsupported)} layers "
+            f"(supported: {', '.join(ATTN_TYPE_TO_ALLOCATOR)})"
+        )
     layer_counts = {}
     for i, layer_type in enumerate(layer_types):
-        if layer_type not in ATTN_TYPE_TO_ALLOCATOR:
-            raise ValueError(f"Invalid layer type: {layer_type}")
         layer_counts[layer_type] = layer_counts.get(layer_type, []) + [i]
     return layer_counts
 
