@@ -26,6 +26,7 @@ jobs:
   # compute it here and use it in a job-level concurrency group below.
   concurrency-key:
     if: github.event_name == 'merge_group'
+    permissions: {}
     runs-on: ubuntu-slim
     outputs:
       key: ${{ steps.key.outputs.key }}
