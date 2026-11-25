@@ -470,10 +470,8 @@ jobs:
       SHARD_ID: ${{ matrix.shard }}
       # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
       VLLM_CPU_CI_ENV: "1"
-      # 16 GiB KV cache (like vLLM's CPU CI, run-cpu-test.sh) instead of the workflow's 32: before starting, vLLM checks that
-      # the KV cache fits in the container's free memory (limit - usage), and the usage includes the page cache of the
-      # model files read by the previous tests / steps of this job. With 32 GiB, the 7-9B models failed this check
-      # ("Available memory on node 0 (... GiB) ... is less than requested memory for kv (32.0 GiB)").
+      # 16 GiB KV cache (like vLLM's CPU CI, run-cpu-test.sh) instead of the workflow's 32, for the 7-9B models of this job:
+      # before starting, vLLM checks that the KV cache fits in the container's free memory (see `evict-page-cache` below).
       VLLM_CPU_KVCACHE_SPACE: 16
 
     steps:
@@ -492,6 +490,9 @@ jobs:
           # mteb: the MTEB pooling test; peft: remote code of jina-embeddings-v5 (both listed in vLLM's requirements/test/cuda.in)
           # pytest-asyncio: the async tests of tests/entrypoints/pooling
           extra-packages: pytest-shard sentence-transformers mteb[bm25s]>=2,<3 peft pytest-asyncio
+          # The 7-9B models of this job: drop the page cache of the model files read by the previous tests before each test
+          # (vLLM's KV cache memory check counts it as used memory)
+          evict-page-cache: "true"
 
       - name: "Test: language models generation and pooling (shard ${{ matrix.shard }} / 4)"
         if: ${{ !cancelled() }}

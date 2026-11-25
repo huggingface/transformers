@@ -15,6 +15,12 @@ inputs:
       `pytest-shard mteb[bm25s]>=2,<3`).
     required: false
     default: ""
+  evict-page-cache:
+    description: >-
+      "true": load the pytest plugin `evict_page_cache.py` (next to this file) in the job's pytest runs, which drops the
+      page cache of the HF cache files before each test (see the plugin's docstring).
+    required: false
+    default: "false"
 
 runs:
   using: composite
@@ -76,6 +82,15 @@ runs:
         if not path.startswith(expected + os.sep):
             sys.exit(f'ERROR: transformers is not imported from the checkout ({expected})')
         "
+
+    - name: Enable the page cache eviction pytest plugin
+      if: ${{ inputs.evict-page-cache == 'true' }}
+      shell: bash
+      run: |
+        mkdir -p /opt/vllm-ci-pytest-plugins
+        cp "$GITHUB_ACTION_PATH/evict_page_cache.py" /opt/vllm-ci-pytest-plugins/
+        echo "PYTHONPATH=/opt/vllm-ci-pytest-plugins" >> "$GITHUB_ENV"
+        echo "PYTEST_PLUGINS=evict_page_cache" >> "$GITHUB_ENV"
 
     - name: Pip freeze
       shell: bash
