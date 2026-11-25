@@ -40,10 +40,15 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_nearest_position_ids, get_vision_window_index
+from ...vision_utils import (
+    get_packed_sequences_inputs,
+    get_vision_nearest_position_ids,
+    get_vision_window_index,
+    packed_sequences_attention_forward,
+)
 from ..auto import AutoModel
 from .configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 
@@ -188,47 +193,19 @@ class MiniCPMV4_6VisionAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if is_flash_attention_requested(self.config):
-            # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
-            attn_output, _ = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=None,
-                scaling=self.scaling,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-
-            attn_outputs = [
-                attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    attention_mask=None,
-                    scaling=self.scaling,
-                    dropout=0.0 if not self.training else self.attention_dropout,
-                    is_causal=False,
-                    **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
-            attn_output = torch.cat(attn_outputs, dim=1)
-
+        attn_output, _ = packed_sequences_attention_forward(
+            self,
+            attention_interface,
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens,
+            max_seqlen,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            is_causal=False,
+            **kwargs,
+        )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
@@ -400,6 +377,7 @@ class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
     _input_embed_layer = "patch_embedding"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_flash_attn = True
 
     _can_record_outputs = {
@@ -420,22 +398,20 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         self.post_init()
 
     def get_downsampled_inputs(
-        self, target_sizes: torch.Tensor, max_seqlens: int | None, device: torch.device, **kwargs
+        self, target_sizes: torch.Tensor, device: torch.device, **kwargs
     ) -> tuple[dict[str, Any], torch.Tensor, torch.Tensor]:
         # NOTE: intentionally not checking for shapes as this is expensive to call `.any()`
         target_sizes = target_sizes // 2
-        # `max_seqlens` is only computed and used for Flash Attention.
-        if max_seqlens is not None:
-            max_seqlens = max_seqlens // 4
-
         cu_seqlens = F.pad(
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(device), (1, 0)
         )
+        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config)
 
         downsampled_kwargs = {
             "attention_mask": None,
             "cu_seqlens": cu_seqlens,
-            "max_seqlen": max_seqlens,
+            "max_seqlen": max_seqlen,
+            "packed_block_mask": block_mask,
             **kwargs,
         }
         return downsampled_kwargs, target_sizes, cu_seqlens
@@ -463,12 +439,13 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(hidden_states.device),
             (1, 0),
         )
-        max_seqlens = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         attn_kwargs = {
             "attention_mask": None,
             "cu_seqlens": cu_seqlens,
-            "max_seqlen": max_seqlens,
+            "max_seqlen": max_seqlen,
+            "packed_block_mask": block_mask,
             **kwargs,
         }
 
@@ -481,7 +458,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
 
                     # NOTE: Downsampled hidden states, and therefore other kwargs should also!
                     attn_kwargs, target_sizes, cu_seqlens = self.get_downsampled_inputs(
-                        target_sizes=target_sizes, max_seqlens=max_seqlens, device=hidden_states.device, **kwargs
+                        target_sizes=target_sizes, device=hidden_states.device, **kwargs
                     )
         else:
             encoder_outputs = self.encoder(inputs_embeds=hidden_states, **attn_kwargs)
@@ -572,6 +549,7 @@ class MiniCPMV4_6Merger(nn.Module):
 
 
 class MiniCPMV4_6PreTrainedModel(PreTrainedModel):
+    _supports_flex_attn = True
     config: MiniCPMV4_6Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")

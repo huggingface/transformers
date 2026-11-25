@@ -30,8 +30,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import is_flash_attention_requested
-from ...vision_utils import get_max_seqlen, get_vision_attention_seqlens, get_vision_position_ids
+from ...vision_utils import (
+    get_packed_sequences_inputs,
+    get_vision_cu_seqlens,
+    get_vision_position_ids,
+    packed_sequences_attention_forward,
+)
 from ..auto import AutoConfig, AutoModel
 from ..lfm2.modeling_lfm2 import Lfm2DecoderLayer
 from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlPreTrainedModel
@@ -161,51 +165,20 @@ class Lfm3VlVisionAttention(Qwen3VLVisionAttention):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if is_flash_attention_requested(self.config):
-            # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
-            attn_output, attn_weights = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=attention_mask,
-                scaling=self.scaling,
-                dropout=0.0,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-
-            attn_outputs, attn_weights = [], []
-            for q, k, v in zip(*splits):
-                attn_output, attn_weight = attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    attention_mask=attention_mask,
-                    scaling=self.scaling,
-                    dropout=0.0,
-                    is_causal=False,
-                    **kwargs,
-                )
-                attn_outputs.append(attn_output)
-                attn_weights.append(attn_weight)
-
-            attn_output = torch.cat(attn_outputs, dim=1)
-            # frames of different shapes have differently sized maps: one entry per frame, or None under sdpa
-            attn_weights = None if attn_weights[0] is None else tuple(attn_weights)
-
+        attn_output, attn_weights = packed_sequences_attention_forward(
+            self,
+            attention_interface,
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens,
+            max_seqlen,
+            scaling=self.scaling,
+            dropout=0.0,
+            is_causal=False,
+            return_attention_weights=True,
+            **kwargs,
+        )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
@@ -301,7 +274,8 @@ class Lfm3VlVisionModel(Qwen2VisionTransformerPretrainedModel):
             The temporal, height and width dimensions of the patch grid of each image or video.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
         # diff -> the convolution reshapes each frame to its grid, which needs host-side sizes
         grid_thw_list = grid_thw.tolist()  # trf-ignore: TRF056
 
@@ -315,6 +289,7 @@ class Lfm3VlVisionModel(Qwen2VisionTransformerPretrainedModel):
                 cu_seqlens=cu_seqlens,
                 grid_thw=grid_thw_list,
                 max_seqlen=max_seqlen,
+                packed_block_mask=block_mask,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

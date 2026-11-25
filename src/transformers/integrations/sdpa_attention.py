@@ -1,4 +1,5 @@
 import os
+from typing import cast
 
 import torch
 
@@ -10,6 +11,7 @@ logger = logging.get_logger(__name__)
 
 
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
+_is_torch_greater_or_equal_than_2_10 = is_torch_greater_or_equal("2.10", accept_dev=True)
 _is_torch_greater_or_equal_than_2_13 = is_torch_greater_or_equal("2.13", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
@@ -91,6 +93,74 @@ def create_position_bias_mask(
     return position_bias_mask.contiguous()
 
 
+def sdpa_varlen_attention_forward(
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    cu_seq_lens_q: torch.Tensor,
+    cu_seq_lens_k: torch.Tensor | None = None,
+    max_length_q: int | None = None,
+    max_length_k: int | None = None,
+    dropout: float = 0.0,
+    scaling: float | None = None,
+    is_causal: bool | None = None,
+    **kwargs,
+) -> tuple[torch.Tensor, None]:
+    """
+    Attention over sequences packed along the length of a batch of one, `(1, heads, total_length, head_dim)`,
+    delimited by `cu_seq_lens_q` (and `cu_seq_lens_k`).
+
+    Runs torch's varlen kernel when it supports the inputs: CUDA, half precision, bidirectional, no dropout, as many
+    key/value heads as query heads, and a head size that is a multiple of 8 up to 256. Otherwise, reads the lengths on
+    the host and attends over each sequence separately.
+    """
+    cu_seq_lens_k = cu_seq_lens_q if cu_seq_lens_k is None else cu_seq_lens_k
+    is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
+    use_varlen = (
+        _is_torch_greater_or_equal_than_2_10
+        and query.is_cuda
+        and query.dtype in (torch.float16, torch.bfloat16)
+        and dropout == 0.0
+        and not is_causal
+        and query.shape[1] == key.shape[1]
+        # Head sizes the flash kernel supports
+        and query.shape[-1] % 8 == 0
+        and query.shape[-1] <= 256
+    )
+    if use_varlen:
+        from torch.nn.attention.varlen import varlen_attn
+
+        # The kernel only uses the maximum lengths to size its launch: without precomputed ones, the total lengths are
+        # valid bounds that need no host sync
+        max_length_q = query.shape[2] if max_length_q is None else max_length_q
+        max_length_k = key.shape[2] if max_length_k is None else max_length_k
+        # Without `return_aux`, a single tensor
+        attn_output = cast(
+            torch.Tensor,
+            varlen_attn(
+                query[0].transpose(0, 1),
+                key[0].transpose(0, 1),
+                value[0].transpose(0, 1),
+                cu_seq_lens_q.to(torch.int32),
+                cu_seq_lens_k.to(torch.int32),
+                max_length_q,
+                max_length_k,
+                scale=scaling,
+            ),
+        )
+        return attn_output.unsqueeze(0), None
+
+    # The fallback splits the sequences, which needs their lengths on the host
+    lengths_q = (cu_seq_lens_q[1:] - cu_seq_lens_q[:-1]).tolist()
+    lengths_k = (cu_seq_lens_k[1:] - cu_seq_lens_k[:-1]).tolist()
+    attn_outputs = [
+        sdpa_attention_forward(module, q, k, v, None, dropout=dropout, scaling=scaling, is_causal=is_causal, **kwargs)
+        for q, k, v in zip(query.split(lengths_q, dim=2), key.split(lengths_k, dim=2), value.split(lengths_k, dim=2))
+    ]
+    return torch.cat([attn_output for attn_output, _ in attn_outputs], dim=1), None
+
+
 def sdpa_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -111,6 +181,12 @@ def sdpa_attention_forward(
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
+        )
+
+    # Sequences packed along the length, delimited by `cu_seq_lens_q` rather than by a mask
+    if kwargs.get("cu_seq_lens_q") is not None and attention_mask is None:
+        return sdpa_varlen_attention_forward(
+            module, query, key, value, dropout=dropout, scaling=scaling, is_causal=is_causal, **kwargs
         )
 
     sdpa_kwargs = {}

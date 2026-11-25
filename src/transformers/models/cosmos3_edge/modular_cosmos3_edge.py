@@ -43,13 +43,11 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
-    get_max_seqlen,
-    is_flash_attention_requested,
     merge_with_config_defaults,
 )
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoMetadata
-from ...vision_utils import get_vision_attention_seqlens
+from ...vision_utils import get_packed_sequences_inputs, get_vision_cu_seqlens, packed_sequences_attention_forward
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
@@ -337,46 +335,19 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if is_flash_attention_requested(self.config):
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
-            attn_output, _ = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=None,
-                scaling=self.scale,
-                dropout=0.0 if not self.training else self.dropout,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-            attn_output = torch.cat(
-                [
-                    attention_interface(
-                        self,
-                        query,
-                        key,
-                        value,
-                        attention_mask=None,
-                        scaling=self.scale,
-                        dropout=0.0 if not self.training else self.dropout,
-                        is_causal=False,
-                        **kwargs,
-                    )[0]
-                    for query, key, value in zip(*splits)
-                ],
-                dim=1,
-            )
-
+        attn_output, _ = packed_sequences_attention_forward(
+            self,
+            attention_interface,
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens,
+            max_seqlen,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+            is_causal=False,
+            **kwargs,
+        )
         return self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
 
 
@@ -418,13 +389,15 @@ class Cosmos3EdgeEncoder(Siglip2Encoder):
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height, and width patch-grid dimensions for every packed image or video.
         """
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                packed_block_mask=block_mask,
                 **kwargs,
             )
 

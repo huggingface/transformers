@@ -28,12 +28,19 @@ removed from the caller's kwargs as a side-effect of the pop.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
+
 import torch
 import torch.nn.functional as F
 
 from .configuration_utils import PreTrainedConfig
 from .utils import logging
-from .utils.generic import get_max_seqlen
+from .utils.generic import get_max_seqlen, is_flash_attention_requested
+
+
+if TYPE_CHECKING:
+    from torch.nn.attention.flex_attention import BlockMask
 
 
 logger = logging.get_logger(__name__)
@@ -65,6 +72,41 @@ def get_vision_cu_seqlens(
     return F.pad(seqlens.cumsum(dim=0, dtype=dtype), (1, 0), value=0)
 
 
+def get_packed_sequences_inputs(
+    cu_seqlens: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+    window: bool = False,
+) -> tuple[int | None, BlockMask | None]:
+    """Get what the attention implementation needs besides `cu_seqlens` to attend within each packed sequence.
+
+    Built once per forward for all the layers, rather than in each. Each value can also be precomputed (e.g. by
+    `get_data_dependent_inputs`) and is then popped from `kwargs`, which keeps the host syncs they need out of the
+    forward.
+
+    Args:
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        config: model configuration used to determine the attention implementation.
+        kwargs: optional caller kwargs containing precomputed values.
+        window: whether `cu_seqlens` delimits the windows of window attention, whose precomputed values are popped
+            from `max_window_seqlen` and `packed_window_block_mask` instead.
+
+    Returns:
+        Flash Attention's maximum sequence length and Flex Attention's block mask, each `None` for other attention
+        implementations.
+    """
+    prefix = "window_" if window else ""
+    kwargs = {} if kwargs is None else kwargs
+    max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs, kwarg_name=f"max_{prefix}seqlen")
+    block_mask = kwargs.pop(f"packed_{prefix}block_mask", None)
+    if block_mask is None and config._attn_implementation == "flex_attention":
+        from .integrations.flex_attention import create_packed_block_mask
+
+        length = int(cu_seqlens[-1])
+        block_mask = create_packed_block_mask(cu_seqlens, None, length, length)
+    return max_seqlen, block_mask
+
+
 def get_vision_attention_seqlens(
     grid_thw: torch.Tensor,
     config: PreTrainedConfig,
@@ -76,6 +118,74 @@ def get_vision_attention_seqlens(
     cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=merge_temporal, kwargs=kwargs)
     max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
     return cu_seqlens, max_seqlen
+
+
+def packed_sequences_attention_forward(
+    module: torch.nn.Module,
+    attention_interface: Callable,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    cu_seqlens: torch.Tensor,
+    max_seqlen: int | None = None,
+    packed_block_mask: BlockMask | None = None,
+    return_attention_weights: bool = False,
+    **kwargs,
+) -> tuple[torch.Tensor, tuple[torch.Tensor, ...] | torch.Tensor | None]:
+    """Attend within each of the sequences packed along the length of `query`, `key` and `value`.
+
+    Flash Attention and SDPA (varlen kernels) and Flex Attention (a block mask) attend over all the packed sequences in
+    one call. Eager attends over each sequence separately.
+
+    Args:
+        module: the attention module, passed to `attention_interface`.
+        attention_interface: the attention function of the module's attention implementation.
+        query: `(1, num_heads, total_length, head_dim)` queries of all the packed sequences.
+        key: `(1, num_key_value_heads, total_length, head_dim)` keys of all the packed sequences.
+        value: `(1, num_key_value_heads, total_length, head_dim)` values of all the packed sequences.
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        max_seqlen, packed_block_mask: as returned by [`get_packed_sequences_inputs`].
+        return_attention_weights: whether eager keeps each sequence's attention weights. They are otherwise freed as it
+            goes, as they add up to the score matrices of all the sequences.
+        kwargs: passed to `attention_interface` (e.g. `scaling`, `dropout`, `is_causal`).
+
+    Returns:
+        The `(1, total_length, num_heads, head_dim)` attention output, and the attention weights: those of the
+        single call, or for eager one tensor per sequence if `return_attention_weights`, `None` otherwise.
+    """
+    # Packed sequences are delimited by `cu_seqlens`: drop the `attention_mask=None` some layers pass down
+    kwargs.pop("attention_mask", None)
+    config = cast(PreTrainedConfig, module.config)
+    if is_flash_attention_requested(config) or config._attn_implementation in ("sdpa", "flex_attention"):
+        return attention_interface(
+            module,
+            query,
+            key,
+            value,
+            attention_mask=None,
+            cu_seq_lens_q=cu_seqlens,
+            cu_seq_lens_k=cu_seqlens,
+            max_length_q=max_seqlen,
+            max_length_k=max_seqlen,
+            packed_block_mask=packed_block_mask,
+            **kwargs,
+        )
+
+    lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+    attn_outputs, attn_weights = [], []
+    for sequence_query, sequence_key, sequence_value in zip(
+        query.split(lengths, dim=2), key.split(lengths, dim=2), value.split(lengths, dim=2)
+    ):
+        attn_output, weights = attention_interface(
+            module, sequence_query, sequence_key, sequence_value, attention_mask=None, **kwargs
+        )
+        attn_outputs.append(attn_output)
+        if return_attention_weights:
+            attn_weights.append(weights)
+        # Free them before the next sequence's are computed
+        del weights
+    attn_weights = tuple(attn_weights) if return_attention_weights and attn_weights[0] is not None else None
+    return torch.cat(attn_outputs, dim=1), attn_weights
 
 
 def get_vision_position_ids(

@@ -45,7 +45,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
+from ...vision_utils import get_packed_sequences_inputs, get_vision_cu_seqlens, get_vision_position_ids
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
@@ -559,6 +559,8 @@ class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
 
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
+    # Inductor can't lower its flex attention (`NoValidChoicesError`)
+    _supports_flex_attn = False
 
 
 class Glm4vVisionModel(Glm4vPreTrainedModel):
@@ -613,7 +615,8 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
             `torch.Tensor`: hidden_states.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
@@ -633,6 +636,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                packed_block_mask=block_mask,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

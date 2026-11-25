@@ -39,7 +39,8 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
-    get_vision_attention_seqlens,
+    get_packed_sequences_inputs,
+    get_vision_cu_seqlens,
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
@@ -412,6 +413,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
 
 
 class Qwen3_5PreTrainedModel(Qwen3NextPreTrainedModel):
+    _supports_flex_attn = True
     config: Qwen3_5Config
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
     _can_record_outputs = {
@@ -464,7 +466,8 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen, block_mask = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
@@ -479,6 +482,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                packed_block_mask=block_mask,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
