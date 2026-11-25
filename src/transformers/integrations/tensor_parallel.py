@@ -21,19 +21,14 @@ from __future__ import annotations
 
 import warnings
 
-from ..distributed.expert_parallel import (
-    EpRouterParallel,
-    MoEParamShard,
-    MoeTensorParalellMegaMoeExperts,
-    RouterParallelMegaMoe,
-)
+from ..distributed.expert_parallel import MoEParamShard
+from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 from ..distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     AllReduceParallel,
     ColwiseParallel,
     MlaKvAProjParallel,
     MoeExpertsParallel,
-    MoeIdentityParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     ParallelInterface,
@@ -43,14 +38,11 @@ from ..distributed.tensor_parallel import (
     TensorParallelLayer,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
-    replace_layer_number_by_wildcard,
     verify_tp_plan,
 )
 from ..distributed.utils import initialize_tensor_parallelism
 
 
-RouterParallel = EpRouterParallel
-MoeIdentityExpertParallel = MoeIdentityParallel
 MoeTensorParalellExperts = MoeExpertsParallel
 
 
@@ -68,23 +60,17 @@ def shard_and_distribute_module(*args, **kwargs):
 
 __all__ = [
     "ALL_PARALLEL_STYLES",
-    "MoeIdentityExpertParallel",
     "MoeTensorParalellExperts",
-    "RouterParallel",
     "initialize_tensor_parallelism",
     "AllReduceParallel",
     "ColwiseParallel",
-    "EpRouterParallel",
     "MlaKvAProjParallel",
     "MoeExpertsParallel",
     "MoEParamShard",
-    "MoeIdentityParallel",
-    "MoeTensorParalellMegaMoeExperts",
     "PackedColwiseParallel",
     "PackedRowwiseParallel",
     "ParallelInterface",
     "ReplicatedWithGradAllReduce",
-    "RouterParallelMegaMoe",
     "RowwiseParallel",
     "SequenceParallel",
     "TensorParallelLayer",

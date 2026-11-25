@@ -38,13 +38,13 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BaseModelOutputWithCLSToken(ModelOutput):
     r"""
-    cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):
+    cls_token_value (`torch.Tensor` of shape `(batch_size, 1, hidden_size)`):
         Classification token at the output of the last layer of the model.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    cls_token_value: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    last_hidden_state: torch.Tensor | None = None
+    cls_token_value: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
 class CvtEmbeddings(nn.Module):
@@ -482,7 +482,6 @@ class CvtPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = ["CvtLayer"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -497,7 +496,7 @@ class CvtPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class CvtModel(CvtPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: CvtConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -547,7 +546,7 @@ class CvtModel(CvtPreTrainedModel):
     """
 )
 class CvtForImageClassification(CvtPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CvtConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

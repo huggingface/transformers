@@ -20,10 +20,8 @@ from transformers import (
     GlmAsrConfig,
     GlmAsrForConditionalGeneration,
     GlmAsrModel,
-    LlamaConfig,
     is_torch_available,
 )
-from transformers.models.glmasr.configuration_glmasr import GlmAsrEncoderConfig
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -43,13 +41,12 @@ class GlmAsrModelTester(ALMModelTester):
     config_class = GlmAsrConfig
     base_model_class = GlmAsrModel
     conditional_generation_class = GlmAsrForConditionalGeneration
-    text_config_class = LlamaConfig
-    audio_config_class = GlmAsrEncoderConfig
+
     audio_mask_key = "input_features_mask"
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("head_dim", 8)
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "head_dim": 8,
+    }
 
     def create_audio_mask(self, batch_size: int | None = None):
         # Deterministic full-length mask: the base default randomizes lengths in [1, feat_seq_length],

@@ -29,6 +29,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3RMSNorm
@@ -216,6 +217,13 @@ class DeepseekV4HCACache(DynamicSlidingWindowLayer):
         self.entry_count[name] += compressed.shape[1]
         return self.compressed_kv[name]
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.buffer_kv, self.buffer_gate, self.compressed_kv):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+
     def reset(self) -> None:
         super().reset()
         # Dropped rather than zeroed, as they grow by concatenation, like the main states
@@ -271,6 +279,13 @@ class DeepseekV4CSACache(DeepseekV4HCACache):
         self.overlap_gate[name] = chunk_gate[:, -1, :, :head_dim].clone()
         return prior_kv, prior_gate
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        for states in (self.overlap_kv, self.overlap_gate):
+            for name, tensor in states.items():
+                if tensor is not None:
+                    states[name] = tensor.index_select(0, beam_idx.to(tensor.device))
+
     def reset(self) -> None:
         super().reset()
         for name in self.overlap_kv:
@@ -324,7 +339,7 @@ class DeepseekV4HCACompressor(nn.Module):
     `T = entry_count["compressor"]`), so the attention can attend over the
     full long-range history.
 
-    When `past_key_values is None` runs in stateless single-shot mode: compress
+    When `cache is None` runs in stateless single-shot mode: compress
     every complete window from `hidden_states` and discard the remainder
     (instead of caching it).
     """
@@ -337,20 +352,21 @@ class DeepseekV4HCACompressor(nn.Module):
         self.head_dim = config.head_dim
         self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.head_dim))
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, self.head_dim, dtype=torch.float32))
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         q_residual: torch.Tensor,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         layer_idx: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, _, _ = hidden_states.shape
-        cache_layer: DeepseekV4HCACache = past_key_values.layers[layer_idx] if past_key_values is not None else None
+        cache_layer: DeepseekV4HCACache = cache.layers[layer_idx] if cache is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
         if cache_layer is None:
@@ -448,24 +464,23 @@ class DeepseekV4Indexer(nn.Module):
         self.index_topk = config.index_topk
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
-        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim, dtype=torch.float32))
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.scorer = DeepseekV4IndexerScorer(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         q_residual: torch.Tensor,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         layer_idx: int,
     ) -> torch.LongTensor:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache | None = (
-            past_key_values.layers[layer_idx] if past_key_values is not None else None
-        )
+        cache_layer: DeepseekV4CSACache | None = cache.layers[layer_idx] if cache is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
@@ -565,23 +580,22 @@ class DeepseekV4CSACompressor(nn.Module):
         self.head_dim = config.head_dim
         self.kv_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
         self.gate_proj = nn.Linear(config.hidden_size, 2 * self.head_dim, bias=False)
-        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim))
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.position_bias = nn.Parameter(torch.empty(self.compress_rate, 2 * self.head_dim, dtype=torch.float32))
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
         self.indexer = DeepseekV4Indexer(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         q_residual: torch.Tensor,
         position_ids: torch.Tensor,
-        past_key_values: Cache | None,
+        cache: Cache | None,
         layer_idx: int,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch, seq_len, _ = hidden_states.shape
-        cache_layer: DeepseekV4CSACache | None = (
-            past_key_values.layers[layer_idx] if past_key_values is not None else None
-        )
+        cache_layer: DeepseekV4CSACache | None = cache.layers[layer_idx] if cache is not None else None
         kv = self.kv_proj(hidden_states)
         gate = self.gate_proj(hidden_states)
 
@@ -640,7 +654,7 @@ class DeepseekV4CSACompressor(nn.Module):
         # Ex: for query at index 5, m=4, and `index_topk=1024`, 1024 index are return but only 2 should be
         # attended to. The indexer marks the rest with `-1`; we clamp before the gather and keep the `valid`
         # to drop them from the per-query block mask afterwards.
-        top_k_indices = self.indexer(hidden_states, q_residual, position_ids, past_key_values, layer_idx)  # [B, S, k]
+        top_k_indices = self.indexer(hidden_states, q_residual, position_ids, cache, layer_idx)  # [B, S, k]
         compressed_len = compressed_kv.shape[2]
         valid = top_k_indices >= 0  # [B, S, k]
         # Per-query block bias: query `t` may only see the cache entries that are <= `seq_len // m`
@@ -691,27 +705,28 @@ class DeepseekV4Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
 
         self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
-        self.q_a_norm = DeepseekV4RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
+        self.q_a_norm = DeepseekV4RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
         self.q_b_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
         self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
-        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.o_a_proj = DeepseekV4GroupedLinear(
             self.num_heads * self.head_dim // config.o_groups, config.o_groups * config.o_lora_rank, config.o_groups
         )
         self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
-        self.sinks = nn.Parameter(torch.empty(self.num_heads))
+        self.sinks = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
         self.compressor = (
             COMPRESSOR_CLASSES[self.layer_type](config) if self.layer_type != "sliding_attention" else None
         )
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: dict[str, tuple[torch.Tensor, torch.Tensor]] | tuple[torch.Tensor, torch.Tensor],
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -728,14 +743,12 @@ class DeepseekV4Attention(nn.Module):
         kv = self.kv_norm(self.kv_proj(hidden_states)).view(*hidden_shape).transpose(1, 2)
         kv = apply_rotary_pos_emb(kv, cos, sin)
 
-        if past_key_values is not None:  # sliding where K==V
-            kv = past_key_values.update(kv, kv, self.layer_idx)[0]
+        if cache is not None:  # sliding where K==V
+            kv = cache.update(kv, kv, self.layer_idx, kwargs=kwargs)[0]
 
         block_bias = None
         if self.compressor is not None:  # Compressed KV (CSA or HCA)
-            compressed_kv, block_bias = self.compressor(
-                hidden_states, q_residual, position_ids, past_key_values, self.layer_idx
-            )
+            compressed_kv, block_bias = self.compressor(hidden_states, q_residual, position_ids, cache, self.layer_idx)
             kv = torch.cat([kv, compressed_kv], dim=2)
 
         # The compressor path concatenates extra entries onto the KV axis after the
@@ -964,7 +977,7 @@ class DeepseekV4TopKRouter(MixtralTopKRouter):
         super().__init__(config)
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -1042,10 +1055,12 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.self_attn = DeepseekV4Attention(config, layer_idx)
         self.mlp = DeepseekV4SparseMoeBlock(config, layer_idx)
-        self.input_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn_hc = DeepseekV4HyperConnection(config)
-        self.ffn_hc = DeepseekV4HyperConnection(config)
+        self.input_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype=torch.float32)
+        self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(
+            dtype=torch.float32
+        )
+        self.attn_hc = DeepseekV4HyperConnection(config).to(dtype=torch.float32)
+        self.ffn_hc = DeepseekV4HyperConnection(config).to(dtype=torch.float32)
 
     def forward(
         self,
@@ -1142,7 +1157,6 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
         "attentions": DeepseekV4Attention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
@@ -1185,30 +1199,32 @@ class DeepseekV4Model(LlamaModel):
             [DeepseekV4DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
-        self.hc_head = DeepseekV4HyperHead(config)
+        self.hc_head = DeepseekV4HyperHead(config).to(dtype=torch.float32)
+        self.norm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps).to(dtype=torch.float32)
         self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         if position_ids is None:
-            past_seen = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen
             position_ids = position_ids.unsqueeze(0)
             # `generate()` may pass a per-layer-type mask dict already built by
@@ -1221,7 +1237,7 @@ class DeepseekV4Model(LlamaModel):
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 position_ids=position_ids,
             )
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
@@ -1237,12 +1253,12 @@ class DeepseekV4Model(LlamaModel):
                 position_ids=position_ids,
                 attention_mask=causal_mask,
                 input_ids=input_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(self.hc_head(hidden_states))
-        return MoeModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
+        return MoeModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
 class DeepseekV4ForCausalLM(MixtralForCausalLM):

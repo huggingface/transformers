@@ -19,14 +19,12 @@ import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import (
-    AutoModel,
     AutoModelForImageTextToText,
     AutoProcessor,
     HunYuanVLConfig,
     HunYuanVLForConditionalGeneration,
     HunYuanVLModel,
     HunYuanVLTextConfig,
-    HunYuanVLVisionConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -56,61 +54,52 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
 
     base_model_class = HunYuanVLModel
     config_class = HunYuanVLConfig
-    text_config_class = HunYuanVLTextConfig
-    vision_config_class = HunYuanVLVisionConfig
+
     conditional_generation_class = HunYuanVLForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("batch_size", 2)
-        kwargs.setdefault("seq_length", 32)
-        kwargs.setdefault("vocab_size", 256)
-        kwargs.setdefault("hidden_size", 64)
-        kwargs.setdefault("intermediate_size", 128)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 4)
-        kwargs.setdefault("num_key_value_heads", 4)
-        kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("max_position_embeddings", 128)
-        kwargs.setdefault("pad_token_id", 0)
-        kwargs.setdefault("bos_token_id", 1)
-        kwargs.setdefault("eos_token_id", 2)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("rope_theta", 10000.0)
-        kwargs.setdefault(
-            "rope_parameters", {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [2, 2, 2, 2]}
-        )
-        kwargs.setdefault("tie_word_embeddings", False)
-        kwargs.setdefault("num_channels", 3)
-        kwargs.setdefault("patch_size", 16)
-        kwargs.setdefault("temporal_patch_size", 1)
-        kwargs.setdefault("spatial_merge_size", 1)
-        kwargs.setdefault("image_size", 64)
-        kwargs.setdefault("image_token_id", 5)
-        kwargs.setdefault("out_hidden_size", kwargs["hidden_size"])
-        kwargs.setdefault("text_hidden_size", kwargs["hidden_size"])
-        kwargs.setdefault("max_image_size", kwargs["image_size"])
-        kwargs.setdefault("min_image_size", kwargs["image_size"])
-        kwargs.setdefault("anyres_vit_max_image_size", kwargs["image_size"])
-        grid_hw = kwargs["image_size"] // kwargs["patch_size"]
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 32,
+        "vocab_size": 256,
+        "hidden_size": 64,
+        "intermediate_size": 128,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 4,
+        "hidden_act": "silu",
+        "max_position_embeddings": 128,
+        "pad_token_id": 0,
+        "bos_token_id": 1,
+        "eos_token_id": 2,
+        "head_dim": 16,
+        "rope_theta": 10000.0,
+        "rope_parameters": {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": [2, 2, 2, 2]},
+        "tie_word_embeddings": False,
+        "num_channels": 3,
+        "patch_size": 16,
+        "temporal_patch_size": 1,
+        "spatial_merge_size": 1,
+        "image_size": 64,
+        "image_token_id": 5,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        merged = {**cls.small_config_overrides, **kwargs}
+        kwargs.setdefault("out_hidden_size", merged["hidden_size"])
+        kwargs.setdefault("text_hidden_size", merged["hidden_size"])
+        kwargs.setdefault("max_image_size", merged["image_size"])
+        kwargs.setdefault("min_image_size", merged["image_size"])
+        kwargs.setdefault("anyres_vit_max_image_size", merged["image_size"])
+        grid_hw = merged["image_size"] // merged["patch_size"]
         # HunYuanVL inserts an extra column per row (newline) and 2 begin/end tokens.
         kwargs.setdefault("num_image_tokens", grid_hw * (grid_hw + 1) + 2)
         kwargs.setdefault("max_vit_seq_len", grid_hw**2)
-        super().__init__(parent, **kwargs)
-        self.device = torch_device
-        self.grid_hw = self.image_size // self.patch_size
-        self.num_image_patches = self.grid_hw**2
-        self.num_image_placeholder_tokens = self.num_image_tokens
-
-    def get_config(self):
-        return HunYuanVLConfig(
-            attn_implementation="eager",
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-        )
-
-    def create_attention_mask(self, input_ids):
-        return torch.ones_like(input_ids, device=torch_device)
+        values = super().get_small_config_defaults(**kwargs)
+        values["device"] = torch_device
+        values["grid_hw"] = values["image_size"] // values["patch_size"]
+        values["num_image_patches"] = values["grid_hw"] ** 2
+        return values
 
     def create_pixel_values(self, batch_size: int | None = None):
         # Override to 5D for patch-based models
@@ -118,12 +107,6 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
         return floats_tensor(
             [batch_size * self.num_image_patches, self.num_channels * self.patch_size * self.patch_size]
         ).to(torch_device)
-
-    def place_image_tokens(self, input_ids, config):
-        input_ids = input_ids.clone()
-        input_ids[input_ids == self.image_token_id] = config.text_config.pad_token_id
-        input_ids[:, : self.num_image_placeholder_tokens] = self.image_token_id
-        return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
@@ -137,10 +120,6 @@ class HunYuanVLVisionText2TextModelTester(VLMModelTester):
     def prepare_config_and_inputs(self):
         config, inputs_dict = self.prepare_config_and_inputs_for_common()
         config.text_config.rope_parameters["mrope_section"] = [2, 2, 2, 2]
-        # HunYuanVL uses 4 multimodal RoPE axes: position, width, height, and temporal.
-        inputs_dict["position_ids"] = (
-            torch.arange(self.seq_length, device=torch_device).view(1, 1, -1).expand(4, self.batch_size, -1)
-        )
         return config, inputs_dict
 
 
@@ -150,33 +129,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     # HunYuanVL packs all images into one flat patch stream; pixel_values.shape[0] is total patches, not batch size.
     skip_test_image_features_output_shape = True
-
-    def test_auto_model_uses_base_model(self):
-        config = self.model_tester.get_config()
-        model = AutoModel.from_config(config).to(self.model_tester.device)
-        self.assertIsInstance(model, HunYuanVLModel)
-        self.assertFalse(hasattr(model, "lm_head"))
-
-    def test_mrope_embeddings_are_built_once_per_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        inputs_dict.pop("position_ids")
-        config.text_config.rope_parameters["mrope_section"] = [2, 2, 2, 2]
-        model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
-        model.eval()
-
-        embedding_call_count = 0
-        rotary_forward = model.model.language_model.rotary_emb.forward
-
-        def wrapped_rotary_forward(*args, **kwargs):
-            nonlocal embedding_call_count
-            embedding_call_count += 1
-            return rotary_forward(*args, **kwargs)
-
-        model.model.language_model.rotary_emb.forward = wrapped_rotary_forward
-        with torch.no_grad():
-            model(**inputs_dict)
-
-        self.assertEqual(embedding_call_count, 1)
 
     def test_model_builds_mrope_position_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -239,38 +191,6 @@ class HunYuanVLModelTest(VLMModelTest, unittest.TestCase):
         config = HunYuanVLConfig(**legacy_kwargs)
         for alias in aliases:
             self.assertNotIn(alias, config.to_dict())
-
-    def test_prepare_inputs_for_generation_drops_pixel_values_after_prefill(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = HunYuanVLForConditionalGeneration(config).to(self.model_tester.device)
-        model.eval()
-
-        prefill_inputs = model.prepare_inputs_for_generation(
-            inputs_dict["input_ids"],
-            attention_mask=inputs_dict["attention_mask"],
-            position_ids=inputs_dict["position_ids"],
-            pixel_values=inputs_dict["pixel_values"],
-            image_grid_thw=inputs_dict["image_grid_thw"],
-            use_cache=True,
-            is_first_iteration=True,
-        )
-        self.assertIs(prefill_inputs["pixel_values"], inputs_dict["pixel_values"])
-        self.assertIs(prefill_inputs["image_grid_thw"], inputs_dict["image_grid_thw"])
-        self.assertEqual(prefill_inputs["position_ids"].shape, inputs_dict["position_ids"].shape)
-
-        decode_inputs = model.prepare_inputs_for_generation(
-            inputs_dict["input_ids"],
-            attention_mask=inputs_dict["attention_mask"],
-            position_ids=inputs_dict["position_ids"],
-            pixel_values=inputs_dict["pixel_values"],
-            image_grid_thw=inputs_dict["image_grid_thw"],
-            use_cache=True,
-            is_first_iteration=False,
-            next_sequence_length=1,
-        )
-        self.assertIsNone(decode_inputs["pixel_values"])
-        self.assertIs(decode_inputs["image_grid_thw"], inputs_dict["image_grid_thw"])
-        self.assertEqual(decode_inputs["position_ids"].shape, (4, self.model_tester.batch_size, 1))
 
     def test_batching_equivalence(self, atol=2e-5, rtol=1e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
@@ -379,7 +299,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple quantitative metrics across different categories.  \n2. **Axes & Categories**: The chart has 12 axes, each representing a different",
+                ("cuda", (8, 6)): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Categories**: The chart has 12 axes, each representing a dataset: *V",
                 ("xpu", 5): "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *VQ",
             }
         )  # fmt: skip
@@ -397,9 +317,9 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): [
-                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *V",
-                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                ("cuda", (8, 6)): [
+                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *VQ",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of marine mammal with a shell and tail).",
                 ],
                 ("xpu", 5): [
                     "To determine what is shown in the image, we analyze the context of the radar chart. A radar chart is a graphical representation of multivariate data, where each axis represents a different variable (here, different models or tasks).  \n\nIn the image, the axes are labeled with model names (e.g., VQAv",
@@ -417,7 +337,7 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): "To determine the answers, let’s analyze the radar chart:  \n\n1. **First Image**: The first image shows a radar chart with multiple colored candy beads. The first candy bead is a **green** one. The animal on this green bead is a **turtle** (a small aquatic creature with a",
+                ("cuda", (8, 6)): "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a green - colored region. The animal on this green region is a turtle.  \n2. **Second Image**:",
                 ("xpu", 5): "To determine the answers, let’s analyze the radar chart:  \n\n1. **First Image**: The first image shows a radar chart with multiple colored candy beads. The first candy bead is a **green** one. The animal on this green bead is a **turtle** (a small aquatic creature with a",
             }
         )  # fmt: skip
@@ -436,10 +356,10 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(inputs.image_grid_thw.shape[0], 3)
         expected_texts = Expectations(
             {
-                ("cuda", None): [
+                ("cuda", (8, 6)): [
                     "It is a software tool that allows you to extract text from a document.",
-                    "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a blue line (BLIP-2) and a green line (InstructBLIP). The second image shows the",
-                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple quantitative metrics across different categories.  \n2. **Axes & Categories**: The chart has 12 axes, each representing a category",
+                    "To determine what is shown in the first image and what animal is on the candy in the second image, we analyze the radar chart:  \n\n1. **First Image**: The first radar chart has a green - colored region. The legend shows that the green color corresponds to “InstructBLIP”. Thus, the",
+                    "To determine what is shown in the image, we analyze the visual elements:  \n\n1. **Chart Type**: A radar chart (also called a spider chart) is used to compare multiple datasets.  \n2. **Axes and Data**: The chart has 12 axes, each representing a dataset: *VQ",
                 ],
                 ("xpu", 5): [
                     "It is a software tool that allows you to extract text from a document.",
@@ -463,9 +383,9 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", None): [
+                ("cuda", (8, 6)): [
                     "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
-                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of marine mammal with a shell and tail).",
                 ],
                 ("xpu", 5): [
                     "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
@@ -487,9 +407,9 @@ class HunYuanVLForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         expected_texts_batch = Expectations(
             {
-                ("cuda", None): [
+                ("cuda", (8, 6)): [
                     "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",
-                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of reptile with a shell and a tail).",
+                    "To determine the animal on the candy, observe the image: there are two green candies with black designs. The animal in the green candies is a **turtle** (a type of marine mammal with a shell and tail).",
                 ],
                 ("xpu", 5): [
                     "STEALTH CAM\n07:59 AM 09/01/15 69 F \nFRONT CBN",

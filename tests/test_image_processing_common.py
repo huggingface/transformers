@@ -35,6 +35,7 @@ from transformers.models.auto.image_processing_auto import (
     IMAGE_PROCESSOR_MAPPING_NAMES,
     get_image_processor_class_from_name,
 )
+from transformers.processing_utils import ImagesKwargs
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -340,6 +341,11 @@ class ImageProcessingTestMixin:
     # Must be set by subclass
     image_processor_tester_class = None
 
+    # Models can allow larger individual pixel differences between image backends without
+    # relaxing the mean-error limit or exact comparisons of integer outputs.
+    backend_equivalence_atol = 1e-1
+    backend_equivalence_mean_atol = 5e-3
+
     test_cast_dtype = None
 
     def setUp(self):
@@ -359,8 +365,10 @@ class ImageProcessingTestMixin:
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
-    def _assert_tensors_equivalence(self, tensor1, tensor2, atol=1e-1, rtol=1e-3, mean_atol=5e-3):
+    def _assert_tensors_equivalence(self, tensor1, tensor2, atol=1e-1, rtol=1e-3, mean_atol=None):
         """Assert that two tensors are equivalent within specified tolerances."""
+        if mean_atol is None:
+            mean_atol = self.backend_equivalence_mean_atol
         torch.testing.assert_close(tensor1, tensor2, atol=atol, rtol=rtol)
         self.assertLessEqual(torch.mean(torch.abs(tensor1 - tensor2)).item(), mean_atol)
 
@@ -430,7 +438,11 @@ class ImageProcessingTestMixin:
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             self._assert_encodings_equivalence(
-                reference_encoding, encodings[backend_name], reference_backend, backend_name
+                reference_encoding,
+                encodings[backend_name],
+                reference_backend,
+                backend_name,
+                atol=self.backend_equivalence_atol,
             )
 
     @require_vision
@@ -453,7 +465,11 @@ class ImageProcessingTestMixin:
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             self._assert_encodings_equivalence(
-                reference_encoding, encodings[backend_name], reference_backend, backend_name
+                reference_encoding,
+                encodings[backend_name],
+                reference_backend,
+                backend_name,
+                atol=self.backend_equivalence_atol,
             )
 
     def _assert_has_attributes(self, processor, expected_attributes: dict[str, Any]) -> None:
@@ -963,7 +979,7 @@ class ImageProcessingTestMixin:
             "aria", "beit", "bit", "blip", "bridgetower", "chameleon", "chinese_clip",
             "clip", "cohere2_vision", "conditional_detr", "convnext", "deepseek_vl",
             "deepseek_vl_hybrid", "deformable_detr", "deit", "depth_pro", "detr",
-            "dinov3_vit", "donut", "dpt", "efficientloftr", "efficientnet", "eomt",
+            "dinov3_vit", "donut", "dpt", "efficientloftr", "efficientnet", "emu3", "eomt",
             "flava", "fuyu", "gemma3", "glm4v", "glpn", "got_ocr2", "grounding_dino",
             "idefics", "idefics2", "idefics3", "imagegpt", "janus", "kosmos2_5",
             "layoutlmv2", "layoutlmv3", "levit", "superglue", "lightglue", "llama4",
@@ -1051,6 +1067,16 @@ class ImageProcessingTestMixin:
                         f"`{method_name}`, add the `{mixin_class.__name__}` inheritance instead."
                     ),
                 )
+
+    def test_valid_kwargs_set(self):
+        """Check that valid_kwargs is set to the correct class."""
+        for image_processing_class in self.image_processing_classes.values():
+            processor = image_processing_class(**self.image_processor_dict)
+            processor_module = sys.modules[processor.__class__.__module__]
+            expected_kwargs_class = vars(processor_module).get(
+                f"{processor.__class__.__name__.removesuffix('Pil')}Kwargs", ImagesKwargs
+            )
+            self.assertIs(processor.valid_kwargs, expected_kwargs_class)
 
 
 class PostProcessSemanticSegmentationTestMixin:

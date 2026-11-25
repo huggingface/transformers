@@ -34,7 +34,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
-from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
+from .utils.import_utils import _package_distribution_mapping, is_tracing
 
 
 logger = logging.get_logger(__name__)
@@ -51,11 +51,11 @@ def flash_attn_supports_top_left_mask():
 
 
 # TODO Deprecate when all models have the attention interface
-def is_flash_attn_available():
+def is_flash_attn_available(kernels_fallback_ok=False):
     return (
-        is_flash_attn_4_available()
-        or is_flash_attn_3_available()
-        or is_flash_attn_2_available()
+        is_flash_attn_4_available(kernels_fallback_ok=kernels_fallback_ok)
+        or is_flash_attn_3_available(kernels_fallback_ok=kernels_fallback_ok)
+        or is_flash_attn_2_available(kernels_fallback_ok=kernels_fallback_ok)
         or is_torch_npu_available()
         or is_torch_xpu_available()
     )
@@ -103,7 +103,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "general_availability_check": is_flash_attn_2_available,
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn") is not None
-            and "flash-attn" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+            and "flash-attn"
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn", [])]
         ),
         "supported_devices": (
             (is_torch_cuda_available, "cuda"),
@@ -126,7 +127,7 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn_interface") is not None
             and "flash-attn-3"
-            in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn_interface", [])]
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn_interface", [])]
         ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 8,  # Ampere
@@ -136,7 +137,8 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
         "general_availability_check": is_flash_attn_4_available,
         "pkg_availability_check": lambda *args, **kwargs: (
             importlib.util.find_spec("flash_attn") is not None
-            and "flash-attn-4" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])]
+            and "flash-attn-4"
+            in [pkg.replace("_", "-") for pkg in _package_distribution_mapping().get("flash_attn", [])]
         ),
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
         "cuda_min_major_version": 9,  # Hopper
@@ -284,11 +286,11 @@ def lazy_import_flash_attention(
     global _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn
     global _process_flash_kwargs_fn, _process_with_kvcache_kwargs_fn
     if implementation is not None and _loaded_implementation != implementation:
-        _loaded_implementation = implementation
-
         _flash_fn, _flash_varlen_fn, _flash_with_kvcache_fn, _pad_fn, _unpad_fn = _lazy_imports(
             implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
         )
+        # Only mark the implementation as loaded once the import succeeded, so that a failed load is retried
+        _loaded_implementation = implementation
 
         # Paged flash attention is not compatible with torch.compile, so we decorate it here (unless it doesnt exist)
         if _flash_with_kvcache_fn is not None:

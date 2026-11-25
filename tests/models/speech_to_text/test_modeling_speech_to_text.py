@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -67,58 +68,39 @@ def prepare_speech_to_text_inputs_dict(
 
 
 @require_torch
-class Speech2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_labels=False,
-        vocab_size=99,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=4,
-        num_conv_layers=2,
-        conv_kernel_sizes=(5, 5),
-        conv_channels=32,
-        input_feat_per_channel=24,
-        input_channels=1,
-        hidden_act="relu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        max_source_positions=20,
-        max_target_positions=20,
-        eos_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
-    ):
+class Speech2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_labels": False,
+        "vocab_size": 99,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 4,
+        "num_conv_layers": 2,
+        "conv_kernel_sizes": (5, 5),
+        "conv_channels": 32,
+        "input_feat_per_channel": 24,
+        "input_channels": 1,
+        "hidden_act": "relu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 20,
+        "max_source_positions": 20,
+        "max_target_positions": 20,
+        "eos_token_id": 2,
+        "pad_token_id": 1,
+        "bos_token_id": 0,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.num_conv_layers = num_conv_layers
-        self.conv_kernel_sizes = conv_kernel_sizes
-        self.conv_channels = conv_channels
-        self.input_feat_per_channel = input_feat_per_channel
-        self.input_channels = input_channels
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.max_source_positions = max_source_positions
-        self.max_target_positions = max_target_positions
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
@@ -194,7 +176,7 @@ class Speech2TextModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
@@ -205,9 +187,7 @@ class Speech2TextModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -258,6 +238,8 @@ class Speech2TextModelTester:
 
 @require_torch
 class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Speech2TextModelTester
+
     all_model_classes = (Speech2TextModel, Speech2TextForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"automatic-speech-recognition": Speech2TextForConditionalGeneration, "feature-extraction": Speech2TextModel}
@@ -448,8 +430,8 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            if "past_key_values" in outputs:
-                correct_outlen += 1  # past_key_values have been returned
+            if "cache" in outputs:
+                correct_outlen += 1  # cache have been returned
 
             self.assertEqual(out_len, correct_outlen)
 

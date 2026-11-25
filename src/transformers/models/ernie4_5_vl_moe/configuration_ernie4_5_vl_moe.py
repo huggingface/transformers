@@ -38,7 +38,7 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     model_type = "ernie4_5_vl_moe_vision"
     base_config_key = "vision_config"
     default_rope_type = "axial"
-    attribute_map = {"num_attention_heads": "num_heads"}
+    attribute_map = {"num_attention_heads": "num_heads", "num_hidden_layers": "depth"}
 
     depth: int = 32
 
@@ -79,7 +79,6 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     """
 
     model_type = "ernie4_5_vl_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
     default_theta = 500000.0
 
@@ -88,12 +87,6 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.text_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.text_moe.experts.down_proj": "rowwise",
-        "layers.*.mlp.text_moe.experts": "moe_tp_experts",
-        "layers.*.mlp.vision_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.vision_moe.experts.down_proj": "rowwise",
-        "layers.*.mlp.vision_moe.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -187,7 +180,6 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
         "vision_config": Ernie4_5_VLMoeVisionConfig,
         "text_config": Ernie4_5_VLMoeTextConfig,

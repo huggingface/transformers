@@ -54,7 +54,6 @@ class GraniteSWAConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granite_swa"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Extends Granite's plan with the learnable per-head `sinks`, sharded across heads (colwise)
     # to match the q/k/v head-sharding so TP keeps each rank's sink slice aligned with its heads.
     base_model_tp_plan = {
@@ -63,6 +62,7 @@ class GraniteSWAConfig(PreTrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "colwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",

@@ -34,7 +34,7 @@ from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, Siz
 from ...integrations.hub_processing_kernels import upsample_argmax_with_kernel, use_processing_kernel
 from ...modeling_outputs import DepthEstimatorOutput
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 class CHMv2ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -404,7 +404,6 @@ class CHMv2ImageProcessor(TorchvisionBackend):
             `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
-        requires_backends(self, "torch")
 
         predicted_depth = outputs.predicted_depth
 

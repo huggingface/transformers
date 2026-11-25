@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.22.0.dev0"
+__version__ = "5.24.0.dev0"
 
 import re
 import sys
@@ -78,6 +78,7 @@ _import_structure = {
         "default_data_collator",
     ],
     "debug_utils": [],
+    "decision": ["DecisionConfig"],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "distributed": ["DistributedConfig"],
@@ -119,6 +120,7 @@ _import_structure = {
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
+        "DecisionPipeline",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
         "FeatureExtractionPipeline",
@@ -218,6 +220,7 @@ _import_structure = {
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
+        "is_torch_supa_available",
         "is_torchvision_available",
         "is_torch_xla_available",
         "is_torch_xpu_available",
@@ -505,6 +508,7 @@ if TYPE_CHECKING:
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
     from .data.data_collator import default_data_collator as default_data_collator
+    from .decision import DecisionConfig as DecisionConfig
     from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
@@ -629,6 +633,7 @@ if TYPE_CHECKING:
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
+    from .pipelines import DecisionPipeline as DecisionPipeline
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
     from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline
@@ -724,6 +729,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_musa_available as is_torch_musa_available
     from .utils import is_torch_neuroncore_available as is_torch_neuroncore_available
     from .utils import is_torch_npu_available as is_torch_npu_available
+    from .utils import is_torch_supa_available as is_torch_supa_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
     from .utils.import_utils import requires_backends

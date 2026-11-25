@@ -28,6 +28,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -47,58 +48,46 @@ if is_torch_available():
 
 
 @require_torch
-class MptModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=14,
-        seq_length=7,
-        is_training=True,
-        use_token_type_ids=False,
-        use_input_mask=True,
-        use_labels=True,
-        use_mc_token_ids=True,
-        vocab_size=99,
-        hidden_size=48,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-    ):
+class MptModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 14,
+        "seq_length": 7,
+        "is_training": True,
+        "use_token_type_ids": False,
+        "use_input_mask": True,
+        "use_labels": True,
+        "use_mc_token_ids": True,
+        "vocab_size": 99,
+        "hidden_size": 48,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["bos_token_id"] = values["vocab_size"] - 1
+        values["eos_token_id"] = values["vocab_size"] - 1
+        values["pad_token_id"] = values["vocab_size"] - 1
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_token_type_ids = use_token_type_ids
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.use_mc_token_ids = use_mc_token_ids
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_dropout_prob = attention_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = None
-        self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 1
-        self.pad_token_id = vocab_size - 1
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -144,7 +133,7 @@ class MptModelTester:
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layers)
+        self.parent.assertEqual(len(result.cache), config.n_layers)
 
     def create_and_check_mpt_model_past(self, config, input_ids, input_mask, *args):
         model = MptModel(config=config)
@@ -160,7 +149,7 @@ class MptModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        past = outputs["past_key_values"]
+        past = outputs["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -169,7 +158,7 @@ class MptModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -209,7 +198,7 @@ class MptModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -230,7 +219,7 @@ class MptModelTester:
             attention_mask=input_mask,
             use_cache=True,
         )
-        past_key_values = outputs.past_key_values
+        cache = outputs.cache
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -250,7 +239,7 @@ class MptModelTester:
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             output_hidden_states=True,
         )
         hidden_states_from_past = output_from_past["hidden_states"][0]
@@ -297,7 +286,7 @@ class MptModelTester:
         model = MptForCausalLM(config)
         model.to(torch_device)
         if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
 
         result = model(input_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
@@ -338,6 +327,8 @@ class MptConfigTester(ConfigTester):
 
 @require_torch
 class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = MptModelTester
+
     all_model_classes = (
         (
             MptModel,

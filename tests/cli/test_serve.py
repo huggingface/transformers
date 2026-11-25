@@ -19,16 +19,19 @@ Tests for the serving layer.
 import asyncio
 import json
 import socket
+import tempfile
 import time
 import unittest
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
 
+from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
-from transformers.cli.serving.model_manager import ModelManager, TimedModel
+from transformers.cli.serving.model_manager import METAL_FLASH_ATTN, ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
 from transformers.cli.serving.systemone import SystemOneHandler
@@ -39,14 +42,19 @@ from transformers.cli.serving.utils import (
     GenerationState,
     Modality,
     ToolCall,
+    build_response_parser,
+    get_gen_models,
     get_response_template,
     parse_assistant_message,
     response_events_to_chunks,
+    split_model_id,
+    split_revision,
 )
 from transformers.testing_utils import (
-    require_librosa,
+    require_audio,
     require_multipart,
     require_serve,
+    require_torch,
     require_torch_accelerator,
     require_torchcodec,
     require_vision,
@@ -56,6 +64,7 @@ from transformers.testing_utils import (
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
+from ..test_decision_head_common import tiny_qwen2
 from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
@@ -262,6 +271,16 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result[2]["tool_call_id"], "call_1")
         self.assertNotIn("tool_call_id", result[0])
 
+    def test_llm_empty_tool_calls_keeps_content(self):
+        """An assistant message with a null or empty `tool_calls` is a plain text message."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        for tool_calls in (None, []):
+            messages = [{"role": "assistant", "content": "Hello!", "tool_calls": tool_calls}]
+            result = get_processor_inputs_from_messages(messages, Modality.LLM)
+            self.assertEqual(result, [{"role": "assistant", "content": "Hello!"}])
+
     def test_vlm_tool_use_fields_forwarded(self):
         """Tool-use fields should be forwarded for VLM modality as well."""
 
@@ -360,7 +379,7 @@ class TestGenerativeModelList(unittest.TestCase):
             hf_hub_download("Qwen/Qwen2.5-0.5B-Instruct", "config.json", cache_dir=cache_dir)
             hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)
 
-            result = ModelManager.get_gen_models(cache_dir)
+            result = get_gen_models(cache_dir)
             model_ids = {r["id"] for r in result}
 
             self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
@@ -379,10 +398,47 @@ class TestGenerativeModelList(unittest.TestCase):
             config = Path(hf_hub_download("google-bert/bert-base-cased", "config.json", cache_dir=cache_dir)).resolve()
             config.write_text(json.dumps({**json.loads(config.read_text()), "architectures": None}))
 
-            model_ids = {r["id"] for r in ModelManager.get_gen_models(cache_dir)}
+            model_ids = {r["id"] for r in get_gen_models(cache_dir)}
 
             self.assertIn("Qwen/Qwen2.5-0.5B-Instruct", model_ids)
             self.assertNotIn("google-bert/bert-base-cased", model_ids)
+
+    def test_list_models_without_hub_cache(self):
+        # A fresh machine has no Hub cache yet: nothing to list, and no error.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.assertEqual(ModelManager().list_models(cache_dir=f"{tmp_dir}/missing"), [])
+
+    def test_list_models_shows_downloaded_and_loaded_models(self):
+        # What the Hub cache holds: two downloaded models.
+        downloaded = [{"owned_by": "org", "id": name, "object": "model", "created": 0} for name in ("org/a", "org/b")]
+        with (
+            tempfile.TemporaryDirectory() as local_path,
+            patch("transformers.cli.serving.model_manager.get_gen_models", return_value=downloaded),
+        ):
+            model_manager = ModelManager()
+            self.addCleanup(model_manager.shutdown)
+            # What loading `org/a` and a local checkpoint leaves in the manager.
+            for name in ("org/a@main", local_path):
+                model_manager.loaded_models[name] = TimedModel(MagicMock(), timeout_seconds=-1)
+
+            models = model_manager.list_models()
+            statuses = {model["id"]: model["status"]["value"] for model in models}
+
+        # `org/a` is both downloaded and loaded: it is listed once. The local path is not in the Hub cache.
+        self.assertEqual(len(models), 3)
+        self.assertEqual(statuses, {"org/a": "loaded", "org/b": "unloaded", local_path: "loaded"})
+
+    def test_list_models_of_a_pinned_server(self):
+        # A server pinned to one model lists that model alone, whatever the Hub cache holds.
+        with patch.object(ModelManager, "_load_processor"), patch.object(ModelManager, "_load_model"):
+            model_manager = ModelManager(force_model="org/model")
+        self.addCleanup(model_manager.shutdown)
+
+        models = model_manager.list_models()
+
+        self.assertEqual(len(models), 1)
+        self.assertEqual(models[0]["id"], "org/model")
+        self.assertEqual(models[0]["status"], {"value": "loaded"})
 
 
 @require_serve
@@ -394,6 +450,20 @@ class TestBuildGenerationConfig(unittest.TestCase):
         from transformers import GenerationConfig
 
         result = self._make_handler()._build_generation_config({"max_tokens": 7}, GenerationConfig())
+        self.assertEqual(result.max_new_tokens, 7)
+
+    def test_max_completion_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config({"max_completion_tokens": 7}, GenerationConfig())
+        self.assertEqual(result.max_new_tokens, 7)
+
+    def test_max_completion_tokens_overrides_max_tokens(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config(
+            {"max_completion_tokens": 7, "max_tokens": 50}, GenerationConfig()
+        )
         self.assertEqual(result.max_new_tokens, 7)
 
     def test_temperature_zero_disables_sampling(self):
@@ -516,6 +586,23 @@ class TestModelManager(unittest.TestCase):
     def test_process_model_name_preserves_revision(self):
         self.assertEqual(ModelManager.process_model_name("org/model@dev"), "org/model@dev")
 
+    def test_local_path_with_at_symbol(self):
+        # The `@` of an existing local path is part of the path, not a revision.
+        with tempfile.TemporaryDirectory(prefix="ckpt@1000_") as local_path:
+            self.assertEqual(ModelManager.process_model_name(local_path), local_path)
+            self.assertEqual(split_revision(local_path), (local_path, None))
+
+    def test_split_revision(self):
+        self.assertEqual(split_revision("org/model@main"), ("org/model", "main"))
+        self.assertEqual(split_revision("org/model@refs/pr/12"), ("org/model", "refs/pr/12"))
+
+    def test_split_model_id(self):
+        self.assertEqual(split_model_id("org/model"), ("org/model", None))
+        self.assertEqual(split_model_id("org/model:weights.gguf"), ("org/model", "weights.gguf"))
+        # The colon of a local path is part of the path, not a GGUF file.
+        self.assertEqual(split_model_id("/runs/run:1/ckpt"), ("/runs/run:1/ckpt", None))
+        self.assertEqual(split_model_id("/runs/run:1/ckpt:weights.gguf"), ("/runs/run:1/ckpt", "weights.gguf"))
+
     def test_quantization_config_4bit(self):
         mm = ModelManager(quantization="bnb-4bit")
         cfg = mm.get_quantization_config()
@@ -529,6 +616,13 @@ class TestModelManager(unittest.TestCase):
     def test_quantization_config_none(self):
         mm = ModelManager()
         self.assertIsNone(mm.get_quantization_config())
+
+    def test_metal_flash_attn_default_only_with_continuous_batching(self):
+        resolve = ModelManager._resolve_attn_implementation
+        with patch("transformers.utils.import_utils.is_kernels_available", return_value=True):
+            self.assertEqual(resolve(None, "mps", continuous_batching=True), METAL_FLASH_ATTN)
+            self.assertIsNone(resolve(None, "mps", continuous_batching=False))
+            self.assertEqual(resolve("sdpa", "mps", continuous_batching=True), "sdpa")
 
 
 class TestTimedModel(unittest.TestCase):
@@ -592,7 +686,7 @@ class TestAppRoutes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.model_manager = MagicMock(spec=ModelManager)
-        cls.model_manager.get_gen_models.return_value = [
+        cls.model_manager.list_models.return_value = [
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
         ]
         cls.chat_handler = MagicMock(spec=ChatCompletionHandler)
@@ -690,7 +784,63 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         self.body["questions"]["team"]["criteria"] = {}
         response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
         self.assertEqual(response.status_code, 422)
-        self.assertIn("criteria", response.json()["detail"][0]["loc"])
+        self.assertIn("a choice question needs `criteria`", response.json()["detail"][0]["msg"])
+
+
+@require_serve
+class TestSystemOneDecisionConfig(unittest.TestCase):
+    @require_torch
+    def test_answers_are_the_pipelines(self):
+        from transformers import AutoTokenizer, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = tiny_qwen2(tokenizer)
+        decision_config = DecisionConfig(temperature={"noul": 1.5})
+        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
+        request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
+        pipe = handler._pipeline("x", model, tokenizer)
+        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
+        answers, input_tokens = handler._answer(pipe, request)
+        expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
+        self.assertEqual(answers, expected)
+        self.assertGreater(input_tokens, 0)
+
+    @require_torch
+    def test_reads_the_decision_config_of_the_repo(self):
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = tiny_qwen2(tokenizer)
+        template = "{{ state }}"
+        with tempfile.TemporaryDirectory() as repo:
+            DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
+            model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
+            pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
+        self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
+        self.assertEqual(pipe.decision_config.chat_template, template)
+
+    @require_torch
+    def test_loads_a_decision_checkpoint_as_the_pipeline_does(self):
+        # A checkpoint shipping a decision head next to its weights is served by the decision model, not as a causal LM
+        import torch
+        from safetensors.torch import save_file
+
+        from transformers import AutoTokenizer, JevForDecision, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        with tempfile.TemporaryDirectory() as repo:
+            tiny_qwen2(tokenizer).save_pretrained(repo)
+            tokenizer.save_pretrained(repo)
+            Path(repo, "decision_config.json").write_text(
+                json.dumps({"codes": ["A", "B"], "temperature": 2.0}), encoding="utf-8"
+            )
+            save_file({"weight": torch.randn(2, 16)}, f"{repo}/readout.safetensors", metadata={"format": "pt"})
+            manager = ModelManager(device="cpu")
+            model, _ = manager.load_model_and_processor(manager.process_model_name(repo))
+            decide = pipeline("decision", model=repo, device="cpu")
+        self.assertIsInstance(model, JevForDecision)
+        self.assertIsInstance(decide.model, JevForDecision)
+        self.assertEqual(model.decision_config.temperature, decide.decision_config.temperature)
 
 
 @slow
@@ -1883,6 +2033,41 @@ class TestToolCallUnit(unittest.TestCase):
         called_template = tokenizer.parse_response.call_args.args[1]
         self.assertIs(called_template, template)
 
+    def test_tool_schema_forwarded_to_serving_parsers(self):
+        tokenizer = MagicMock()
+        tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "fields": {},
+        }
+        tokenizer.decode.return_value = ""
+        tokenizer.parse_response.return_value = {"role": "assistant"}
+
+        processor = MagicMock()
+        model = MagicMock()
+        processor.tokenizer = tokenizer
+
+        tools = [
+            {
+                "type": "function",
+                "function": {"name": "set_alarm"},
+            }
+        ]
+
+        for schema in (None, tools):
+            with self.subTest(tools=schema):
+                parse_assistant_message(processor, model, [2], [1], tools=schema)
+                self.assertEqual(
+                    tokenizer.parse_response.call_args.kwargs["tools"],
+                    schema,
+                )
+
+                with patch("transformers.cli.serving.utils.ResponseParser") as parser:
+                    build_response_parser(processor, model, [1], tools=schema)
+                    self.assertEqual(
+                        parser.call_args.kwargs["tools"],
+                        schema,
+                    )
+
     def test_parse_assistant_message_multiple_tool_calls(self):
         tokenizer = MagicMock()
         tokenizer.response_template = None
@@ -2614,7 +2799,7 @@ class TestReasoningGemma(_TestReasoningBase, ServeIntegrationTestCase):
 
 
 @slow
-@require_librosa
+@require_audio
 @require_multipart
 @require_serve
 class TestTranscription(ServeIntegrationTestCase):

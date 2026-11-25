@@ -35,6 +35,7 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto import AutoConfig, AutoTokenizer
+from ..models.auto.auto_factory import _BaseAutoModelClass
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
@@ -113,7 +114,7 @@ def _pad(items, key, padding_value, padding_side):
 
         for i, item in enumerate(items):
             if padding_side == "left":
-                tensor[i, -len(item[key][0]) :] = item[key][0]
+                tensor[i, max_length - len(item[key][0]) :] = item[key][0]
             else:
                 tensor[i, : len(item[key][0])] = item[key][0]
 
@@ -143,15 +144,17 @@ def pad_collate_fn(tokenizer, feature_extractor):
         f_padding_value = getattr(feature_extractor, "padding_value", None)
         f_padding_side = getattr(feature_extractor, "padding_side", None)
 
-    if t_padding_side is not None and f_padding_side is not None and t_padding_side != f_padding_side:
-        raise ValueError(
-            f"The feature extractor, and tokenizer don't agree on padding side {t_padding_side} != {f_padding_side}"
-        )
     padding_side = "right"
     if t_padding_side is not None:
         padding_side = t_padding_side
     if f_padding_side is not None:
         padding_side = f_padding_side
+    # Multimodal processors can pad text and audio on different sides. Only the feature extractor's own inputs
+    # follow its side then, all other inputs line up with the text. Processors rename its attention mask to these.
+    feature_keys = set(getattr(feature_extractor, "model_input_names", None) or [])
+    feature_keys |= {"input_features_mask", "feature_attention_mask"}
+    if tokenizer is not None:
+        feature_keys -= set(tokenizer.model_input_names)
 
     def inner(items):
         keys = set(items[0].keys())
@@ -161,6 +164,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
                     f"The elements of the batch contain different keys. Cannot batch them ({set(item.keys())} !="
                     f" {keys})"
                 )
+        text_padding_side = t_padding_side if t_padding_side is not None and "input_ids" in keys else padding_side
         # input_values, input_pixels, input_ids, ...
         padded = {}
         for key in keys:
@@ -179,7 +183,8 @@ def pad_collate_fn(tokenizer, feature_extractor):
             else:
                 # This is likely another random key maybe even user provided
                 _padding_value = 0
-            padded[key] = _pad(items, key, _padding_value, padding_side)
+            side = padding_side if key in feature_keys else text_padding_side
+            padded[key] = _pad(items, key, _padding_value, side)
         return padded
 
     return inner
@@ -236,6 +241,10 @@ def load_model(
         all_traceback = {}
         for model_class in class_tuple:
             kwargs = model_kwargs.copy()
+            if not issubclass(model_class, _BaseAutoModelClass):
+                # Only the Auto classes understand `code_revision`, because they're the ones that load remote code.
+                # Concrete classes from `config.architectures` would pass it to the model `__init__` and crash
+                kwargs.pop("code_revision", None)
 
             try:
                 model = model_class.from_pretrained(model, **kwargs)
@@ -706,8 +715,9 @@ def build_pipeline_init_args(
             Device on which the pipeline is allocated. When left unset, the pipeline is placed on the first available
             accelerator (CUDA, MPS, XPU, ...) and falls back to CPU only when none is available; the model is moved
             there automatically. Pass `device="cpu"` (or `-1`) to force CPU, a positive ordinal or `"cuda:1"` to select
-            a specific accelerator, or a native `torch.device`/`str`. This argument cannot be combined with a model
-            already loaded via `accelerate` (i.e. one with an `hf_device_map`).
+            a specific accelerator, or a native `torch.device`/`str`. If `device` is left unset and `pipeline()` loads
+            the model on a single device with `device_map`, it stays on that device. This argument cannot be combined
+            with a model already loaded via `accelerate` (i.e. one with an `hf_device_map`).
         dtype (`str` or `torch.dtype`, *optional*, defaults to `"auto"`):
             Precision the model is loaded in, forwarded to `from_pretrained`. Defaults to `"auto"`, which loads the
             model in the dtype it was saved in (read from the checkpoint's `config.dtype`, otherwise inferred from the

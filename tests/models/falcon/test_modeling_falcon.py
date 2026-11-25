@@ -45,9 +45,11 @@ class FalconModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = FalconModel
 
-    def __init__(self, parent, new_decoder_architecture=True):
-        super().__init__(parent)
-        self.new_decoder_architecture = new_decoder_architecture
+    small_config_overrides = {
+        "new_decoder_architecture": True,
+        "hidden_size": 64,
+        "num_attention_heads": 4,
+    }
 
 
 @require_torch
@@ -67,9 +69,33 @@ class FalconModelTest(CausalLMModelTest, unittest.TestCase):
     ):
         return True
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        # `head_dim` is a read-only property in falcon, we assume the initial values to be correct
+        assert config.head_dim >= requested_dim
+        return config
+
     @unittest.skip(reason="To support alibi, we are forced to create a mask in all cases")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    def test_packed_sequences_do_not_attend_across_documents(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = FalconForCausalLM(config).to(torch_device).eval()
+        # Pack two documents cut from the prepared input ids into a single row.
+        packed_ids = inputs_dict["input_ids"][:1]
+        split = packed_ids.shape[1] // 2
+        seq_a, seq_b = packed_ids[:, :split], packed_ids[:, split:]
+        packed_position_ids = torch.cat([torch.arange(split), torch.arange(packed_ids.shape[1] - split)])
+        packed_position_ids = packed_position_ids.unsqueeze(0).to(torch_device)
+
+        with torch.no_grad():
+            packed_logits = model(packed_ids, position_ids=packed_position_ids, use_cache=False).logits
+            logits_a = model(seq_a, use_cache=False).logits
+            logits_b = model(seq_b, use_cache=False).logits
+
+        torch.testing.assert_close(packed_logits[:, :split], logits_a, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(packed_logits[:, split:], logits_b, rtol=1e-4, atol=1e-4)
 
 
 @require_torch

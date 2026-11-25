@@ -266,14 +266,14 @@ class Nemotron3DiarizationSpeakerCache:
 @dataclass
 class Nemotron3DiarizationOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, num_frames, config.head_config.num_speakers)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_frames, config.head_config.num_speakers)`):
         Per-frame speaker activity logits at the spectrogram frame rate. `logits.sigmoid()` gives the probability
         that each speaker is active in each frame; speakers are ordered by their first arrival in the audio.
-    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*, returned when `output_hidden_states=True`):
+    hidden_states (`tuple[torch.Tensor, ...]`, *optional*, returned when `output_hidden_states=True`):
         Encoder hidden states of every chunk, in chunk order: the encoder runs once per chunk, so the tuple holds
         `config.audio_config.num_hidden_layers + 1` tensors per chunk. Their sequence length is the chunk's, cache
         and look-ahead frames included.
-    attentions (`tuple[torch.FloatTensor, ...]`, *optional*, returned when `output_attentions=True`):
+    attentions (`tuple[torch.Tensor, ...]`, *optional*, returned when `output_attentions=True`):
         Encoder attention weights of every chunk, in chunk order, `config.audio_config.num_hidden_layers` tensors
         per chunk.
     speaker_cache (`Nemotron3DiarizationSpeakerCache`, *optional*, returned in streaming mode):
@@ -345,7 +345,6 @@ class Nemotron3DiarizationRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -502,7 +501,7 @@ class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -527,7 +526,6 @@ class Nemotron3DiarizationPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Nemotron3DiarizationAudioLayer"]
-    _skip_keys_device_placement = ["speaker_cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -540,8 +538,8 @@ class Nemotron3DiarizationPreTrainedModel(PreTrainedModel):
     }
     main_input_name = "input_features"
     input_modalities = "audio"
+    _skip_keys_device_placement = ["speaker_cache"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Nemotron3DiarizationForAudioFrameClassification):

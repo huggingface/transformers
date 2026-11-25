@@ -29,6 +29,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import interval
@@ -39,7 +40,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ModelOutputWithPast,
     AudioFlamingo3PreTrainedModel,
 )
-from ..auto import AutoConfig, AutoModelForAudioFrameClassification
+from ..auto import AutoConfig, AutoModel, AutoModelForAudioFrameClassification
 from ..glmasr.modeling_glmasr import apply_rotary_pos_emb, eager_attention_forward
 from ..nemotron3_diarization.configuration_nemotron3_diarization import Nemotron3DiarizationAudioConfig
 from ..nemotron3_diarization.modeling_nemotron3_diarization import (
@@ -185,7 +186,7 @@ class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
     model_type = "nemotron3_5_transcribe_audio"
     base_config_key = "audio_config"
     sub_configs_defaults = {
-        "asr_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_asr_audio"),
+        "asr_config": Nemotron3_5TranscribeAsrAudioConfig,
         "diarization_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="nemotron3_diarization",
@@ -254,7 +255,7 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
 
     model_type = "nemo_speechlm"
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_audio"),
+        "audio_config": Nemotron3_5TranscribeAudioConfig,
         "text_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="nemotron_h",
@@ -272,9 +273,7 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
                 "routed_scaling_factor": 2.5,
             },
         ),
-        "word_timestamp_config": SubConfigSpec(
-            config_class=AutoConfig, model_type="nemotron3_5_transcribe_word_timestamp"
-        ),
+        "word_timestamp_config": Nemotron3_5TranscribeWordTimestampConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -303,18 +302,18 @@ class Nemotron3_5TranscribeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWi
 @dataclass
 class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(num_audio_tokens, text_config.hidden_size)`, *optional*):
+    pooler_output (`torch.Tensor` of shape `(num_audio_tokens, text_config.hidden_size)`, *optional*):
         Projected audio embeddings of the valid encoder frames of every recording, in batch order: the embeddings that
         replace the audio tokens of the prompt. Returned by `get_audio_features`.
-    asr_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
+    asr_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
         Output of the speech recognition encoder, before its normalization and the speaker embeddings: the input of
         [`~Nemotron3_5TranscribeForConditionalGeneration.get_word_timestamp_logits`].
-    speaker_logits (`torch.FloatTensor` of shape `(batch_size, feature_sequence_length, audio_config.num_speakers)`):
+    speaker_logits (`torch.Tensor` of shape `(batch_size, feature_sequence_length, audio_config.num_speakers)`):
         Logits of the diarization model, one frame per spectrogram frame.
     """
 
-    asr_last_hidden_state: torch.FloatTensor | None = None
-    speaker_logits: torch.FloatTensor | None = None
+    asr_last_hidden_state: torch.Tensor | None = None
+    speaker_logits: torch.Tensor | None = None
 
 
 class Nemotron3_5TranscribePreTrainedModel(AudioFlamingo3PreTrainedModel):
@@ -331,7 +330,6 @@ class Nemotron3_5TranscribePreTrainedModel(AudioFlamingo3PreTrainedModel):
         r"^ctc_timestamp\.tokenizer\.model_proto$",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Nemotron3_5TranscribeSpeakerEmbedding):
@@ -462,12 +460,12 @@ class Nemotron3_5TranscribeWordTimestampModel(Nemotron3_5TranscribePreTrainedMod
     @auto_docstring
     def forward(
         self,
-        inputs_embeds: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_frames, hidden_size)`):
             Speech recognition encoder states, before the audio model's `asr_norm` and speaker embeddings.
         attention_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask of the valid encoder frames.
@@ -552,12 +550,12 @@ class Nemotron3_5TranscribeAudioModel(Nemotron3_5TranscribePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_features: torch.FloatTensor,
+        input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Nemotron3_5TranscribeAudioModelOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_sequence_length, num_mel_bins)`):
+        input_features (`torch.Tensor` of shape `(batch_size, feature_sequence_length, num_mel_bins)`):
             Log mel spectrogram, padded to a multiple of `config.subsampling_factor` frames. As in the original, audio
             longer than `config.diarization_config.chunk_length` encoder frames is encoded in chunks with context.
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
@@ -633,10 +631,13 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
 
     def __init__(self, config: Nemotron3_5TranscribeConfig):
         super().__init__(config)
-        self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.audio_tower = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
+        self.multi_modal_projector = nn.Linear(
+            config.audio_config.hidden_size, config.text_config.hidden_size, dtype=torch.float32
+        )
         self.word_timestamp_encoder = Nemotron3_5TranscribeWordTimestampModel(config.word_timestamp_config)
 
-    def _embed_input_ids(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
+    def _embed_input_ids(self, input_ids: torch.LongTensor) -> torch.Tensor:
         # the audio token can be past the language model's vocabulary (NVIDIA's tokenizer appends it): it is looked up
         # as 0, its positions take the audio embeddings
         if self.config.audio_token_id >= self.config.text_config.vocab_size:
@@ -645,15 +646,16 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
+        input_features: torch.Tensor | None = None,
         input_features_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Nemotron3_5TranscribeModelOutputWithPast:
@@ -669,7 +671,7 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
             input_features_mask=input_features_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -682,17 +684,17 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
         """
     )
     def get_word_timestamp_hidden_states(
-        self, asr_last_hidden_state: torch.FloatTensor, input_features_mask: torch.Tensor
-    ) -> torch.FloatTensor:
+        self, asr_last_hidden_state: torch.Tensor, input_features_mask: torch.Tensor
+    ) -> torch.Tensor:
         r"""
-        asr_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
+        asr_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
             Output of the speech recognition encoder before its normalization and the speaker embeddings, as returned
             by [`~Nemotron3_5TranscribeModel.get_audio_features`] for `input_features_mask`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask of the valid spectrogram frames. Padding must be on the right.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_frames * word_timestamp_config.upsampling_factor,
+            `torch.Tensor` of shape `(batch_size, num_frames * word_timestamp_config.upsampling_factor,
             audio_config.hidden_size)`: `upsampling_factor` frames per encoder frame, in the dtype of the word timestamp
             encoder.
         """
@@ -739,17 +741,17 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
         """
     )
     def get_word_timestamp_logits(
-        self, asr_last_hidden_state: torch.FloatTensor, input_features_mask: torch.Tensor
-    ) -> torch.FloatTensor:
+        self, asr_last_hidden_state: torch.Tensor, input_features_mask: torch.Tensor
+    ) -> torch.Tensor:
         r"""
-        asr_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
+        asr_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
             Output of the speech recognition encoder before its normalization and the speaker embeddings, as returned
             by [`~Nemotron3_5TranscribeForConditionalGeneration.get_audio_features`] for `input_features_mask`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask of the valid spectrogram frames. Padding must be on the right.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_frames * word_timestamp_config.upsampling_factor,
+            `torch.Tensor` of shape `(batch_size, num_frames * word_timestamp_config.upsampling_factor,
             word_timestamp_config.vocab_size)`: raw logits over the pieces of the alignment tokenizer and the blank,
             `upsampling_factor` frames per encoder frame (the processor applies the log-softmax).
         """
@@ -797,7 +799,8 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
         )
 
     @staticmethod
-    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, cache, position_ids=None, **_):
         # TODO: @eustlb, remove once `masking_utils.create_masks_for_generate` skips the layers without attention
         # (Nemotron-H `moe` / `mlp`), which also removes `NemotronHForCausalLM.create_masks_for_generate`
         # as `NemotronHForCausalLM`: the default dispatch does not know the Nemotron-H `moe` layer type, so both masks
@@ -806,7 +809,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
             "config": config.get_text_config(),
             "inputs_embeds": inputs_embeds,
             "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
+            "cache": cache,
             "position_ids": position_ids,
         }
         return {

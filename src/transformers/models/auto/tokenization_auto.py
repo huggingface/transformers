@@ -114,6 +114,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("dia", "DiaTokenizer"),
         ("diffusion_gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("distilbert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("dots3_note", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("dpr", "DPRQuestionEncoderTokenizer" if is_tokenizers_available() else None),
         ("electra", "BertTokenizer" if is_tokenizers_available() else None),
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
@@ -230,6 +231,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         (
+            "mistral_large4",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),  # TODO: needed?
+        (
             "mixtral",
             "MistralCommonBackend"
             if is_mistral_common_available()
@@ -262,6 +269,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("olmo_hybrid", "TokenizersBackend" if is_tokenizers_available() else None),
         ("olmoe", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("omdet-turbo", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("omniasr", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("omniasr_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("oneformer", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("openai-gpt", "OpenAIGPTTokenizer" if is_tokenizers_available() else None),
         ("opt", "GPT2Tokenizer" if is_tokenizers_available() else None),
@@ -391,6 +400,8 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "hyperclovax_vlm",
     "hyperclovax_vision_v2",
     "internlm2",
+    "internlm3",
+    "iquestcoder",
     "jamba",
     "llava",
     "llava_next",
@@ -839,6 +850,8 @@ class AutoTokenizer:
             and _hub_declared_class is not None
             and _hub_declared_class.removesuffix("Fast") == "LlamaTokenizer"
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type) or "").removesuffix("Fast") != "MistralCommonBackend"
+            and config_model_type not in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+            and config_model_name not in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
             and TokenizersBackend._tokenizer_json_has_byte_level(pretrained_model_name_or_path, **kwargs)
         ):
             logger.warning_once(

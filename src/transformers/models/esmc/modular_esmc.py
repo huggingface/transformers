@@ -97,7 +97,6 @@ class EsmcConfig(LlamaConfig):
     rms_norm_eps = AttributeError()
     pretraining_tp = AttributeError()
     use_cache = AttributeError()
-    keys_to_ignore_at_inference = AttributeError()
 
     def __post_init__(self, **kwargs):
         # The special-token ids are fixed by the vocabulary every checkpoint shares (`<cls>`=0 doubles

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 
 import torch
@@ -23,10 +22,11 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
+from ...modeling_rope_utils import RopeParameters, dynamic_rope_update, yarn_apply_mscale
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -75,9 +75,6 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -92,7 +89,6 @@ class DeepseekV2Config(LlamaConfig):
     }
 
     model_type = "deepseek_v2"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_experts": "n_routed_experts",
     }
@@ -168,6 +164,7 @@ class DeepseekV2TopkRouter(Qwen2MoeTopKRouter):
         self.topk_method = config.topk_method
         self.num_group = config.n_group
         self.topk_group = config.topk_group
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
@@ -223,7 +220,6 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
 
 
 class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -231,21 +227,6 @@ class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
         freqs_cis = freqs_cis * self.attention_scaling
 
         return freqs_cis
-
-
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
 
 
 class DeepseekV2Attention(nn.Module):
@@ -325,11 +306,12 @@ class DeepseekV2Attention(nn.Module):
         key_states[..., self.qk_nope_head_dim :].copy_(k_rot)
         return key_states, value_states
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -352,8 +334,8 @@ class DeepseekV2Attention(nn.Module):
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         # Cache read / write is performed while the latent KV is still compressed
-        if past_key_values is not None:
-            k_nope, k_pe = past_key_values.update(k_nope, k_pe, self.layer_idx)
+        if cache is not None:
+            k_nope, k_pe = cache.update(k_nope, k_pe, self.layer_idx, kwargs=kwargs)
 
         query_states = torch.cat((q_nope, q_pe), dim=-1)
 
@@ -396,8 +378,8 @@ class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
         "attentions": DeepseekV2Attention,
         "router_logits": OutputRecorder(DeepseekV2TopkRouter, index=0),
     }
+    _keep_in_fp32_modules_strict = ["gate.weight"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, DeepseekV2TopkRouter):
@@ -414,13 +396,14 @@ class DeepseekV2Model(OlmoeModel):
 class DeepseekV2ForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -430,7 +413,7 @@ class DeepseekV2ForCausalLM(LlamaForCausalLM):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -448,7 +431,7 @@ class DeepseekV2ForCausalLM(LlamaForCausalLM):
         return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,

@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Chat models are conversational models you can send a message to and receive a response. Most language models from mid-2023 onwards are chat models and may be referred to as "instruct" or "instruction-tuned" models. Models that do not support chat are often referred to as "base" or "pretrained" models.
 
-Larger and newer models are generally more capable, but models specialized in certain domains (medical, legal text, non-English languages, etc.) can often outperform these larger models. Try leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_llm_leaderboard) and [LMSys Chatbot Arena](https://chat.lmsys.org/?leaderboard) to help you identify the best model for your use case.
+Larger and newer models are generally more capable, but models specialized in certain domains (medical, legal text, non-English languages, etc.) can often outperform these larger models. Try leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_llm_leaderboard) and [LMArena](https://lmarena.ai/leaderboard) to help you identify the best model for your use case.
 
 This guide shows you how to quickly load chat models in Transformers from the command line, how to build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
 
@@ -96,7 +96,7 @@ or you run out of memory.
 
 ## Performance and memory usage
 
-Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `torch_dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
+Transformers load models in full `float32` precision by default, and for a 8B model, this requires ~32GB of memory! Use the `dtype="auto"` argument, which generally uses `bfloat16` for models that were trained with it, to reduce your memory usage.
 
 > [!TIP]
 > Refer to the [Quantization](./quantization/overview) docs for more information about the different quantization backends available.

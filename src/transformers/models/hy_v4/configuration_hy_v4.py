@@ -57,7 +57,6 @@ class HYV4Config(PreTrainedConfig):
     """
 
     model_type = "hy_v4"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -68,9 +67,7 @@ class HYV4Config(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.sinks": "colwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -84,10 +81,9 @@ class HYV4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 120832
