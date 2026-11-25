@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 from safetensors import safe_open
 
-from .cache_utils import Cache
+from .cache_utils import Cache, KVSharingDict
 from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import WeightRenaming, convert_and_load_state_dict_in_model
 from .masking_utils import LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING, create_causal_mask
@@ -120,7 +120,21 @@ class GradientCheckpointingLayer(nn.Module):
                     message = message.rstrip(",") + "."
                     logger.warning_once(message)
 
-                return self._gradient_checkpointing_func(partial(forward, self, **kwargs), *args)
+                states = {}
+                for key, value in kwargs.items():
+                    if isinstance(value, KVSharingDict):
+                        states[key] = (value, dict(value))
+                        kwargs[key] = KVSharingDict(value)
+
+                output = self._gradient_checkpointing_func(partial(forward, self, **kwargs), *args)
+
+                for key, (shared, states_before) in states.items():
+                    layer_states = kwargs[key]
+                    shared.update(layer_states)
+                    layer_states.clear()
+                    layer_states.update(states_before)
+
+                return output
             return forward(self, *args, **kwargs)
 
         cls.forward = forward_with_checkpointing
