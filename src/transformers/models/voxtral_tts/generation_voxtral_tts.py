@@ -49,7 +49,7 @@ class VoxtralTtsGenerationMixin:
         attention_mask: torch.Tensor | None = None,
         max_new_frames: int = 2000,
         cfg_alpha: float = 1.2,
-        generator: torch.Generator | None = None,
+        generator: torch.Generator | list[torch.Generator] | None = None,
         output_audio: bool = True,
         codec_chunk_size: int | None = 375,
         **kwargs,
@@ -72,8 +72,10 @@ class VoxtralTtsGenerationMixin:
                 Maximum number of audio frames to generate (one frame is 80 ms of audio).
             cfg_alpha (`float`, *optional*, defaults to 1.2):
                 Classifier-free guidance scale of the flow-matching velocity.
-            generator (`torch.Generator`, *optional*):
-                Random generator for the flow-matching noise, for reproducible generations.
+            generator (`torch.Generator` or `list[torch.Generator]`, *optional*):
+                Random generator(s) for the flow-matching noise, for reproducible generations. With one generator per
+                batch element, each sequence draws its noise from its own generator, so its audio does not depend on
+                the other sequences of the batch (up to numerical precision).
             output_audio (`bool`, *optional*, defaults to `True`):
                 Whether to decode the generated codes into waveforms with the codec.
             codec_chunk_size (`int`, *optional*, defaults to 375):
@@ -89,6 +91,8 @@ class VoxtralTtsGenerationMixin:
 
         batch_size = input_ids.shape[0]
         device = input_ids.device
+        if isinstance(generator, (list, tuple)) and len(generator) != batch_size:
+            raise ValueError(f"Got {len(generator)} generators for a batch of {batch_size} sequences.")
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         position_ids = (attention_mask.long().cumsum(-1) - 1).clamp(min=0)
@@ -105,24 +109,34 @@ class VoxtralTtsGenerationMixin:
         last_hidden_state = outputs.last_hidden_state[:, -1]
         next_position_ids = position_ids[:, -1:] + 1
 
+        num_codebooks = self.config.num_codebooks
         frames = []
-        finished = torch.zeros(batch_size, dtype=torch.bool, device=device)
         audio_lengths = torch.zeros(batch_size, dtype=torch.long, device=device)
+        # Rows of the batch still generating: finished rows are dropped from the cache and every per-row tensor
+        active_rows = list(range(batch_size))
         for _ in range(max_new_frames):
-            frame = self.acoustic_transformer.generate_frame(
-                last_hidden_state, cfg_alpha=cfg_alpha, generator=generator
+            noise = self._sample_flow_matching_noise(generator, active_rows, device)
+            active_frame = self.acoustic_transformer.generate_frame(
+                last_hidden_state, cfg_alpha=cfg_alpha, noise=noise
             )
-            frame[finished] = EMPTY_AUDIO_TOKEN
+            frame = active_frame.new_full((batch_size, num_codebooks), EMPTY_AUDIO_TOKEN)
+            frame[active_rows] = active_frame
             frames.append(frame)
-            just_finished = (frame[:, 0] == END_AUDIO_TOKEN) & ~finished
-            audio_lengths += (~finished & ~just_finished).long()
-            finished |= just_finished
-            if finished.all():
-                break
 
-            attention_mask = torch.cat([attention_mask, attention_mask.new_ones((batch_size, 1))], dim=-1)
+            ended = (active_frame[:, 0] == END_AUDIO_TOKEN).tolist()
+            audio_lengths[[row for row, row_ended in zip(active_rows, ended) if not row_ended]] += 1
+            if all(ended):
+                break
+            if any(ended):
+                keep = [i for i, row_ended in enumerate(ended) if not row_ended]
+                cache.batch_select_indices(torch.tensor(keep, device=device))
+                active_rows = [active_rows[i] for i in keep]
+                active_frame, attention_mask = active_frame[keep], attention_mask[keep]
+                next_position_ids = next_position_ids[keep]
+
+            attention_mask = torch.cat([attention_mask, attention_mask.new_ones((len(active_rows), 1))], dim=-1)
             outputs = self.model(
-                audio_codes=frame[:, None],
+                audio_codes=active_frame[:, None],
                 attention_mask=attention_mask,
                 position_ids=next_position_ids,
                 cache=cache,
@@ -154,3 +168,20 @@ class VoxtralTtsGenerationMixin:
             audio = [audio_values[i, : int(audio_lengths[i]) * hop_length] for i in range(batch_size)]
 
         return VoxtralTtsGenerateOutput(audio=audio, audio_codes=audio_codes, audio_lengths=audio_lengths)
+
+    def _sample_flow_matching_noise(
+        self,
+        generator: torch.Generator | list[torch.Generator] | None,
+        active_rows: list[int],
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Initial acoustic latents (in float32) of the rows still generating."""
+        num_acoustic_codebooks = self.config.acoustic_transformer_config.num_acoustic_codebooks
+        if isinstance(generator, (list, tuple)):
+            noise = [
+                torch.randn(num_acoustic_codebooks, generator=generator[row], device=generator[row].device)
+                for row in active_rows
+            ]
+            return torch.stack([row_noise.to(device) for row_noise in noise])
+        noise_device = generator.device if generator is not None else device
+        return torch.randn((len(active_rows), num_acoustic_codebooks), generator=generator, device=noise_device)

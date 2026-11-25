@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Voxtral TTS model."""
 
+import copy
 import unittest
 from unittest import mock
 
@@ -285,6 +286,79 @@ class VoxtralTtsModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue((outputs.audio_lengths == 0).all())
         self.assertTrue(all(audio.numel() == 0 for audio in outputs.audio))
 
+    def _semantic_logits_forcing(self, model, end_rows_per_call):
+        """Patches the semantic head: call `i` forces `[END_AUDIO]` for the rows in `end_rows_per_call[i]` and forbids it
+        for every other row. Also records the batch size of every call."""
+        semantic_head = model.acoustic_transformer.get_semantic_logits
+        batch_sizes = []
+
+        def get_semantic_logits(hidden_states):
+            logits = semantic_head(hidden_states)
+            end_rows = end_rows_per_call[len(batch_sizes)] if len(batch_sizes) < len(end_rows_per_call) else []
+            batch_sizes.append(hidden_states.shape[0])
+            logits[..., 1] = logits.min() - 1
+            for row in end_rows:
+                logits[row, 1] = logits[row].max() + 1
+            return logits
+
+        return mock.patch.object(model.acoustic_transformer, "get_semantic_logits", get_semantic_logits), batch_sizes
+
+    def test_generate_with_per_row_generators_is_batch_invariant(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_with_voice()
+        model = VoxtralTtsForTextToSpeech(config).to(torch_device).eval()
+        num_voice = self.model_tester.num_voice_tokens
+        # Row 0 has 2 fewer text tokens, so it is left-padded in the batch
+        short_row = torch.cat([inputs["input_ids"][0, : 2 + num_voice], inputs["input_ids"][0, 4 + num_voice :]])
+        rows = [short_row, inputs["input_ids"][1]]
+        inputs["input_ids"][0] = torch.cat([torch.full((2,), self.model_tester.pad_token_id), short_row.cpu()])
+        inputs["attention_mask"][0, :2] = 0
+
+        generators = [torch.Generator(torch_device).manual_seed(seed) for seed in (1, 2)]
+        batched = model.generate(**inputs, max_new_frames=4, generator=generators)
+        for row, seed in enumerate((1, 2)):
+            single = model.generate(
+                input_ids=rows[row][None],
+                voice_embeddings=inputs["voice_embeddings"][row * num_voice : (row + 1) * num_voice],
+                max_new_frames=4,
+                generator=[torch.Generator(torch_device).manual_seed(seed)],
+            )
+            # The batch runs until its longest sequence ends: later frames of a finished row are `[EMPTY_AUDIO]`
+            num_frames = single.audio_codes.shape[1]
+            torch.testing.assert_close(batched.audio_codes[row : row + 1, :num_frames], single.audio_codes)
+            self.assertTrue((batched.audio_codes[row, num_frames:] == 0).all())
+            torch.testing.assert_close(batched.audio[row], single.audio[0], rtol=1e-4, atol=1e-4)
+
+        with self.assertRaisesRegex(ValueError, "1 generators for a batch of 2"):
+            model.generate(**inputs, max_new_frames=1, generator=generators[:1])
+
+    def test_generate_drops_finished_rows(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_with_voice()
+        model = VoxtralTtsForTextToSpeech(config).to(torch_device).eval()
+        # Row 0 ends at the first frame, row 1 never ends
+        patch, batch_sizes = self._semantic_logits_forcing(model, end_rows_per_call=[[0]])
+        with patch:
+            outputs = model.generate(
+                **inputs, max_new_frames=4, generator=[torch.Generator(torch_device).manual_seed(s) for s in (1, 2)]
+            )
+        # Once row 0 has ended, only row 1 goes through the model
+        self.assertEqual(batch_sizes, [2, 1, 1, 1])
+        self.assertEqual(outputs.audio_lengths.tolist(), [0, 4])
+        self.assertEqual(int(outputs.audio_codes[0, 0, 0]), 1)
+        self.assertTrue((outputs.audio_codes[0, 1:] == 0).all())
+        self.assertEqual(outputs.audio[0].numel(), 0)
+
+        # Row 1 is not affected by row 0 ending
+        num_voice = self.model_tester.num_voice_tokens
+        patch, _ = self._semantic_logits_forcing(model, end_rows_per_call=[])
+        with patch:
+            single = model.generate(
+                input_ids=inputs["input_ids"][1:],
+                voice_embeddings=inputs["voice_embeddings"][num_voice:],
+                max_new_frames=4,
+                generator=[torch.Generator(torch_device).manual_seed(2)],
+            )
+        torch.testing.assert_close(outputs.audio_codes[1:], single.audio_codes)
+
     def test_acoustic_transformer_frame_codes(self):
         config = self.model_tester.get_config()
         model = VoxtralTtsForTextToSpeech(config).to(torch_device).eval()
@@ -315,6 +389,225 @@ class VoxtralTtsModelTest(ModelTesterMixin, unittest.TestCase):
             prefix = codec.decode(codes[:, :7]).audio_values
         self.assertEqual(full.shape, (2, 12 * codec_config.hop_length))
         torch.testing.assert_close(full[:, : prefix.shape[1]], prefix, rtol=1e-4, atol=1e-4)
+
+
+@require_torch
+class VoxtralTtsConversionTest(unittest.TestCase):
+    """Converts a tiny checkpoint laid out as the original (Mistral-format) one."""
+
+    # Same structure as the released `params.json`, with tiny dimensions
+    params = {
+        "dim": 32, "n_layers": 2, "head_dim": 8, "hidden_dim": 64, "n_heads": 4, "n_kv_heads": 2,
+        "rope_theta": 1000000.0, "norm_eps": 1e-05, "vocab_size": 64, "tied_embeddings": True,
+        "max_position_embeddings": 512,
+        "multimodal": {
+            "bos_token_id": 1,
+            "audio_model_args": {
+                "semantic_codebook_size": 30, "acoustic_codebook_size": 5, "n_acoustic_codebook": 4,
+                "audio_token_id": 24, "begin_audio_token_id": 25,
+                "acoustic_transformer_args": {
+                    "input_dim": 32, "dim": 32, "n_layers": 1, "head_dim": 8, "hidden_dim": 64, "n_heads": 4,
+                    "n_kv_heads": 2,
+                },
+            },
+            "audio_tokenizer_args": {
+                "channels": 1, "sampling_rate": 24000, "pretransform_patch_size": 4, "patch_proj_kernel_size": 3,
+                "semantic_codebook_size": 30, "semantic_dim": 8, "acoustic_codebook_size": 5, "acoustic_dim": 4,
+                "causal": True, "attn_sliding_window_size": 4, "half_attn_window_upon_downsampling": True,
+                "dim": 16, "hidden_dim": 32, "head_dim": 8, "n_heads": 2, "n_kv_heads": 2, "qk_norm_eps": 1e-06,
+                "norm_eps": 0.01, "layer_scale_init": 0.01, "decoder_transformer_lengths_str": "1,1",
+                "decoder_convs_kernels_str": "3,4", "decoder_convs_strides_str": "1,2",
+            },
+        },
+    }  # fmt: skip
+
+    def original_state_dict(self):
+        generator = torch.Generator().manual_seed(0)
+
+        def randn(*shape):
+            return torch.randn(*shape, generator=generator)
+
+        p = self.params
+        audio_args = p["multimodal"]["audio_model_args"]
+        at, codec = audio_args["acoustic_transformer_args"], p["multimodal"]["audio_tokenizer_args"]
+
+        def transformer_layer(prefix, dim, n_heads, n_kv_heads, head_dim, hidden_dim):
+            return {
+                f"{prefix}.attention.wq.weight": randn(n_heads * head_dim, dim),
+                f"{prefix}.attention.wk.weight": randn(n_kv_heads * head_dim, dim),
+                f"{prefix}.attention.wv.weight": randn(n_kv_heads * head_dim, dim),
+                f"{prefix}.attention.wo.weight": randn(dim, n_heads * head_dim),
+                f"{prefix}.attention_norm.weight": randn(dim),
+                f"{prefix}.ffn_norm.weight": randn(dim),
+                f"{prefix}.feed_forward.w1.weight": randn(hidden_dim, dim),
+                f"{prefix}.feed_forward.w2.weight": randn(dim, hidden_dim),
+                f"{prefix}.feed_forward.w3.weight": randn(hidden_dim, dim),
+            }
+
+        def weight_norm_conv(prefix, out_channels, in_channels, kernel_size, transpose=False):
+            # `weight_norm` (dim=0) keeps one gain per output channel of a Conv1d, per input channel of a transpose
+            weight_shape = (
+                (in_channels, out_channels, kernel_size) if transpose else (out_channels, in_channels, kernel_size)
+            )
+            return {
+                f"{prefix}.conv.parametrizations.weight.original0": randn(weight_shape[0], 1, 1).abs(),
+                f"{prefix}.conv.parametrizations.weight.original1": randn(*weight_shape),
+            }
+
+        num_special = 2
+        audio_vocab = 128 * -(-(audio_args["semantic_codebook_size"] + num_special + (audio_args["acoustic_codebook_size"] + num_special) * audio_args["n_acoustic_codebook"]) // 128)  # fmt: skip
+        state_dict = {
+            "mm_audio_embeddings.tok_embeddings.weight": randn(p["vocab_size"], p["dim"]),
+            "mm_audio_embeddings.audio_codebook_embeddings.embeddings.weight": randn(audio_vocab, p["dim"]),
+            "norm.weight": randn(p["dim"]),
+            "acoustic_transformer.llm_projection.weight": randn(at["dim"], at["input_dim"]),
+            "acoustic_transformer.time_projection.weight": randn(at["dim"], at["dim"]),
+            "acoustic_transformer.input_projection.weight": randn(at["dim"], audio_args["n_acoustic_codebook"]),
+            "acoustic_transformer.semantic_codebook_output.weight": randn(128, at["dim"]),
+            "acoustic_transformer.acoustic_codebook_output.weight": randn(audio_args["n_acoustic_codebook"], at["dim"]),
+            "acoustic_transformer.norm.weight": randn(at["dim"]),
+            "audio_tokenizer.quantizer.semantic_codebook.cluster_usage": randn(codec["semantic_codebook_size"]).abs(),
+            "audio_tokenizer.quantizer.semantic_codebook.embedding_sum": randn(codec["semantic_codebook_size"], codec["semantic_dim"]),
+        }  # fmt: skip
+        for i in range(p["n_layers"]):
+            state_dict.update(
+                transformer_layer(
+                    f"layers.{i}", p["dim"], p["n_heads"], p["n_kv_heads"], p["head_dim"], p["hidden_dim"]
+                )
+            )
+        for i in range(at["n_layers"]):
+            state_dict.update(
+                transformer_layer(
+                    f"acoustic_transformer.layers.{i}", at["dim"], at["n_heads"], at["n_kv_heads"], at["head_dim"], at["hidden_dim"]
+                )
+            )  # fmt: skip
+        # Decoder blocks alternate an (up)sampling convolution and transformer layers
+        kernels = [int(k) for k in codec["decoder_convs_kernels_str"].split(",")]
+        latent_dim = codec["semantic_dim"] + codec["acoustic_dim"]
+        for stage, num_layers in enumerate(int(n) for n in codec["decoder_transformer_lengths_str"].split(",")):
+            in_channels = latent_dim if stage == 0 else codec["dim"]
+            state_dict.update(
+                weight_norm_conv(f"audio_tokenizer.decoder_blocks.{2 * stage}", codec["dim"], in_channels, kernels[stage], transpose=stage > 0)
+            )  # fmt: skip
+            for j in range(num_layers):
+                prefix = f"audio_tokenizer.decoder_blocks.{2 * stage + 1}.layers.{j}"
+                state_dict.update(
+                    transformer_layer(prefix, codec["dim"], codec["n_heads"], codec["n_kv_heads"], codec["head_dim"], codec["hidden_dim"])
+                )  # fmt: skip
+                state_dict[f"{prefix}.attention.q_norm.weight"] = randn(codec["n_heads"] * codec["head_dim"])
+                state_dict[f"{prefix}.attention.k_norm.weight"] = randn(codec["n_kv_heads"] * codec["head_dim"])
+                state_dict[f"{prefix}.attention_scale"] = randn(codec["dim"])
+                state_dict[f"{prefix}.ffn_scale"] = randn(codec["dim"])
+        state_dict.update(
+            weight_norm_conv(
+                "audio_tokenizer.output_proj", codec["pretransform_patch_size"], codec["dim"], codec["patch_proj_kernel_size"]
+            )
+        )  # fmt: skip
+        return state_dict
+
+    def convert(self):
+        from transformers.models.voxtral_tts.convert_voxtral_tts_weights_to_hf import (
+            convert_config,
+            convert_state_dict,
+        )
+
+        config = convert_config(copy.deepcopy(self.params))
+        original_state_dict = self.original_state_dict()
+        return config, original_state_dict, convert_state_dict(original_state_dict, config)
+
+    def test_converted_state_dict_loads_strictly(self):
+        config, _, state_dict = self.convert()
+        self.assertEqual(config.audio_vocab_size, 128)
+        self.assertEqual(config.acoustic_transformer_config.num_flow_matching_steps, 7)
+        self.assertEqual(config.codec_config.hop_length, 8)
+        model = VoxtralTtsForTextToSpeech(config)
+        model.load_state_dict(state_dict, strict=True)
+
+    def test_tensors_are_mapped_to_the_right_parameters(self):
+        # Tensors of the same shape are easy to swap: every original tensor is distinct random data, so equality pins
+        # each mapping rule down
+        _, original, state_dict = self.convert()
+        expected_mapping = {
+            "mm_audio_embeddings.tok_embeddings.weight": "model.language_model.embed_tokens.weight",
+            "mm_audio_embeddings.audio_codebook_embeddings.embeddings.weight": "model.audio_embeddings.embed_audio_tokens.weight",
+            "layers.1.attention.wv.weight": "model.language_model.layers.1.self_attn.v_proj.weight",
+            "layers.1.attention.wo.weight": "model.language_model.layers.1.self_attn.o_proj.weight",
+            "layers.1.attention_norm.weight": "model.language_model.layers.1.input_layernorm.weight",
+            "layers.1.ffn_norm.weight": "model.language_model.layers.1.post_attention_layernorm.weight",
+            "layers.1.feed_forward.w1.weight": "model.language_model.layers.1.mlp.gate_proj.weight",
+            "layers.1.feed_forward.w3.weight": "model.language_model.layers.1.mlp.up_proj.weight",
+            "norm.weight": "model.language_model.norm.weight",
+            "acoustic_transformer.layers.0.attention.wq.weight": "acoustic_transformer.layers.0.self_attn.q_proj.weight",
+            "acoustic_transformer.layers.0.attention.wk.weight": "acoustic_transformer.layers.0.self_attn.k_proj.weight",
+            "acoustic_transformer.llm_projection.weight": "acoustic_transformer.llm_projection.weight",
+            "acoustic_transformer.time_projection.weight": "acoustic_transformer.time_projection.weight",
+            "acoustic_transformer.semantic_codebook_output.weight": "acoustic_transformer.semantic_head.weight",
+            "acoustic_transformer.acoustic_codebook_output.weight": "acoustic_transformer.acoustic_head.weight",
+            "audio_tokenizer.decoder_blocks.1.layers.0.attention.q_norm.weight": "codec_model.stages.0.layers.0.self_attn.q_norm.weight",
+            "audio_tokenizer.decoder_blocks.1.layers.0.attention.k_norm.weight": "codec_model.stages.0.layers.0.self_attn.k_norm.weight",
+            "audio_tokenizer.decoder_blocks.3.layers.0.attention.wq.weight": "codec_model.stages.1.layers.0.self_attn.q_proj.weight",
+            "audio_tokenizer.decoder_blocks.3.layers.0.attention_norm.weight": "codec_model.stages.1.layers.0.input_layernorm.weight",
+            "audio_tokenizer.decoder_blocks.3.layers.0.attention_scale": "codec_model.stages.1.layers.0.self_attn_layer_scale",
+            "audio_tokenizer.decoder_blocks.3.layers.0.ffn_scale": "codec_model.stages.1.layers.0.mlp_layer_scale",
+            "audio_tokenizer.decoder_blocks.3.layers.0.feed_forward.w2.weight": "codec_model.stages.1.layers.0.mlp.down_proj.weight",
+            "audio_tokenizer.quantizer.semantic_codebook.cluster_usage": "codec_model.quantizer.cluster_usage",
+            "audio_tokenizer.quantizer.semantic_codebook.embedding_sum": "codec_model.quantizer.embedding_sum",
+        }  # fmt: skip
+        for original_key, new_key in expected_mapping.items():
+            with self.subTest(original_key):
+                torch.testing.assert_close(state_dict[new_key], original[original_key], rtol=0, atol=0)
+
+    def test_rope_permutation_matches_interleaved_rope(self):
+        config, original, state_dict = self.convert()
+        model = VoxtralTtsForTextToSpeech(config).eval()
+        model.load_state_dict(state_dict, strict=True)
+        text_config, seq_len = config.text_config, 6
+        n_heads, n_kv_heads, head_dim = text_config.num_attention_heads, text_config.num_key_value_heads, 8
+        hidden_states = torch.randn(seq_len, text_config.hidden_size, generator=torch.Generator().manual_seed(1))
+
+        # Original formulation: RoPE rotates interleaved pairs of dimensions (mistral-inference)
+        freqs = 1.0 / (text_config.rope_parameters["rope_theta"] ** (torch.arange(0, head_dim, 2).float() / head_dim))
+        freqs_cis = torch.polar(torch.ones(seq_len, head_dim // 2), torch.outer(torch.arange(seq_len).float(), freqs))
+
+        def interleaved_rope(x):
+            x = torch.view_as_complex(x.reshape(*x.shape[:-1], -1, 2))
+            return torch.view_as_real(x * freqs_cis[:, None]).flatten(-2)
+
+        query = interleaved_rope(
+            (hidden_states @ original["layers.0.attention.wq.weight"].T).view(seq_len, n_heads, head_dim)
+        )
+        key = interleaved_rope(
+            (hidden_states @ original["layers.0.attention.wk.weight"].T).view(seq_len, n_kv_heads, head_dim)
+        )
+        expected_scores = torch.einsum("qhd,khd->hqk", query, key.repeat_interleave(n_heads // n_kv_heads, dim=1))  # fmt: skip
+
+        language_model = model.model.language_model
+        attention = language_model.layers[0].self_attn
+        position_ids = torch.arange(seq_len)[None]
+        cos, sin = language_model.rotary_emb(hidden_states[None], position_ids=position_ids)
+        hf_query = attention.q_proj(hidden_states).view(1, seq_len, n_heads, head_dim).transpose(1, 2)
+        hf_key = attention.k_proj(hidden_states).view(1, seq_len, n_kv_heads, head_dim).transpose(1, 2)
+        rotate_half = lambda x: torch.cat([-x[..., head_dim // 2 :], x[..., : head_dim // 2]], dim=-1)  # noqa: E731
+        hf_query = hf_query * cos[:, None] + rotate_half(hf_query) * sin[:, None]
+        hf_key = hf_key * cos[:, None] + rotate_half(hf_key) * sin[:, None]
+        hf_scores = torch.einsum("hqd,hkd->hqk", hf_query[0], hf_key[0].repeat_interleave(n_heads // n_kv_heads, dim=0))  # fmt: skip
+        torch.testing.assert_close(hf_scores, expected_scores, rtol=1e-4, atol=1e-4)
+
+    def test_weight_norm_is_folded(self):
+        _, original, state_dict = self.convert()
+        for original_prefix, new_key, conv in [
+            ("audio_tokenizer.decoder_blocks.0", "codec_model.stages.0.conv.weight", torch.nn.Conv1d(12, 16, 3)),
+            ("audio_tokenizer.decoder_blocks.2", "codec_model.stages.1.conv.weight", torch.nn.ConvTranspose1d(16, 16, 4)),
+            ("audio_tokenizer.output_proj", "codec_model.output_proj.weight", torch.nn.Conv1d(16, 4, 3)),
+        ]:  # fmt: skip
+            conv = torch.nn.utils.parametrizations.weight_norm(conv)
+            conv.parametrizations.weight.original0.data = original[
+                f"{original_prefix}.conv.parametrizations.weight.original0"
+            ]
+            conv.parametrizations.weight.original1.data = original[
+                f"{original_prefix}.conv.parametrizations.weight.original1"
+            ]
+            torch.testing.assert_close(state_dict[new_key], conv.weight.detach())
 
 
 @slow
