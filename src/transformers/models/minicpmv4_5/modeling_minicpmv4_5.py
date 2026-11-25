@@ -581,7 +581,7 @@ class MiniCPMV4_5Model(MiniCPMV4_5PreTrainedModel):
             Which patches of `pixel_values_videos` are real (`True`) rather than padding.
         patch_position_ids_videos (`torch.LongTensor` of shape `(num_frame_slices, max_patches, 2)`, *optional*):
             `(row, col)` of each patch in its frame slice's patch grid.
-        temporal_ids (`torch.LongTensor` of shape `(num_groups, max_frames)`, *optional*):
+        temporal_ids (`torch.LongTensor` of shape `(num_groups * num_slices, max_frames)`, *optional*):
             Timestamp of each frame of each (group, slice), in 0.1 s steps; -1 pads shorter groups.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -648,7 +648,7 @@ class MiniCPMV4_5Model(MiniCPMV4_5PreTrainedModel):
             Which patches are real (`True`) rather than padding.
         patch_position_ids_videos (`torch.LongTensor` of shape `(num_frame_slices, max_patches, 2)`):
             `(row, col)` of each patch in its slice's patch grid.
-        temporal_ids (`torch.LongTensor` of shape `(num_groups, max_frames)`):
+        temporal_ids (`torch.LongTensor` of shape `(num_groups * num_slices, max_frames)`):
             Timestamp of each frame of each (group, slice), in 0.1 s steps; -1 pads shorter groups.
         """
         vision_outputs = self.vision_tower(
@@ -741,7 +741,7 @@ class MiniCPMV4_5ForConditionalGeneration(MiniCPMV4_5PreTrainedModel, Generation
             Which patches of `pixel_values_videos` are real (`True`) rather than padding.
         patch_position_ids_videos (`torch.LongTensor` of shape `(num_frame_slices, max_patches, 2)`, *optional*):
             `(row, col)` of each patch in its frame slice's patch grid.
-        temporal_ids (`torch.LongTensor` of shape `(num_groups, max_frames)`, *optional*):
+        temporal_ids (`torch.LongTensor` of shape `(num_groups * num_slices, max_frames)`, *optional*):
             Timestamp of each frame of each (group, slice), in 0.1 s steps; -1 pads shorter groups.
 
         Example:
@@ -822,7 +822,7 @@ class MiniCPMV4_5ForConditionalGeneration(MiniCPMV4_5PreTrainedModel, Generation
             Which patches are real (`True`) rather than padding.
         patch_position_ids_videos (`torch.LongTensor` of shape `(num_frame_slices, max_patches, 2)`):
             `(row, col)` of each patch in its slice's patch grid.
-        temporal_ids (`torch.LongTensor` of shape `(num_groups, max_frames)`):
+        temporal_ids (`torch.LongTensor` of shape `(num_groups * num_slices, max_frames)`):
             Timestamp of each frame of each (group, slice), in 0.1 s steps; -1 pads shorter groups.
         """
         return self.model.get_video_features(

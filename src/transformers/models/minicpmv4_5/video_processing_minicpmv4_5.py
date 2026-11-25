@@ -88,8 +88,6 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     do_convert_rgb = True
-    # Frames are sliced like MiniCPM-V 2.5 images (sizes rounded to the patch size); groups of consecutive frames are
-    # packed so that the resampler compresses each group, with each frame's timestamp, into one set of tokens.
     max_slice_nums = 1
     scale_resolution = 448
     patch_size = 14
