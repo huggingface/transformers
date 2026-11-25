@@ -21,7 +21,7 @@ from inspect import isfunction, ismethod
 from typing import Any
 
 from ..chat_template_utils import get_json_schema
-from .content_parsers import STREAMABLE_PARSERS, process_field
+from .content_parsers import STREAMABLE_PARSERS, TYPED_STRUCTURED_PARSERS, process_field
 from .response_templates import ResponseTemplate, ResponseTemplateField, load_response_template
 
 
@@ -378,7 +378,7 @@ class ResponseParser:
         field = self._spec.fields[self._current]
         value = process_field(self._body, field, self._captures)
         if self._tool_params:
-            value = self._coerce_tool_calls(value)
+            value = self._coerce_tool_calls(value, typed=field.content in TYPED_STRUCTURED_PARSERS)
         if field.join is not None:
             if not isinstance(value, str):
                 raise ValueError(
@@ -394,9 +394,9 @@ class ResponseParser:
         events.append({"type": "region_close", "field": self._current, "value": value})
         self._reset_to_implicit()
 
-    def _coerce_tool_calls(self, value: Any) -> Any:
+    def _coerce_tool_calls(self, value: Any, *, typed: bool = False) -> Any:
         if isinstance(value, list):
-            return [self._coerce_tool_calls(item) for item in value]
+            return [self._coerce_tool_calls(item, typed=typed) for item in value]
         fn = value.get("function") if isinstance(value, dict) else None
         if not isinstance(fn, dict):
             return value
@@ -406,6 +406,8 @@ class ResponseParser:
         if properties := self._tool_params.get(name):
             for key, argument in arguments.items():
                 if key not in properties or not (types := _schema_types(properties[key])):
+                    continue
+                if typed and "string" in types:
                     continue
                 if isinstance(argument, str):
                     arguments[key] = _coerce(argument, types)

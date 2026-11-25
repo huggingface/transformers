@@ -59,14 +59,14 @@ Alternatively, you can directly download the checkpoints using:
 BERT-345M-uncased:
 
 ```bash
-wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_uncased/zip
+wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_uncased/zip \
 -O megatron_bert_345m_v0_1_uncased.zip
 ```
 
 BERT-345M-cased:
 
 ```bash
-wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_cased/zip -O
+wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_cased/zip -O \
 megatron_bert_345m_v0_1_cased.zip
 ```
 
