@@ -777,13 +777,9 @@ class PrefixCache:
     to an arbitrary length. Used from one inference thread only, so it needs no lock.
     """
 
-    # TODO: bound and extend this cache. It holds one entry on the GPU, of any length (~144 KB per token for an 8B
-    # model, ~4.7 GB at 32k tokens), and two clients that alternate evict each other's entry. Planned follow-up:
-    # - a `--prefix-cache-max-tokens` cap: crop a longer cache to its first N tokens on `store()` (and `.clone()` it,
-    #   since `crop` keeps a view of the full tensors);
-    # - several entries, matched by longest shared prefix and evicted least-recently-used under a total budget;
-    # - a pinned CPU-memory tier for evicted entries (~10 ms per 1k tokens to bring back on an A10G, vs ~290 ms to
-    #   re-encode). Disk offload is probably not worth it for `transformers serve`.
+    # TODO: one unbounded GPU entry; alternating clients evict each other. Follow-up: a `--prefix-cache-max-tokens`
+    # cap (crop + `.clone()` on `store()`), several LRU entries under a budget, a pinned-CPU tier for evicted ones,
+    # and hybrid models (linear attention, e.g. Qwen3-Next): snapshot the recurrent state at the end of a turn.
 
     def __init__(self):
         self._token_ids: list[int] = []
@@ -805,7 +801,7 @@ class PrefixCache:
             while reused < limit and cached_ids[reused] == new_ids[reused]:
                 reused += 1
         self.reused_tokens = reused
-        if reused == 0:
+        if cache is None or reused == 0:
             cache = DynamicCache(config=model.config)
             if not all(type(layer) is DynamicLayer for layer in cache.layers):
                 return None
@@ -918,12 +914,15 @@ class GenerateManager(BaseGenerateManager):
 
     def _generate(self, model: "PreTrainedModel", gen_kwargs: dict, reuse_prefix: bool):
         """``model.generate(**gen_kwargs)`` on the inference thread, through the prefix cache when ``reuse_prefix``."""
-        cache = self._prefix_cache.take(model, gen_kwargs["input_ids"]) if reuse_prefix else None
+        prefix_cache = self._prefix_cache if reuse_prefix else None
+        if prefix_cache is None:
+            return model.generate(**gen_kwargs)
+        cache = prefix_cache.take(model, gen_kwargs["input_ids"])
         if cache is None:
             return model.generate(**gen_kwargs)
         out = model.generate(**gen_kwargs, cache=cache)
         sequences = out if not hasattr(out, "sequences") else out.sequences
-        self._prefix_cache.store(sequences[0].tolist(), cache)
+        prefix_cache.store(sequences[0].tolist(), cache)
         return out
 
     def generate_streaming(
