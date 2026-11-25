@@ -874,6 +874,7 @@ def _flash_attention_forward(
                 and q.device in _TRTLLM_WORKSPACE
                 and keywords.get("s_aux") is None
                 and keywords.get("softcap") is None
+                and keywords.get("sliding_window") is None  # gpt-oss came out wrong through it (sinks + window)
             ):
                 scale = keywords.get("softmax_scale") or q.size(-1) ** -0.5
                 window = keywords.get("sliding_window")
