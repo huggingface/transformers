@@ -98,12 +98,15 @@ class NanbeigeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(self.checkpoint, dtype=torch.bfloat16, device_map=torch_device)
         self.assertIsInstance(model, NanbeigeForCausalLM)
         inputs = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "What is the capital of France? Answer with the city name."}],
+            [{"role": "user", "content": "Which number is bigger, 9.11 or 9.8?"}],
             add_generation_prompt=True,
             enable_thinking=False,
             return_dict=True,
             return_tensors="pt",
         ).to(model.device)
-        outputs = model.generate(**inputs, max_new_tokens=2, do_sample=False)
+        outputs = model.generate(**inputs, max_new_tokens=24, do_sample=False)
         new_tokens = outputs[0, inputs["input_ids"].shape[1] :]
-        self.assertEqual(tokenizer.decode(new_tokens, skip_special_tokens=True), "Paris")
+        self.assertEqual(
+            tokenizer.decode(new_tokens, skip_special_tokens=True),
+            "To determine which number is bigger between **9.11** and **9.8**, we compare them step by",
+        )
