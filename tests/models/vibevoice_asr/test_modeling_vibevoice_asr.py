@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -58,7 +59,7 @@ class VibeVoiceAsrModelTester(ModelTesterConfigMixin):
     small_config_overrides = {
         "audio_token_id": 0,
         "seq_length": 25,
-        "audio_samples": 24000,  # 1 second at 24kHz
+        "audio_samples": 16,
         "is_training": True,
         "text_config": {
             "model_type": "qwen2",
@@ -117,11 +118,14 @@ class VibeVoiceAsrModelTester(ModelTesterConfigMixin):
         )
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.text_config["vocab_size"])
+        config = self.get_config()
+        # Text tokens other than the audio and pad ones, then each audio's placeholder tokens: one per audio token
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.text_config["vocab_size"] - 2) + 2
+        hop_length = config.acoustic_tokenizer_encoder_config.hop_length
+        input_ids[:, 1 : 1 + math.ceil(self.audio_samples / hop_length)] = self.audio_token_id
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
         input_values = floats_tensor([self.batch_size, 1, self.audio_samples])
         padding_mask = torch.ones([self.batch_size, self.audio_samples], dtype=torch.bool, device=torch_device)
-        config = self.get_config()
         return config, input_ids, attention_mask, input_values, padding_mask
 
     def prepare_config_and_inputs_for_common(self):
@@ -163,10 +167,6 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
         pass
 
     test_save_pretrained_matches_hub_checkpoint = ALMModelTest.test_save_pretrained_matches_hub_checkpoint
-
-    @unittest.skip(reason="The tester's `input_ids` are random, without audio placeholder tokens matching its audio.")
-    def test_get_audio_embeddings_one_row_per_audio_token(self):
-        pass
 
     @unittest.skip(reason="VibeVoiceAsr has no separate base model without a head.")
     def test_model_base_model_prefix(self):
