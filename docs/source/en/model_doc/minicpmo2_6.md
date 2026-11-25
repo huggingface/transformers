@@ -63,18 +63,9 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 
 [[autodoc]] MiniCPMO2_6Config
 
-## MiniCPMO2_6VisionConfig
-
-[[autodoc]] MiniCPMO2_6VisionConfig
-
 ## MiniCPMO2_6AudioConfig
 
 [[autodoc]] MiniCPMO2_6AudioConfig
-
-## MiniCPMO2_6VisionTransformer
-
-[[autodoc]] MiniCPMO2_6VisionTransformer
-    - forward
 
 ## MiniCPMO2_6AudioEncoder
 

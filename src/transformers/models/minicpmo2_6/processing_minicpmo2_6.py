@@ -35,49 +35,31 @@ class MiniCPMO2_6Processor(ProcessorMixin):
         feature_extractor=None,
         tokenizer=None,
         chat_template=None,
-        image_token: str = "<unk>",
-        image_start_token: str = "<image>",
-        image_end_token: str = "</image>",
-        slice_start_token: str = "<slice>",
-        slice_end_token: str = "</slice>",
-        num_image_tokens: int = 64,
-        audio_token: str = "<|audio|>",
-        audio_start_token: str = "<|audio_start|>",
-        audio_end_token: str = "<|audio_end|>",
+        image_token="<unk>",
+        num_image_tokens=64,
+        audio_token="<|audio|>",
         **kwargs,
     ):
         r"""
         image_token (`str`, *optional*, defaults to `"<unk>"`):
             Marks an image in the text, and is repeated `num_image_tokens` times per image slice.
-        image_start_token (`str`, *optional*, defaults to `"<image>"`):
-            Opens the image tokens of the overview image.
-        image_end_token (`str`, *optional*, defaults to `"</image>"`):
-            Closes the image tokens of the overview image.
-        slice_start_token (`str`, *optional*, defaults to `"<slice>"`):
-            Opens the image tokens of one slice.
-        slice_end_token (`str`, *optional*, defaults to `"</slice>"`):
-            Closes the image tokens of one slice.
         num_image_tokens (`int`, *optional*, defaults to 64):
             Number of image tokens per slice (the resampler's number of latents).
         audio_token (`str`, *optional*, defaults to `"<|audio|>"`):
             Marks an audio in the text, and is repeated once per audio token (25 per second of audio).
-        audio_start_token (`str`, *optional*, defaults to `"<|audio_start|>"`):
-            Opens the audio tokens of each second of audio.
-        audio_end_token (`str`, *optional*, defaults to `"<|audio_end|>"`):
-            Closes the audio tokens of each second of audio.
         """
-        self.image_token = image_token
-        self.image_start_token = image_start_token
-        self.image_end_token = image_end_token
-        self.slice_start_token = slice_start_token
-        self.slice_end_token = slice_end_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_start_token = getattr(tokenizer, "image_start_token", "<image>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "</image>")
+        self.slice_start_token = getattr(tokenizer, "slice_start_token", "<slice>")
+        self.slice_end_token = getattr(tokenizer, "slice_end_token", "</slice>")
         self.num_image_tokens = num_image_tokens
-        self.audio_token = audio_token
-        self.audio_start_token = audio_start_token
-        self.audio_end_token = audio_end_token
-        super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
+        self.audio_start_token = getattr(tokenizer, "audio_start_token", "<|audio_start|>")
+        self.audio_end_token = getattr(tokenizer, "audio_end_token", "<|audio_end|>")
         self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
+        super().__init__(image_processor, feature_extractor, tokenizer, chat_template=chat_template, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         # Overview image, then each slice in its own <slice>...</slice>, one line per row of slices

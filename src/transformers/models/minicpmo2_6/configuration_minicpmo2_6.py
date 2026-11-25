@@ -27,42 +27,6 @@ from ..auto import AutoConfig
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-o-2_6")
 @strict
-class MiniCPMO2_6VisionConfig(PreTrainedConfig):
-    r"""
-    Example:
-
-    ```python
-    >>> from transformers.models.minicpmo2_6.modeling_minicpmo2_6 import MiniCPMO2_6VisionTransformer
-    >>> from transformers.models.minicpmo2_6.configuration_minicpmo2_6 import MiniCPMO2_6VisionConfig
-
-    >>> # Initializing a MiniCPMO2_6VisionConfig with google/siglip-base-patch16-224 style configuration
-    >>> configuration = MiniCPMO2_6VisionConfig()
-
-    >>> # Initializing a MiniCPMO2_6VisionTransformer (with random weights) from the google/siglip-base-patch16-224 style configuration
-    >>> model = MiniCPMO2_6VisionTransformer(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "minicpmo2_6_vision"
-    base_config_key = "vision_config"
-
-    hidden_size: int = 1152
-    intermediate_size: int = 4304
-    num_hidden_layers: int = 27
-    num_attention_heads: int = 16
-    num_channels: int = 3
-    image_size: int | list[int] | tuple[int, int] = 980
-    patch_size: int | list[int] | tuple[int, int] = 14
-    hidden_act: str = "gelu_pytorch_tanh"
-    layer_norm_eps: float = 1e-6
-    attention_dropout: float | int = 0.0
-    initializer_range: float = 0.02
-
-
-@auto_docstring(checkpoint="openbmb/MiniCPM-o-2_6")
-@strict
 class MiniCPMO2_6AudioConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
@@ -133,7 +97,7 @@ class MiniCPMO2_6Config(PreTrainedConfig):
 
     model_type = "minicpmo2_6"
     sub_configs_defaults = {
-        "vision_config": MiniCPMO2_6VisionConfig,
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="minicpmv2_6_vision"),
         "audio_config": MiniCPMO2_6AudioConfig,
         "text_config": SubConfigSpec(
             config_class=AutoConfig,
@@ -171,4 +135,4 @@ class MiniCPMO2_6Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["MiniCPMO2_6Config", "MiniCPMO2_6VisionConfig", "MiniCPMO2_6AudioConfig"]
+__all__ = ["MiniCPMO2_6Config", "MiniCPMO2_6AudioConfig"]

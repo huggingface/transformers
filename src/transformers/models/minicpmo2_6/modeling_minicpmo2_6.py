@@ -31,7 +31,6 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPooling,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -43,7 +42,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_minicpmo2_6 import MiniCPMO2_6AudioConfig, MiniCPMO2_6Config, MiniCPMO2_6VisionConfig
+from .configuration_minicpmo2_6 import MiniCPMO2_6AudioConfig, MiniCPMO2_6Config
 
 
 logger = logging.get_logger(__name__)
@@ -55,36 +54,26 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    scaling: float,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    if hasattr(module, "num_key_value_groups"):
-        key = repeat_kv(key, module.num_key_value_groups)
-        value = repeat_kv(value, module.num_key_value_groups)
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class MiniCPMO2_6CrossAttention(nn.Module):
@@ -165,6 +154,30 @@ class MiniCPMO2_6CrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class MiniCPMO2_6PositionEmbedding(nn.Module):
+    """
+    2D sin-cos embedding of `(row, col)` patch positions, added to the resampler's keys. Uses the axial rope frequencies
+    (the same for rows and columns), laid out as [sin_col | cos_col | sin_row | cos_row] like the original.
+    """
+
+    def __init__(self, embed_dim: int, theta: float = 10000.0):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.theta = theta
+        self.inv_freq = nn.Buffer(self.compute_inv_freq(embed_dim, theta), persistent=False)
+
+    @staticmethod
+    def compute_inv_freq(embed_dim: int, theta: float) -> torch.Tensor:
+        spatial_dim = embed_dim // 2
+        return 1.0 / (theta ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+
+    def forward(self, patch_position_ids: torch.Tensor) -> torch.Tensor:
+        inv_freq = self.inv_freq.to(patch_position_ids.device)
+        row_angles = patch_position_ids[..., 0, None].float() * inv_freq
+        col_angles = patch_position_ids[..., 1, None].float() * inv_freq
+        return torch.cat([col_angles.sin(), col_angles.cos(), row_angles.sin(), row_angles.cos()], dim=-1)
+
+
 class MiniCPMO2_6Resampler(nn.Module):
     """
     Perceiver-style resampler: `resampler_n_latents` learned queries cross-attend to the patch features of one image
@@ -183,18 +196,7 @@ class MiniCPMO2_6Resampler(nn.Module):
         self.attn = MiniCPMO2_6CrossAttention(config, self.embed_dim, config.resampler_n_heads)
         self.ln_post = nn.LayerNorm(self.embed_dim, eps=1e-6)
         self.proj = nn.Parameter(torch.zeros(self.embed_dim, self.embed_dim))
-
-    def get_2d_pos_embed(self, patch_position_ids: torch.Tensor) -> torch.Tensor:
-        """
-        2D sin-cos embedding of `(row, col)` patch positions, shape `(num_slices, max_patches, embed_dim)`. Channels
-        are laid out as [sin_w | cos_w | sin_h | cos_h] like the original.
-        """
-        quarter = self.embed_dim // 4
-        omega = torch.arange(quarter, device=patch_position_ids.device, dtype=torch.float32) / quarter
-        omega = 1.0 / 10000**omega
-        rows = patch_position_ids[..., 0, None].float() * omega
-        cols = patch_position_ids[..., 1, None].float() * omega
-        return torch.cat([cols.sin(), cols.cos(), rows.sin(), rows.cos()], dim=-1)
+        self.position_embedding = MiniCPMO2_6PositionEmbedding(self.embed_dim)
 
     def forward(
         self,
@@ -203,19 +205,23 @@ class MiniCPMO2_6Resampler(nn.Module):
         patch_position_ids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        kv = self.ln_kv(self.kv_proj(vision_features))
-        pos_embed = (self.get_2d_pos_embed(patch_position_ids) * pixel_attention_mask[..., None]).to(kv.dtype)
-        queries = self.ln_q(self.query).unsqueeze(0).expand(kv.shape[0], -1, -1)
+        key_value_states = self.ln_kv(self.kv_proj(vision_features))
+        position_embeddings = self.position_embedding(patch_position_ids) * pixel_attention_mask[..., None]
+        query_states = self.ln_q(self.query).unsqueeze(0).expand(key_value_states.shape[0], -1, -1)
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embeds=queries,
+            inputs_embeds=query_states,
             attention_mask=pixel_attention_mask,
-            encoder_hidden_states=kv,
+            encoder_hidden_states=key_value_states,
         )
-        attn_output, _ = self.attn(
-            queries, kv, attention_mask=attention_mask, encoder_position_embeddings=pos_embed, **kwargs
+        attention_output, _ = self.attn(
+            query_states,
+            key_value_states,
+            attention_mask=attention_mask,
+            encoder_position_embeddings=position_embeddings.to(key_value_states.dtype),
+            **kwargs,
         )
-        return self.ln_post(attn_output) @ self.proj
+        return self.ln_post(attention_output) @ self.proj
 
 
 @auto_docstring
@@ -231,7 +237,8 @@ class MiniCPMO2_6PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
-    _no_split_modules = ["MiniCPMO2_6EncoderLayer", "MiniCPMO2_6Resampler", "MiniCPMO2_6AudioEncoderLayer"]
+    # The vision tower and the audio encoder register their own layers
+    _no_split_modules = ["MiniCPMO2_6Resampler"]
     # The checkpoint also holds the speech decoder (`tts.*`), which this model doesn't include
     _keys_to_ignore_on_load_unexpected = [r"^tts\."]
 
@@ -240,246 +247,8 @@ class MiniCPMO2_6PreTrainedModel(PreTrainedModel):
         if isinstance(module, MiniCPMO2_6Resampler):
             init.trunc_normal_(module.query, std=0.02)
             init.normal_(module.proj, std=module.embed_dim**-0.5)
-
-
-class MiniCPMO2_6VisionEmbeddings(nn.Module):
-    """
-    This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
-    resolution.
-
-    The modifications are adapted from [Patch n' Pack: NaViT, a Vision Transformer for any Aspect Ratio and Resolution](https://huggingface.co/papers/2307.06304)
-    which allows treating images in their native aspect ratio and without the need to resize them to the same
-    fixed size. In particular, we start from the original pre-trained SigLIP model
-    (which uses images of fixed-size square images) and adapt it by training on images of variable resolutions.
-    """
-
-    def __init__(self, config: MiniCPMO2_6VisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            padding="valid",
-        )
-
-        self.num_patches_per_side = self.image_size // self.patch_size
-        self.num_patches = self.num_patches_per_side**2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-
-    def forward(self, pixel_values: torch.Tensor, patch_position_ids: torch.LongTensor) -> torch.Tensor:
-        embeddings = self.patch_embedding(pixel_values).flatten(2).transpose(1, 2)
-        boundaries = torch.arange(
-            1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
-        )
-        # Bucket each patch by its (row, col) in its slice's 2D patch grid; padding stays at (0, 0)
-        step = 1.0 / (patch_position_ids.amax(dim=1, keepdim=True) + 1)
-        bucket_coords = torch.bucketize(patch_position_ids * step, boundaries, right=True)
-        position_ids = bucket_coords[..., 0] * self.num_patches_per_side + bucket_coords[..., 1]
-        return embeddings + self.position_embedding(position_ids)
-
-
-class MiniCPMO2_6VisionAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-        # Ignore copy
-        self.is_causal = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
-
-        input_shape = hidden_states.shape[:-1]
-
-        hidden_shape = (*input_shape, -1, self.head_dim)
-        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-class MiniCPMO2_6VisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
-
-
-class MiniCPMO2_6EncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MiniCPMO2_6VisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.self_attn = MiniCPMO2_6VisionAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = MiniCPMO2_6VisionMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
-class MiniCPMO2_6Encoder(nn.Module):
-    """
-    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`MiniCPMO2_6EncoderLayer`].
-
-    Args:
-        config: MiniCPMO2_6Config
-    """
-
-    def __init__(self, config: MiniCPMO2_6Config):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([MiniCPMO2_6EncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    # Ignore copy
-    @auto_docstring
-    def forward(
-        self,
-        inputs_embeds,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
-            hidden_states = encoder_layer(
-                hidden_states,
-                attention_mask,
-                **kwargs,
-            )
-
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
-
-@auto_docstring(
-    custom_intro="""
-    MiniCPMO2_6 vision encoder model that returnss raw image embeddings.
-    """
-)
-class MiniCPMO2_6VisionTransformer(MiniCPMO2_6PreTrainedModel):
-    config: MiniCPMO2_6VisionConfig
-    input_modalities = ("image",)
-    _can_record_outputs = {
-        "hidden_states": MiniCPMO2_6EncoderLayer,
-        "attentions": MiniCPMO2_6VisionAttention,
-    }
-
-    def __init__(self, config: MiniCPMO2_6VisionConfig):
-        super().__init__(config)
-        embed_dim = config.hidden_size
-
-        self.config = config
-        self.embeddings = MiniCPMO2_6VisionEmbeddings(config)
-        self.encoder = MiniCPMO2_6Encoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings = value
-
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        patch_attention_mask: torch.BoolTensor,
-        patch_position_ids: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        patch_attention_mask (`torch.BoolTensor` of shape `(num_slices, max_patches)`):
-            Which patches are real (`True`) rather than padding.
-        patch_position_ids (`torch.LongTensor` of shape `(num_slices, max_patches, 2)`):
-            `(row, col)` of each patch in its slice's patch grid.
-        """
-        hidden_states = self.embeddings(pixel_values, patch_position_ids)
-        attention_mask = create_bidirectional_mask(
-            config=self.config, inputs_embeds=hidden_states, attention_mask=patch_attention_mask
-        )
-        encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=attention_mask, **kwargs)
-        return BaseModelOutputWithPooling(last_hidden_state=self.post_layernorm(encoder_outputs.last_hidden_state))
+        elif isinstance(module, MiniCPMO2_6PositionEmbedding):
+            init.copy_(module.inv_freq, module.compute_inv_freq(module.embed_dim, module.theta))
 
 
 class MiniCPMO2_6AudioAttention(nn.Module):
@@ -1055,7 +824,6 @@ class MiniCPMO2_6ForConditionalGeneration(MiniCPMO2_6PreTrainedModel, Generation
 
 __all__ = [
     "MiniCPMO2_6PreTrainedModel",
-    "MiniCPMO2_6VisionTransformer",
     "MiniCPMO2_6AudioEncoder",
     "MiniCPMO2_6Model",
     "MiniCPMO2_6ForConditionalGeneration",

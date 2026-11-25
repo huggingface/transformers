@@ -34,22 +34,15 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3EncoderConfig
 from ..auto import AutoConfig, AutoModel
-from ..minicpmv2_6.configuration_minicpmv2_6 import MiniCPMV2_6Config, MiniCPMV2_6VisionConfig
+from ..minicpmv2_6.configuration_minicpmv2_6 import MiniCPMV2_6Config
 from ..minicpmv2_6.modeling_minicpmv2_6 import (
     MiniCPMV2_6ForConditionalGeneration,
     MiniCPMV2_6Model,
     MiniCPMV2_6PreTrainedModel,
-    MiniCPMV2_6VisionTransformer,
 )
 from ..minicpmv2_6.processing_minicpmv2_6 import MiniCPMV2_6Processor
 from ..nemotron_asr_streaming.modeling_nemotron_asr_streaming import chunked_limited_mask_function
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioAttention, Qwen2AudioEncoder, Qwen2AudioEncoderLayer
-
-
-@auto_docstring(checkpoint="openbmb/MiniCPM-o-2_6")
-@strict
-class MiniCPMO2_6VisionConfig(MiniCPMV2_6VisionConfig):
-    model_type = "minicpmo2_6_vision"
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-o-2_6")
@@ -108,7 +101,7 @@ class MiniCPMO2_6Config(MiniCPMV2_6Config):
 
     model_type = "minicpmo2_6"
     sub_configs_defaults = {
-        "vision_config": MiniCPMO2_6VisionConfig,
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="minicpmv2_6_vision"),
         "audio_config": MiniCPMO2_6AudioConfig,
         "text_config": SubConfigSpec(
             config_class=AutoConfig,
@@ -135,13 +128,10 @@ class MiniCPMO2_6Config(MiniCPMV2_6Config):
 
 class MiniCPMO2_6PreTrainedModel(MiniCPMV2_6PreTrainedModel):
     input_modalities = ("image", "audio", "text")
-    _no_split_modules = ["MiniCPMO2_6EncoderLayer", "MiniCPMO2_6Resampler", "MiniCPMO2_6AudioEncoderLayer"]
+    # The vision tower and the audio encoder register their own layers
+    _no_split_modules = ["MiniCPMO2_6Resampler"]
     # The checkpoint also holds the speech decoder (`tts.*`), which this model doesn't include
     _keys_to_ignore_on_load_unexpected = [r"^tts\."]
-
-
-class MiniCPMO2_6VisionTransformer(MiniCPMV2_6VisionTransformer):
-    pass
 
 
 class MiniCPMO2_6AudioAttention(Qwen2AudioAttention):
@@ -477,51 +467,33 @@ class MiniCPMO2_6Processor(MiniCPMV2_6Processor):
         feature_extractor=None,
         tokenizer=None,
         chat_template=None,
-        image_token: str = "<unk>",
-        image_start_token: str = "<image>",
-        image_end_token: str = "</image>",
-        slice_start_token: str = "<slice>",
-        slice_end_token: str = "</slice>",
-        num_image_tokens: int = 64,
-        audio_token: str = "<|audio|>",
-        audio_start_token: str = "<|audio_start|>",
-        audio_end_token: str = "<|audio_end|>",
+        image_token="<unk>",
+        num_image_tokens=64,
+        audio_token="<|audio|>",
         **kwargs,
     ):
         r"""
         image_token (`str`, *optional*, defaults to `"<unk>"`):
             Marks an image in the text, and is repeated `num_image_tokens` times per image slice.
-        image_start_token (`str`, *optional*, defaults to `"<image>"`):
-            Opens the image tokens of the overview image.
-        image_end_token (`str`, *optional*, defaults to `"</image>"`):
-            Closes the image tokens of the overview image.
-        slice_start_token (`str`, *optional*, defaults to `"<slice>"`):
-            Opens the image tokens of one slice.
-        slice_end_token (`str`, *optional*, defaults to `"</slice>"`):
-            Closes the image tokens of one slice.
         num_image_tokens (`int`, *optional*, defaults to 64):
             Number of image tokens per slice (the resampler's number of latents).
         audio_token (`str`, *optional*, defaults to `"<|audio|>"`):
             Marks an audio in the text, and is repeated once per audio token (25 per second of audio).
-        audio_start_token (`str`, *optional*, defaults to `"<|audio_start|>"`):
-            Opens the audio tokens of each second of audio.
-        audio_end_token (`str`, *optional*, defaults to `"<|audio_end|>"`):
-            Closes the audio tokens of each second of audio.
         """
-        self.image_token = image_token
-        self.image_start_token = image_start_token
-        self.image_end_token = image_end_token
-        self.slice_start_token = slice_start_token
-        self.slice_end_token = slice_end_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_start_token = getattr(tokenizer, "image_start_token", "<image>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "</image>")
+        self.slice_start_token = getattr(tokenizer, "slice_start_token", "<slice>")
+        self.slice_end_token = getattr(tokenizer, "slice_end_token", "</slice>")
         self.num_image_tokens = num_image_tokens
-        self.audio_token = audio_token
-        self.audio_start_token = audio_start_token
-        self.audio_end_token = audio_end_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
+        self.audio_start_token = getattr(tokenizer, "audio_start_token", "<|audio_start|>")
+        self.audio_end_token = getattr(tokenizer, "audio_end_token", "<|audio_end|>")
+        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
         ProcessorMixin.__init__(
             self, image_processor, feature_extractor, tokenizer, chat_template=chat_template, **kwargs
         )
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.audio_token_id = tokenizer.convert_tokens_to_ids(self.audio_token)
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         # Audio longer than 30 s is split into 30 s windows, one row of `input_features` each
@@ -592,11 +564,9 @@ class MiniCPMO2_6Processor(MiniCPMV2_6Processor):
 
 __all__ = [
     "MiniCPMO2_6Config",
-    "MiniCPMO2_6VisionConfig",
     "MiniCPMO2_6AudioConfig",
     "MiniCPMO2_6Processor",
     "MiniCPMO2_6PreTrainedModel",
-    "MiniCPMO2_6VisionTransformer",
     "MiniCPMO2_6AudioEncoder",
     "MiniCPMO2_6Model",
     "MiniCPMO2_6ForConditionalGeneration",

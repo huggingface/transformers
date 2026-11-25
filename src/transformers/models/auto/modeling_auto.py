@@ -368,7 +368,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("minicpm_ocr_vision", "MiniCPMOcrVisionModel"),
         ("minicpmo2_6", "MiniCPMO2_6Model"),
         ("minicpmo2_6_audio", "MiniCPMO2_6AudioEncoder"),
-        ("minicpmo2_6_vision", "MiniCPMO2_6VisionTransformer"),
         ("minicpmv2_5", "MiniCPMV2_5Model"),
         ("minicpmv2_6", "MiniCPMV2_6Model"),
         ("minicpmv2_6_vision", "MiniCPMV2_6VisionTransformer"),
