@@ -194,8 +194,18 @@ if is_kernels_available():
             "fla",
             version=2,
             entries=[
-                ("chunk_gated_delta_rule", "chunk_gated_delta_rule", ("cuda", "rocm", "xpu"), (Mode.TRAINING, Mode.INFERENCE)),
-                ("fused_recurrent_gated_delta_rule", "recurrent_gated_delta_rule", ("cuda", "rocm", "xpu"), (Mode.INFERENCE,)),
+                (
+                    "chunk_gated_delta_rule",
+                    "chunk_gated_delta_rule",
+                    ("cuda", "rocm", "xpu"),
+                    (Mode.TRAINING, Mode.INFERENCE),
+                ),
+                (
+                    "fused_recurrent_gated_delta_rule",
+                    "recurrent_gated_delta_rule",
+                    ("cuda", "rocm", "xpu"),
+                    (Mode.INFERENCE,),
+                ),
                 ("fused_recurrent_kda", "recurrent_kimi_delta_attention", ("cuda", "rocm", "xpu"), (Mode.INFERENCE,)),
                 ("RMSNormGated", "FusedRMSNormGated", ("cuda", "rocm", "xpu"), (Mode.TRAINING, Mode.INFERENCE)),
             ],
@@ -253,7 +263,7 @@ if is_kernels_available():
         rope = build_kernels_community_layer("rotary", layer_name="apply_rotary_transformers", version=2)
         aiter_rope = build_kernels_community_layer("aiter-rope", layer_name="apply_rotary_transformers", version=3)
         _KERNEL_MAPPING["rotary_pos_emb"] = {
-            **for_devices_and_modes(("cuda", "xpu"), (Mode.INFERENCE,), rope),
+            **for_devices_and_modes(("cuda", "xpu"), (Mode.TRAINING, Mode.INFERENCE), rope),
             **for_devices_and_modes(("rocm",), (Mode.INFERENCE,), aiter_rope),
         }
 

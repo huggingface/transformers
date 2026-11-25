@@ -3910,17 +3910,7 @@ class PreTrainedModel(
             self._kernels_mode = (
                 self.kernels_mode or (Mode.INFERENCE if not self.training else Mode.TRAINING) if mode is None else mode
             )
-
-            # NOTE: For now we don't allow training mode and reset kernelization instead
-            if self.kernels_mode & Mode.TRAINING:
-                logger.warning_once(
-                    f"Detected a training mode with kernelization: {self.kernels_mode}. We are working on supporting training "
-                    f"via `kernels` but in the meantime we disable any such attempts. Resetting kernelization..."
-                )
-                self.reset_kernels()
-                self._use_kernels = True  # Keep the desired flag
-            else:
-                kernelize(self, device_map=device_map)
+            kernelize(self, device_map=device_map)
         else:
             # Reset kernelization
             self.use_kernels = False
@@ -5104,16 +5094,13 @@ class PreTrainedModel(
 
     def train(self, mode: bool = True):
         result = super().train(mode)
+
         # Potential kernelization (only happens if a new Mode is detected)
         if is_kernels_available() and self.use_kernels:
             from kernels import Mode
 
-            expected_mode = Mode.INFERENCE if not mode else Mode.TRAINING
-            # NOTE: For now we don't allow training mode
-            if expected_mode & Mode.TRAINING:
-                self._use_kernels = self.reset_kernels()
-            else:
-                self.kernels_mode = expected_mode
+            self.kernels_mode = Mode.INFERENCE if not mode else Mode.TRAINING
+
         return result
 
     def eval(self):

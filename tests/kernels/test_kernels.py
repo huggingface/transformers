@@ -520,7 +520,7 @@ class TestKernelUtilities(TestCasePlus):
         hooked_forward = model.norm.forward
 
         with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=fake_kernelize):
-            hub_kernels_pkg.kernelize(model)
+            hub_kernels_pkg.kernelize(model, mode=Mode.INFERENCE)
 
         self.assertIs(model.norm.forward, hooked_forward)
         self.assertIs(model.norm._old_forward, kernel_forward)
@@ -990,9 +990,8 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
 
         with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
             self.model.use_kernels = True
-            # TODO: Reactivate when training is using kernels again - temporarily disabled
-            # self.model.train(True)
-            # self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
+            self.model.train(True)
+            self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
             self.model.eval()
             self.assertTrue(any(m == Mode.INFERENCE for m in last_modes))
 
