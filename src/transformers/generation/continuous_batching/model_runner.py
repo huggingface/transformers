@@ -128,12 +128,6 @@ class ModelRunner:
         self.return_logprobs = return_logprobs
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.cuda_graph_booleans
         self.cache = cache
-        # [scratch] Dynamo compiles some frames once per layer (guards on the layer index or the module): with the default
-        # limit of 8 recompiles, the layers after the 8th ran eager inside the CUDA graphs
-        torch._dynamo.config.recompile_limit = max(
-            torch._dynamo.config.recompile_limit, int(os.environ.get("PROTO_RECOMPILE_LIMIT", 256))
-        )
-        torch._dynamo.config.accumulated_recompile_limit = max(torch._dynamo.config.accumulated_recompile_limit, 4096)
         # [scratch] FA4 decode steps through TRT-LLM's decode kernel: its workspace exists before any graph capture
         if cache.use_varlen_block_table and is_flash_attention_requested(cache.config, version=4):
             from ...modeling_flash_attention_utils import proto_trtllm_decode_workspace
@@ -776,6 +770,20 @@ class ModelRunner:
         # Early return if the warmup is not needed
         if not self.pad_inputs:
             return None
+
+        # [scratch] Dynamo compiles some frames once per layer (guards on the layer index or the module): with the default
+        # limit of 8 recompiles, the layers after the 8th ran eager inside the CUDA graphs. Not for FP8 checkpoints:
+        # their compiled layers were 2-4x slower than the eager ones (Qwen3-30B-A3B-FP8 H100)
+        quantization = getattr(model.config, "quantization_config", None)
+        quant_method = quantization.get("quant_method") if isinstance(quantization, dict) else None
+        quant_method = quant_method or getattr(quantization, "quant_method", None)
+        if str(quant_method) not in ("fp8", "QuantizationMethod.FP8"):
+            torch._dynamo.config.recompile_limit = max(
+                torch._dynamo.config.recompile_limit, int(os.environ.get("PROTO_RECOMPILE_LIMIT", 256))
+            )
+            torch._dynamo.config.accumulated_recompile_limit = max(
+                torch._dynamo.config.accumulated_recompile_limit, 4096
+            )
 
         # [scratch] Blackwell: bf16 MoE experts shuffled once for TRT-LLM's kernel, before any graph capture
         from ...integrations._proto_bf16_experts import trtllm_bf16_prepare_model
