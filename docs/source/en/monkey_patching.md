@@ -483,8 +483,8 @@ with apply_patches():
 # Expose `output_selected_experts=True` on the base model by adding an OutputRecorder
 # at runtime. Index 2 of the router's tuple output is the expert indices.
 inner = model.model
-existing = _CAN_RECORD_REGISTRY.get(str(inner.__class__), {}) or {}
-_CAN_RECORD_REGISTRY[str(inner.__class__)] = {
+existing = _CAN_RECORD_REGISTRY.get(inner)
+_CAN_RECORD_REGISTRY[inner] = {
     **existing,
     "selected_experts": OutputRecorder(ReplayableQwen3MoeTopKRouter, index=2),
 }
