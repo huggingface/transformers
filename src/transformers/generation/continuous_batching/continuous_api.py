@@ -802,18 +802,26 @@ class ContinuousBatchingManager:
         """Returns True if the background generation thread has been started and is still alive."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
-    def start(self) -> None:
-        """Start the background generation thread."""
+    def start(self, warmup: bool = False) -> None:
+        """Start the background generation thread. With `warmup`, that thread pre-captures the CUDA graphs (see
+        `warmup`) before it takes requests, and this call returns once it is done. The model then only ever runs in
+        the generation thread, which state kept per thread relies on (e.g. a model split with tensor parallelism)."""
         if self.is_running():
             logger.warning("Manager thread is already running.")
             return None
         self.background_thread_status.clear()
         # Inference mode is thread-local: run the generation loop with the same inference mode as the caller
         use_inference_mode = torch.is_inference_mode_enabled()
+        warmup_done = threading.Event()
         self._generation_thread = threading.Thread(
-            target=self._run_generation_loop, kwargs={"use_inference_mode": use_inference_mode}
+            target=self._run_generation_loop,
+            kwargs={"use_inference_mode": use_inference_mode, "warmup": warmup, "warmup_done": warmup_done},
         )
         self._generation_thread.start()
+        if warmup:
+            warmup_done.wait()
+            if self.background_thread_status.fatal_error is not None:
+                raise self.background_thread_status.fatal_error
 
     def stop(
         self,
@@ -1107,8 +1115,9 @@ class ContinuousBatchingManager:
             self._wake_up_loop.clear()
             return True
 
-    def _run_generation_loop(self, use_inference_mode: bool) -> None:
-        """Main processing loop running in the background thread, in the caller's inference mode."""
+    def _run_generation_loop(self, use_inference_mode: bool, warmup: bool, warmup_done: threading.Event) -> None:
+        """Main processing loop running in the background thread, in the caller's inference mode. With `warmup`, the
+        loop starts with the warmup, and sets `warmup_done` after it (or when the thread stops on an error)."""
         batch_processor = None
 
         with torch.inference_mode(use_inference_mode):
@@ -1122,6 +1131,11 @@ class ContinuousBatchingManager:
                 batch_processor = self._create_batch_processor()
                 self.batch_processor = batch_processor  # register the batch processor for main thread access
                 self.current_batch = 0
+
+                if warmup and not self.warmed_up:
+                    batch_processor.warmup(self.model)
+                    self.warmed_up = True
+                warmup_done.set()
 
                 # If using the async API, we bootstrap the first batch w/out update
                 if batch_processor.use_async_batching:
@@ -1150,6 +1164,7 @@ class ContinuousBatchingManager:
                 logger.error(f"Error in generation loop: {e}", exc_info=True)
                 self._handle_critical_error(e, batch_processor)
             finally:
+                warmup_done.set()
                 self.background_thread_status.mark_as_stopped()
                 logger.info("Generation loop finished and background thread exited successfully.")
 
@@ -1354,13 +1369,11 @@ class ContinuousMixin:
             continuous_batching_config=continuous_batching_config,
             workload_hints=workload_hints,
         )
-        if warmup and not manager.warmed_up:
-            # TODO: have a progress bar for the warmup as well, like other inference engine
-            logger.info("Warming up for continuous batching...")
-            start = perf_counter()
-            manager.warmup()
-            logger.info(f"Warming up completed in {perf_counter() - start:.2f}s.")
-        manager.start()
+        # TODO: have a progress bar for the warmup as well, like other inference engine
+        start = perf_counter()
+        manager.start(warmup=warmup)
+        if warmup:
+            logger.info(f"Continuous batching started and warmed up in {perf_counter() - start:.2f}s.")
         try:
             yield manager
         finally:

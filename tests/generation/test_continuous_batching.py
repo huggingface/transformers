@@ -2843,9 +2843,8 @@ def _tp_cancellation_worker(
 
     manager = model.init_continuous_batching(continuous_batching_config=cb_config)
     manager.logit_processor.clear()
-    # Warm up synchronously so CUDA-graph capture doesn't eat the streaming-loop deadline below
-    manager.warmup()
-    manager.start()
+    # Warm up before the requests so CUDA-graph capture doesn't eat the streaming-loop deadline below
+    manager.start(warmup=True)
     try:
         request_id = manager.add_request(inputs, max_new_tokens=max_new_tokens, streaming=True)
         chunks_seen = 0
