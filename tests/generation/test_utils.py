@@ -705,31 +705,28 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # - assisted_decoding does not support `batch_size > 1`
 
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "moshi",
-                    "git",
-                    "prophetnet",
-                    "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()` all BLIP models
-                    "instructblip",
-                    "instructblipvideo",
-                    "zamba",  # special loop, and no real need to add support for now
-                    "zaya",  # a bit specific, could work but need a bit more work and no need rn
-                    "xlstm",  # extremely special cache mechanism, won't fix
-                    "rwkv",  # does not use cache classes, won't fix
-                ]
-            ):
-                self.skipTest(reason="May fix in the future: need model-specific fixes")
-
             # Set seed for deterministic test - ensures reproducible model initialization and inputs
             set_seed(42)
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
             set_config_for_less_flaky_test(config)
+
+            if config.model_type in [
+                "moshi",
+                "git",
+                "prophetnet",
+                "mllama",  # special cache sizes
+                "blip2",  # overridden `generate()` all BLIP models
+                "instructblip",
+                "instructblipvideo",
+                "zamba",  # special loop, and no real need to add support for now
+                "zaya",  # a bit specific, could work but need a bit more work and no need rn
+                "deepseek_v4",  # non standard cache, would require more work
+                "xlstm",  # extremely special cache mechanism, won't fix
+                "rwkv",  # does not use cache classes, won't fix
+                "reformer",  # does not use cache classes, won't fix
+            ]:
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # force eager attention to support output attentions
             if self.has_attentions:
@@ -883,28 +880,25 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
         # different shapes, see https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
-                self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(
-                model_name in model_class.__name__.lower()
-                for model_name in [
-                    "moshi",
-                    "git",
-                    "prophetnet",
-                    "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()` for all BLIP models
-                    "instructblip",
-                    "instructblipvideo",
-                    "zamba",  # special loop, and no real need to add support for now
-                    "zaya",  # a bit specific, could work but need a bit more work and no need rn
-                    "xlstm",  # extremely special cache mechanism, won't fix
-                    "rwkv",  # does not use cache classes, won't fix
-                ]
-            ):
-                self.skipTest(reason="May fix in the future: need model-specific fixes")
-
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            if config.model_type in [
+                "moshi",
+                "git",
+                "prophetnet",
+                "mllama",  # special cache sizes
+                "blip2",  # overridden `generate()` all BLIP models
+                "instructblip",
+                "instructblipvideo",
+                "zamba",  # special loop, and no real need to add support for now
+                "zaya",  # a bit specific, could work but need a bit more work and no need rn
+                "deepseek_v4",  # non standard cache, would require more work
+                "xlstm",  # extremely special cache mechanism, won't fix
+                "rwkv",  # does not use cache classes, won't fix
+                "reformer",  # does not use cache classes, won't fix
+            ]:
+                self.skipTest(reason="May fix in the future: need model-specific fixes")
 
             # force eager attention to support output attentions
             if self.has_attentions:
