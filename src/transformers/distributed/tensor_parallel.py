@@ -354,6 +354,52 @@ class EmbeddingParallel(TensorParallelLayer):
             output = output.redistribute(placements=[Replicate()])
         return output.to_local() if self.use_local_output else output
 
+    def install_forward(self, module, mesh):
+        """A vocab-parallel lookup runs on plain tensors: each rank looks up the ids of its rows of the vocabulary and
+        gives zeros for the others, then the ranks' outputs are summed. DTensor's own lookup keeps the mask of the ids
+        on a placement that torch caches for the whole process, while it fills it per thread: a forward in a second
+        thread (e.g. a generation thread started after a warmup) finds the cached placement without its mask."""
+        if self.shard_dim != 0:
+            return super().install_forward(module, mesh)
+        original_forward = module.forward
+        dtensor_forward = super().install_forward(module, mesh).forward
+
+        def vocab_parallel_forward(input_ids, *args, **kwargs):
+            if self.should_use_local_tensors(module):
+                return dtensor_forward(input_ids, *args, **kwargs)
+            if isinstance(input_ids, DTensor):
+                input_ids = input_ids.redistribute(placements=[Replicate()]).to_local()
+            start, num_rows = self._local_rows(module, mesh)
+            outside = (input_ids < start) | (input_ids >= start + num_rows)
+            with _use_local_dtensor_params(module), _use_local_padding_idx(module, start, num_rows):
+                output = original_forward((input_ids - start).masked_fill(outside, 0), *args, **kwargs)
+            output = output.masked_fill(outside.unsqueeze(-1), 0)
+            return self.transform_output_post_forward(module, output, mesh)
+
+        module.forward = vocab_parallel_forward
+        return module
+
+    @staticmethod
+    def _local_rows(module, mesh) -> tuple[int, int]:
+        """The first row of the vocabulary this rank holds, and how many rows it holds."""
+        weight = module.weight
+        num_rows = weight.to_local().size(0) if isinstance(weight, DTensor) else weight.size(0)
+        rows_per_rank = -(-module.num_embeddings // mesh.size())  # ceil, as `torch.chunk` splits the vocabulary
+        return rows_per_rank * mesh.get_local_rank(), num_rows
+
+
+@contextlib.contextmanager
+def _use_local_padding_idx(module, start, num_rows):
+    """For a forward on a rank's rows of the vocabulary: `padding_idx` becomes a row of that slice, or `None` when
+    another rank holds it. An embedding checks that its `padding_idx` is one of its rows."""
+    padding_idx = module.padding_idx
+    if padding_idx is not None:
+        module.padding_idx = padding_idx - start if start <= padding_idx < start + num_rows else None
+    try:
+        yield
+    finally:
+        module.padding_idx = padding_idx
+
 
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
     """Replicated parameter whose gradient is partial.

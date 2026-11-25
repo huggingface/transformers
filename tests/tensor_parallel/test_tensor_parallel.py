@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import tempfile
+import threading
 from unittest.mock import patch
 
 import torch
@@ -372,6 +373,41 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+
+def _test_forward_in_another_thread_impl(_rank, model_path):
+    model_tp = LlamaForCausalLM.from_pretrained(
+        model_path, distributed_config=DistributedConfig(tp_size=dist.get_world_size())
+    )
+    model = LlamaForCausalLM.from_pretrained(model_path).to(model_tp.device)
+    input_ids = torch.arange(10, device=model_tp.device)[None]
+    outputs = []
+
+    def forward():
+        try:
+            with torch.no_grad():
+                outputs.append(model_tp(input_ids).logits)
+        except Exception as error:
+            outputs.append(error)
+
+    forward()  # torch caches how to sum the ranks' embedding lookups, then another thread uses that cache
+    thread = threading.Thread(target=forward)
+    thread.start()
+    thread.join()
+    if isinstance(outputs[1], Exception):
+        raise outputs[1]
+    with torch.no_grad():
+        torch.testing.assert_close(outputs[1].cpu(), model(input_ids).logits.cpu())
+
+
+@is_tensor_parallel_test
+class TestTensorParallelThreads(TestCasePlus):
+    def test_forward_in_another_thread(self):
+        """A forward in a thread other than the first one's, as continuous batching runs after warming up its CUDA
+        graphs: the vocab-parallel embedding must not depend on torch's caches being from the same thread."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            LlamaForCausalLM(_tiny_llama_config()).save_pretrained(tmp_dir)
+            run_distributed(world_size=2)(_test_forward_in_another_thread_impl)(tmp_dir)
 
 
 @is_tensor_parallel_test
