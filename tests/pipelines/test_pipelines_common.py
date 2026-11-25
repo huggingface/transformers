@@ -511,6 +511,8 @@ class PipelinePadTest(unittest.TestCase):
                         else:
                             expected[:, i, :length] = positions
                     torch.testing.assert_close(actual, expected)
+
+    @require_torch
     def test_pipeline_padding_text_left_and_audio_features_right(self):
         import torch
 
