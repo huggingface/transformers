@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # MiniCPM-V 2.6
 
-[MiniCPM-V 2.6](https://huggingface.co/openbmb/MiniCPM-V-2_6) and [MiniCPM-V 4.0](https://huggingface.co/openbmb/MiniCPM-V-4) are multimodal models from [OpenBMB](https://github.com/OpenBMB) ([paper](https://huggingface.co/papers/2408.01800)) built like [MiniCPM-Llama3-V 2.5](minicpmv2_5), with a resampler of 64 learned queries. The vision encoder's position embedding follows each slice's 2D patch grid, and every slice has its own `<slice>...</slice>` placeholder. MiniCPM-V 2.6 uses a [Qwen2](qwen2) 7B language model, MiniCPM-V 4.0 MiniCPM4-3B, a [Llama](llama)-architecture model with LongRoPE. Images are prepared by [`MiniCPMV2_5ImageProcessor`].
+[MiniCPM-V 2.6](https://huggingface.co/openbmb/MiniCPM-V-2_6) and [MiniCPM-V 4.0](https://huggingface.co/openbmb/MiniCPM-V-4) are multimodal models from [OpenBMB](https://github.com/OpenBMB) ([paper](https://huggingface.co/papers/2408.01800)) built like [MiniCPM-Llama3-V 2.5](minicpmv2_5), with a resampler of 64 learned queries. The vision encoder's position embedding follows each slice's 2D patch grid, and every slice has its own `<slice>...</slice>` placeholder. MiniCPM-V 2.6 uses a [Qwen2](qwen2) 7B language model, MiniCPM-V 4.0 uses MiniCPM4-3B, a [Llama](llama)-architecture model with LongRoPE. Images are prepared by [`MiniCPMV2_5ImageProcessor`].
 
 The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
 
