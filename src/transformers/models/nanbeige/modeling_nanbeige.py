@@ -434,8 +434,7 @@ class NanbeigeForCausalLM(NanbeigePreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
-        r"""Return the final decoder pass's next-token logits in float32.
-
+        r"""
         Example:
 
         ```python
@@ -465,8 +464,10 @@ class NanbeigeForCausalLM(NanbeigePreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             **kwargs,
         )
-        hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
-        logits = self.lm_head(hidden_states).float()
+
+        hidden_states = outputs.last_hidden_state
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

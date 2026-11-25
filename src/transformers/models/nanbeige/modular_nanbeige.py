@@ -20,8 +20,8 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
@@ -217,20 +217,8 @@ class NanbeigeModel(LlamaModel):
 class NanbeigeForCausalLM(LlamaForCausalLM):
     @can_return_tuple
     @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        cache: Cache | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        r"""Return the final decoder pass's next-token logits in float32.
-
+    def forward(self, **super_kwargs):
+        r"""
         Example:
 
         ```python
@@ -251,29 +239,7 @@ class NanbeigeForCausalLM(LlamaForCausalLM):
         >>> generated_ids = model.generate(**inputs, max_new_tokens=30)
         >>> tokenizer.decode(generated_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         ```"""
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            cache=cache,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
-        logits = self.lm_head(hidden_states).float()
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return super().forward(**super_kwargs)
 
 
 __all__ = ["NanbeigeConfig", "NanbeigePreTrainedModel", "NanbeigeModel", "NanbeigeForCausalLM"]
