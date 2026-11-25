@@ -23,7 +23,12 @@ from unittest.mock import patch
 from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_torch_greater_or_equal
-from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, is_torch_available, is_torch_distributed_available
+from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
+    is_torch_available,
+    is_torch_distributed_available,
+)
 
 
 if is_torch_available():
@@ -97,12 +102,12 @@ def _test_save_and_from_pretrained(rank, directory, source_config, destination_c
         torch.testing.assert_close(full_state_dict, reference.state_dict())
 
 
-def _test_save_sharded_model_files(rank, directory, source_config):
+def _test_save_sharded_model_files(rank, directory, source_config, max_shard_size):
     with _distributed_context(rank, directory):
         model = MixtralForCausalLM.from_pretrained(
             f"{directory}/seed", distributed_config=DistributedConfig(**source_config)
         )
-        model.save_pretrained(f"{directory}/saved", max_shard_size="10KB")
+        model.save_pretrained(f"{directory}/saved", max_shard_size=max_shard_size)
 
 
 def _test_save_one_file_per_rank(rank, directory, source_config):
@@ -243,6 +248,17 @@ class DistributedUtilsTest(unittest.TestCase):
             num_attention_heads=4,
             num_key_value_heads=4,
         )
+        # Its fused experts are reverted to one tensor per expert on save, and its `lm_head` is tied.
+        self.moe_config = MixtralConfig(
+            vocab_size=16,
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            num_local_experts=4,
+            tie_word_embeddings=True,
+        )
 
     @parameterized.expand(
         [
@@ -271,21 +287,11 @@ class DistributedUtilsTest(unittest.TestCase):
     @parameterized.expand(PARALLEL_CONFIGS.items())
     def test_save_sharded_model_files(self, _, source_config):
         # The fused experts are reverted to one tensor per expert on save, the tied `lm_head` is dropped, and the
-        # files outnumber the ranks, so every rank writes files over several rounds.
-        config = MixtralConfig(
-            vocab_size=16,
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            num_local_experts=4,
-            tie_word_embeddings=True,
-        )
+        # files outnumber the ranks.
         with tempfile.TemporaryDirectory() as directory:
-            reference = MixtralForCausalLM(config)
+            reference = MixtralForCausalLM(self.moe_config)
             reference.save_pretrained(f"{directory}/seed", max_shard_size="10KB")
-            mp.spawn(_test_save_sharded_model_files, args=(directory, source_config), nprocs=4, join=True)
+            mp.spawn(_test_save_sharded_model_files, args=(directory, source_config, "10KB"), nprocs=4, join=True)
 
             # Same weight names and files as a non-distributed save.
             seed_index = json.loads(Path(f"{directory}/seed/{SAFE_WEIGHTS_INDEX_NAME}").read_text(encoding="utf-8"))
@@ -295,6 +301,21 @@ class DistributedUtilsTest(unittest.TestCase):
             self.assertGreater(len(saved_files), 4)
             self.assertEqual(saved_files, {path.name for path in Path(f"{directory}/saved").glob("*.safetensors")})
 
+            torch.testing.assert_close(
+                MixtralForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
+            )
+
+    @parameterized.expand(PARALLEL_CONFIGS.items())
+    def test_save_single_model_file(self, _, source_config):
+        # Fewer files than ranks: all ranks write into the same file.
+        with tempfile.TemporaryDirectory() as directory:
+            reference = MixtralForCausalLM(self.moe_config)
+            reference.save_pretrained(f"{directory}/seed")
+            mp.spawn(_test_save_sharded_model_files, args=(directory, source_config, "50GB"), nprocs=4, join=True)
+
+            saved_files = [path.name for path in Path(f"{directory}/saved").glob("*.safetensors")]
+            self.assertEqual(saved_files, [SAFE_WEIGHTS_NAME])
+            self.assertFalse(Path(f"{directory}/saved/{SAFE_WEIGHTS_INDEX_NAME}").exists())
             torch.testing.assert_close(
                 MixtralForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
             )
@@ -322,17 +343,8 @@ class DistributedUtilsTest(unittest.TestCase):
     @parameterized.expand(PARALLEL_CONFIGS.items())
     def test_save_one_file_per_rank(self, _, source_config):
         # With the default `max_shard_size`, the files are capped to a `world_size`-th of the model: one file per rank.
-        config = MixtralConfig(
-            vocab_size=16,
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            num_local_experts=4,
-        )
         with tempfile.TemporaryDirectory() as directory:
-            reference = MixtralForCausalLM(config)
+            reference = MixtralForCausalLM(self.moe_config)
             reference.save_pretrained(f"{directory}/seed")
             mp.spawn(_test_save_one_file_per_rank, args=(directory, source_config), nprocs=4, join=True)
 

@@ -13,8 +13,12 @@
 # limitations under the License.
 from __future__ import annotations
 
+import json
 import os
 import re
+from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -45,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-    from safetensors.torch import save_file as safe_save_file
+    from safetensors.torch import save as safe_save
     from torch.utils._pytree import tree_map
 
     from ..core_model_loading import _revert_weight_conversion_per_transform, revert_weight_conversion
@@ -163,17 +167,18 @@ def save_sharded_state_dict(
     save_original_format: bool,
 ) -> tuple[StateDictSplit, dict[str, str]]:
     """
-    Write a TP- or FSDP-sharded `state_dict` as regular safetensors files, with every rank writing some of the files.
+    Write a TP- or FSDP-sharded `state_dict` as regular safetensors files, with every rank writing part of the files.
     Every rank must call this function.
 
         1. Everything is planned on meta tensors with the global shapes, so every rank gets the same plan without
-           moving any data: the groups of weights reverted together by one weight conversion, the reverted weights,
-           and their split into files. The files are at most `max_shard_size`, and for large models at most a
-           `world_size`-th of the model, so that there are at least as many files as ranks.
-        2. File `i` is written by rank `i % world_size`, in rounds of `world_size` files: all ranks join the
-           `full_tensor()` gathers of the groups of the round, and each owner reverts the groups of its file and
-           keeps the weights on CPU. Then all owners write their file in parallel. CPU memory per rank is bounded by
-           one file.
+           moving any data. The files are at most `max_shard_size`, and for large models at most a `world_size`-th
+           of the model, so that there are at least as many files as ranks.
+        2. All the files laid end to end are cut into `world_size` slices of about the same size, between groups,
+           and rank `r` writes the groups of slice `r`. Each file is then written by one rank, or by the two ranks
+           whose slices meet in it.
+        3. The weights are gathered group by group: a group is the weights reverted together by one weight conversion.
+           Every rank joins each `full_tensor()` gather, since it is a collective, but only the owner of the group
+           reverts it and writes it from a background thread.
 
     Returns the split of the reverted state dict and the weight map of the files that were written.
     """
@@ -192,8 +197,6 @@ def save_sharded_state_dict(
     def revert(tensors: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
         return revert_weight_conversion(model, tensors) if save_original_format else tensors
 
-    # The split is planned on the reverted weights, so that the weights reverted together by a conversion never
-    # have to be in the same file.
     meta_state_dict = to_meta(state_dict)
     if save_original_format:
         reverted_groups = _revert_weight_conversion_per_transform(model, meta_state_dict)
@@ -203,9 +206,9 @@ def save_sharded_state_dict(
     planned_outputs = [to_meta(reverted) for _, reverted in reverted_groups]
     reverted_state_dict = {name: tensor for outputs in planned_outputs for name, tensor in outputs.items()}
 
-    # At least one file per rank, so that every rank writes: the files are at most a `world_size`-th of the model.
-    # `max_shard_size` is only an upper bound, so smaller files still honor it. Small models keep their files, since
-    # writing them takes little time anyway.
+    # At least one file per rank: filesystems like ext4 serialize concurrent writes into the same file (inode lock),
+    # so ranks sharing a file wait on each other. `max_shard_size` is only an upper bound, so smaller files still
+    # honor it. Small models keep their files, since writing them takes little time anyway.
     total_bytes = sum(tensor.nbytes for tensor in reverted_state_dict.values())
     file_size = min(
         convert_file_size_to_int(max_shard_size),
@@ -215,44 +218,57 @@ def save_sharded_state_dict(
         reverted_state_dict, filename_pattern=filename_pattern, max_shard_size=file_size
     )
     weight_map = state_dict_split.tensor_to_filename
-    files = list(state_dict_split.filename_to_tensors)
+    headers, locations = _plan_safetensors_files(state_dict_split.filename_to_tensors, reverted_state_dict, metadata)
 
-    # The groups each file needs, in the order of their first weight in the file. A group whose weights go to
-    # several files is gathered and reverted for each of them.
-    output_group = {name: index for index, outputs in enumerate(planned_outputs) for name in outputs}
-    file_groups = {filename: [] for filename in files}
-    for filename, names in state_dict_split.filename_to_tensors.items():
-        for name in names:
-            if output_group[name] not in file_groups[filename]:
-                file_groups[filename].append(output_group[name])
+    # Rank `r` owns the groups of the `r`-th of `world_size` slices of equal size of all the files laid end to end,
+    # cut between groups. A slice can end in the middle of a file, so two ranks can write the same file.
+    file_indices = {filename: index for index, filename in enumerate(headers)}
+    position = [
+        min((file_indices[locations[name][0]], locations[name][1]) for name in outputs) if outputs else (0, 0)
+        for outputs in planned_outputs
+    ]
+    # Each rank goes through its slice front to back, and the gathers go through all the slices at the same pace in
+    # bytes, so that every rank's writer always has work queued.
+    group_owner = [0] * len(groups)
+    order, queued_bytes = [], [0] * world_size
+    written_bytes, total_bytes = 0, max(total_bytes, 1)
+    for group_index in sorted(range(len(groups)), key=lambda i: position[i]):
+        group_bytes = sum(tensor.nbytes for tensor in planned_outputs[group_index].values())
+        owner = min(int((written_bytes + group_bytes / 2) * world_size / total_bytes), world_size - 1)
+        group_owner[group_index] = owner
+        order.append((queued_bytes[owner], owner, group_index))
+        queued_bytes[owner] += group_bytes
+        written_bytes += group_bytes
+    order = [group_index for _, _, group_index in sorted(order)]
 
-    with torch.no_grad():
-        for round_start in range(0, len(files), world_size):
-            round_files = files[round_start : round_start + world_size]
-            # The files of the round are gathered in lockstep: at step `k`, all ranks join the gathers of the `k`-th
-            # group of every file, then each owner reverts its group and copies it to CPU. Gathering one file after
-            # the other would make the copies run one rank at a time, since an owner blocked in `.cpu()` delays the
-            # gathers of the next file.
-            shard = {}
-            for k in range(max(len(file_groups[filename]) for filename in round_files)):
-                owned_group = None
-                for owner, filename in enumerate(round_files):
-                    if k >= len(file_groups[filename]):
-                        continue
-                    group_index = file_groups[filename][k]
-                    tensors = {}
-                    for name in groups[group_index]:
-                        tensor = state_dict[name]
-                        # Collective: every rank must gather, even if it does not own the file.
-                        if is_dtensor(tensor):
-                            tensor = tensor.full_tensor()
-                        if owner == rank:
-                            tensors[name] = tensor.detach()
+    # Every file is created with its header before any rank writes into it.
+    fds = {
+        filename: _create_safetensors_file(os.path.join(save_directory, filename), header)
+        for index, (filename, header) in enumerate(headers.items())
+        if index % world_size == rank
+    }
+    _distributed_barrier()
+    for group_index, outputs in enumerate(planned_outputs):
+        if group_owner[group_index] != rank:
+            continue
+        for filename in {weight_map[name] for name in outputs} - fds.keys():
+            fds[filename] = os.open(os.path.join(save_directory, filename), os.O_WRONLY | getattr(os, "O_BINARY", 0))
+    device = next((tensor.device for tensor in state_dict.values()), torch.device("cpu"))
+    writer = _SafetensorsWriter(fds, locations, device)
+    try:
+        with torch.no_grad():
+            for group_index in order:
+                owner = group_owner[group_index]
+                tensors = {}
+                for name in groups[group_index]:
+                    tensor = state_dict[name]
+                    # Collective: every rank must gather, even if it does not own the group.
+                    if is_dtensor(tensor):
+                        tensor = tensor.full_tensor()
                     if owner == rank:
-                        owned_group = (filename, group_index, tensors)
-                if owned_group is None:
+                        tensors[name] = tensor.detach()
+                if owner != rank:
                     continue
-                filename, group_index, tensors = owned_group
                 outputs = revert(tensors)
                 planned = planned_outputs[group_index]
                 if {name: (t.shape, t.dtype) for name, t in outputs.items()} != {
@@ -262,21 +278,192 @@ def save_sharded_state_dict(
                         f"The weights reverted from {groups[group_index]} do not match the ones planned on meta tensors."
                     )
                 for name, tensor in outputs.items():
-                    if weight_map[name] == filename:
-                        shard[name] = tensor.contiguous().cpu()
+                    writer.submit(name, tensor)
                 del tensors, outputs
+    finally:
+        writer.close()
 
-            if rank < len(round_files):
-                safe_save_file(shard, os.path.join(save_directory, round_files[rank]), metadata=metadata)
-            del shard
-
-    # The files are only complete once every owner is done writing.
+    # The files are only complete once every rank is done writing.
     _distributed_barrier()
     return state_dict_split, weight_map
 
 
+# Bytes of gathered weights a rank can queue for its writer thread before the gathers wait for it.
+_MAX_PENDING_WRITE_BYTES = 2**30
 # When the files are made smaller to give every rank its own file, they are not made smaller than this.
 _MIN_CAPPED_FILE_BYTES = 2**30
+# Size of each of the two pinned buffers that stream a device tensor to its file.
+_STAGING_BUFFER_BYTES = 128 * 2**20
+
+
+@lru_cache
+def _safetensors_dtype(dtype: torch.dtype) -> str:
+    # Serialize an empty tensor to read the dtype name safetensors uses, rather than relying on its private tables.
+    data = safe_save({"tensor": torch.empty(0, dtype=dtype)})
+    header_size = int.from_bytes(data[:8], "little")
+    return json.loads(data[8 : 8 + header_size])["tensor"]["dtype"]
+
+
+def _plan_safetensors_files(
+    filename_to_tensors: dict[str, list[str]], tensors: dict[str, torch.Tensor], metadata: dict[str, str] | None
+) -> tuple[dict[str, bytes], dict[str, tuple[str, int]]]:
+    """
+    Build the header of every safetensors file from meta `tensors`, and the location (file and absolute
+    byte offset) of every tensor. Like `safetensors`, larger dtypes come first so that every tensor is aligned on its dtype.
+    """
+    headers, locations = {}, {}
+    for filename, names in filename_to_tensors.items():
+        names = sorted(names, key=lambda name: (-tensors[name].element_size(), name))
+        header = {"__metadata__": metadata} if metadata else {}
+        offsets, offset = {}, 0
+        for name in names:
+            tensor = tensors[name]
+            header[name] = {
+                "dtype": _safetensors_dtype(tensor.dtype),
+                "shape": list(tensor.shape),
+                "data_offsets": [offset, offset + tensor.nbytes],
+            }
+            offsets[name] = offset
+            offset += tensor.nbytes
+        header = json.dumps(header, separators=(",", ":")).encode("utf-8")
+        # The data starts on an 8-byte boundary, as in files written by `safetensors`.
+        header += b" " * (-len(header) % 8)
+        header = len(header).to_bytes(8, "little") + header
+        headers[filename] = header
+        locations.update({name: (filename, len(header) + tensor_offset) for name, tensor_offset in offsets.items()})
+    return headers, locations
+
+
+def _write_at(fd: int, data: memoryview, offset: int) -> None:
+    # Each file descriptor is only used by one thread, so seeking then writing is safe and also works on Windows.
+    os.lseek(fd, offset, os.SEEK_SET)
+    while data:
+        data = data[os.write(fd, data) :]
+
+
+def _create_safetensors_file(path: str, header: bytes) -> int:
+    """Create the file with its header, and return it open for writing the tensors at their planned offsets."""
+    # `O_BINARY` only exists, and is needed, on Windows.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0))
+    try:
+        _write_at(fd, memoryview(header), 0)
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+class _SafetensorsWriter:
+    """
+    Write tensors at the planned location:
+        - `fds`: file descriptors of the files to write, open for writing at the planned offsets.
+        - `locations`: maps every tensor name to the file and absolute byte offset to write it at.
+        - `device`: the device of the tensors to write, or "cpu" if they are all on CPU.
+
+    The idea is to make the writes efficient and non blocking, with three ideas:
+        1. It is non blocking so that the main thread can keep gathering tensors while the writes are done in the
+           background.
+        2. It does not hold more than `_MAX_PENDING_WRITE_BYTES` of gathered tensors to avoid using too much memory.
+        3. A submitted write job is divided in two steps:
+            - Copying the tensor on device to a pinned buffer on CPU.
+            - Writing the pinned buffer to the file.
+            To make things fast, we overlap these two steps.
+            We use two pinned buffers, chunk the tensor into pieces, and overlap the copy of the one chunk with
+            the write of the previous one.
+    """
+
+    def __init__(self, fds: dict[str, int], locations: dict[str, tuple[str, int]], device: torch.device):
+        self._fds = fds
+        self._locations = locations
+        # A single worker: the writes share the staging buffers, the stream and the file descriptors, and finish in
+        # the order they were submitted.
+        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="safetensors-writer")
+
+        # The writes not checked yet with their sizes, and the total of those sizes: a tensor stays in memory until it
+        # is written, so `submit` keeps this total under `_MAX_PENDING_WRITE_BYTES` to bound the memory they hold.
+        self._pending: deque[tuple[Future, int]] = deque()
+        self._pending_bytes = 0
+
+        # Device tensors are copied to CPU on a side stream, so that the copies overlap the gathers on the current
+        # stream.
+        self._stream = self._buffers = self._copied = None
+
+        # Only torch 2.7 supports the `torch.Stream` generic API.
+        if device.type != "cpu" and fds and is_torch_greater_or_equal("2.7"):
+            self._stream = torch.Stream(device=device)
+            self._buffers = [torch.empty(_STAGING_BUFFER_BYTES, dtype=torch.uint8, pin_memory=True) for _ in range(2)]
+            # Side stream.
+            self._copied = [torch.Event(device=device) for _ in range(2)]
+
+    def submit(self, name: str, tensor: torch.Tensor) -> None:
+        """
+        Submits a tensor to be written at its planned location in the file.
+        """
+        # Flat bytes, made on the current stream so the writer only has to wait for it.
+        data = tensor.contiguous().reshape(-1).view(torch.uint8)
+        ready = None
+        if data.device.type != "cpu":
+            if self._stream is None:
+                # Without a side stream (torch < 2.7), copy to CPU on the current stream, which blocks.
+                data = data.cpu()
+            else:
+                # Marks the end of the work producing `data` on the current stream: the side stream waits for it
+                # before copying.
+                ready = torch.Event(device=data.device)
+                ready.record()
+
+        # Wait for the writes that are done or that would make the pending bytes exceed the limit, so that the next write
+        # can be submitted without holding too much memory.
+        while self._pending and (
+            self._pending[0][0].done() or self._pending_bytes + data.numel() > _MAX_PENDING_WRITE_BYTES
+        ):
+            future, size = self._pending.popleft()
+            self._pending_bytes -= size
+            future.result()
+
+        # Submit the write to the background thread.
+        filename, offset = self._locations[name]
+        self._pending.append((self._pool.submit(self._write, self._fds[filename], data, offset, ready), data.numel()))
+        self._pending_bytes += data.numel()
+
+    def close(self) -> None:
+        try:
+            self._pool.shutdown(wait=True)
+            for future, _ in self._pending:
+                future.result()
+        finally:
+            for fd in self._fds.values():
+                os.close(fd)
+
+    def _write(self, fd: int, data: torch.Tensor, offset: int, ready: torch.Event | None) -> None:
+        if self._stream is None:
+            _write_at(fd, memoryview(data.numpy()), offset)
+            return
+        previous = None
+        with self._stream:
+            # Waiting for `ready` on the side stream, meaning that `data` has been computed on device and is ready to
+            # be written.
+            self._stream.wait_event(ready)
+            for index, start in enumerate(range(0, data.numel(), _STAGING_BUFFER_BYTES)):
+                chunk = data[start : start + _STAGING_BUFFER_BYTES]
+                # The buffer is free: its previous chunk was written before this loop iteration.
+                buffer = self._buffers[index % 2][: chunk.numel()]
+                # Only queues the copy into the pinned buffer: the event tells when it is done.
+                buffer.copy_(chunk, non_blocking=True)
+                self._copied[index % 2].record(self._stream)
+
+                # Write the previous chunk while this one is copied.
+                if previous is not None:
+                    previous_buffer, previous_start, previous_event = previous
+                    # Wait for the copy of the previous chunk to finish before writing it to the file.
+                    previous_event.synchronize()
+                    _write_at(fd, memoryview(previous_buffer.numpy()), offset + previous_start)
+                previous = (buffer, start, self._copied[index % 2])
+
+        if previous is not None:
+            previous_buffer, previous_start, previous_event = previous
+            previous_event.synchronize()
+            _write_at(fd, memoryview(previous_buffer.numpy()), offset + previous_start)
 
 
 def consolidate_distributed_checkpoint(
