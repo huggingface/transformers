@@ -56,7 +56,7 @@ from transformers.utils.kernel_config import add_to_mapping_local
 
 if is_kernels_available():
     from kernels import LayerRepository, LocalLayerRepository, Mode, kernelize, use_kernel_mapping
-    from kernels.validate import DigestValidator
+    from kernels._internals.validate import DigestValidator
 
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
@@ -933,7 +933,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
 
             mock_kernel = SimpleNamespace(layers=SimpleNamespace(LlamaRMSNorm=MockRMSNorm))
 
-            with patch("kernels.layer.layer.get_local_kernel", return_value=mock_kernel) as mock_load:
+            with patch("kernels._internals.layer.layer.get_local_kernel", return_value=mock_kernel) as mock_load:
                 layer_cls = repo.load()
 
             mock_load.assert_called_once_with(repo_path)
