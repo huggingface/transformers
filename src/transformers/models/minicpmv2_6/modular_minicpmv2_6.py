@@ -23,21 +23,29 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
-from ..minicpmv2_5.configuration_minicpmv2_5 import MiniCPMV2_5Config, MiniCPMV2_5VisionConfig
+from ..idefics2.configuration_idefics2 import Idefics2VisionConfig
+from ..idefics2.modeling_idefics2 import Idefics2VisionEmbeddings, Idefics2VisionTransformer
+from ..minicpmv2_5.configuration_minicpmv2_5 import MiniCPMV2_5Config
 from ..minicpmv2_5.modeling_minicpmv2_5 import (
     MiniCPMV2_5ForConditionalGeneration,
     MiniCPMV2_5Model,
     MiniCPMV2_5PreTrainedModel,
-    MiniCPMV2_5VisionEmbeddings,
-    MiniCPMV2_5VisionTransformer,
 )
 from ..minicpmv2_5.processing_minicpmv2_5 import MiniCPMV2_5Processor
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-2_6")
 @strict
-class MiniCPMV2_6VisionConfig(MiniCPMV2_5VisionConfig):
+class MiniCPMV2_6VisionConfig(Idefics2VisionConfig):
     model_type = "minicpmv2_6_vision"
+    base_config_key = "vision_config"
+
+    hidden_size: int = 1152
+    intermediate_size: int = 4304
+    num_hidden_layers: int = 27
+    num_attention_heads: int = 16
+    image_size: int | list[int] | tuple[int, int] = 980
+    patch_size: int | list[int] | tuple[int, int] = 14
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-2_6")
@@ -93,7 +101,7 @@ class MiniCPMV2_6Config(MiniCPMV2_5Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class MiniCPMV2_6VisionEmbeddings(MiniCPMV2_5VisionEmbeddings):
+class MiniCPMV2_6VisionEmbeddings(Idefics2VisionEmbeddings):
     def forward(self, pixel_values: torch.Tensor, patch_position_ids: torch.LongTensor) -> torch.Tensor:
         embeddings = self.patch_embedding(pixel_values).flatten(2).transpose(1, 2)
         boundaries = torch.arange(
@@ -107,10 +115,10 @@ class MiniCPMV2_6VisionEmbeddings(MiniCPMV2_5VisionEmbeddings):
 
 
 class MiniCPMV2_6PreTrainedModel(MiniCPMV2_5PreTrainedModel):
-    pass
+    _no_split_modules = ["MiniCPMV2_6EncoderLayer", "MiniCPMV2_6Resampler"]
 
 
-class MiniCPMV2_6VisionTransformer(MiniCPMV2_5VisionTransformer):
+class MiniCPMV2_6VisionTransformer(Idefics2VisionTransformer):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -208,25 +216,13 @@ class MiniCPMV2_6Processor(MiniCPMV2_5Processor):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        image_token: str = "<unk>",
-        image_start_token: str = "<image>",
-        image_end_token: str = "</image>",
-        slice_start_token: str = "<slice>",
-        slice_end_token: str = "</slice>",
-        num_image_tokens: int = 64,
+        image_token="<unk>",
+        num_image_tokens=64,
         **kwargs,
     ):
         r"""
         image_token (`str`, *optional*, defaults to `"<unk>"`):
             Marks an image in the text, and is repeated `num_image_tokens` times per image slice.
-        image_start_token (`str`, *optional*, defaults to `"<image>"`):
-            Opens the image tokens of the overview image.
-        image_end_token (`str`, *optional*, defaults to `"</image>"`):
-            Closes the image tokens of the overview image.
-        slice_start_token (`str`, *optional*, defaults to `"<slice>"`):
-            Opens the image tokens of one slice.
-        slice_end_token (`str`, *optional*, defaults to `"</slice>"`):
-            Closes the image tokens of one slice.
         num_image_tokens (`int`, *optional*, defaults to 64):
             Number of image tokens per slice (the resampler's number of latents).
         """
@@ -235,10 +231,6 @@ class MiniCPMV2_6Processor(MiniCPMV2_5Processor):
             tokenizer,
             chat_template=chat_template,
             image_token=image_token,
-            image_start_token=image_start_token,
-            image_end_token=image_end_token,
-            slice_start_token=slice_start_token,
-            slice_end_token=slice_end_token,
             num_image_tokens=num_image_tokens,
             **kwargs,
         )

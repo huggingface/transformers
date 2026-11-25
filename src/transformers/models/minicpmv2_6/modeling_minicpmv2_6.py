@@ -93,36 +93,26 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    scaling: float,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    if hasattr(module, "num_key_value_groups"):
-        key = repeat_kv(key, module.num_key_value_groups)
-        value = repeat_kv(value, module.num_key_value_groups)
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class MiniCPMV2_6CrossAttention(nn.Module):
@@ -203,6 +193,30 @@ class MiniCPMV2_6CrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class MiniCPMV2_6PositionEmbedding(nn.Module):
+    """
+    2D sin-cos embedding of `(row, col)` patch positions, added to the resampler's keys. Uses the axial rope frequencies
+    (the same for rows and columns), laid out as [sin_col | cos_col | sin_row | cos_row] like the original.
+    """
+
+    def __init__(self, embed_dim: int, theta: float = 10000.0):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.theta = theta
+        self.inv_freq = nn.Buffer(self.compute_inv_freq(embed_dim, theta), persistent=False)
+
+    @staticmethod
+    def compute_inv_freq(embed_dim: int, theta: float) -> torch.Tensor:
+        spatial_dim = embed_dim // 2
+        return 1.0 / (theta ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+
+    def forward(self, patch_position_ids: torch.Tensor) -> torch.Tensor:
+        inv_freq = self.inv_freq.to(patch_position_ids.device)
+        row_angles = patch_position_ids[..., 0, None].float() * inv_freq
+        col_angles = patch_position_ids[..., 1, None].float() * inv_freq
+        return torch.cat([col_angles.sin(), col_angles.cos(), row_angles.sin(), row_angles.cos()], dim=-1)
+
+
 class MiniCPMV2_6Resampler(nn.Module):
     """
     Perceiver-style resampler: `resampler_n_latents` learned queries cross-attend to the patch features of one image
@@ -221,18 +235,7 @@ class MiniCPMV2_6Resampler(nn.Module):
         self.attn = MiniCPMV2_6CrossAttention(config, self.embed_dim, config.resampler_n_heads)
         self.ln_post = nn.LayerNorm(self.embed_dim, eps=1e-6)
         self.proj = nn.Parameter(torch.zeros(self.embed_dim, self.embed_dim))
-
-    def get_2d_pos_embed(self, patch_position_ids: torch.Tensor) -> torch.Tensor:
-        """
-        2D sin-cos embedding of `(row, col)` patch positions, shape `(num_slices, max_patches, embed_dim)`. Channels
-        are laid out as [sin_w | cos_w | sin_h | cos_h] like the original.
-        """
-        quarter = self.embed_dim // 4
-        omega = torch.arange(quarter, device=patch_position_ids.device, dtype=torch.float32) / quarter
-        omega = 1.0 / 10000**omega
-        rows = patch_position_ids[..., 0, None].float() * omega
-        cols = patch_position_ids[..., 1, None].float() * omega
-        return torch.cat([cols.sin(), cols.cos(), rows.sin(), rows.cos()], dim=-1)
+        self.position_embedding = MiniCPMV2_6PositionEmbedding(self.embed_dim)
 
     def forward(
         self,
@@ -241,19 +244,23 @@ class MiniCPMV2_6Resampler(nn.Module):
         patch_position_ids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        kv = self.ln_kv(self.kv_proj(vision_features))
-        pos_embed = (self.get_2d_pos_embed(patch_position_ids) * pixel_attention_mask[..., None]).to(kv.dtype)
-        queries = self.ln_q(self.query).unsqueeze(0).expand(kv.shape[0], -1, -1)
+        key_value_states = self.ln_kv(self.kv_proj(vision_features))
+        position_embeddings = self.position_embedding(patch_position_ids) * pixel_attention_mask[..., None]
+        query_states = self.ln_q(self.query).unsqueeze(0).expand(key_value_states.shape[0], -1, -1)
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embeds=queries,
+            inputs_embeds=query_states,
             attention_mask=pixel_attention_mask,
-            encoder_hidden_states=kv,
+            encoder_hidden_states=key_value_states,
         )
-        attn_output, _ = self.attn(
-            queries, kv, attention_mask=attention_mask, encoder_position_embeddings=pos_embed, **kwargs
+        attention_output, _ = self.attn(
+            query_states,
+            key_value_states,
+            attention_mask=attention_mask,
+            encoder_position_embeddings=position_embeddings.to(key_value_states.dtype),
+            **kwargs,
         )
-        return self.ln_post(attn_output) @ self.proj
+        return self.ln_post(attention_output) @ self.proj
 
 
 @auto_docstring
@@ -276,6 +283,20 @@ class MiniCPMV2_6PreTrainedModel(PreTrainedModel):
         if isinstance(module, MiniCPMV2_6Resampler):
             init.trunc_normal_(module.query, std=0.02)
             init.normal_(module.proj, std=module.embed_dim**-0.5)
+        elif isinstance(module, MiniCPMV2_6PositionEmbedding):
+            init.copy_(module.inv_freq, module.compute_inv_freq(module.embed_dim, module.theta))
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 class MiniCPMV2_6VisionAttention(nn.Module):
