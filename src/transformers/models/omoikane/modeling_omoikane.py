@@ -1087,13 +1087,11 @@ class OmoikaneForCausalLM(OmoikanePreTrainedModel, GenerationMixin):
         >>> model = OmoikaneForCausalLM.from_pretrained("Goekdeniz-Guelmez/Omoikane-50M-A27M-Base")
         >>> tokenizer = AutoTokenizer.from_pretrained("Goekdeniz-Guelmez/Omoikane-50M-A27M-Base")
 
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> inputs = tokenizer("Plants create energy through a process known as", return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        >>> generate_ids = model.generate(inputs.input_ids, max_new_tokens=20)
+        >>> text = tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
         ```"""
         outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
