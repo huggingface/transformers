@@ -3461,10 +3461,18 @@ if is_torch_xpu_available():
 
 
 if is_torch_available() and is_torch_tpu_available():
+
+    def _tpu_device_count() -> int:
+        # Before the first TPU op, device_count() ignores TPU_VISIBLE_DEVICES.
+        # Apply it here so test collection doesn't claim TPU chips.
+        count = torch.accelerator.device_count()
+        visible = os.environ.get("TPU_VISIBLE_DEVICES")
+        return min(count, len(visible.split(","))) if visible else count
+
     # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
     # falls back to the `default` entry of its table rather than being faked here.
     BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
-    BACKEND_DEVICE_COUNT["tpu"] = torch.accelerator.device_count
+    BACKEND_DEVICE_COUNT["tpu"] = _tpu_device_count
     BACKEND_SYNCHRONIZE["tpu"] = torch.accelerator.synchronize
     BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
     if hasattr(torch.tpu, "empty_cache"):
