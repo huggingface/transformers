@@ -213,7 +213,6 @@ class EuroBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = EuroBertForMaskedLM if is_torch_available() else None
-    _torch_compile_train_attention_dropout = 0.0
 
     def setUp(self):
         self.model_tester = EuroBertModelTester(self)
