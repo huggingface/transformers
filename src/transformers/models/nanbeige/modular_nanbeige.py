@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
@@ -33,11 +33,8 @@ from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
-    LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -72,18 +69,6 @@ class NanbeigeConfig(LlamaConfig):
     num_loops: int = positive_int_field(default=2)
     loop_loss_weights: list[float] | None = None
     skip_loop_final_norm: bool = False
-
-
-class NanbeigeRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class NanbeigeRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
-
-
-class NanbeigeMLP(LlamaMLP):
-    pass
 
 
 class NanbeigeAttention(LlamaAttention):
@@ -234,30 +219,19 @@ class NanbeigeForCausalLM(LlamaForCausalLM):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
-        r"""Predict the next token from the hidden states of the final decoder pass."""
-        outputs: BaseModelOutputWithPast = self.model(
+        r"""Return the final decoder pass's next-token logits in float32."""
+        super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
             inputs_embeds=inputs_embeds,
+            labels=labels,
             use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
-        hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
-        logits = self.lm_head(hidden_states).float()
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        logits = self.lm_head(hidden_states).float()  # noqa: F821, F841
 
 
 __all__ = [
