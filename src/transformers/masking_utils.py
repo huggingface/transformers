@@ -724,8 +724,8 @@ class AttentionMaskInterface(GeneralInterface):
         "flash_attention_2": flash_attention_mask,
         "flash_attention_3": flash_attention_mask,
         "flash_attention_4": flash_attention_mask,
-        "flash_attention_torch": flash_attention_mask,
         "flex_attention": flex_attention_mask,
+        "varlen_attention": sdpa_mask,
     }
 
 
@@ -771,15 +771,15 @@ def packed_sequences_cu_seq_lens(
     needs_dense_mask: bool,
 ) -> torch.Tensor | None:
     """
-    Packed rows are attended over by SDPA's varlen kernel, and by eager one sequence at a time, which take the
-    cumulative lengths of the sequences over the flattened batch instead of a dense mask. Returns them, or `None` when
+    Packed rows are attended over by torch's varlen kernel (`varlen_attention`), and by SDPA and eager one sequence at a
+    time, which take the cumulative lengths of the sequences over the flattened batch instead of a dense mask. Returns them, or `None` when
     the dense mask is needed.
 
     The attention layers pass their own `sliding_window`, as for flash attention.
     """
     if (
         packed_sequence_mask is None
-        or config._attn_implementation not in ("sdpa", "eager")
+        or config._attn_implementation not in ("sdpa", "eager", "varlen_attention")
         or needs_dense_mask
         # Sparse-attention indexers (`index_topk`) select their keys on the dense mask
         or getattr(config, "index_topk", None) is not None

@@ -158,8 +158,9 @@ def per_sequence_attention_forward(
     if sequence_lengths is not None:
         lengths_q = lengths_k = sequence_lengths
     else:
+        # One host read (and one graph break when compiled) for self-attention, where both are the same lengths
         lengths_q = (cu_seq_lens_q[1:] - cu_seq_lens_q[:-1]).tolist()
-        lengths_k = (cu_seq_lens_k[1:] - cu_seq_lens_k[:-1]).tolist()
+        lengths_k = lengths_q if cu_seq_lens_k is cu_seq_lens_q else (cu_seq_lens_k[1:] - cu_seq_lens_k[:-1]).tolist()
     attn_outputs, attn_weights = [], []
     for q, k, v in zip(query.split(lengths_q, dim=2), key.split(lengths_k, dim=2), value.split(lengths_k, dim=2)):
         mask = None

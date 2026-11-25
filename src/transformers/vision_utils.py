@@ -147,8 +147,8 @@ def packed_sequences_attention_forward(
 ) -> tuple[torch.Tensor, tuple[torch.Tensor, ...] | torch.Tensor | None]:
     """Attend within each of the sequences packed along the length of `query`, `key` and `value`.
 
-    Flash Attention and SDPA (varlen kernels) and Flex Attention (a block mask) attend over all the packed sequences in
-    one call. Eager attends over each sequence separately.
+    Flash Attention and `varlen_attention` (varlen kernels) and Flex Attention (a block mask) attend over all the packed
+    sequences in one call. SDPA and eager attend over each sequence separately.
 
     Args:
         module: the attention module, passed to `attention_interface`.
@@ -169,7 +169,11 @@ def packed_sequences_attention_forward(
     # Packed sequences are delimited by `cu_seqlens`: drop the `attention_mask=None` some layers pass down
     kwargs.pop("attention_mask", None)
     config = cast(PreTrainedConfig, module.config)
-    if is_flash_attention_requested(config) or config._attn_implementation in ("sdpa", "flex_attention"):
+    if is_flash_attention_requested(config) or config._attn_implementation in (
+        "sdpa",
+        "flex_attention",
+        "varlen_attention",
+    ):
         return attention_interface(
             module,
             query,
