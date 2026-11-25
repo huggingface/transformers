@@ -436,13 +436,15 @@ class Mxfp4GptOssMLP(nn.Module):
             routed_out = self.experts(hidden_states, router_indices, router_scores)
         else:
             router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
-            with on_device(router_logits.device):
-                routing_data, gather_idx, scatter_idx = triton_kernels_hub.routing.routing(
-                    router_logits, self.router.top_k
-                )
-            routed_out = self.experts.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
+            routed_out = self._routed(hidden_states, router_logits)
         routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
         return routed_out, router_logits
+
+    @torch.compiler.disable  # [scratch] triton_kernels' routing and matmul_ogs do not trace under dynamo
+    def _routed(self, hidden_states, router_logits):
+        with on_device(router_logits.device):
+            routing_data, gather_idx, scatter_idx = triton_kernels_hub.routing.routing(router_logits, self.router.top_k)
+        return self.experts.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
 
 
 def dequantize_convertops(blocks, scales, dtype):
