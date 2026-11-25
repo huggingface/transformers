@@ -19,6 +19,7 @@ import os
 import torch
 import triton
 import triton.language as tl
+from torch.distributed.tensor import DTensor
 
 from ._proto_fp8_experts import decode_route, decode_topk_sum
 
@@ -205,30 +206,41 @@ def trtllm_bf16_prepare_model(model) -> int:
             and not module.has_post_expert_norm
             and not module.has_bias
             and not module.is_transposed
-            and not module._is_expert_parallel
             and module.gate_up_proj.dtype == torch.bfloat16
             and module.gate_up_proj.shape[1] % 256 == 0
             and module.down_proj.shape[1] % 128 == 0
         )
         if not usable:
             continue
-        _trtllm_bf16_shuffle_(module.gate_up_proj.data, True, cache)
-        _trtllm_bf16_shuffle_(module.down_proj.data, False, cache)
+        gate_up, down = module.gate_up_proj.data, module.down_proj.data
+        if isinstance(gate_up, DTensor):  # expert parallel: this rank's experts, shuffled in place in its shard
+            gate_up, down = gate_up.to_local(), down.to_local()
+        _trtllm_bf16_shuffle_(gate_up, True, cache)
+        _trtllm_bf16_shuffle_(down, False, cache)
         module._proto_trtllm_bf16 = True
         prepared += 1
     return prepared
 
 
-def _trtllm_bf16_experts(gate_up, down, hidden_states, top_k_index, top_k_weights):
+def _trtllm_bf16_experts(gate_up, down, hidden_states, top_k_index, top_k_weights, expert_parallel):
     from flashinfer.fused_moe import WeightLayout, trtllm_bf16_routed_moe
 
     num_experts, two_i, hidden = gate_up.shape
+    num_global, offset = num_experts, 0
+    if expert_parallel:
+        # AllReduceEP hands this rank's experts local ids, num_experts for the other ranks' routes (weight 0): the
+        # kernel takes global ids and skips the experts outside [offset, offset + num_experts)
+        rank, world = torch.distributed.get_rank(), torch.distributed.get_world_size()
+        num_global, offset = num_experts * world, num_experts * rank
+        top_k_index = torch.where(
+            top_k_index >= num_experts, (offset + num_experts) % num_global, top_k_index + offset
+        )  # fmt: skip
     out = trtllm_bf16_routed_moe(
         topk_ids=(top_k_index.to(torch.int32), top_k_weights.to(torch.bfloat16)), hidden_states=hidden_states,
         gemm1_weights=gate_up.view(num_experts, hidden // 64, two_i, 64),
         gemm2_weights=down.view(num_experts, two_i // 2 // 64, hidden, 64),
-        num_experts=num_experts, top_k=top_k_index.shape[-1], n_group=None, topk_group=None,
-        intermediate_size=two_i // 2, local_expert_offset=0, local_num_experts=num_experts, routing_method_type=1,
+        num_experts=num_global, top_k=top_k_index.shape[-1], n_group=None, topk_group=None,
+        intermediate_size=two_i // 2, local_expert_offset=offset, local_num_experts=num_experts, routing_method_type=1,
         use_shuffled_weight=True, weight_layout=WeightLayout.BlockMajorK, do_finalize=True,
     )  # fmt: skip
     return out[0] if isinstance(out, (list, tuple)) else out
@@ -242,7 +254,7 @@ def proto_decode_experts_forward(self, hidden_states, top_k_index, top_k_weights
 
     if self.__dict__.get("_proto_trtllm_bf16"):  # weights shuffled for TRT-LLM: no other path reads them now
         return torch.compiler.disable(_trtllm_bf16_experts)(
-            self.gate_up_proj, self.down_proj, hidden_states, top_k_index, top_k_weights
+            self.gate_up_proj, self.down_proj, hidden_states, top_k_index, top_k_weights, self._is_expert_parallel
         )
     usable = (
         self.has_gate

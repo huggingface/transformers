@@ -772,12 +772,14 @@ class ModelRunner:
             return None
 
         # [scratch] Dynamo compiles some frames once per layer (guards on the layer index or the module): with the default
-        # limit of 8 recompiles, the layers after the 8th ran eager inside the CUDA graphs. Not for FP8 checkpoints:
-        # their compiled layers were 2-4x slower than the eager ones (Qwen3-30B-A3B-FP8 H100)
+        # limit of 8 recompiles, the layers after the 8th ran eager inside the CUDA graphs. Not for FP8 checkpoints nor
+        # under tensor parallelism: their compiled layers were 2-4x slower than the eager ones (Qwen3-30B-A3B-FP8 H100,
+        # Qwen3-235B-A22B TP2 B300)
         quantization = getattr(model.config, "quantization_config", None)
         quant_method = quantization.get("quant_method") if isinstance(quantization, dict) else None
         quant_method = quant_method or getattr(quantization, "quant_method", None)
-        if str(quant_method) not in ("fp8", "QuantizationMethod.FP8"):
+        distributed = torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1
+        if not distributed and str(quant_method) not in ("fp8", "QuantizationMethod.FP8"):
             torch._dynamo.config.recompile_limit = max(
                 torch._dynamo.config.recompile_limit, int(os.environ.get("PROTO_RECOMPILE_LIMIT", 256))
             )
