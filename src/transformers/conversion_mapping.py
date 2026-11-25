@@ -1522,6 +1522,25 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "liquid_codec": [
+            # released keys: backbones under `lfm.`, STFT ends at top level, quantizer projections under `fsq.`
+            WeightRenaming(source_patterns=r"^_frontend\.out\.", target_patterns="encoder.embedder.out_proj."),
+            WeightRenaming(source_patterns=r"^_frontend\.(in_proj|conv)\.", target_patterns=r"encoder.embedder.\1."),
+            WeightRenaming(source_patterns=r"^to_quantizer\.", target_patterns="encoder.output_proj."),
+            WeightRenaming(
+                source_patterns=r"^quantizer\.fsq\.(project_in|project_out)\.", target_patterns=r"quantizer.\1."
+            ),
+            WeightRenaming(
+                source_patterns=r"^encoder\.lfm\.(layers|embedding_norm)\.", target_patterns=r"encoder.\1."
+            ),
+            WeightRenaming(
+                source_patterns=r"^decoder\.lfm\.(layers|embedding_norm)\.", target_patterns=r"decoder.\1."
+            ),
+            WeightRenaming(source_patterns=r"^decoder\.lin\.", target_patterns="decoder.head.linear."),
+            WeightRenaming(source_patterns=r"^decoder\.istft\.window", target_patterns="decoder.head.window"),
+            WeightRenaming(source_patterns=r"^from_quantizer\.", target_patterns="decoder.input_proj."),
+            WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
+        ],
         "ernie4_5_vl_moe": [
             # vision
             WeightRenaming("vision_model", "vision_tower"),
