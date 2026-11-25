@@ -425,7 +425,10 @@ class DeferredStopCheck(StopCheck):
         # outputs or if the user passed an explicit Cache object
         self.cache = cache if cache_is_returned else None
         if self.cache is not None:
-            self.cache.activate_past_recording(recurrent_states_to_keep=1)  # we will crop at most 1 token
+            cache = cache.self_attention_cache if isinstance(cache, EncoderDecoderCache) else cache
+            current_num_to_keep = max(cache.get_recurrent_states_to_keep(i) for i in range(len(cache.layers)))
+            # If not already set, we only need to crop at most 1 token
+            self.cache.activate_past_recording(recurrent_states_to_keep=max(1, current_num_to_keep))
         pinned = input_ids.device.type == "cuda"
         self.slots = deque(
             (
