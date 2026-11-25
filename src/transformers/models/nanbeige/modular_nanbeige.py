@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
@@ -220,18 +220,29 @@ class NanbeigeForCausalLM(LlamaForCausalLM):
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""Return the final decoder pass's next-token logits in float32."""
-        super().forward(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             cache=cache,
             inputs_embeds=inputs_embeds,
-            labels=labels,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
             **kwargs,
         )
-        logits = self.lm_head(hidden_states).float()  # noqa: F821, F841
+        hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
+        logits = self.lm_head(hidden_states).float()
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            cache=outputs.cache,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 __all__ = [

@@ -460,10 +460,8 @@ class NanbeigeForCausalLM(NanbeigePreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             **kwargs,
         )
-
-        hidden_states = outputs.last_hidden_state
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-        logits = self.lm_head(hidden_states).float()  # noqa: F821, F841
+        hidden_states = slice_logits_to_keep(outputs.last_hidden_state, logits_to_keep)
+        logits = self.lm_head(hidden_states).float()
 
         loss = None
         if labels is not None:
