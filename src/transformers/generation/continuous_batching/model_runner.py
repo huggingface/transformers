@@ -790,7 +790,8 @@ class ModelRunner:
         quant_method = quantization.get("quant_method") if isinstance(quantization, dict) else None
         quant_method = quant_method or getattr(quantization, "quant_method", None)
         distributed = torch.distributed.is_initialized() and torch.distributed.get_world_size() > 1
-        if not distributed and str(quant_method) not in ("fp8", "QuantizationMethod.FP8"):
+        raise_under_tp = os.environ.get("PROTO_RECOMPILE_TP", "0") == "1"  # dev knob: TP runs too
+        if (not distributed or raise_under_tp) and str(quant_method) not in ("fp8", "QuantizationMethod.FP8"):
             torch._dynamo.config.recompile_limit = max(
                 torch._dynamo.config.recompile_limit, int(os.environ.get("PROTO_RECOMPILE_LIMIT", 256))
             )
