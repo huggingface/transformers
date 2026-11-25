@@ -749,6 +749,8 @@ def _process_flash_attention_kwargs(
 
 
 _PROTO_KV_WRITE = os.environ.get("PROTO_KV_WRITE", "1") == "1"
+# [scratch] debug: attention sinks through the log-sum-exp rescale on Hopper too (see `_flash_attention_forward`)
+_PROTO_SINKS_BY_LSE = os.environ.get("PROTO_SINKS_BY_LSE") == "1"
 
 
 def _flash_attention_forward(
@@ -872,11 +874,22 @@ def _flash_attention_forward(
         if _PROTO_KV_WRITE:  # [scratch] write the new K/V first, then a plain paged call
             from .integrations._proto_paged_kv_write import paged_kv_write
 
+            # FA3 takes attention sinks on Hopper only. Elsewhere the sink joins the softmax as one more key through the
+            # log-sum-exp of the scores: out * exp(lse) / (exp(lse) + exp(sink)) = out * sigmoid(lse - sink)
+            sinks = flash_kwargs_fn.keywords.get("s_aux")
+            if sinks is not None and (_PROTO_SINKS_BY_LSE or torch.cuda.get_device_capability()[0] != 9):
+                flash_kwargs_fn = partial(flash_kwargs_fn.func, **{**flash_kwargs_fn.keywords, "s_aux": None})
+            else:
+                sinks = None
             seqused = paged_kv_write(k, v, k_cache, v_cache, block_table, cache_seqlens, cu_seq_lens_q, max_length_q)
             flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=seqused)
             out = flash_kvcache_fn(
-                q, k_cache, v_cache, cu_seqlens_q=cu_seq_lens_q, pack_gqa=True, num_splits=1, **flash_kwargs
-            )
+                q, k_cache, v_cache, cu_seqlens_q=cu_seq_lens_q, pack_gqa=True, num_splits=1,
+                return_softmax_lse=sinks is not None, **flash_kwargs,
+            )  # fmt: skip
+            if sinks is not None:  # lse is [heads, tokens]
+                out, lse = out[0], out[1]
+                out = out * torch.sigmoid(lse.transpose(0, 1) - sinks.float())[..., None].to(out.dtype)
         else:
             flash_kwargs = flash_kwargs_fn(
                 max_seqlen_q=max_length_q, block_table=block_table, cache_seqlens=cache_seqlens
