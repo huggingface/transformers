@@ -26,7 +26,6 @@ jobs:
   # its date. Both are shown in the report (`vllm-ci-report`).
   find-vllm-commit:
     name: Find the vLLM commit to test
-    if: false  # [Temporary] trial run
     runs-on: ubuntu-latest
     permissions: {}
     outputs:
