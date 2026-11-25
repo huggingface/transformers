@@ -27,6 +27,9 @@ The method works best when the assistant model is significantly smaller than the
 
 Pass `assistant_model` to [`~GenerationMixin.generate`]. Set `do_sample=True` to resample if token validation fails.
 
+> [!TIP]
+> Pass `cache_implementation="static"` to run the verification step of the main model through [torch.compile](./perf_torch_compile), see [KV cache](./kv_cache#fixed-size-cache). The assistant keeps running eagerly, since its draft length varies between rounds.
+
 <hfoptions id="spec-decoding">
 <hfoption id="greedy search">
 
@@ -189,7 +192,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 ## Multi-token prediction drafter
 
-An MTP drafter is a lightweight assistant model loaded from a separate checkpoint. It proposes candidate tokens for the target model to verify. The drafter uses the target model's input embeddings and attends to its KV cache. It starts from the target model's hidden states, then drafts tokens autoregressively. For each next token, it feeds its projected hidden state back into the drafter. The target model verifies the drafted tokens in one forward pass, as in speculative deocding.
+An MTP drafter is a lightweight assistant model loaded from a separate checkpoint. It proposes candidate tokens for the target model to verify. The drafter uses the target model's input embeddings and attends to its KV cache. It starts from the target model's hidden states, then drafts tokens autoregressively. For each next token, it feeds its projected hidden state back into the drafter. The target model verifies the drafted tokens in one forward pass, as in speculative decoding.
 
 Unlike MTP layers, which are part of the target checkpoint and share its output head, an MTP drafter is a separate assistant model. It uses the target's input embeddings and KV cache to propose tokens.
 

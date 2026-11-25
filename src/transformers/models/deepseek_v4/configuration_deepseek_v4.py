@@ -97,7 +97,6 @@ class DeepseekV4Config(PreTrainedConfig):
     """
 
     model_type = "deepseek_v4"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # `num_local_experts` is the standard MoE attr name (read by FP8 / TP integrations);
     # `intermediate_size` is what :class:`LlamaMLP` reads for the shared expert width
     # — V4 only ships `moe_intermediate_size` so we route the read through.
@@ -111,13 +110,10 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    # Main attention and the shared MLP stay replicated. Shared-KV MQA and the CSA / HCA compressor
-    # broadcast one KV head via `repeat_kv`, so colwise `q_b_proj` would mismatch the rank-local
-    # head count; the shared MLP is too small to be worth sharding.
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",

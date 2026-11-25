@@ -16,54 +16,45 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
-> [!WARNING]
-> NVFP4 support is limited: Blackwell GPUs only, no tensor parallelism, no CPU or disk offload, no saving or training,
-> and MoE experts only from pre-quantized checkpoints. See [Current limitations](#current-limitations).
+NVFP4 is NVIDIA's 4-bit floating-point format. Each block of 16 weights shares an FP8 scale, and each tensor has an FP32 scale on top. Transformers quantizes the weights while the model loads and quantizes activations on the fly, so prefill runs as a W4A4 matmul on Blackwell tensor cores and decode runs as a W4A16 matmul. Use it to run 4-bit models on a Blackwell GPU.
 
-NVFP4 quantization packs full-precision linear weights into NVIDIA's 4-bit floating-point format while a model is
-loaded. [`NVFP4Config`] replaces eligible bias-free `torch.nn.Linear` modules, whose `in_features` and `out_features` are both divisible by 16, with an NVFP4 linear implementation from
-the [NVFP4 Hub kernel](https://huggingface.co/kernels-community/nvfp4-gemm). The model's attention and MLP interfaces are
-not replaced.
+The table below summarizes what NVFP4 supports in Transformers.
 
-> [!TIP]
-> NVFP4 requires a Blackwell GPU with compute capability 10.0 or newer, a compatible CUDA-enabled PyTorch build, and
-> the [kernels](https://github.com/huggingface/kernels) package.
+| | |
+|---|---|
+| Config | [`NVFP4Config`] |
+| `quant_method` | `nvfp4` |
+| Workflow | Quantize while loading, load pre-quantized |
+| Bits | 4 |
+| Hardware | One CUDA GPU with compute capability 10.0+ (Blackwell) |
+| Save | ❌ |
+| Fine-tune | ❌ |
+| Auto-compile | ✅ |
 
-Install Accelerate and a compatible version of `kernels`.
+## Install the NVFP4 kernels
+
+Transformers downloads the NVFP4 kernels from the [kernels-community/nvfp4-gemm](https://huggingface.co/kernels-community/nvfp4-gemm) repository on the Hub. Install the [kernels](https://huggingface.co/docs/kernels/index) library. The kernel needs a build that matches your PyTorch and CUDA versions.
 
 ```bash
-pip install --upgrade accelerate kernels
+pip install -U "transformers[kernels]"
 ```
 
-Pass [`NVFP4Config`] to [`~PreTrainedModel.from_pretrained`] with a single CUDA device. Weights are quantized as they
-are loaded, so the source checkpoint should contain floating-point weights.
+## Quantize a model with NVFP4
+
+Create a [`NVFP4Config`] and pass it to [`~PreTrainedModel.from_pretrained`] with a `device_map` that places the whole model on one CUDA GPU. The source checkpoint must have floating-point weights.
 
 ```py
-import torch
+from transformers import AutoModelForCausalLM, NVFP4Config
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, NVFP4Config
-
-
-model_id = "meta-llama/Llama-3.2-1B"
 quantization_config = NVFP4Config()
 model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    dtype=torch.bfloat16,
-    device_map="cuda",
+    "Qwen/Qwen3-8B",
     quantization_config=quantization_config,
+    device_map="cuda",
 )
-
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-inputs = tokenizer("NVFP4 is", return_tensors="pt").to(model.device)
-output = model.generate(**inputs, max_new_tokens=20)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use `modules_to_not_convert` to keep selected modules in their original precision.
-
-```py
-quantization_config = NVFP4Config(modules_to_not_convert=["vision", "lm_head"])
-```
+NVFP4 replaces each `torch.nn.Linear` layer that has no bias and whose `in_features` and `out_features` are both divisible by 16. Other linear layers keep their original precision. [`NVFP4Config`] has no parameters that change how the weights are quantized.
 
 ## Pre-quantized checkpoints
 
@@ -85,7 +76,7 @@ needs neither the kernel nor a Blackwell GPU.
 NVFP4 linear modules support `torch.compile`. The first compiled invocation includes graph compilation time, so warm up
 the model before measuring generation throughput.
 
-## Current limitations
+## Limitations
 
 - Quantizing while loading runs on one CUDA device. A pre-quantized checkpoint can span several with a `device_map`.
 - Expert parallelism shards NVFP4 experts. Tensor parallelism of NVFP4 layers is rejected, since their scales have no
@@ -94,3 +85,8 @@ the model before measuring generation throughput.
 - MoE experts are only quantized from pre-quantized checkpoints, not on the fly.
 - Weight-only (`W4A16_NVFP4`) layers dequantize their weights in each forward, without the kernels.
 - NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.
+
+## Resources
+
+- [Introducing NVFP4 for Efficient and Accurate Low-Precision Inference](https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/) blog post
+- [kernels-community/nvfp4-gemm](https://huggingface.co/kernels-community/nvfp4-gemm) Hub kernel

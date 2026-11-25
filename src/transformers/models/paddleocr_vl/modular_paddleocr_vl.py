@@ -32,7 +32,8 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
@@ -49,7 +50,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -394,7 +395,6 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaddleOCRDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -423,12 +423,13 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -439,11 +440,11 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
         if inputs_embeds is None:
             inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
@@ -459,7 +460,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=text_position_ids,
         )
 
@@ -472,7 +473,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
                 attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
                 position_ids=text_position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -480,7 +481,7 @@ class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -540,8 +541,7 @@ class PaddleOCRVisionMLP(SiglipMLP):
 
 
 class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+    pass
 
 
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
@@ -733,12 +733,13 @@ class PaddleOCRVLModel(Qwen2VLModel):
         )
         return special_image_mask
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: list[torch.Tensor] | None = None,
+        cache: list[torch.Tensor] | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         pixel_values: torch.Tensor | None = None,
@@ -746,7 +747,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
@@ -771,7 +772,7 @@ class PaddleOCRVLModel(Qwen2VLModel):
                 image_grid_thw=image_grid_thw,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 mm_token_type_ids=mm_token_type_ids,
             )
 
@@ -779,13 +780,13 @@ class PaddleOCRVLModel(Qwen2VLModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
-        return outputs
+        return MultimodalBaseModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -794,12 +795,13 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     def get_video_features(self):
         raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -809,7 +811,7 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -847,12 +849,12 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         >>> print(output_text)
         ```
         """
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MultimodalBaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             image_grid_thw=image_grid_thw,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             pixel_values=pixel_values,
@@ -871,12 +873,13 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
         )
 
 

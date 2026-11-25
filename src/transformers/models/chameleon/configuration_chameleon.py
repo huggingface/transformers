@@ -91,7 +91,6 @@ class ChameleonConfig(PreTrainedConfig):
     sub_configs_defaults = {
         "vq_config": ChameleonVQVAEConfig,
     }
-    keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 65536
     hidden_size: int = 4096

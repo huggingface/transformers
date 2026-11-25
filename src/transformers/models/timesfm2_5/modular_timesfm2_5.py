@@ -27,6 +27,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..apertus.modeling_apertus import ApertusAttention
@@ -179,12 +180,13 @@ class TimesFm2_5Attention(ApertusAttention):
         super().__init__(config, layer_idx)
         self.scaling = nn.Parameter(torch.empty((self.head_dim,)))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        past_key_values=None,
+        cache=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         input_shape = hidden_states.shape[:-1]
@@ -203,8 +205,8 @@ class TimesFm2_5Attention(ApertusAttention):
         scale = F.softplus(self.scaling).mul(1.442695041 / math.sqrt(self.head_dim))
         query_states = query_states * scale[None, None, None, :]
 
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -431,7 +433,7 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
         position_ids = torch.arange(sequence_length, device=input_embeddings.device).unsqueeze(0) - num_masked
 
         padding_mask = (~patch_padding).to(torch.int64)
-        attention_mask = create_causal_mask(self.config, input_embeddings, padding_mask, past_key_values=None)
+        attention_mask = create_causal_mask(self.config, input_embeddings, padding_mask, cache=None)
         position_embeddings = self.rotary_emb(input_embeddings, position_ids)
 
         hidden_states = input_embeddings

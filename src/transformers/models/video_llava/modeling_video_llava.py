@@ -23,7 +23,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
@@ -37,67 +41,44 @@ from .configuration_video_llava import VideoLlavaConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for VideoLlava base model outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class VideoLlavaModelOutputWithPast(ModelOutput):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+class VideoLlavaModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    last_hidden_state: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-    video_hidden_states: torch.Tensor | None = None
+    @property
+    def video_hidden_states(self):
+        logger.warning_once(
+            "`video_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.video_outputs.pooler_output
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for VideoLlava causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class VideoLlavaCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+class VideoLlavaCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    video_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor`  of size `(batch_size * num_frames, num_videos, sequence_length, hidden_size)`.
-        video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    loss: torch.Tensor | None = None
-    logits: torch.Tensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.Tensor] | None = None
-    attentions: tuple[torch.Tensor] | None = None
-    image_hidden_states: torch.Tensor | None = None
-    video_hidden_states: torch.Tensor | None = None
+    @property
+    def video_hidden_states(self):
+        logger.warning_once(
+            "`video_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.video_outputs.pooler_output
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->VideoLlava
@@ -129,13 +110,11 @@ class VideoLlavaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = (
@@ -290,6 +269,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -297,7 +277,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         pixel_values_videos: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
@@ -347,19 +327,14 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         return VideoLlavaModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
-            video_hidden_states=video_features if mm_encoder_outputs.get("video") is not None else None,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -409,6 +384,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     @auto_docstring
     @deprecate_kwarg("pixel_values_images", version="v5.23", new_name="pixel_values")
     # Keep both image inputs in sig because `generate()` relies on inspect to filter out inputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -417,7 +393,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         pixel_values_videos: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.Tensor | None = None,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
@@ -505,7 +481,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             pixel_values_videos=pixel_values_videos,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             vision_feature_layer=vision_feature_layer,
@@ -527,11 +503,11 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         return VideoLlavaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            video_hidden_states=outputs.video_hidden_states,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 

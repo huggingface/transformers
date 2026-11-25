@@ -173,7 +173,6 @@ class EdgeTamFeedForward(Sam2FeedForward):
 class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = None
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EdgeTamModel):

@@ -158,6 +158,19 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
+    def test_rope_positions_stay_fp32_when_loaded_in_bf16(self):
+        # A 12x12 patch grid with 4x4 windows scales the positions of the global layers by 1/3, which bf16 can't represent
+        config = self.model_tester.get_config()
+        config.backbone_config.image_size = 12 * config.backbone_config.patch_size
+        config.backbone_config.window_size = 4
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            Sam3VisionModel(config).save_pretrained(tmp_dir)
+            model = Sam3VisionModel.from_pretrained(tmp_dir, dtype=torch.bfloat16)
+
+        for layer in model.backbone.layers:
+            expected = layer.precompute_positions(layer.config, layer.window_size)
+            torch.testing.assert_close(layer.position_ids, expected, rtol=0, atol=0)
+
     @unittest.skip(reason="SAM3's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

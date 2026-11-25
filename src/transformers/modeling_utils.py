@@ -1110,7 +1110,7 @@ class PreTrainedModel(
 
     # Device-map related properties
     _no_split_modules: set[str] | list[str] | None = None
-    _skip_keys_device_placement: set[str] | list[str] | None = None
+    _skip_keys_device_placement: set[str] | list[str] | None = ["cache"]
 
     # Specific dtype upcasting
     # `_keep_in_fp32_modules` will upcast to fp32 only if the requested dtype is fp16
@@ -1807,6 +1807,16 @@ class PreTrainedModel(
                 requested_original_flash_attn = False
 
         if is_kernel(applicable_attn_implementation):
+            # A Flash Attention kernel from the Hub needs the same model support as `flash_attention_*`
+            if not self._supports_flash_attn and is_flash_attention_requested(
+                requested_attention_implementation=applicable_attn_implementation
+            ):
+                raise ValueError(
+                    f"{self.__class__.__name__} does not support Flash Attention yet, so it cannot use the "
+                    f"`{applicable_attn_implementation}` kernel. Please request to add support where the model is "
+                    f"hosted, on its model hub page: https://huggingface.co/{self.config._name_or_path}/discussions/new"
+                    " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
+                )
             try:
                 # preload flash attention here to allow compile with fullgraph
                 lazy_import_flash_attention(applicable_attn_implementation, allow_all_kernels=allow_all_kernels)
@@ -2298,7 +2308,6 @@ class PreTrainedModel(
             else:
                 self.model = decoder
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize the weights. This is quite general on purpose, in the spirit of what we usually do. For more complex

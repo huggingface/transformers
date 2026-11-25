@@ -16,107 +16,107 @@ rendered properly in your Markdown viewer.
 
 # GPTQ
 
-The [GPT-QModel](https://github.com/ModelCloud/GPTQModel) project (Python package `gptqmodel`) implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes the error. These weights are quantized to int4, but they're restored to fp16 on the fly during inference. This can save memory usage by 4x because the int4 weights are dequantized in a fused kernel rather than a GPU's global memory. Inference is also faster because a lower bitwidth takes less time to communicate.
+[GPTQ](https://huggingface.co/papers/2210.17323) quantizes a model one layer at a time and uses a small calibration dataset to update the remaining weights so they compensate for each layer's rounding error. Transformers runs GPTQ through [Optimum](https://huggingface.co/docs/optimum/index) and the [GPT-QModel](https://github.com/ModelCloud/GPTQModel) library. Use it to quantize a model to 2 to 8 bits with calibration while it loads, or to load one of the many GPTQ checkpoints on the Hub.
 
-AutoGPTQ is no longer supported in Transformers. Install GPT-QModel instead.
+The table below summarizes what GPTQ supports in Transformers.
 
-Install Accelerate, Transformers and Optimum first.
+| | |
+|---|---|
+| Config | [`GPTQConfig`] |
+| `quant_method` | `gptq` |
+| Workflow | Quantize while loading, with calibration |
+| Bits | 2, 3, 4, 8 |
+| Hardware | CUDA, XPU, CPU |
+| Save | ✅ |
+| Fine-tune | ✅ |
+| Auto-compile | ❌ |
+
+## Install GPTQ
+
+Install Optimum 1.24.0 or later and GPT-QModel 1.4.3 or later.
 
 ```bash
-pip install --upgrade accelerate optimum transformers
+pip install -U "optimum>=1.24.0"
+pip install -U "gptqmodel>=1.4.3" --no-build-isolation
 ```
 
-Then run the command below to install GPT-QModel.
+## Quantize a model with GPTQ
 
-```bash
-pip install gptqmodel --no-build-isolation
-```
-
-Create a [`GPTQConfig`] class and set the number of bits to quantize to, a dataset to calbrate the weights for quantization, and a tokenizer to prepare the dataset.
+Create a [`GPTQConfig`] with a `dataset` to calibrate on, and pass it to [`~PreTrainedModel.from_pretrained`]. The weights are quantized after they load. GPTQ recommends fp16, so the example below sets `dtype=torch.float16`.
 
 ```py
+import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, GPTQConfig
 
-tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
-gptq_config = GPTQConfig(bits=4, dataset="c4", tokenizer=tokenizer)
-```
-
-You can pass your own dataset as a list of strings, but it is highly recommended to use the same dataset from the GPTQ paper.
-
-```py
-dataset = ["gptqmodel is an easy-to-use model quantization library with user-friendly apis, based on the GPTQ algorithm."]
-gptq_config = GPTQConfig(bits=4, dataset=dataset, tokenizer=tokenizer)
-```
-
-Load a model to quantize and pass [`GPTQConfig`] to [`~AutoModelForCausalLM.from_pretrained`]. Set `device_map="auto"` to automatically offload the model to a CPU to help fit the model in memory, and allow the model modules to be moved between the CPU and GPU for quantization.
-
-```py
-quantized_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m", device_map="auto", quantization_config=gptq_config)
-```
-
-If you're running out of memory because a dataset is too large (disk offloading is not supported), try passing the `max_memory` parameter to allocate the amount of memory to use on your device (GPU and CPU).
-
-```py
-quantized_model = AutoModelForCausalLM.from_pretrained(
-    "facebook/opt-125m",
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+quantization_config = GPTQConfig(bits=4, dataset="c4", tokenizer=tokenizer)
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B",
+    quantization_config=quantization_config,
+    dtype=torch.float16,
     device_map="auto",
-    max_memory={0: "30GiB", 1: "46GiB", "cpu": "30GiB"},
-    quantization_config=gptq_config
 )
 ```
 
-> [!WARNING]
-> Depending on your hardware, it can take some time to quantize a model from scratch. It can take ~5 minutes to quantize the [facebook/opt-350m](https://huggingface.co/facebook/opt-350m) model on a free-tier Google Colab GPU, but it'll take ~4 hours to quantize a 175B parameter model on a NVIDIA A100. Before you quantize a model, it is a good idea to check the Hub if a GPTQ-quantized version of the model already exists.
+`dataset` is required to quantize a model. Pass the name of a dataset from the GPTQ paper, `"wikitext2"`, `"c4"`, or `"c4-new"`, or a list of strings. The `tokenizer` prepares the dataset. If you don't pass one, GPTQ loads the tokenizer from the model's repository.
 
-Once a model is quantized, you can use [`~PreTrainedModel.push_to_hub`] to push the model and tokenizer to the Hub where it can be easily shared and accessed. This saves the [`GPTQConfig`].
+Calibration runs the model block by block, so it takes much longer than loading. Before you quantize a model, check the Hub for an existing GPTQ checkpoint.
 
-```py
-quantized_model.push_to_hub("opt-125m-gptq")
-tokenizer.push_to_hub("opt-125m-gptq")
-```
+## Load a GPTQ checkpoint
 
-[`~PreTrainedModel.save_pretrained`] saves a quantized model locally. If the model was quantized with the `device_map` parameter, make sure to move the entire model to a GPU or CPU before saving it. The example below saves the model on a CPU.
-
-```py
-quantized_model.save_pretrained("opt-125m-gptq")
-tokenizer.save_pretrained("opt-125m-gptq")
-
-# if quantized with device_map set
-quantized_model.to("cpu")
-quantized_model.save_pretrained("opt-125m-gptq")
-```
-
-Reload a quantized model with [`~PreTrainedModel.from_pretrained`], and set `device_map="auto"` to automatically distribute the model on all available GPUs to load the model faster without using more memory than needed.
+Pass the checkpoint to [`~PreTrainedModel.from_pretrained`] without a [`GPTQConfig`]. Transformers reads the quantization settings from the checkpoint's config.
 
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen2.5-1.5B-Instruct-GPTQ-Int4",
+    device_map="auto",
+)
 ```
 
-## Marlin
+To change the kernel or buffer size, pass a [`GPTQConfig`] with the new `backend` or `max_input_length`. Transformers overrides only these two loading attributes and keeps the rest of the checkpoint's settings.
 
-[Marlin](https://github.com/IST-DASLab/marlin) is a 4-bit only CUDA GPTQ kernel, highly optimized for the NVIDIA A100 GPU (Ampere) architecture. Loading, dequantization, and execution of post-dequantized weights are highly parallelized, offering a substantial inference improvement versus the original CUDA GPTQ kernel. Marlin is only available for quantized inference and does not support model quantization.
+## Configure GPTQ
 
-Marlin inference can be activated with the `backend` parameter in [`GPTQConfig`].
+These [`GPTQConfig`] parameters change how the weights are quantized. See [`GPTQConfig`] for the rest.
+
+| Parameter | Default | Effect |
+|---|---|---|
+| `bits` | required | Number of bits per weight. Supports 2, 3, 4, and 8. |
+| `group_size` | `128` | Number of weights that share a scale. `-1` uses one scale per column. |
+| `damp_percent` | `0.1` | Fraction of the average Hessian diagonal added for numerical stability. Must be between 0 and 1. |
+| `desc_act` | `False` | Quantizes columns in order of decreasing activation size (act-order). Can improve accuracy and slow down inference. Setting it to `True` turns off `act_group_aware`. |
+| `sym` | `True` | Uses symmetric quantization. Set to `False` for asymmetric quantization. |
+| `modules_in_block_to_quantize` | `None` | Lists of module names in each block to quantize, in order. Linear layers not listed stay unquantized. With the default, every linear layer in the block is quantized. Requires Optimum 1.15.0 or later. |
+
+## Choose a kernel backend
+
+GPT-QModel runs the quantized layers through one of several kernels. The `backend` parameter picks one and defaults to `"auto"`, which lets GPT-QModel choose a kernel for your hardware and checkpoint. The example below loads a checkpoint with the ExLlamaV2 kernel.
 
 ```py
-
+from gptqmodel import BACKEND
 from transformers import AutoModelForCausalLM, GPTQConfig
 
-model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config=GPTQConfig(bits=4, backend="marlin"))
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen2.5-1.5B-Instruct-GPTQ-Int4",
+    quantization_config=GPTQConfig(bits=4, backend=BACKEND.EXLLAMA_V2),
+    device_map="auto",
+)
 ```
 
-## GPT-QModel
+See the GPT-QModel [backend list](https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py) for the available values.
 
-GPT-QModel is the actively maintained backend for GPTQ in Transformers. It was originally forked from AutoGPTQ, but has since diverged with significant improvements such as faster quantization, lower memory usage, and more accurate defaults.
+## Limitations
 
-GPT-QModel provides asymmetric quantization which can potentially lower quantization errors compared to symmetric quantization. It is not backward compatible with legacy AutoGPTQ checkpoints, and not all kernels (Marlin) support asymmetric quantization.
-
-GPT-QModel also has broader support for the latest LLM models, multimodal models (Qwen2-VL and Ovis1.6-VL), platforms (Linux, macOS, Windows 11), and hardware (AMD ROCm, Apple Silicon, Intel/AMD CPUs, and Intel Datacenter Max/Arc GPUs, etc.).
-
-The Marlin kernels are also updated for A100 GPUs and other kernels are updated to include auto-padding for legacy models and models with non-uniform in/out-features.
+- GPTQ only supports text models. Loading a model whose main input isn't `input_ids` raises a `RuntimeError`.
+- Quantizing a model with disk offloading in its `device_map` raises a `ValueError`.
+- Loading without GPT-QModel installed raises an `ImportError`. AutoGPTQ isn't supported.
+- Without a `device_map`, the model loads on the CPU.
 
 ## Resources
 
-Run the GPTQ quantization with PEFT [notebook](https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb?usp=sharing) for a hands-on experience.
+- [GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers](https://huggingface.co/papers/2210.17323) paper
+- [GPT-QModel](https://github.com/ModelCloud/GPTQModel) repository
+- [Optimum GPTQ](https://huggingface.co/docs/optimum/llm_quantization/usage_guides/quantization) guide
+- [GPTQ quantization with PEFT](https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb?usp=sharing) notebook

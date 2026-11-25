@@ -111,9 +111,9 @@ class DynamicLayer(CacheLayerMixin):
     is_croppable = True
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        self.dtype, self.device = key_states.dtype, key_states.device
-        self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
-        self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.device = key_states.device
+        self.keys = torch.tensor([], dtype=key_states.dtype, device=self.device)
+        self.values = torch.tensor([], dtype=value_states.dtype, device=self.device)
         self.is_initialized = True
 
     def update(
@@ -411,6 +411,7 @@ class StaticLayer(CacheLayerMixin):
     """
 
     is_compileable = True
+    is_croppable = True
     is_sliding = False
     cumulative_length: torch.Tensor
 
@@ -430,19 +431,19 @@ class StaticLayer(CacheLayerMixin):
         function ahead-of-time (this is required for `torch.export` for example). It is also required whenever the
         prefill itself ends up in a compiled region (with chunked prefill for instance).
         """
-        self.dtype, self.device = key_states.dtype, key_states.device
+        self.device = key_states.device
         self.batch_size, self.num_heads = key_states.shape[:2]
         self.v_head_dim = value_states.shape[-1]
         self.k_head_dim = key_states.shape[-1]
 
         self.keys = torch.zeros(
             (self.batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
-            dtype=self.dtype,
+            dtype=key_states.dtype,
             device=self.device,
         )
         self.values = torch.zeros(
             (self.batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
-            dtype=self.dtype,
+            dtype=value_states.dtype,
             device=self.device,
         )
         # Made on the device (it is 0 here): a 0-d host -> device copy waits for the zeros queued above (MPS: a full sync
@@ -508,6 +509,19 @@ class StaticLayer(CacheLayerMixin):
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        if tokens_to_remove > 0:
+            raise RuntimeError(
+                "Static layers can only be cropped by passing a negative int, to specify how many tokens to remove"
+            )
+        # Note that we do not touch the actual `keys` and `values` tensors, we simply take care of updating `cumulative_length` so that
+        # the next `update` will overwrite the stale states
+        # Note that has to be performed in-place, as we have a static address that we need to keep
+        self.cumulative_length.sub_(abs(tokens_to_remove))
+
 
 class StaticSlidingWindowLayer(StaticLayer):
     """
@@ -529,6 +543,8 @@ class StaticSlidingWindowLayer(StaticLayer):
         super().__init__(max_cache_len=effective_max_cache_len)
         # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
         self.cumulative_length_int = 0
+        # This needs to be checked dynamically, as it's only True if we never go beyond the window
+        self._is_croppable = max_cache_len <= sliding_window
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -631,9 +647,26 @@ class StaticSlidingWindowLayer(StaticLayer):
         """Returns the sequence length of the cached states."""
         return self.cumulative_length_int
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        # Note that this is only correct as long as we never went beyond the window, which `is_croppable` guarantees - otherwise the
+        # evicted states cannot be recovered
+        super().crop(tokens_to_remove)
+        self.cumulative_length_int -= abs(tokens_to_remove)
+
     def reset(self):
         super().reset()
         self.cumulative_length_int = 0
+
+    @property
+    def is_croppable(self) -> bool:
+        """Whether `crop` can put this layer back as it was."""
+        # Note: since LinearAttention layers have this as a `property`, we also need to access it as a `property` here for mixed classes
+        # such as `LinearAttentionAndStaticSlidingWindowAttentionLayer`, otherwise they complain if we try to set `self.is_croppable` directly
+        # in the `__init__`
+        return self._is_croppable
 
 
 class StaticIndexedLayer(StaticLayer):
@@ -696,6 +729,14 @@ class StaticIndexedLayer(StaticLayer):
 
         return self.indexer_keys
 
+    def crop(self, tokens_to_remove: int) -> None:
+        """
+        Remove `tokens_to_remove` tokens from the current cache layer.
+        """
+        super().crop(tokens_to_remove)
+        if self.is_indexer_initialized:
+            self.indexer_cumulative_length.sub_(abs(tokens_to_remove))
+
     def reset(self) -> None:
         super().reset()
         self.indexer_position_ids = None
@@ -719,6 +760,8 @@ class BaseQuantizedLayer(DynamicLayer):
     `_quantized_keys` and `_quantized_values`. Their layout is left to the backend, so the sequence length is
     tracked separately, in `cumulative_length`.
     """
+
+    is_croppable = False
 
     def __init__(self):
         super().__init__()
@@ -991,7 +1034,7 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
 
     def _dequantize(self, qtensor):
         quant_tensor, scale = qtensor
-        return (quant_tensor.float() * scale).to(self.dtype)
+        return (quant_tensor.float() * scale).to(self.keys.dtype)
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -1038,8 +1081,6 @@ class Fp8QuantizedLayer(BaseQuantizedLayer):
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
-    # All shapes are static by essence in a LinearAttention layer, so it is compilable
-    is_compileable = True
     # Linear attention layers track their own conv/recurrent states; they don't use the key/value early-init path.
     supports_early_init = False
 
@@ -1118,6 +1159,15 @@ class LinearAttentionCacheLayerMixin(ABC):
         # extra careful. If a conv states is initialized but no recurrent states are, then we return True as we know that we will never
         # have any recurrent state (they are updated in the same forward)
         return any(self.is_conv_states_initialized.values())
+
+    @property
+    def is_compileable(self) -> bool:
+        """
+        All shapes are static by essence in a LinearAttention layer, so it is compilable. The exception is when we record the past to
+        be able to `crop` later: the conv states then grow, and they are assigned instead of copied in place, so they lose their
+        static address and may alias a cudagraph output.
+        """
+        return not self.record_past
 
     def activate_past_recording(self):
         """
@@ -1898,8 +1948,7 @@ class Cache:
         """Return whether the layers of the cache are linear attention (Mamba/SSM) layers. Note that layers containing
         both linear and full attention states will return False by this function"""
         return [
-            isinstance(layer, LinearAttentionCacheLayerMixin)
-            and not isinstance(layer, LinearAttentionAndFullAttentionLayer)
+            isinstance(layer, LinearAttentionCacheLayerMixin) and not isinstance(layer, CacheLayerMixin)
             for layer in self.layers
         ]
 
@@ -1996,9 +2045,9 @@ class DynamicCache(Cache):
     >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
 
     >>> # Prepare a cache class and pass it to model's forward
-    >>> past_key_values = DynamicCache(config=model.config)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = DynamicCache(config=model.config)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     ```
     """
 
@@ -2087,9 +2136,9 @@ class StaticCache(Cache):
     >>> # Prepare a cache class and pass it to model's forward
     >>> # Leave empty space for 10 new tokens, which can be used when calling forward iteratively 10 times to generate
     >>> max_generated_length = inputs.input_ids.shape[1] + 10
-    >>> past_key_values = StaticCache(config=model.config, max_cache_len=max_generated_length)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = StaticCache(config=model.config, max_cache_len=max_generated_length)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     StaticCache()
     ```
     """
@@ -2224,9 +2273,9 @@ class EncoderDecoderCache(Cache):
     >>> # Prepare cache classes for encoder and decoder and pass it to model's forward
     >>> self_attention_cache = DynamicCache(config=self.config)
     >>> cross_attention_cache = DynamicCache(config=self.config)
-    >>> past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
-    >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-    >>> outputs.past_key_values # access cache filled with key/values from generation
+    >>> cache = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+    >>> outputs = model(**inputs, cache=cache, use_cache=True)
+    >>> outputs.cache # access cache filled with key/values from generation
     EncoderDecoderCache()
     ```
     """
@@ -2274,7 +2323,7 @@ class EncoderDecoderCache(Cache):
 
     def __len__(self):
         """
-        Support for backwards-compatible `past_key_values` length, e.g. `len(past_key_values)`. This value corresponds
+        Support for backwards-compatible `cache` length, e.g. `len(cache)`. This value corresponds
         to the number of layers in the model.
         """
         return len(self.self_attention_cache)

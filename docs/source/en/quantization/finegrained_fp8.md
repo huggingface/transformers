@@ -16,69 +16,69 @@ rendered properly in your Markdown viewer.
 
 # Fine-grained FP8
 
-Fine-grained FP8 quantization quantizes the weights and activations to fp8.
+Fine-grained FP8 stores weights in FP8 (E4M3) with one scale per 2D block of weights, 128x128 by default, and quantizes activations to FP8 at runtime with one scale per token for each 128-value group of input channels. It's the format [DeepSeek-V3](https://hf.co/papers/2412.19437) and many other FP8 checkpoints on the Hub use. Use it to run FP8 checkpoints, or to quantize a model to FP8 while it loads, on Ada, Hopper, or Blackwell GPUs and on Intel XPUs.
 
-- The weights are quantized to 8-bits for each 2D block (`weight_block_size=(128, 128)`).
-- The activations are quantized to 8-bits for each group per token. The group value matches the weights in the input channel (128 by default).
+The table below summarizes what Fine-grained FP8 supports in Transformers.
 
-FP8 quantization enables support for [DeepSeek-V3](https://hf.co/papers/2412.19437) and DeepSeek-R1.
+| | |
+|---|---|
+| Config | [`FineGrainedFP8Config`] |
+| `quant_method` | `fp8`, `mxfp8` |
+| Workflow | Quantize while loading, load pre-quantized |
+| Bits | 8 |
+| Hardware | CUDA (compute capability 8.9+), XPU |
+| Save | ✅ |
+| Fine-tune | ✅ |
+| Auto-compile | ✅ |
 
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/b7b3b34bf826a6423ea82ffc57ecac80c46c3c76/transformers/quantization/quantization_deepseek.png">
-</div>
+## Install the Fine-grained FP8 kernels
 
-> [!TIP]
-> You need a GPU with Compute Capability>=9 (H100), and install a PyTorch version compatible with the CUDA version of your GPU.
-
-Install Accelerate and upgrade to the latest version of PyTorch.
+Transformers downloads the FP8 matmul kernel from the [kernels-community/finegrained-fp8](https://huggingface.co/kernels-community/finegrained-fp8) repository on the Hub. Install the [kernels](https://huggingface.co/docs/kernels/index) and [Accelerate](https://huggingface.co/docs/accelerate/index) libraries.
 
 ```bash
-pip install --upgrade accelerate torch
+pip install -U "transformers[kernels]" accelerate
 ```
 
-Create a [`FineGrainedFP8Config`] class and pass it to [`~PreTrainedModel.from_pretrained`] to quantize it. The weights are loaded in full precision (`torch.float32`) by default regardless of the actual data type the weights are stored in. Set `dtype="auto"` to load the weights in the data type defined in a models `config.json` file to automatically load the most memory-optimal data type.
+## Quantize a model with Fine-grained FP8
+
+Create a [`FineGrainedFP8Config`] and pass it to [`~PreTrainedModel.from_pretrained`].
 
 ```py
-from transformers import FineGrainedFP8Config, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, FineGrainedFP8Config
 
-model_name = "meta-llama/Meta-Llama-3-8B"
 quantization_config = FineGrainedFP8Config()
-quantized_model = AutoModelForCausalLM.from_pretrained(model_name, dtype="auto", device_map="auto", quantization_config=quantization_config)
-
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device.type)
-
-output = quantized_model.generate(**input_ids, max_new_tokens=10)
-print(tokenizer.decode(output[0], skip_special_tokens=True))
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B",
+    quantization_config=quantization_config,
+    device_map="cuda",
+)
 ```
 
-Use [`~PreTrainedModel.save_pretrained`] to save the quantized model and reload it with [`~PreTrainedModel.from_pretrained`].
+## Configure Fine-grained FP8
+
+These [`FineGrainedFP8Config`] parameters change how the weights and activations are quantized.
+
+| Parameter | Default | Effect |
+|---|---|---|
+| `weight_block_size` | `(128, 128)` | Size of the weight block that shares one scale. Set it to `None` for one scale per weight tensor. |
+| `activation_scheme` | `"dynamic"` | `"dynamic"` computes activation scales at runtime. `"static"` uses one stored activation scale per layer, read from a pre-quantized checkpoint. `"none"` keeps activations unquantized (weight-only FP8): the weights are dequantized to the activations' dtype in forward. |
+| `scale_fmt` | `"float"` | Storage format of the weight scales. `"float"` stores float32 scales. `"ue8m0"` stores 1-byte power-of-two scales (`torch.float8_e8m0fnu`), as in DeepSeek-V4 checkpoints, and needs PyTorch 2.7 or later. |
+| `modules_to_convert` | `None` | Embedding tables to load in FP8 from a pre-quantized checkpoint, matched by module name suffix. |
+
+## Load a pre-quantized FP8 checkpoint
+
+Checkpoints quantized with Fine-grained FP8 carry their quantization config, so load them without a [`FineGrainedFP8Config`].
 
 ```py
-quant_path = "/path/to/save/quantized/model"
-quantized_model.save_pretrained(quant_path)
-model = AutoModelForCausalLM.from_pretrained(quant_path, device_map="auto")
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-8B-FP8", device_map="cuda")
 ```
 
-## Activation schemes
+Fine-grained FP8 also loads MXFP8 checkpoints, whose config sets `quant_method="mxfp8"`. MXFP8 stores FP8 weights with one power-of-two scale, saved as a byte, per block of 32 weights.
 
-`activation_scheme` sets how activations are quantized:
-
-| scheme | activations |
-|---|---|
-| `"dynamic"` (default) | quantized per token group at runtime |
-| `"static"` | quantized with a stored per-tensor `activation_scale` |
-| `"none"` | not quantized (weight-only FP8): weights are dequantized to the activations' dtype in forward |
-
-`weight_block_size=None` stores one scale per tensor (per-tensor FP8).
-
-## Pre-quantized checkpoints
-
-FP8 checkpoints load without a `quantization_config`, e.g. [Qwen/Qwen3-30B-A3B-FP8](https://huggingface.co/Qwen/Qwen3-30B-A3B-FP8)
-or [deepseek-ai/DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) (`(128, 128)` blocks). Checkpoints that
-name their scales differently load too: DeepSeek-V4's `scale`, Mistral Large 4's `qscale_weight`, and per-tensor FP8's
-`weight_scale` / `input_scale`.
+Checkpoints that name their scales differently load too: DeepSeek-V4's `scale`, Mistral Large 4's `qscale_weight`, and
+per-tensor FP8's `weight_scale` / `input_scale`.
 
 Checkpoints that mix FP8 with other methods per layer load as a [quantization plan](./overview#quantization-plans),
 with fine-grained FP8 for their FP8 layers:
@@ -89,26 +89,28 @@ with fine-grained FP8 for their FP8 layers:
   list a `quant_algo` per layer: `FP8` (per-tensor, static activations) and `FP8_PB_WO` (`(128, 128)` blocks,
   weight-only) layers load with fine-grained FP8, `NVFP4` ones with [NVFP4](./nvfp4).
 
-## DeepGEMM fast path
+## Use the DeepGEMM fast path
 
-On Hopper (SM90+) and Blackwell (SM100+) GPUs, every FP8 linear automatically dispatches to the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm) when `weight_block_size=(128, 128)` and `activation_scheme="dynamic"`. DeepGEMM is 3-6x faster than the Triton fallback. Install or upgrade the [kernels](https://github.com/huggingface/kernels) package to enable it.
+On Hopper (SM90) and Blackwell (SM100) GPUs, FP8 linear layers dispatch to the [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) kernels from [kernels-community/deep-gemm](https://huggingface.co/kernels-community/deep-gemm) when `weight_block_size=(128, 128)` and `activation_scheme="dynamic"`. DeepGEMM is faster than the default Triton kernel on the shapes it supports. The `kernels` install above enables it.
 
-```bash
-pip install -U kernels
-```
+DeepGEMM compiles its kernels with the system `nvcc` the first time it runs, so you need a full CUDA toolkit, not a runtime-only install. Hopper needs CUDA 12.3 or later and Blackwell needs CUDA 12.9 or later. Transformers looks for the toolkit in `CUDA_HOME`, then `CUDA_PATH`, then the directory of `nvcc` on your `PATH`, then `/usr/local/cuda`. Set `CUDA_HOME` to the toolkit root if Transformers doesn't find it.
 
-DeepGEMM JIT-compiles its kernels with the system `nvcc`, so a full CUDA toolkit must be installed. A runtime-only install (CUDA libraries without `nvcc`) won't work. The minimum toolkit version depends on the hardware: 12.3 or later on Hopper (SM90), 12.9 or later on Blackwell (SM100).
+If DeepGEMM can't load or declines a layer, Transformers logs a warning and falls back to the Triton kernel. Set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to always use the Triton kernel for linear layers.
 
-Transformers finds the toolkit by checking `CUDA_HOME`, then `CUDA_PATH`, then `nvcc` on your `PATH`, then `/usr/local/cuda`. Set `CUDA_HOME` to the toolkit root if `nvcc` isn't discovered.
+On Blackwell, DeepGEMM only reads UE8M0 scales. Linear layers with float32 scales (`scale_fmt="float"`) use the Triton kernel instead.
 
-If the kernel cannot load (missing `kernels`, unsupported GPU, no CUDA toolkit, or an `nvcc` older than the required version), Transformers logs a warning once and falls back to the Triton finegrained-fp8 kernel. Static activation quantization always stays on the Triton path.
+For mixture-of-experts layers, DeepGEMM is opt-in. Pass `experts_implementation="deepgemm"` to [`~PreTrainedModel.from_pretrained`], or `"deepgemm_megamoe"` on Blackwell. See the [Experts backends](../experts_interface) guide for every option.
 
-To force the Triton fallback even when DeepGEMM is available, set `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1`. This only affects the FP8 linear dispatch and leaves the `"deepgemm"` experts backend untouched, which you switch with [`~PreTrainedModel.set_experts_implementation`].
+## Limitations
 
-For MoE experts, the DeepGEMM path is opt-in. Pass `experts_implementation="deepgemm"` (or `"deepgemm_megamoe"` on Blackwell) at load time to route the expert matmuls through DeepGEMM. See the [Experts backends](../experts_interface) guide for the full set of options.
+- Quantizing while loading needs a CUDA GPU or an XPU. Without one, loading raises a `RuntimeError`. A pre-quantized checkpoint loads without an accelerator, but Transformers dequantizes it to bf16 and logs a warning.
+- On CUDA, FP8 compute needs compute capability 8.9 or higher, like an RTX 4090 or H100. On an older GPU, Transformers dequantizes the model to bf16 and logs a warning.
+- Quantizing while loading can't offload to the CPU or disk. A `device_map` that includes `"cpu"` or `"disk"` alongside other devices raises a `ValueError`. A pre-quantized checkpoint can offload.
+- On Blackwell, the `"deepgemm"` experts backend raises a `NotImplementedError` for float32 scales. Use a `scale_fmt="ue8m0"` checkpoint, or the `"grouped_mm"` or `"batched_mm"` experts backends.
+- The `"grouped_mm"` and `"batched_mm"` experts backends don't support `activation_scheme="static"` and raise a `NotImplementedError`.
+- `scale_fmt="ue8m0"` needs PyTorch 2.7 or later. Older versions raise a `RuntimeError`.
 
-## UE8M0 scale format
+## Resources
 
-DeepSeek V4-style checkpoints store FP8 weight scales in the packed `float8_e8m0fnu` format instead of `float32`. These checkpoints are pre-quantized and set `scale_fmt="ue8m0"` in their quantization config. Both the DeepGEMM and Triton kernels read UE8M0 scales, so these checkpoints run on either path.
-
-On Blackwell (SM100+), the DeepGEMM experts kernels only supports UE8M0 scales. A checkpoint with plain `float32` scales (`scale_fmt="float"`) raises a `ValueError`. Use a `scale_fmt="ue8m0"` checkpoint, or run the experts with `grouped_mm` or `batched_mm`, which support `float32` scales directly. Hopper (SM90+) supports `float32` scales on the DeepGEMM path without conversion. See the [Experts backends](../experts_interface) guide for the experts backend options.
+- [DeepSeek-V3 Technical Report](https://hf.co/papers/2412.19437) paper
+- [DeepGEMM](https://github.com/deepseek-ai/DeepGEMM) repository

@@ -35,9 +35,11 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
+from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..got_ocr2.image_processing_got_ocr2 import (
     GotOcr2ImageProcessor,
     GotOcr2ImageProcessorKwargs,
@@ -48,8 +50,6 @@ from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import GraniteModel, GranitePreTrainedModel
 from ..idefics3.configuration_idefics3 import Idefics3VisionConfig
 from ..idefics3.modeling_idefics3 import (
-    Idefics3BaseModelOutputWithPast,
-    Idefics3CausalLMOutputWithPast,
     Idefics3Connector,
     Idefics3ForConditionalGeneration,
     Idefics3Model,
@@ -688,40 +688,10 @@ class GraniteDoclingProcessor(Idefics3Processor):
         raise AttributeError("Not needed for GraniteDocling, `ProcessorMixin.create_mm_token_type_ids` is used")
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for GraniteDocling model outputs, with potential hidden states and attentions.
-    """
-)
-@dataclass
-class GraniteDoclingBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
-    r"""
-    router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-        Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
-        given.
-    """
-
-    router_logits: torch.FloatTensor | None = None
+class GraniteDoclingBaseModelOutputWithPast(AriaModelOutputWithPast): ...
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for GraniteDocling causal language model (or autoregressive) outputs.
-    """
-)
-@dataclass
-class GraniteDoclingCausalLMOutputWithPast(Idefics3CausalLMOutputWithPast):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    router_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-        Logits of the density router, one per sample. Returned when the model has a router and `pixel_values` are
-        given.
-    """
-
-    router_logits: torch.FloatTensor | None = None
+class GraniteDoclingCausalLMOutputWithPast(AriaCausalLMOutputWithPast): ...
 
 
 @auto_docstring(
@@ -765,12 +735,13 @@ class GraniteDoclingTextModel(GraniteModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         visual_pos_masks: torch.BoolTensor | None = None,
@@ -792,11 +763,11 @@ class GraniteDoclingTextModel(GraniteModel):
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -804,7 +775,7 @@ class GraniteDoclingTextModel(GraniteModel):
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             position_ids=position_ids,
         )
 
@@ -816,7 +787,7 @@ class GraniteDoclingTextModel(GraniteModel):
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
+                cache=cache,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
                 **kwargs,
@@ -831,7 +802,7 @@ class GraniteDoclingTextModel(GraniteModel):
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -1154,12 +1125,13 @@ class GraniteDoclingModel(Idefics3Model):
         `pixel_attention_mask` and are discarded before the vision encoder.
         """
     )
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
@@ -1188,7 +1160,6 @@ class GraniteDoclingModel(Idefics3Model):
         image_hidden_states = None
         deepstack_visual_embeds = None
         visual_pos_masks = None
-        router_logits = None
         mm_encoder_outputs = {} if mm_encoder_outputs is None else mm_encoder_outputs
         if mm_encoder_outputs.get("image") is not None or pixel_values is not None:
             if mm_encoder_outputs.get("image") is None:
@@ -1199,7 +1170,6 @@ class GraniteDoclingModel(Idefics3Model):
             image_hidden_states = torch.cat(image_outputs.pooler_output, dim=0).to(
                 inputs_embeds.device, inputs_embeds.dtype
             )
-            router_logits = image_outputs.router_logits
             deepstack_visual_embeds = image_outputs.deepstack_features
             if deepstack_visual_embeds is not None:
                 deepstack_visual_embeds = [
@@ -1214,19 +1184,15 @@ class GraniteDoclingModel(Idefics3Model):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             visual_pos_masks=visual_pos_masks,
             deepstack_visual_embeds=deepstack_visual_embeds,
             **kwargs,
         )
 
         return GraniteDoclingBaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_hidden_states,
-            router_logits=router_logits,
+            **outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
         )
 
 
@@ -1239,12 +1205,13 @@ class GraniteDoclingModel(Idefics3Model):
 class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         tile_fine_mask: torch.BoolTensor | None = None,
@@ -1301,7 +1268,7 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             tile_fine_mask=tile_fine_mask,
@@ -1311,7 +1278,9 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
             return_dict=True,
             **kwargs,
         )
-        router_logits = outputs.router_logits
+        router_logits = None
+        if outputs.image_outputs is not None:
+            router_logits = outputs.image_outputs.router_logits
 
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
@@ -1333,11 +1302,11 @@ class GraniteDoclingForConditionalGeneration(Idefics3ForConditionalGeneration):
         return GraniteDoclingCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-            router_logits=router_logits,
+            image_outputs=outputs.image_outputs,
+            router_logits=router_logits,  # for BC
         )
 
 
