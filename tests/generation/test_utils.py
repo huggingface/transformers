@@ -4811,6 +4811,40 @@ class GenerationIntegrationTests(unittest.TestCase):
         # With no EOS to stop at, PLD proposes all num_output_tokens continuation tokens (10 + 4)
         self.assertTrue(output_prompt_lookup.shape[-1] == 14)
 
+    def test_prompt_lookup_decoding_output_attentions_without_attentions(self):
+        # Assisted decoding collects the attentions of each generated token when `output_attentions=True`. Attention
+        # implementations that cannot return attentions (`sdpa`, the default for most models) return an empty
+        # `attentions` tuple, which used to be indexed unconditionally and raised
+        # `IndexError: tuple index out of range`. Every other decoding strategy only warns in this case.
+        config = AutoConfig.for_model(
+            "llama",
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            head_dim=8,
+            vocab_size=32,
+            max_position_embeddings=64,
+        )
+        config._attn_implementation = "sdpa"
+        model = AutoModelForCausalLM.from_config(config).to(torch_device).eval()
+
+        input_ids = torch.randint(1, 30, (1, 10), device=torch_device)
+        output = model.generate(
+            input_ids,
+            max_new_tokens=4,
+            do_sample=False,
+            eos_token_id=-1,
+            prompt_lookup_num_tokens=2,
+            return_dict_in_generate=True,
+            output_attentions=True,
+        )
+
+        # The model returns no attentions, so none are collected -- but generation must still succeed.
+        self.assertEqual(len(output.attentions), 0)
+        self.assertEqual(output.sequences.shape[-1], input_ids.shape[-1] + 4)
+
     # TODO (ydshieh): Find a better way to handle flakyness, or find a working seed number.
     @unittest.skip(reason="The seed 42 is no longer working after we switch to torch 2.13.")
     def test_speculative_decoding_equals_regular_decoding(self):
