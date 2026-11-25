@@ -219,8 +219,12 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
 
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
-    # The scales in the swizzled layout of the hardware too, as vLLM does: the matmul reads them faster
+    # The scales in the swizzled layout of the hardware too, as vLLM does: the matmul reads them faster. On Blackwell
+    # that layout needs the persistent kernel without epilogue subtiles
     scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
+    if w_scale.device.type == "cuda" and torch.cuda.get_device_capability(w_scale.device)[0] == 10:
+        constraints = {"is_persistent": True, "epilogue_subtile": 1}
+        triton_kernels_hub.matmul_ogs_details.opt_flags.update_opt_flags_constraints(constraints)
     w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     return w, w_scale
 
