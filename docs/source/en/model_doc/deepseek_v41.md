@@ -35,14 +35,15 @@ If you already know DeepSeek-V4, here is what is new:
 - **Images.** A ViT with 2D RoPE encodes each image at its own resolution, and a projector merges every 3x3 square of
   patches into one token.
 
-Each layer's variant is listed in `config.text_config.attention_layer_types`:
+Every layer attends over its own sliding window. What a layer does about compressed KV on top of that is listed in
+`config.text_config.kv_sharing_modes`:
 
-| Type | Compresses its own KV | Runs an indexer |
+| Mode | Compressed KV | Indexer |
 |---|---|---|
-| `"sliding_attention"` | - | - |
-| `"compressed_attention"` | yes | yes |
-| `"kv_shared_indexed_attention"` | no, reads the last `"compressed_attention"` layer's | yes |
-| `"kv_shared_attention"` | no | no, reuses the last selection |
+| `"store"` | compresses its own, and the layers after it read them | yes |
+| `"reuse_compressed_but_indexer"` | reads the last `"store"` layer's | yes |
+| `"reuse_compressed"` | reads the last `"store"` layer's | no, reuses the last selection |
+| `None` | none, the layer only has its sliding window | - |
 
 ## Usage
 
@@ -56,7 +57,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash")
 model = AutoModelForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash", dtype=torch.bfloat16, device_map="auto")
-model.set_engram_token_map(tokenizer)
+model.set_ngram_token_map(tokenizer)
 
 messages = [{"role": "user", "content": "What is hashing an n-gram good for?"}]
 inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_dict=True, return_tensors="pt")
@@ -86,7 +87,7 @@ processor = DeepseekV41Processor(
 model = AutoModelForImageTextToText.from_pretrained(
     "deepseek-ai/DeepSeek-V4.1-Flash", dtype=torch.bfloat16, device_map="auto"
 )
-model.set_engram_token_map(tokenizer)
+model.set_ngram_token_map(tokenizer)
 
 messages = [
     {
@@ -155,7 +156,7 @@ print(processor.decode(outputs[0, inputs["input_ids"].shape[1] :]))
 
 [[autodoc]] DeepseekV41TextModel
     - forward
-    - set_engram_token_map
+    - set_ngram_token_map
 
 ## DeepseekV41Model
 
@@ -166,4 +167,4 @@ print(processor.decode(outputs[0, inputs["input_ids"].shape[1] :]))
 
 [[autodoc]] DeepseekV41ForCausalLM
     - forward
-    - set_engram_token_map
+    - set_ngram_token_map

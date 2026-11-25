@@ -228,8 +228,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_key_value_heads",
         "router_aux_loss_coef",
         "router_jitter_noise",
-        # The checkpoint's config lists the layers that run an indexer, but the model reads the
-        # `attention_layer_types` that we derive from it
+        # The checkpoint's config lists the layers that run an indexer, and the model reads the
+        # `kv_sharing_modes` that the config derives from it
         "index_source_layer_ids",
         # The DSpark draft layers are in the checkpoint, but they are not instantiated yet
         "num_nextn_predict_layers",

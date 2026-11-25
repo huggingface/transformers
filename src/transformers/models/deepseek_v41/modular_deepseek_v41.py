@@ -22,7 +22,7 @@ from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer
+from ...cache_utils import Cache, DynamicCache, DynamicSlidingWindowLayer, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import TorchvisionBackend
@@ -66,14 +66,6 @@ from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
 
 
 logger = logging.get_logger(__name__)
-
-
-DEEPSEEK_V41_ATTENTION_LAYER_TYPES = (
-    "sliding_attention",
-    "compressed_attention",
-    "kv_shared_indexed_attention",
-    "kv_shared_attention",
-)
 
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4.1-Flash")
@@ -121,25 +113,16 @@ class DeepseekV41TextConfig(DeepseekV4Config):
     layer_types (`list[str]`):
         Per-layer cache type. Every DeepSeek-V4.1 layer uses `"shared_compressed_attention"`, so this is filled in
         automatically.
-    attention_layer_types (`list[str]`, *optional*):
-        Which attention variant each layer uses. Derived from `compress_ratios`, `kv_source_layer_ids` and
-        `index_source_layer_ids`:
-
-        - `"sliding_attention"` attends over a sliding window only.
-        - `"compressed_attention"` also compresses its own KV, and runs an indexer to pick which compressed
-          entries each query attends to.
-        - `"kv_shared_indexed_attention"` reads the compressed KV of the last `"compressed_attention"` layer, but
-          runs its own indexer over it.
-        - `"kv_shared_attention"` reuses both the compressed KV and the selection of the layers before it.
     compress_ratios (`list[int]`, *optional*):
         Per-layer KV compression ratio. 0 is sliding-window attention only, and `r > 0` adds attention over
         KV that are pooled `r`-to-1. The checkpoint's config lists the DSpark layers after the main ones, and
         those extra entries are ignored here. Defaults to sliding-window attention everywhere.
     kv_source_layer_ids (`list[int]`, *optional*):
-        The layers that compress their own KV. Every later layer with the same ratio reads that KV, up to the
-        next source.
+        The layers that compress their own KV, and run an indexer to pick which compressed entries each query
+        attends to. Every later layer with the same ratio reads that KV, up to the next source.
     index_source_layer_ids (`list[int]`, *optional*):
-        The layers that run an indexer. The layers in between reuse the selection of the last one.
+        The layers that run an indexer. A layer that is not in `kv_source_layer_ids` runs it over the compressed
+        KV that it reads, and the layers in between reuse the selection of the last indexer.
     candidate_source_layer_id (`int`, *optional*):
         The indexer of this layer also keeps the `candidate_topk_blocks` best blocks of compressed positions per
         query, and the indexers after it only choose inside those blocks.
@@ -169,22 +152,23 @@ class DeepseekV41TextConfig(DeepseekV4Config):
         Indexer head dim.
     index_topk (`int`):
         Number of compressed entries the indexer keeps per query.
-    engram_layer_ids (`list[int]`, *optional*):
-        The layers that add an Engram n-gram lookup to the residual stream before their attention.
-    engram_num_embeddings (`list[int]`, *optional*):
+    ple_layer_ids (`list[int]`, *optional*):
+        The layers that add an Engram n-gram lookup to the residual stream before their attention. These are
+        zero-based layer indices, as in the checkpoint's `engram_layer_ids`.
+    ngram_num_embeddings (`list[int]`, *optional*):
         Rows in the hash table of each Engram layer. This is the sum of the layer's bucket sizes, so it is only
         checked against them.
-    engram_max_ngram_size (`int`, *optional*, defaults to 4):
+    ngram_size (`int`, *optional*, defaults to 4):
         Longest n-gram that is hashed. Every size from 2 up to this one gets its own lookups.
-    engram_vocab_size (`int`, *optional*, defaults to 16000000):
+    ngram_vocab_size_base (`int`, *optional*, defaults to 16000000):
         Each (n-gram size, head) pair gets a bucket range whose size is the next unused prime above this.
-    engram_n_heads (`int`, *optional*, defaults to 8):
+    heads_per_ngram (`int`, *optional*, defaults to 8):
         Number of hash heads per n-gram size.
-    engram_head_dim (`int`, *optional*, defaults to 256):
+    ngram_head_dim (`int`, *optional*, defaults to 256):
         Dimension of the rows of the Engram hash tables.
-    engram_pad_token_id (`int`, *optional*, defaults to 2):
+    ngram_pad_token_id (`int`, *optional*, defaults to 2):
         Token that fills the slots of an n-gram that reach back before the start of the sequence.
-    engram_compressed_vocab_size (`int`, *optional*, defaults to 99092):
+    ngram_compressed_vocab_size (`int`, *optional*, defaults to 99092):
         Size of the vocabulary once tokens that normalize alike are merged. The hash multipliers are derived
         from it.
     num_nextn_predict_layers (`int`):
@@ -219,7 +203,23 @@ class DeepseekV41TextConfig(DeepseekV4Config):
     rms_norm_eps: float = 1.0e-20
     pad_token_id: int | None = 2
 
-    attention_layer_types: list[str] | None = None
+    # The checkpoint's config calls the n-gram fields `engram_*`. We name them like Qwen4-Exp names its own n-gram
+    # tables (`ple_*` and `ngram_*`), and this map reads the checkpoint's names into them.
+    # TODO: that is the naming the review of Hy4-flash (#50903) asked for, but the PR itself still says
+    # `engram_*`. We're watching which one it merges with, to follow it.
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "intermediate_size": "moe_intermediate_size",
+        "engram_layer_ids": "ple_layer_ids",
+        "engram_num_embeddings": "ngram_num_embeddings",
+        "engram_max_ngram_size": "ngram_size",
+        "engram_vocab_size": "ngram_vocab_size_base",
+        "engram_n_heads": "heads_per_ngram",
+        "engram_head_dim": "ngram_head_dim",
+        "engram_pad_token_id": "ngram_pad_token_id",
+        "engram_compressed_vocab_size": "ngram_compressed_vocab_size",
+    }
+
     compress_ratios: list[int] | None = None
     kv_source_layer_ids: list[int] | None = None
     index_source_layer_ids: list[int] | None = None
@@ -227,14 +227,14 @@ class DeepseekV41TextConfig(DeepseekV4Config):
     candidate_topk_blocks: int = 2048
     candidate_block_size: int = 8
 
-    engram_layer_ids: list[int] | None = None
-    engram_num_embeddings: list[int] | None = None
-    engram_max_ngram_size: int = 4
-    engram_vocab_size: int = 16000000
-    engram_n_heads: int = 8
-    engram_head_dim: int = 256
-    engram_pad_token_id: int = 2
-    engram_compressed_vocab_size: int = 99092
+    ple_layer_ids: list[int] | None = None
+    ngram_num_embeddings: list[int] | None = None
+    ngram_size: int = 4
+    ngram_vocab_size_base: int = 16000000
+    heads_per_ngram: int = 8
+    ngram_head_dim: int = 256
+    ngram_pad_token_id: int = 2
+    ngram_compressed_vocab_size: int = 99092
 
     dspark_block_size: int = 5
     dspark_noise_token_id: int = 128799
@@ -251,42 +251,36 @@ class DeepseekV41TextConfig(DeepseekV4Config):
     def validate_layer_type(self):
         """Checks that the attention schedule is one the model can run: every layer that attends to compressed
         KV needs a source for that KV and for its selection somewhere before it."""
-        if self.num_hidden_layers is None or self.attention_layer_types is None:
+        if self.num_hidden_layers is None or self.compress_ratios is None:
             return
-        if len(self.attention_layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"`num_hidden_layers` ({self.num_hidden_layers}) must equal `len(attention_layer_types)` "
-                f"({len(self.attention_layer_types)})."
-            )
-        bad = [t for t in self.attention_layer_types if t not in DEEPSEEK_V41_ATTENTION_LAYER_TYPES]
-        if bad:
-            raise ValueError(
-                f"`attention_layer_types` entries must be one of {DEEPSEEK_V41_ATTENTION_LAYER_TYPES}; got {bad}."
-            )
+        kv_source_layer_ids = self.kv_source_layer_ids or []
+        index_source_layer_ids = self.index_source_layer_ids or []
 
         source_ratio = None
-        for layer_idx, layer_type in enumerate(self.attention_layer_types):
+        for layer_idx in range(self.num_hidden_layers):
             ratio = self.compress_ratios[layer_idx]
-            if layer_type == "compressed_attention":
-                if layer_idx not in self.index_source_layer_ids:
+            if ratio == 0:
+                # A sliding window and nothing else, so there is no compressed KV to find a source for
+                continue
+            if layer_idx in kv_source_layer_ids:
+                # Compresses its own KV, and the index keys are made from them
+                if layer_idx not in index_source_layer_ids:
                     raise ValueError(
                         f"Layer {layer_idx} is in `kv_source_layer_ids`, so it must be in `index_source_layer_ids` "
-                        f"too: the index keys are made from the KV it compresses. Got {self.index_source_layer_ids}."
+                        f"too: the index keys are made from the KV it compresses. Got {index_source_layer_ids}."
                     )
                 source_ratio = ratio
-            elif layer_type != "sliding_attention" and ratio != source_ratio:
+            elif ratio != source_ratio:
+                # Reads the compressed KV of the last source, which must be pooled with its own ratio
                 raise ValueError(
                     f"Layer {layer_idx} has a compression ratio of {ratio}, but the last layer in "
                     f"`kv_source_layer_ids` before it compresses with a ratio of {source_ratio}. Add {layer_idx} "
                     "to `kv_source_layer_ids` or change its entry in `compress_ratios`."
                 )
-        if (
-            self.candidate_source_layer_id is not None
-            and self.candidate_source_layer_id not in self.index_source_layer_ids
-        ):
+        if self.candidate_source_layer_id is not None and self.candidate_source_layer_id not in index_source_layer_ids:
             raise ValueError(
                 f"`candidate_source_layer_id` ({self.candidate_source_layer_id}) must be one of "
-                f"`index_source_layer_ids` ({self.index_source_layer_ids})."
+                f"`index_source_layer_ids` ({index_source_layer_ids})."
             )
 
     def validate_fake_quantization(self):
@@ -320,31 +314,8 @@ class DeepseekV41TextConfig(DeepseekV4Config):
             )
         self.kv_source_layer_ids = list(self.kv_source_layer_ids or [])
         self.index_source_layer_ids = list(self.index_source_layer_ids or [])
-        self.engram_layer_ids = list(self.engram_layer_ids or [])
+        self.ple_layer_ids = list(self.ple_layer_ids or [])
         self.dspark_target_layer_ids = list(self.dspark_target_layer_ids or [])
-
-        # `attention_layer_types` picks the attention class of each layer
-        attention_layer_types = []
-        for layer_idx in range(n):
-            if self.compress_ratios[layer_idx] == 0:
-                # A sliding window and nothing else
-                attention_layer_types.append("sliding_attention")
-            elif layer_idx in self.kv_source_layer_ids:
-                # Compresses its own KV and indexes it
-                attention_layer_types.append("compressed_attention")
-            elif layer_idx in self.index_source_layer_ids:
-                # Reads the KV of the last source, but selects from it with its own indexer
-                attention_layer_types.append("kv_shared_indexed_attention")
-            else:
-                # Reads both the KV and the selection of the layers before it
-                attention_layer_types.append("kv_shared_attention")
-        if self.attention_layer_types is None:
-            self.attention_layer_types = attention_layer_types
-        elif list(self.attention_layer_types) != attention_layer_types:
-            raise ValueError(
-                f"`attention_layer_types` ({self.attention_layer_types}) does not match `compress_ratios`, "
-                f"`kv_source_layer_ids` and `index_source_layer_ids`, which give {attention_layer_types}."
-            )
 
         # `layer_types` picks the cache class, and all layers keep their state in the same one
         self.layer_types = ["shared_compressed_attention"] * n
@@ -383,6 +354,58 @@ class DeepseekV41TextConfig(DeepseekV4Config):
                 compress.setdefault("attention_factor", 1.0)
             self.rope_parameters = {"main": main, "compress": compress}
 
+    @property
+    def kv_source_layers(self) -> list[int | None]:
+        """
+        For each layer, the layer whose compressed KV it attends to. That is the layer itself if it compresses its
+        own, and `None` if it attends over its sliding window only.
+        """
+        kv_source_layers, source = [], None
+        for layer_idx in range(self.num_hidden_layers):
+            if self.compress_ratios[layer_idx] == 0:
+                # A sliding window and nothing else
+                kv_source_layers.append(None)
+            elif layer_idx in self.kv_source_layer_ids:
+                # Compresses its own KV, and stays the source until the next layer that does
+                source = layer_idx
+                kv_source_layers.append(layer_idx)
+            else:
+                # Reads the compressed KV of the last source
+                kv_source_layers.append(source)
+        return kv_source_layers
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        """
+        How each layer takes part in the sharing of compressed KV:
+
+        - `"store"` compresses KV of its own, and the layers after it read them.
+        - `"reuse_compressed"` reads the compressed KV of the last layer that made some, and attends to the entries
+          that the last indexer before it selected.
+        - `"reuse_compressed_but_indexer"` reads those compressed KV too, but selects from them with an indexer of
+          its own.
+        - `None` shares nothing: the layer attends over its sliding window only, or no layer reads the KV that it
+          compresses.
+
+        Whatever its mode, every layer computes and caches the KV of its own sliding window.
+        """
+        # These are not the plain `"reuse"` of the models whose layers share all of their KV. The cache hands a
+        # `"reuse"` layer a `DummyLayer` that stores nothing, and ours still have a sliding window to store.
+        kv_source_layers = self.kv_source_layers
+        kv_sharing_modes = []
+        for layer_idx, source in enumerate(kv_source_layers):
+            if source is None:
+                # A sliding window and nothing else
+                kv_sharing_modes.append(None)
+            elif source != layer_idx:
+                # Reads the compressed KV of an earlier layer, with or without an indexer of its own
+                has_indexer = layer_idx in self.index_source_layer_ids
+                kv_sharing_modes.append("reuse_compressed_but_indexer" if has_indexer else "reuse_compressed")
+            else:
+                # Compresses its own KV, which are only shared if a later layer reads them
+                kv_sharing_modes.append("store" if kv_source_layers.count(layer_idx) > 1 else None)
+        return kv_sharing_modes
+
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4.1-Flash")
 @strict
@@ -412,7 +435,7 @@ class DeepseekV41Config(PreTrainedConfig):
             defaults = {
                 # The Engram tables are stored in FP8 too, and they are far too big to dequantize. A block of a
                 # table is as wide as a block of a linear, but it never spans rows
-                "modules_to_convert": ["engram.embed"],
+                "modules_to_convert": ["ple.ngram_embedding"],
                 "embedding_block_size": block_size[1],
                 # These linears are stored in BF16. They have no scales, so the quantizer has to skip them
                 "modules_to_not_convert": [
@@ -434,10 +457,10 @@ class DeepseekV41CacheLayer(DynamicSlidingWindowLayer):
     Cache layer for DeepSeek-V4.1. Every layer keeps its sliding window of KV here. On top of that, a few layers
     keep state that other layers read:
 
-      * `compressed_kv` / `index_keys` - the compressed KV entries a `"compressed_attention"` layer has emitted
-        so far, and the index keys made from them. The KV-sharing layers after it attend to these too. Entry
-        `g` of a row is its `g`-th group of real tokens, so the rows of a padded batch do not have the same
-        number of entries. A row with fewer of them than the others has zeros after its last one.
+      * `compressed_kv` / `index_keys` - the compressed KV entries that a layer which compresses its own KV has
+        emitted so far, and the index keys made from them. The KV-sharing layers after it attend to these too.
+        Entry `g` of a row is its `g`-th group of real tokens, so the rows of a padded batch do not have the
+        same number of entries. A row with fewer of them than the others has zeros after its last one.
       * `pooling_buffer` - the KV and the gates of the last `compress_ratio - 1` real tokens of each row. The
         last few of them are the tokens of a pooling group that is still filling up. The group only becomes a
         compressed entry once its last token arrives.
@@ -445,6 +468,10 @@ class DeepseekV41CacheLayer(DynamicSlidingWindowLayer):
         layer keeps it.
     """
 
+    # TODO: #51202 adds cache layers for compressed states to `cache_utils` (`DynamicSlidingWindowCompressedLayer`,
+    # with the pooling groups, the compressed entries and the selection behind one API for every indexer model).
+    # We're watching for it to merge: the compressed states then move onto that class, and this one and its
+    # `"shared_compressed_attention"` layer type go away.
     _layer_type = "shared_compressed_attention"
 
     def __init__(self, config: "DeepseekV41TextConfig", **kwargs):
@@ -791,8 +818,8 @@ class DeepseekV41Indexer(nn.Module):
 
     This is a small side attention: several query heads are scored against one shared key per compressed
     entry, the scores are rectified, and then combined across heads with per-token weights. The keys are made
-    from the compressor's latents, so only an indexer that sits in a `"compressed_attention"` layer has the
-    modules to make them (`k_proj` and `k_norm`). The other indexers read those same keys.
+    from the compressor's latents, so only the indexer of a layer that compresses its own KV has the modules to
+    make them (`k_proj` and `k_norm`). The other indexers read those same keys.
 
     With a candidate source this is the second of two levels, see `select_candidate_blocks` for the first.
     """
@@ -865,16 +892,17 @@ class DeepseekV41Indexer(nn.Module):
 
 class DeepseekV41Attention(nn.Module):
     r"""
-    Attention over a sliding window, which is all that the `"sliding_attention"` layers do. The other layer
-    types also attend to compressed KV entries, which go after the window on the KV axis:
+    Attention over a sliding window, which is all that the layers with a compression ratio of 0 do. The other
+    layers also attend to compressed KV entries, which go after the window on the KV axis. What they do for them
+    depends on their entry in `config.kv_sharing_modes`:
 
-    * `"compressed_attention"` compresses KV of its own. It also makes the index keys for them and runs an
-      indexer over those keys. The KV-sharing layers after it read all three: the compressed KV, the index
-      keys and the selection.
-    * `"kv_shared_indexed_attention"` reads the compressed KV of the last `"compressed_attention"` layer, and
-      runs its own indexer to select which of them each query attends to.
-    * `"kv_shared_attention"` reads those compressed KV too, and reuses the selection of the last layer that
-      ran an indexer.
+    * A layer that compresses KV of its own also makes the index keys for them and runs an indexer over those
+      keys. With `"store"`, the KV-sharing layers after it read all three: the compressed KV, the index keys and
+      the selection.
+    * `"reuse_compressed_but_indexer"` reads the compressed KV of the last layer that made some, and runs its own
+      indexer to select which of them each query attends to.
+    * `"reuse_compressed"` reads those compressed KV too, and reuses the selection of the last layer that ran an
+      indexer.
 
     Shared with DeepSeek-V4:
     * Shared-KV multi-query attention: there is a single KV head, and the same tensor is read as both key and
@@ -888,10 +916,17 @@ class DeepseekV41Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.layer_type = config.attention_layer_types[layer_idx]
-        # A layer that reads compressed KV uses their RoPE base for everything, its window included
-        self.rope_layer_type = "main" if self.layer_type == "sliding_attention" else "compress"
         self.compress_ratio = config.compress_ratios[layer_idx]
+        self.is_sliding = self.compress_ratio == 0
+        # TODO: one class that branches on the sharing mode is how the models on `main` do it. #50189 would
+        # replace the modes with an `attention_layer_types` field and one attention class per entry. We're
+        # watching for it to merge, to split this class the same way.
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
+        self.kv_source_layer = config.kv_source_layers[layer_idx]
+        self.is_kv_shared_layer = kv_sharing_mode in ("reuse_compressed", "reuse_compressed_but_indexer")
+        self.store_compressed_kv = kv_sharing_mode == "store"
+        # A layer that reads compressed KV uses their RoPE base for everything, its window included
+        self.rope_layer_type = "main" if self.is_sliding else "compress"
         self.num_heads = config.num_attention_heads
         self.num_key_value_groups = config.num_attention_heads  # single KV head, broadcast to all
         self.head_dim = config.head_dim
@@ -910,10 +945,12 @@ class DeepseekV41Attention(nn.Module):
         )
         self.o_b_proj = nn.Linear(config.o_groups * config.o_lora_rank, config.hidden_size, bias=False)
         self.sinks = nn.Parameter(torch.empty(self.num_heads, dtype=torch.float32))
-        if self.layer_type in ("compressed_attention", "kv_shared_indexed_attention"):
-            self.indexer = DeepseekV41Indexer(config, layer_idx)
-        if self.layer_type == "compressed_attention":
-            self.compressor = DeepseekV41Compressor(config, layer_idx)
+        # Only the layers that compress their own KV have a compressor. They index them too, and so do the
+        # KV-sharing layers that the config lists as index sources.
+        has_compressor = not self.is_sliding and not self.is_kv_shared_layer
+        has_indexer = has_compressor or kv_sharing_mode == "reuse_compressed_but_indexer"
+        self.indexer = DeepseekV41Indexer(config, layer_idx) if has_indexer else None
+        self.compressor = DeepseekV41Compressor(config, layer_idx) if has_compressor else None
 
     def forward(
         self,
@@ -923,15 +960,13 @@ class DeepseekV41Attention(nn.Module):
         is_real_token: torch.Tensor,
         num_seen_tokens: torch.Tensor,
         cache: Cache | None = None,
-        shared_states: dict[str, torch.Tensor] | None = None,
+        shared_kv_states: KVSharingDict | None = None,
+        selected_entries: torch.Tensor | None = None,
+        candidate_entries: torch.Tensor | None = None,
         compressed_position_embeddings: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, dict[str, torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
-        # We return what we publish in a new dict, and leave the one we were given alone. With gradient
-        # checkpointing this layer runs again in the backward pass, long after the layers after it, and it has
-        # to read the same states as the first time.
-        shared_states = dict(shared_states or {})
         hidden_shape = (*input_shape, -1, self.head_dim)
         # The model computes RoPE for both bases, and each layer picks the one that matches its attention type
         cos, sin = position_embeddings[self.rope_layer_type]
@@ -948,7 +983,10 @@ class DeepseekV41Attention(nn.Module):
         if cache is not None:
             kv = cache.update(kv, kv, self.layer_idx)[0]
 
-        if self.layer_type == "compressed_attention":
+        if self.is_kv_shared_layer:
+            # This layer reads the compressed KV of an earlier layer, and the index keys made from them
+            compressed_kv, index_keys = shared_kv_states[str(self.kv_source_layer)]
+        elif self.compressor is not None:
             # This layer compresses the groups that this call completes. A row may complete none of them, e.g.
             # when decoding a token that is not the last of its group.
             cache_layer: DeepseekV41CacheLayer | None = cache.layers[self.layer_idx] if cache is not None else None
@@ -972,28 +1010,29 @@ class DeepseekV41Attention(nn.Module):
                 compressed_kv, index_keys = cache_layer.update_compressed_states(
                     compressed_kv, index_keys, num_seen_tokens // self.compress_ratio, num_new_entries
                 )
-            # We publish both for the indexers and the KV-sharing layers after us, starting with our own
-            shared_states["compressed_kv"], shared_states["index_keys"] = compressed_kv, index_keys
+            if self.store_compressed_kv:
+                # The KV-sharing layers after us read both under our layer index. No other layer writes there,
+                # so they still find them when gradient checkpointing runs them again in the backward pass.
+                shared_kv_states[str(self.layer_idx)] = compressed_kv, index_keys
 
-        if self.layer_type in ("compressed_attention", "kv_shared_indexed_attention"):
-            # This layer selects which compressed entries each query attends to, and the
-            # `"kv_shared_attention"` layers after it reuse the selection
-            shared_states["selected"], shared_states["candidates"] = self.indexer(
+        if self.indexer is not None:
+            # This layer selects which compressed entries each query attends to, and the `"reuse_compressed"`
+            # layers after it reuse the selection
+            selected_entries, candidate_entries = self.indexer(
                 hidden_states,
                 q_residual,
-                shared_states["index_keys"],
+                index_keys,
                 num_seen_tokens[:, None] + is_real_token.cumsum(dim=-1),
                 (cos, sin),
-                shared_states.get("candidates"),
+                candidate_entries,
             )
 
-        if self.layer_type != "sliding_attention":
+        if not self.is_sliding:
             # The compressed entries go after the window on the KV axis. The model built the mask for the
             # window only, so we extend it with the entries that each query selected.
-            compressed_kv, selected = shared_states["compressed_kv"], shared_states["selected"]
             kv = torch.cat([kv, compressed_kv.unsqueeze(1).to(kv.dtype)], dim=2)
-            compressed_mask = torch.zeros_like(selected, dtype=attention_mask.dtype)
-            compressed_mask = compressed_mask.masked_fill(~selected, torch.finfo(attention_mask.dtype).min)
+            compressed_mask = torch.zeros_like(selected_entries, dtype=attention_mask.dtype)
+            compressed_mask = compressed_mask.masked_fill(~selected_entries, torch.finfo(attention_mask.dtype).min)
             attention_mask = torch.cat([attention_mask, compressed_mask.unsqueeze(1)], dim=-1)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -1021,7 +1060,7 @@ class DeepseekV41Attention(nn.Module):
         grouped = fake_quantize(grouped, "fp8", block_size=32)
         grouped = self.o_a_proj(grouped).flatten(2)
         output = self.o_b_proj(grouped)
-        return output, attn_weights, shared_states
+        return output, attn_weights, selected_entries, candidate_entries
 
 
 class DeepseekV41HyperConnection(nn.Module):
@@ -1138,16 +1177,16 @@ def _is_prime(number: int) -> bool:
     return True
 
 
-def _engram_bucket_sizes(config: DeepseekV41TextConfig) -> list[list[int]]:
+def _ngram_bucket_sizes(config: DeepseekV41TextConfig) -> list[list[int]]:
     # Every (n-gram size, head) pair of every Engram layer hashes into its own range of buckets. The size of
     # each range is a prime, and no prime is used twice across the whole model. For each n-gram size the
-    # search restarts just below `engram_vocab_size`, so we end up handing out consecutive primes.
+    # search restarts just below `ngram_vocab_size_base`, so we end up handing out consecutive primes.
     bucket_sizes, seen = [], set()
-    for _ in config.engram_layer_ids:
+    for _ in config.ple_layer_ids:
         layer_sizes = []
-        for _ in range(config.engram_max_ngram_size - 1):
-            candidate = config.engram_vocab_size - 1
-            for _ in range(config.engram_n_heads):
+        for _ in range(config.ngram_size - 1):
+            candidate = config.ngram_vocab_size_base - 1
+            for _ in range(config.heads_per_ngram):
                 candidate += 1
                 while candidate in seen or not _is_prime(candidate):
                     candidate += 1
@@ -1157,27 +1196,27 @@ def _engram_bucket_sizes(config: DeepseekV41TextConfig) -> list[list[int]]:
     return bucket_sizes
 
 
-def _engram_hash_multipliers(config: DeepseekV41TextConfig) -> np.ndarray:
+def _ngram_hash_multipliers(config: DeepseekV41TextConfig) -> np.ndarray:
     # One multiplier per (layer, lookback), from a per-layer RNG so that the layers hash differently. They
     # are kept odd, and bounded so that `token_id * multiplier` cannot overflow int64.
-    bound = max(1, (np.iinfo(np.int64).max // config.engram_compressed_vocab_size) // 2)
+    bound = max(1, (np.iinfo(np.int64).max // config.ngram_compressed_vocab_size) // 2)
     rows = []
-    for layer_idx in config.engram_layer_ids:
+    for layer_idx in config.ple_layer_ids:
         generator = np.random.default_rng(10007 * layer_idx)
-        values = generator.integers(low=0, high=bound, size=(config.engram_max_ngram_size,), dtype=np.int64)
+        values = generator.integers(low=0, high=bound, size=(config.ngram_size,), dtype=np.int64)
         rows.append(values * 2 + 1)
     return np.stack(rows)
 
 
-def _default_engram_token_map(config: DeepseekV41TextConfig) -> torch.Tensor:
-    if config.engram_compressed_vocab_size == config.vocab_size:
+def _default_ngram_token_map(config: DeepseekV41TextConfig) -> torch.Tensor:
+    if config.ngram_compressed_vocab_size == config.vocab_size:
         # A compressed vocab as large as the vocab itself merges no tokens, so the map is the identity
         return torch.arange(config.vocab_size)
-    # Otherwise the map comes from the tokenizer (see `build_engram_token_map`), and -1 marks it as missing
+    # Otherwise the map comes from the tokenizer (see `build_ngram_token_map`), and -1 marks it as missing
     return torch.full((config.vocab_size,), -1, dtype=torch.long)
 
 
-def build_engram_token_map(tokenizer) -> torch.Tensor:
+def build_ngram_token_map(tokenizer) -> torch.Tensor:
     """
     Builds the map from token ids to the smaller id space that the Engram n-grams are hashed over. Tokens that
     normalize alike are merged there, so that " The", "the" and "THE" all hash the same way.
@@ -1196,10 +1235,10 @@ def build_engram_token_map(tokenizer) -> torch.Tensor:
 
     ```python
     >>> from transformers import AutoTokenizer
-    >>> from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_engram_token_map
+    >>> from transformers.models.deepseek_v41.modeling_deepseek_v41 import build_ngram_token_map
 
     >>> tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V4.1-Flash")
-    >>> token_map = build_engram_token_map(tokenizer)
+    >>> token_map = build_ngram_token_map(tokenizer)
     >>> token_map[tokenizer.convert_tokens_to_ids("The")] == token_map[tokenizer.convert_tokens_to_ids("the")]
     tensor(True)
 
@@ -1238,26 +1277,26 @@ def build_engram_token_map(tokenizer) -> torch.Tensor:
     return torch.tensor(token_map, dtype=torch.long)
 
 
-class DeepseekV41NgramHasher(nn.Module):
+class DeepseekV41NGramHasher(nn.Module):
     """
     Maps each position to the hash ids of the n-grams that end there, for all Engram layers at once.
 
     Token ids first go through `token_map`, then each position is hashed together with the
-    `engram_max_ngram_size - 1` tokens before it. The look-back stops at the start of the sequence and at any
+    `ngram_size - 1` tokens before it. The look-back stops at the start of the sequence and at any
     masked token (padding or an image), so an n-gram never spans one.
     """
 
     def __init__(self, config: DeepseekV41TextConfig):
         super().__init__()
         self.config = config
-        self.max_ngram_size = config.engram_max_ngram_size
-        self.num_heads = config.engram_n_heads
-        self.pad_token_id = config.engram_pad_token_id
-        bucket_sizes = torch.tensor(_engram_bucket_sizes(config))
+        self.ngram_size = config.ngram_size
+        self.num_heads = config.heads_per_ngram
+        self.pad_token_id = config.ngram_pad_token_id
+        bucket_sizes = torch.tensor(_ngram_bucket_sizes(config))
         self.bucket_sizes = nn.Buffer(bucket_sizes, persistent=False)
         self.offsets = nn.Buffer(bucket_sizes.cumsum(-1) - bucket_sizes, persistent=False)
-        self.multipliers = nn.Buffer(torch.from_numpy(_engram_hash_multipliers(config)), persistent=False)
-        self.token_map = nn.Buffer(_default_engram_token_map(config))
+        self.multipliers = nn.Buffer(torch.from_numpy(_ngram_hash_multipliers(config)), persistent=False)
+        self.token_map = nn.Buffer(_default_ngram_token_map(config))
 
     def forward(
         self,
@@ -1270,12 +1309,12 @@ class DeepseekV41NgramHasher(nn.Module):
             raise ValueError(
                 "The Engram token map has no entry for some of the input ids. The DeepSeek-V4.1 checkpoints do "
                 "not store this map, so it has to be built from the tokenizer once after loading the model:\n"
-                "`model.set_engram_token_map(tokenizer)`"
+                "`model.set_ngram_token_map(tokenizer)`"
             )
         # A masked token takes no part in any n-gram. We mark it with -1, like the start of the sequence.
         if token_mask is not None:
             compressed_ids = torch.where(token_mask, compressed_ids, -1)
-        history_length = self.max_ngram_size - 1
+        history_length = self.ngram_size - 1
         if cache_layer is not None:
             compressed_ids = cache_layer.update_token_history(compressed_ids, history_length)
         else:
@@ -1283,7 +1322,7 @@ class DeepseekV41NgramHasher(nn.Module):
 
         # One window per position: the token itself comes first, then the tokens before it, nearest first.
         # Once the look-back hits a -1, that slot and all the ones behind it read as padding.
-        windows = compressed_ids.unfold(1, self.max_ngram_size, 1).flip(-1)
+        windows = compressed_ids.unfold(1, self.ngram_size, 1).flip(-1)
         blocked = (windows == -1).cummax(dim=-1).values
         windows = torch.where(blocked, self.token_map[self.pad_token_id], windows)
 
@@ -1298,9 +1337,10 @@ class DeepseekV41NgramHasher(nn.Module):
         return torch.cat(hash_ids, dim=-1) + self.offsets
 
 
-class DeepseekV41Engram(nn.Module):
+class DeepseekV41PLELayer(nn.Module):
     """
-    Writes an n-gram lookup into the residual streams, gated by how well it matches each stream.
+    DeepSeek's Engram, which is a per-layer embedding (PLE): it writes an n-gram lookup into the residual
+    streams, gated by how well it matches each stream.
 
     The hash ids fetch one row of the table per (n-gram size, head) pair. `kv_proj` turns the concatenated
     rows into one key per stream plus a value that the streams share, and the gate of a stream is the
@@ -1312,19 +1352,19 @@ class DeepseekV41Engram(nn.Module):
         self.hidden_size = config.hidden_size
         self.hc_mult = config.hc_mult
         self.eps = config.rms_norm_eps
-        engram_index = config.engram_layer_ids.index(layer_idx)
-        num_embeddings = sum(_engram_bucket_sizes(config)[engram_index])
-        if config.engram_num_embeddings is not None and config.engram_num_embeddings[engram_index] != num_embeddings:
+        ple_index = config.ple_layer_ids.index(layer_idx)
+        num_embeddings = sum(_ngram_bucket_sizes(config)[ple_index])
+        if config.ngram_num_embeddings is not None and config.ngram_num_embeddings[ple_index] != num_embeddings:
             raise ValueError(
                 f"The Engram table of layer {layer_idx} needs {num_embeddings} rows, which is the sum of its bucket "
-                f"sizes, but `engram_num_embeddings` says {config.engram_num_embeddings[engram_index]}. The bucket "
-                "sizes come from `engram_vocab_size`, `engram_n_heads`, `engram_max_ngram_size` and "
-                "`engram_layer_ids`, so one of those does not match the checkpoint."
+                f"sizes, but `ngram_num_embeddings` says {config.ngram_num_embeddings[ple_index]}. The bucket "
+                "sizes come from `ngram_vocab_size_base`, `heads_per_ngram`, `ngram_size` and "
+                "`ple_layer_ids`, so one of those does not match the checkpoint."
             )
-        num_lookups = (config.engram_max_ngram_size - 1) * config.engram_n_heads
-        self.embed = nn.Embedding(num_embeddings, config.engram_head_dim)
+        num_lookups = (config.ngram_size - 1) * config.heads_per_ngram
+        self.ngram_embedding = nn.Embedding(num_embeddings, config.ngram_head_dim)
         self.kv_proj = nn.Linear(
-            num_lookups * config.engram_head_dim, config.hidden_size * (config.hc_mult + 1), bias=False
+            num_lookups * config.ngram_head_dim, config.hidden_size * (config.hc_mult + 1), bias=False
         )
         self.q_weight = nn.Parameter(torch.ones(config.hc_mult, config.hidden_size))
         self.k_weight = nn.Parameter(torch.ones(config.hc_mult, config.hidden_size))
@@ -1332,7 +1372,7 @@ class DeepseekV41Engram(nn.Module):
     def forward(
         self, hidden_streams: torch.Tensor, hash_ids: torch.Tensor, token_mask: torch.Tensor | None = None
     ) -> torch.Tensor:
-        key_value = self.kv_proj(self.embed(hash_ids).flatten(-2).to(hidden_streams.dtype))
+        key_value = self.kv_proj(self.ngram_embedding(hash_ids).flatten(-2).to(hidden_streams.dtype))
         key, value = key_value.split([self.hc_mult * self.hidden_size, self.hidden_size], dim=-1)
         key = key.float().unflatten(-1, (self.hc_mult, self.hidden_size))
         streams = hidden_streams.float()
@@ -1369,28 +1409,32 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn_hc = DeepseekV41HyperConnection(config).to(dtype=torch.float32)
         self.ffn_hc = DeepseekV41HyperConnection(config).to(dtype=torch.float32)
-        self.engram = DeepseekV41Engram(config, layer_idx) if layer_idx in config.engram_layer_ids else None
+        self.ple = DeepseekV41PLELayer(config, layer_idx) if layer_idx in config.ple_layer_ids else None
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         pre: torch.Tensor,
-        engram_hash_ids: torch.Tensor | None = None,
-        engram_mask: torch.Tensor | None = None,
+        ngram_hash_ids: torch.Tensor | None = None,
+        ngram_mask: torch.Tensor | None = None,
         image_mask: torch.Tensor | None = None,
-        shared_states: dict[str, torch.Tensor] | None = None,
+        selected_entries: torch.Tensor | None = None,
+        candidate_entries: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         # hidden_states throughout: [B, S, hc_mult, hidden]. The hyper-connection weights are float32, and
         # comb is used transposed: sum_j comb[j, k] * residual[j], which is comb.T @ residual.
         dtype = hidden_states.dtype
-        if self.engram is not None:
-            hidden_states = self.engram(hidden_states, engram_hash_ids, engram_mask)
+        if self.ple is not None:
+            hidden_states = self.ple(hidden_states, ngram_hash_ids, ngram_mask)
 
         attn_pre, post, comb = self.attn_hc(hidden_states)
         collapsed = (pre.unsqueeze(-1) * hidden_states.float()).sum(dim=2).to(dtype)
-        attn_output, _, shared_states = self.self_attn(
-            self.input_layernorm(collapsed), shared_states=shared_states, **kwargs
+        attn_output, _, selected_entries, candidate_entries = self.self_attn(
+            self.input_layernorm(collapsed),
+            selected_entries=selected_entries,
+            candidate_entries=candidate_entries,
+            **kwargs,
         )
         hidden_states = post.unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
             comb.transpose(-1, -2), hidden_states.float()
@@ -1403,7 +1447,7 @@ class DeepseekV41DecoderLayer(GradientCheckpointingLayer):
         hidden_states = post.unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(
             comb.transpose(-1, -2), hidden_states.float()
         )
-        return hidden_states.to(dtype), mlp_pre, shared_states
+        return hidden_states.to(dtype), mlp_pre, selected_entries, candidate_entries
 
 
 def vision_eager_attention_forward(
@@ -1566,15 +1610,15 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
             init.normal_(module.fn, mean=0.0, std=std)
             init.zeros_(module.base)
             init.ones_(module.scale)
-        elif isinstance(module, DeepseekV41Engram):
+        elif isinstance(module, DeepseekV41PLELayer):
             init.ones_(module.q_weight)
             init.ones_(module.k_weight)
-        elif isinstance(module, DeepseekV41NgramHasher):
-            bucket_sizes = torch.tensor(_engram_bucket_sizes(module.config))
+        elif isinstance(module, DeepseekV41NGramHasher):
+            bucket_sizes = torch.tensor(_ngram_bucket_sizes(module.config))
             init.copy_(module.bucket_sizes, bucket_sizes)
             init.copy_(module.offsets, bucket_sizes.cumsum(-1) - bucket_sizes)
-            init.copy_(module.multipliers, torch.from_numpy(_engram_hash_multipliers(module.config)))
-            init.copy_(module.token_map, _default_engram_token_map(module.config))
+            init.copy_(module.multipliers, torch.from_numpy(_ngram_hash_multipliers(module.config)))
+            init.copy_(module.token_map, _default_ngram_token_map(module.config))
         elif isinstance(module, DeepseekV41Model):
             init.normal_(module.image_start, mean=0.0, std=std)
             init.normal_(module.image_end, mean=0.0, std=std)
@@ -1612,16 +1656,16 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
     # The structure linter reads any `set_*` method as a hyperparameter that should live on the config. This one
     # fills a buffer that is saved and loaded with the weights, and it only exists because the original
     # checkpoints left that buffer out.
-    def set_engram_token_map(self, tokenizer_or_token_map):  # trf-ignore: TRF033
+    def set_ngram_token_map(self, tokenizer_or_token_map):  # trf-ignore: TRF033
         """
         Sets the map from token ids to compressed ids that the Engram n-grams are hashed over. The checkpoints do
         not store it, so it has to be set once after loading the model.
 
         Args:
             tokenizer_or_token_map ([`PreTrainedTokenizerFast`] or `torch.Tensor`):
-                The tokenizer of the checkpoint, or a map that `build_engram_token_map` made from it.
+                The tokenizer of the checkpoint, or a map that `build_ngram_token_map` made from it.
         """
-        hasher = next((module for module in self.modules() if isinstance(module, DeepseekV41NgramHasher)), None)
+        hasher = next((module for module in self.modules() if isinstance(module, DeepseekV41NGramHasher)), None)
         if hasher is None:
             raise ValueError("This model has no Engram layers, so there is no token map to set.")
         if isinstance(tokenizer_or_token_map, torch.Tensor):
@@ -1629,12 +1673,12 @@ class DeepseekV41PreTrainedModel(PreTrainedModel):
             token_map = tokenizer_or_token_map
         else:
             # A tokenizer, which we build the map from in the same way as the reference implementation
-            token_map = build_engram_token_map(tokenizer_or_token_map)
+            token_map = build_ngram_token_map(tokenizer_or_token_map)
         num_compressed_ids = int(token_map.max()) + 1
-        if num_compressed_ids != hasher.config.engram_compressed_vocab_size:
+        if num_compressed_ids != hasher.config.ngram_compressed_vocab_size:
             raise ValueError(
                 f"The token map has {num_compressed_ids} compressed ids, but the model was trained with "
-                f"{hasher.config.engram_compressed_vocab_size} (`config.engram_compressed_vocab_size`). The hash "
+                f"{hasher.config.ngram_compressed_vocab_size} (`config.ngram_compressed_vocab_size`). The hash "
                 "multipliers are derived from that number, so this is not the tokenizer the checkpoint was "
                 "trained with."
             )
@@ -1738,7 +1782,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         )
         self.norm = DeepseekV41RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekV41RotaryEmbedding(config)
-        self.engram_hasher = DeepseekV41NgramHasher(config) if config.engram_layer_ids else None
+        self.ngram_hasher = DeepseekV41NGramHasher(config) if config.ple_layer_ids else None
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -1764,7 +1808,7 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         """
         if input_ids is None and inputs_embeds is None:
             raise ValueError("You must specify at least one of input_ids or inputs_embeds")
-        if self.engram_hasher is not None and input_ids is None:
+        if self.ngram_hasher is not None and input_ids is None:
             raise ValueError(
                 "DeepSeek-V4.1 hashes n-grams of token ids for its Engram layers, so it needs `input_ids` even "
                 "when `inputs_embeds` is passed."
@@ -1794,13 +1838,13 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
 
         # Next, the n-gram hashes of all the Engram layers. A padded token must not end up in the n-grams of
         # the tokens after it, and neither must an image token.
-        engram_hash_ids, engram_mask = None, None
-        if self.engram_hasher is not None:
+        ngram_hash_ids, ngram_mask = None, None
+        if self.ngram_hasher is not None:
             hash_mask = is_real_token
             if image_mask is not None:
-                engram_mask = ~image_mask
-                hash_mask = hash_mask & engram_mask
-            engram_hash_ids = self.engram_hasher(input_ids, hash_mask, cache.layers[0] if cache is not None else None)
+                ngram_mask = ~image_mask
+                hash_mask = hash_mask & ngram_mask
+            ngram_hash_ids = self.ngram_hasher(input_ids, hash_mask, cache.layers[0] if cache is not None else None)
 
         # `generate()` may pass a per-layer-type mask dict already built by `create_masks_for_generate`. All
         # layers use the same sliding-window mask, so we use the prebuilt one directly.
@@ -1830,26 +1874,30 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
         # each token, this is the RoPE of the entry that it completes if it is the last one of a group of
         # `ratio`, and the compressor keeps the ones of the tokens that are.
         compressed_position_embeddings = {}
-        for ratio, layer_type in zip(self.config.compress_ratios, self.config.attention_layer_types):
-            if layer_type == "compressed_attention" and ratio not in compressed_position_embeddings:
+        for layer_idx, source in enumerate(self.config.kv_source_layers):
+            ratio = self.config.compress_ratios[layer_idx]
+            if source == layer_idx and ratio not in compressed_position_embeddings:
                 compressed_position_embeddings[ratio] = self.rotary_emb(
                     inputs_embeds, position_ids=position_ids - (ratio - 1), layer_type="compress"
                 )
-        # What the attention layers hand down the stack instead of recomputing: the compressed KV, the index
-        # keys, the selection and the candidate blocks. Each layer returns them with its own on top, so every
-        # source has published before the layers after it read.
-        shared_states = {}
+        # What the attention layers share instead of recomputing, for this forward only. A layer that compresses
+        # its own KV leaves them in this dict with their index keys, for the KV-sharing layers after it.
+        shared_kv_states = KVSharingDict()
+        # The selection of the last indexer and the candidate blocks go from layer to layer instead.
+        # TODO: #51202 has the cache layer hand the selection out as top-k indices (`select_indices`), where we
+        # pass boolean masks. We're watching for it to merge, to pass the selection the same way.
+        selected_entries, candidate_entries = None, None
 
         for layer_idx, layer in enumerate(self.layers):
-            hidden_states, pre, shared_states = layer(
+            hidden_states, pre, selected_entries, candidate_entries = layer(
                 hidden_states,
                 pre,
-                engram_hash_ids=(
-                    engram_hash_ids[:, :, self.config.engram_layer_ids.index(layer_idx)]
-                    if layer_idx in self.config.engram_layer_ids
+                ngram_hash_ids=(
+                    ngram_hash_ids[:, :, self.config.ple_layer_ids.index(layer_idx)]
+                    if layer_idx in self.config.ple_layer_ids
                     else None
                 ),
-                engram_mask=engram_mask,
+                ngram_mask=ngram_mask,
                 image_mask=image_mask,
                 position_embeddings=position_embeddings,
                 compressed_position_embeddings=compressed_position_embeddings,
@@ -1857,7 +1905,9 @@ class DeepseekV41TextModel(DeepseekV41PreTrainedModel):
                 num_seen_tokens=num_seen_tokens,
                 attention_mask=causal_mask,
                 cache=cache,
-                shared_states=shared_states,
+                shared_kv_states=shared_kv_states,
+                selected_entries=selected_entries,
+                candidate_entries=candidate_entries,
                 **kwargs,
             )
 

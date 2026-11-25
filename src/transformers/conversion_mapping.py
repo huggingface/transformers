@@ -851,13 +851,17 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.shared_experts\.w1\.", target_patterns=r".shared_experts.gate_proj."),
             WeightRenaming(source_patterns=r"\.shared_experts\.w2\.", target_patterns=r".shared_experts.down_proj."),
             WeightRenaming(source_patterns=r"\.shared_experts\.w3\.", target_patterns=r".shared_experts.up_proj."),
+            # The checkpoint calls its n-gram tables Engram. The second rename reads the result of the first, so
+            # that saving undoes them in the opposite order.
+            WeightRenaming(source_patterns=r"\.engram\.", target_patterns=r".ple."),
+            WeightRenaming(source_patterns=r"\.ple\.embed\.", target_patterns=r".ple.ngram_embedding."),
             # The FP8 quantizer renames every `.scale` of the checkpoint to `weight_scale_inv`, which is the name
             # of the scales of an FP8 linear. The scales of an FP8 table are called `weight_scale`, so the ones
             # of the Engram tables need one more rename.
             # TODO: drop this after #50245, which calls the scales of a table `weight_scale_inv` as well
             WeightRenaming(
-                source_patterns=r"\.engram\.embed\.weight_scale_inv",
-                target_patterns=r".engram.embed.weight_scale",
+                source_patterns=r"\.ple\.ngram_embedding\.weight_scale_inv",
+                target_patterns=r".ple.ngram_embedding.weight_scale",
             ),
             WeightConverter(
                 source_patterns=[

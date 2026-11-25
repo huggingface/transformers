@@ -58,14 +58,6 @@ class DeepseekV41VisionConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
 
-DEEPSEEK_V41_ATTENTION_LAYER_TYPES = (
-    "sliding_attention",
-    "compressed_attention",
-    "kv_shared_indexed_attention",
-    "kv_shared_attention",
-)
-
-
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4.1-Flash")
 @strict
 class DeepseekV41TextConfig(PreTrainedConfig):
@@ -77,25 +69,16 @@ class DeepseekV41TextConfig(PreTrainedConfig):
     layer_types (`list[str]`):
         Per-layer cache type. Every DeepSeek-V4.1 layer uses `"shared_compressed_attention"`, so this is filled in
         automatically.
-    attention_layer_types (`list[str]`, *optional*):
-        Which attention variant each layer uses. Derived from `compress_ratios`, `kv_source_layer_ids` and
-        `index_source_layer_ids`:
-
-        - `"sliding_attention"` attends over a sliding window only.
-        - `"compressed_attention"` also compresses its own KV, and runs an indexer to pick which compressed
-          entries each query attends to.
-        - `"kv_shared_indexed_attention"` reads the compressed KV of the last `"compressed_attention"` layer, but
-          runs its own indexer over it.
-        - `"kv_shared_attention"` reuses both the compressed KV and the selection of the layers before it.
     compress_ratios (`list[int]`, *optional*):
         Per-layer KV compression ratio. 0 is sliding-window attention only, and `r > 0` adds attention over
         KV that are pooled `r`-to-1. The checkpoint's config lists the DSpark layers after the main ones, and
         those extra entries are ignored here. Defaults to sliding-window attention everywhere.
     kv_source_layer_ids (`list[int]`, *optional*):
-        The layers that compress their own KV. Every later layer with the same ratio reads that KV, up to the
-        next source.
+        The layers that compress their own KV, and run an indexer to pick which compressed entries each query
+        attends to. Every later layer with the same ratio reads that KV, up to the next source.
     index_source_layer_ids (`list[int]`, *optional*):
-        The layers that run an indexer. The layers in between reuse the selection of the last one.
+        The layers that run an indexer. A layer that is not in `kv_source_layer_ids` runs it over the compressed
+        KV that it reads, and the layers in between reuse the selection of the last indexer.
     candidate_source_layer_id (`int`, *optional*):
         The indexer of this layer also keeps the `candidate_topk_blocks` best blocks of compressed positions per
         query, and the indexers after it only choose inside those blocks.
@@ -125,22 +108,23 @@ class DeepseekV41TextConfig(PreTrainedConfig):
         Indexer head dim.
     index_topk (`int`):
         Number of compressed entries the indexer keeps per query.
-    engram_layer_ids (`list[int]`, *optional*):
-        The layers that add an Engram n-gram lookup to the residual stream before their attention.
-    engram_num_embeddings (`list[int]`, *optional*):
+    ple_layer_ids (`list[int]`, *optional*):
+        The layers that add an Engram n-gram lookup to the residual stream before their attention. These are
+        zero-based layer indices, as in the checkpoint's `engram_layer_ids`.
+    ngram_num_embeddings (`list[int]`, *optional*):
         Rows in the hash table of each Engram layer. This is the sum of the layer's bucket sizes, so it is only
         checked against them.
-    engram_max_ngram_size (`int`, *optional*, defaults to 4):
+    ngram_size (`int`, *optional*, defaults to 4):
         Longest n-gram that is hashed. Every size from 2 up to this one gets its own lookups.
-    engram_vocab_size (`int`, *optional*, defaults to 16000000):
+    ngram_vocab_size_base (`int`, *optional*, defaults to 16000000):
         Each (n-gram size, head) pair gets a bucket range whose size is the next unused prime above this.
-    engram_n_heads (`int`, *optional*, defaults to 8):
+    heads_per_ngram (`int`, *optional*, defaults to 8):
         Number of hash heads per n-gram size.
-    engram_head_dim (`int`, *optional*, defaults to 256):
+    ngram_head_dim (`int`, *optional*, defaults to 256):
         Dimension of the rows of the Engram hash tables.
-    engram_pad_token_id (`int`, *optional*, defaults to 2):
+    ngram_pad_token_id (`int`, *optional*, defaults to 2):
         Token that fills the slots of an n-gram that reach back before the start of the sequence.
-    engram_compressed_vocab_size (`int`, *optional*, defaults to 99092):
+    ngram_compressed_vocab_size (`int`, *optional*, defaults to 99092):
         Size of the vocabulary once tokens that normalize alike are merged. The hash multipliers are derived
         from it.
     num_nextn_predict_layers (`int`):
@@ -163,12 +147,22 @@ class DeepseekV41TextConfig(PreTrainedConfig):
     """
 
     model_type = "deepseek_v41_text"
-    # `num_local_experts` is the standard MoE attr name (read by FP8 / TP integrations);
-    # `intermediate_size` is what :class:`LlamaMLP` reads for the shared expert width
-    # — V4 only ships `moe_intermediate_size` so we route the read through.
+
+    # The checkpoint's config calls the n-gram fields `engram_*`. We name them like Qwen4-Exp names its own n-gram
+    # tables (`ple_*` and `ngram_*`), and this map reads the checkpoint's names into them.
+    # TODO: that is the naming the review of Hy4-flash (#50903) asked for, but the PR itself still says
+    # `engram_*`. We're watching which one it merges with, to follow it.
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "intermediate_size": "moe_intermediate_size",
+        "engram_layer_ids": "ple_layer_ids",
+        "engram_num_embeddings": "ngram_num_embeddings",
+        "engram_max_ngram_size": "ngram_size",
+        "engram_vocab_size": "ngram_vocab_size_base",
+        "engram_n_heads": "heads_per_ngram",
+        "engram_head_dim": "ngram_head_dim",
+        "engram_pad_token_id": "ngram_pad_token_id",
+        "engram_compressed_vocab_size": "ngram_compressed_vocab_size",
     }
 
     base_model_pp_plan = {
@@ -246,7 +240,6 @@ class DeepseekV41TextConfig(PreTrainedConfig):
     _rope_type_labels = ("main", "compress")
     base_config_key = "text_config"
 
-    attention_layer_types: list[str] | None = None
     compress_ratios: list[int] | None = None
     kv_source_layer_ids: list[int] | None = None
     index_source_layer_ids: list[int] | None = None
@@ -254,14 +247,14 @@ class DeepseekV41TextConfig(PreTrainedConfig):
     candidate_topk_blocks: int = 2048
     candidate_block_size: int = 8
 
-    engram_layer_ids: list[int] | None = None
-    engram_num_embeddings: list[int] | None = None
-    engram_max_ngram_size: int = 4
-    engram_vocab_size: int = 16000000
-    engram_n_heads: int = 8
-    engram_head_dim: int = 256
-    engram_pad_token_id: int = 2
-    engram_compressed_vocab_size: int = 99092
+    ple_layer_ids: list[int] | None = None
+    ngram_num_embeddings: list[int] | None = None
+    ngram_size: int = 4
+    ngram_vocab_size_base: int = 16000000
+    heads_per_ngram: int = 8
+    ngram_head_dim: int = 256
+    ngram_pad_token_id: int = 2
+    ngram_compressed_vocab_size: int = 99092
 
     dspark_block_size: int = 5
     dspark_noise_token_id: int = 128799
@@ -298,42 +291,36 @@ class DeepseekV41TextConfig(PreTrainedConfig):
     def validate_layer_type(self):
         """Checks that the attention schedule is one the model can run: every layer that attends to compressed
         KV needs a source for that KV and for its selection somewhere before it."""
-        if self.num_hidden_layers is None or self.attention_layer_types is None:
+        if self.num_hidden_layers is None or self.compress_ratios is None:
             return
-        if len(self.attention_layer_types) != self.num_hidden_layers:
-            raise ValueError(
-                f"`num_hidden_layers` ({self.num_hidden_layers}) must equal `len(attention_layer_types)` "
-                f"({len(self.attention_layer_types)})."
-            )
-        bad = [t for t in self.attention_layer_types if t not in DEEPSEEK_V41_ATTENTION_LAYER_TYPES]
-        if bad:
-            raise ValueError(
-                f"`attention_layer_types` entries must be one of {DEEPSEEK_V41_ATTENTION_LAYER_TYPES}; got {bad}."
-            )
+        kv_source_layer_ids = self.kv_source_layer_ids or []
+        index_source_layer_ids = self.index_source_layer_ids or []
 
         source_ratio = None
-        for layer_idx, layer_type in enumerate(self.attention_layer_types):
+        for layer_idx in range(self.num_hidden_layers):
             ratio = self.compress_ratios[layer_idx]
-            if layer_type == "compressed_attention":
-                if layer_idx not in self.index_source_layer_ids:
+            if ratio == 0:
+                # A sliding window and nothing else, so there is no compressed KV to find a source for
+                continue
+            if layer_idx in kv_source_layer_ids:
+                # Compresses its own KV, and the index keys are made from them
+                if layer_idx not in index_source_layer_ids:
                     raise ValueError(
                         f"Layer {layer_idx} is in `kv_source_layer_ids`, so it must be in `index_source_layer_ids` "
-                        f"too: the index keys are made from the KV it compresses. Got {self.index_source_layer_ids}."
+                        f"too: the index keys are made from the KV it compresses. Got {index_source_layer_ids}."
                     )
                 source_ratio = ratio
-            elif layer_type != "sliding_attention" and ratio != source_ratio:
+            elif ratio != source_ratio:
+                # Reads the compressed KV of the last source, which must be pooled with its own ratio
                 raise ValueError(
                     f"Layer {layer_idx} has a compression ratio of {ratio}, but the last layer in "
                     f"`kv_source_layer_ids` before it compresses with a ratio of {source_ratio}. Add {layer_idx} "
                     "to `kv_source_layer_ids` or change its entry in `compress_ratios`."
                 )
-        if (
-            self.candidate_source_layer_id is not None
-            and self.candidate_source_layer_id not in self.index_source_layer_ids
-        ):
+        if self.candidate_source_layer_id is not None and self.candidate_source_layer_id not in index_source_layer_ids:
             raise ValueError(
                 f"`candidate_source_layer_id` ({self.candidate_source_layer_id}) must be one of "
-                f"`index_source_layer_ids` ({self.index_source_layer_ids})."
+                f"`index_source_layer_ids` ({index_source_layer_ids})."
             )
 
     def __post_init__(self, **kwargs):
@@ -351,31 +338,8 @@ class DeepseekV41TextConfig(PreTrainedConfig):
             )
         self.kv_source_layer_ids = list(self.kv_source_layer_ids or [])
         self.index_source_layer_ids = list(self.index_source_layer_ids or [])
-        self.engram_layer_ids = list(self.engram_layer_ids or [])
+        self.ple_layer_ids = list(self.ple_layer_ids or [])
         self.dspark_target_layer_ids = list(self.dspark_target_layer_ids or [])
-
-        # `attention_layer_types` picks the attention class of each layer
-        attention_layer_types = []
-        for layer_idx in range(n):
-            if self.compress_ratios[layer_idx] == 0:
-                # A sliding window and nothing else
-                attention_layer_types.append("sliding_attention")
-            elif layer_idx in self.kv_source_layer_ids:
-                # Compresses its own KV and indexes it
-                attention_layer_types.append("compressed_attention")
-            elif layer_idx in self.index_source_layer_ids:
-                # Reads the KV of the last source, but selects from it with its own indexer
-                attention_layer_types.append("kv_shared_indexed_attention")
-            else:
-                # Reads both the KV and the selection of the layers before it
-                attention_layer_types.append("kv_shared_attention")
-        if self.attention_layer_types is None:
-            self.attention_layer_types = attention_layer_types
-        elif list(self.attention_layer_types) != attention_layer_types:
-            raise ValueError(
-                f"`attention_layer_types` ({self.attention_layer_types}) does not match `compress_ratios`, "
-                f"`kv_source_layer_ids` and `index_source_layer_ids`, which give {attention_layer_types}."
-            )
 
         # `layer_types` picks the cache class, and all layers keep their state in the same one
         self.layer_types = ["shared_compressed_attention"] * n
@@ -430,6 +394,58 @@ class DeepseekV41TextConfig(PreTrainedConfig):
                 f"FP8 or FP4 in blocks of 32 values, so their widths must be multiples of 32. Got {bad}."
             )
 
+    @property
+    def kv_source_layers(self) -> list[int | None]:
+        """
+        For each layer, the layer whose compressed KV it attends to. That is the layer itself if it compresses its
+        own, and `None` if it attends over its sliding window only.
+        """
+        kv_source_layers, source = [], None
+        for layer_idx in range(self.num_hidden_layers):
+            if self.compress_ratios[layer_idx] == 0:
+                # A sliding window and nothing else
+                kv_source_layers.append(None)
+            elif layer_idx in self.kv_source_layer_ids:
+                # Compresses its own KV, and stays the source until the next layer that does
+                source = layer_idx
+                kv_source_layers.append(layer_idx)
+            else:
+                # Reads the compressed KV of the last source
+                kv_source_layers.append(source)
+        return kv_source_layers
+
+    @property
+    def kv_sharing_modes(self) -> list[str | None]:
+        """
+        How each layer takes part in the sharing of compressed KV:
+
+        - `"store"` compresses KV of its own, and the layers after it read them.
+        - `"reuse_compressed"` reads the compressed KV of the last layer that made some, and attends to the entries
+          that the last indexer before it selected.
+        - `"reuse_compressed_but_indexer"` reads those compressed KV too, but selects from them with an indexer of
+          its own.
+        - `None` shares nothing: the layer attends over its sliding window only, or no layer reads the KV that it
+          compresses.
+
+        Whatever its mode, every layer computes and caches the KV of its own sliding window.
+        """
+        # These are not the plain `"reuse"` of the models whose layers share all of their KV. The cache hands a
+        # `"reuse"` layer a `DummyLayer` that stores nothing, and ours still have a sliding window to store.
+        kv_source_layers = self.kv_source_layers
+        kv_sharing_modes = []
+        for layer_idx, source in enumerate(kv_source_layers):
+            if source is None:
+                # A sliding window and nothing else
+                kv_sharing_modes.append(None)
+            elif source != layer_idx:
+                # Reads the compressed KV of an earlier layer, with or without an indexer of its own
+                has_indexer = layer_idx in self.index_source_layer_ids
+                kv_sharing_modes.append("reuse_compressed_but_indexer" if has_indexer else "reuse_compressed")
+            else:
+                # Compresses its own KV, which are only shared if a later layer reads them
+                kv_sharing_modes.append("store" if kv_source_layers.count(layer_idx) > 1 else None)
+        return kv_sharing_modes
+
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4.1-Flash")
 @strict
@@ -459,7 +475,7 @@ class DeepseekV41Config(PreTrainedConfig):
             defaults = {
                 # The Engram tables are stored in FP8 too, and they are far too big to dequantize. A block of a
                 # table is as wide as a block of a linear, but it never spans rows
-                "modules_to_convert": ["engram.embed"],
+                "modules_to_convert": ["ple.ngram_embedding"],
                 "embedding_block_size": block_size[1],
                 # These linears are stored in BF16. They have no scales, so the quantizer has to skip them
                 "modules_to_not_convert": [

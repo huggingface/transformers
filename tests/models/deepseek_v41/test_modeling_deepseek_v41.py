@@ -34,12 +34,14 @@ if is_torch_available():
         DeepseekV41ForCausalLM,
         DeepseekV41Model,
         DeepseekV41TextConfig,
+        DynamicCache,
         FineGrainedFP8Config,
     )
     from transformers.integrations import FP8Embedding, FP8Linear
     from transformers.models.deepseek_v41.modeling_deepseek_v41 import (
+        DeepseekV41CacheLayer,
         DeepseekV41Compressor,
-        DeepseekV41NgramHasher,
+        DeepseekV41NGramHasher,
         fake_quantize,
         select_candidate_blocks,
     )
@@ -108,13 +110,13 @@ class DeepseekV41ModelTester(VLMModelTester):
         "index_topk": 3,
         "hc_mult": 2,
         "hc_sinkhorn_iters": 3,
-        "engram_layer_ids": [0, 2],
-        "engram_max_ngram_size": 3,
-        "engram_vocab_size": 50,
-        "engram_n_heads": 2,
-        "engram_head_dim": 8,
-        "engram_pad_token_id": 2,
-        "engram_num_embeddings": None,
+        "ple_layer_ids": [0, 2],
+        "ngram_size": 3,
+        "ngram_vocab_size_base": 50,
+        "heads_per_ngram": 2,
+        "ngram_head_dim": 8,
+        "ngram_pad_token_id": 2,
+        "ngram_num_embeddings": None,
         "num_nextn_predict_layers": 0,
         "dspark_noise_token_id": 3,
         "rms_norm_eps": 1e-6,
@@ -135,7 +137,7 @@ class DeepseekV41ModelTester(VLMModelTester):
     def get_small_config_defaults(cls, **kwargs):
         values = super().get_small_config_defaults(**kwargs)
         # As large as the vocab, so that no tokens are merged and the model works without a tokenizer
-        values["engram_compressed_vocab_size"] = values["vocab_size"]
+        values["ngram_compressed_vocab_size"] = values["vocab_size"]
         return values
 
     def create_pixel_values(self, batch_size: int | None = None):
@@ -227,10 +229,11 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         config = config.get_text_config()
         self.assertEqual(len(cache.layers), config.num_hidden_layers)
         window_shape = (batch_size, 1, min(seq_length, config.sliding_window - 1), config.head_dim)
-        for layer, attention_type, ratio in zip(cache.layers, config.attention_layer_types, config.compress_ratios):
+        for layer_idx, (layer, source) in enumerate(zip(cache.layers, config.kv_source_layers)):
+            ratio = config.compress_ratios[layer_idx]
             self.assertEqual(layer.keys.shape, window_shape)
             self.assertEqual(layer.values.shape, window_shape)
-            if attention_type == "compressed_attention":
+            if source == layer_idx:
                 # Only the layer that compresses the KV stores it. The KV-sharing layers read it from there.
                 self.assertEqual(layer.compressed_kv.shape, (batch_size, seq_length // ratio, config.head_dim))
             else:
@@ -428,21 +431,18 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         self.assertEqual(num_groups.tolist(), [3, 3])
         torch.testing.assert_close(offloaded, expected)
 
-    def test_attention_layer_types(self):
+    def test_kv_sharing_modes(self):
         config = self.model_tester.get_config().text_config
+        self.assertEqual(config.kv_source_layers, [None, 1, 1, 3, 3])
         self.assertEqual(
-            config.attention_layer_types,
-            [
-                "sliding_attention",
-                "compressed_attention",
-                "kv_shared_attention",
-                "compressed_attention",
-                "kv_shared_indexed_attention",
-            ],
+            config.kv_sharing_modes, [None, "store", "reuse_compressed", "store", "reuse_compressed_but_indexer"]
         )
+        # The cache gives a `DummyLayer` to the layers of a model that reuse all of their KV. Ours only reuse the
+        # compressed KV, and still need a cache layer for their sliding window.
+        cache = DynamicCache(config=config)
+        self.assertEqual([type(layer) for layer in cache.layers], [DeepseekV41CacheLayer] * 5)
+
         text_config = config.to_dict()
-        # The layer types are derived from the fields that we change below, so they have to be derived again
-        del text_config["attention_layer_types"]
         # A layer cannot read compressed KV that no layer before it has made
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "kv_source_layer_ids"):
             DeepseekV41TextConfig.from_dict(
@@ -452,10 +452,29 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "index_source_layer_ids"):
             DeepseekV41TextConfig.from_dict({**text_config, "index_source_layer_ids": [3, 4]})
 
-    def test_engram_hash_ids(self):
+    def test_config_reads_the_checkpoint_field_names(self):
+        """The config of the checkpoint calls the n-gram fields `engram_*`, and they land in our names for them."""
+        text_config = self.model_tester.get_config().text_config.to_dict()
+        checkpoint_names = {
+            "ple_layer_ids": "engram_layer_ids",
+            "ngram_num_embeddings": "engram_num_embeddings",
+            "ngram_size": "engram_max_ngram_size",
+            "ngram_vocab_size_base": "engram_vocab_size",
+            "heads_per_ngram": "engram_n_heads",
+            "ngram_head_dim": "engram_head_dim",
+            "ngram_pad_token_id": "engram_pad_token_id",
+            "ngram_compressed_vocab_size": "engram_compressed_vocab_size",
+        }
+        self.assertLessEqual(checkpoint_names.keys(), text_config.keys())
+        checkpoint_config = {checkpoint_names.get(name, name): value for name, value in text_config.items()}
+        config = DeepseekV41TextConfig.from_dict(checkpoint_config)
+        self.assertEqual(config.to_dict(), text_config)
+        self.assertEqual(config.engram_layer_ids, [0, 2])
+
+    def test_ngram_hash_ids(self):
         """The n-gram hash ids match the ones of the reference implementation, with and without a masked token."""
         config = self.model_tester.get_config().text_config
-        hasher = DeepseekV41NgramHasher(config)
+        hasher = DeepseekV41NGramHasher(config)
         self.assertEqual(hasher.bucket_sizes.tolist(), [[53, 59, 61, 67], [71, 73, 79, 83]])
         input_ids = torch.tensor([[5, 9, 2, 7, 7, 3]])
         # fmt: off
@@ -480,19 +499,19 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         token_mask = torch.tensor([[True, True, True, False, True, True]])
         self.assertEqual(hasher(input_ids, token_mask).tolist(), [expected_masked])
 
-    def test_engram_token_map_must_be_set(self):
+    def test_ngram_token_map_must_be_set(self):
         """With merged tokens, the map comes from the tokenizer, and the model says so instead of guessing."""
         config = self.model_tester.get_config()
-        config.text_config.engram_compressed_vocab_size = 60
+        config.text_config.ngram_compressed_vocab_size = 60
         model = DeepseekV41ForCausalLM(config).to(torch_device).eval()
         input_ids = self.model_tester.prepare_text_ids(1, 6)
-        with self.assertRaisesRegex(ValueError, "set_engram_token_map"):
+        with self.assertRaisesRegex(ValueError, "set_ngram_token_map"):
             model(input_ids=input_ids)
 
         token_map = torch.arange(config.text_config.vocab_size) % 60
         with self.assertRaisesRegex(ValueError, "compressed ids"):
-            model.set_engram_token_map(token_map % 50)
-        model.set_engram_token_map(token_map)
+            model.set_ngram_token_map(token_map % 50)
+        model.set_ngram_token_map(token_map)
         with torch.no_grad():
             logits = model(input_ids=input_ids).logits
         self.assertEqual(logits.shape, (1, 6, config.text_config.vocab_size))
@@ -549,9 +568,9 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         input_ids = self.model_tester.prepare_text_ids(2, 19)
         with torch.no_grad():
             cache = model(input_ids=input_ids, use_cache=True).cache
-        for layer, attention_type in zip(cache.layers, config.text_config.attention_layer_types):
+        for layer_idx, (layer, source) in enumerate(zip(cache.layers, config.text_config.kv_source_layers)):
             self.assertTrue(torch.equal(fake_quantize(layer.keys, "fp8", block_size=32), layer.keys))
-            if attention_type == "compressed_attention":
+            if source == layer_idx:
                 self.assertTrue(torch.equal(fake_quantize(layer.index_keys, "fp4", block_size=32), layer.index_keys))
 
     def test_select_candidate_blocks(self):
@@ -660,7 +679,7 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         """
         config = self.model_tester.get_config().to_dict()
         # A scale of an Engram table covers 32 values, so the rows have to be at least that wide
-        config["text_config"]["engram_head_dim"] = 32
+        config["text_config"]["ngram_head_dim"] = 32
         config = DeepseekV41Config.from_dict({**config, "quantization_config": CHECKPOINT_QUANTIZATION_CONFIG})
         with torch.device("meta"):
             model = DeepseekV41ForCausalLM(config)
@@ -678,8 +697,8 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
             if isinstance(module, torch.nn.Linear):
                 is_bf16 = any(part in name for part in bf16_linears)
                 self.assertEqual(isinstance(module, FP8Linear), not is_bf16, name)
-        for layer_idx in config.text_config.engram_layer_ids:
-            table = model.model.language_model.layers[layer_idx].engram.embed
+        for layer_idx in config.text_config.ple_layer_ids:
+            table = model.model.language_model.layers[layer_idx].ple.ngram_embedding
             self.assertIsInstance(table, FP8Embedding)
             # One scale per block of 32 values, and the rows are a single block wide here
             self.assertEqual(table.weight_scale.shape, (table.num_embeddings, 1))
@@ -695,7 +714,7 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
         """
         config = self.model_tester.get_config()
         # A scale of an Engram table covers 32 values, so the rows have to be at least that wide
-        config.text_config.engram_head_dim = 32
+        config.text_config.ngram_head_dim = 32
         torch.manual_seed(0)
         model = DeepseekV41ForCausalLM(config)
         fp4_values = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
@@ -752,8 +771,10 @@ class DeepseekV41ModelTest(VLMModelTest, unittest.TestCase):
             )
             loaded_model = loaded_model.to(torch_device).eval()
 
-        for layer_idx in config.text_config.engram_layer_ids:
-            self.assertIsInstance(loaded_model.model.language_model.layers[layer_idx].engram.embed, FP8Embedding)
+        for layer_idx in config.text_config.ple_layer_ids:
+            self.assertIsInstance(
+                loaded_model.model.language_model.layers[layer_idx].ple.ngram_embedding, FP8Embedding
+            )
         input_ids = self.model_tester.prepare_text_ids(2, 9)
         with torch.no_grad():
             expected = expected_model(input_ids=input_ids).logits
