@@ -777,6 +777,14 @@ class PrefixCache:
     to an arbitrary length. Used from one inference thread only, so it needs no lock.
     """
 
+    # TODO: bound and extend this cache. It holds one entry on the GPU, of any length (~144 KB per token for an 8B
+    # model, ~4.7 GB at 32k tokens), and two clients that alternate evict each other's entry. Planned follow-up:
+    # - a `--prefix-cache-max-tokens` cap: crop a longer cache to its first N tokens on `store()` (and `.clone()` it,
+    #   since `crop` keeps a view of the full tensors);
+    # - several entries, matched by longest shared prefix and evicted least-recently-used under a total budget;
+    # - a pinned CPU-memory tier for evicted entries (~10 ms per 1k tokens to bring back on an A10G, vs ~290 ms to
+    #   re-encode). Disk offload is probably not worth it for `transformers serve`.
+
     def __init__(self):
         self._token_ids: list[int] = []
         self._cache = None
