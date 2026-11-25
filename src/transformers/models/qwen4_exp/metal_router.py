@@ -1,4 +1,5 @@
 """Fused Qwen4 router: one Metal dispatch for a decode token's 512-expert softmax top-10."""
+
 import torch
 
 
@@ -213,8 +214,17 @@ def _router_impl(x, weight, E, H, K):
     indices = torch.empty(1, K, dtype=torch.int64, device=x.device)
     counter = torch.zeros(1, dtype=torch.int32, device=x.device)
     getattr(_lib(), f"qwen_router_{_NAMES[x.dtype]}_8")(
-        x.contiguous(), weight, logits, weights, indices, counter, E, H, K,
-        threads=E * 256, group_size=256,
+        x.contiguous(),
+        weight,
+        logits,
+        weights,
+        indices,
+        counter,
+        E,
+        H,
+        K,
+        threads=E * 256,
+        group_size=256,
     )
     return logits, weights, indices
 
@@ -244,6 +254,7 @@ def _forward(self, hidden_states):
 
 def prepare(model):
     from transformers.models.qwen4_exp.modeling_qwen4_exp import Qwen4ExpTextTopKRouter
+
     for module in model.modules():
         if isinstance(module, Qwen4ExpTextTopKRouter):
             module._metal_w32 = module.weight.detach().float().contiguous()
@@ -252,6 +263,7 @@ def prepare(model):
 def install():
     global _orig_forward
     from transformers.models.qwen4_exp.modeling_qwen4_exp import Qwen4ExpTextTopKRouter
+
     if getattr(Qwen4ExpTextTopKRouter, "_metal_router", False):
         return
     _orig_forward = Qwen4ExpTextTopKRouter.forward

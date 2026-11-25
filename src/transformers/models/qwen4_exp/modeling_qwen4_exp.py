@@ -1889,8 +1889,7 @@ class Qwen4ExpVisionAttention(nn.Module):
                 splits = [(query_states, key_states, value_states)]
             else:
                 splits = [
-                    torch.split(tensor, lengths.tolist(), dim=2)
-                    for tensor in (query_states, key_states, value_states)
+                    torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
                 ]
                 splits = list(zip(*splits))
 

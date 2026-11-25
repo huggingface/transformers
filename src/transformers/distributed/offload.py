@@ -834,7 +834,7 @@ class _MPSHostRouter:
         if nxt is None:
             self.guess_no_ahead += 1
         if guesses and nxt:
-            ahead = [nxt]
+            # ahead = [nxt]    not used
             self.pending_guess[nxt] = set(guesses)  # priced against nxt's real routing when it resolves
             npool = store.pool_of[nxt]
             self._stamps(npool)
