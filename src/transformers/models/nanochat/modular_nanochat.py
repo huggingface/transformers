@@ -35,12 +35,12 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
-from ..llama4.modeling_llama4 import Llama4TextL2Norm
+from ..llama4.modeling_llama4 import Llama4TextWeightlessRMSNorm
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_nanochat import NanoChatConfig
 
 
-class NanoChatRMSNorm(Llama4TextL2Norm):
+class NanoChatRMSNorm(Llama4TextWeightlessRMSNorm):
     pass
 
 

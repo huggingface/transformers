@@ -42,7 +42,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_flint import FlintConfig
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class FlintRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
