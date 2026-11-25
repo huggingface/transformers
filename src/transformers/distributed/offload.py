@@ -545,7 +545,10 @@ class _MPSHostRouter:
     straight into free pool slots (`preadv` into the slots' unified memory: no copy, no device op), writes the slot
     table in place and signals. Pools and tables live in shared storage, written by the CPU while the device waits."""
 
-    MAX_AHEAD = 16
+    # How many layers the host may queue ahead of the device. Overlap saturates fast: an in-process sweep puts the knee
+    # at 4 and 4..32 is flat (35.65-36.03 ms/token), while a deeper queue loses cold throughput. 16 is a margin above
+    # the knee, not a tuned optimum. See `benchmark_v2/experts_offload/max_ahead_sweep.py`.
+    MAX_AHEAD = int(os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_MAX_AHEAD", "16"))
     COMMIT_EVERY = int(os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_COMMIT_EVERY", "2"))
 
     def __init__(self, store, ext):
