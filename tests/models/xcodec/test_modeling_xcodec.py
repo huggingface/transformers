@@ -225,15 +225,13 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertTrue(isinstance(dict_output, dict))
 
                 for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
-                    if not torch.allclose(
-                        set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
-                    ):
-                        self.fail(
-                            "Tuple and dict output are not equal. Difference:"
-                            f" {torch.max(torch.abs(tuple_value - dict_value))}. Tuple has `nan`:"
-                            f" {torch.isnan(tuple_value).any()} and `inf`: {torch.isinf(tuple_value)}. Dict has"
-                            f" `nan`: {torch.isnan(dict_value).any()} and `inf`: {torch.isinf(dict_value)}."
-                        )
+                    torch.testing.assert_close(
+                        set_nan_tensor_to_zero(tuple_value),
+                        set_nan_tensor_to_zero(dict_value),
+                        rtol=1e-5,
+                        atol=1e-5,
+                        msg=lambda m: f"Tuple and dict output are not equal.\n{m}",
+                    )
 
         for model_class in self.all_model_classes:
             model = model_class(config)
