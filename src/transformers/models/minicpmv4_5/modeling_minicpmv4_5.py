@@ -49,7 +49,7 @@ from .configuration_minicpmv4_5 import MiniCPMV4_5Config, MiniCPMV4_5VisionConfi
 class MiniCPMV4_5PreTrainedModel(PreTrainedModel):
     config: MiniCPMV4_5Config
     base_model_prefix = "model"
-    input_modalities = ("image", "text")
+    input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
 
     _supports_flash_attn = True

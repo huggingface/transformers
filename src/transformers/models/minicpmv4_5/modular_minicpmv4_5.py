@@ -181,6 +181,7 @@ class MiniCPMV4_5VideoProcessor(MiniCPMV4_6VideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
+        num_frames: int | None = None,
         fps: float | None = None,
         max_num_frames: int | None = None,
         max_num_packing: int | None = None,
@@ -190,6 +191,8 @@ class MiniCPMV4_5VideoProcessor(MiniCPMV4_6VideoProcessor):
         Args:
             metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
+            num_frames (`int`, *optional*):
+                Number of frames to sample uniformly, instead of sampling at `fps`.
             fps (`float`, *optional*):
                 Frames per second to sample.
             max_num_frames (`int`, *optional*):
@@ -208,13 +211,14 @@ class MiniCPMV4_5VideoProcessor(MiniCPMV4_6VideoProcessor):
         max_num_frames = max_num_frames if max_num_frames is not None else self.max_num_frames
         max_num_packing = max_num_packing if max_num_packing is not None else self.max_num_packing
 
-        num_packing = self.get_num_packing(metadata.duration, fps, max_num_frames, max_num_packing)
-        if num_packing == 1:
-            num_frames = round(min(fps, round(metadata.fps)) * min(max_num_frames, metadata.duration))
-        elif metadata.duration * fps / max_num_frames <= max_num_packing:
-            num_frames = round(metadata.duration * fps)
-        else:
-            num_frames = round(max_num_frames * max_num_packing)
+        if num_frames is None:
+            num_packing = self.get_num_packing(metadata.duration, fps, max_num_frames, max_num_packing)
+            if num_packing == 1:
+                num_frames = round(min(fps, round(metadata.fps)) * min(max_num_frames, metadata.duration))
+            elif metadata.duration * fps / max_num_frames <= max_num_packing:
+                num_frames = round(metadata.duration * fps)
+            else:
+                num_frames = round(max_num_frames * max_num_packing)
         gap = metadata.total_num_frames / num_frames
         return [int(i * gap + gap / 2) for i in range(num_frames)]
 
@@ -363,7 +367,7 @@ class MiniCPMV4_5Processor(MiniCPMV2_6Processor):
 
 
 class MiniCPMV4_5PreTrainedModel(MiniCPMV2_6PreTrainedModel):
-    pass
+    input_modalities = ("image", "video", "text")
 
 
 class MiniCPMV4_5VisionTransformer(MiniCPMV2_6VisionTransformer):

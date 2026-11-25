@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
@@ -77,6 +78,16 @@ class MiniCPMV4_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {"do_sample_frames": False, "expected_dim": 0, "output_length": 11},
             {"do_sample_frames": False, "fps": 2, "expected_dim": 0, "output_length": 11},
         ]
+
+    @parameterized.expand([(1, "pt")])
+    @unittest.skip("MiniCPM can't sample already decoded videos, have to turn off sampling!")
+    def test_apply_chat_template_decoded_video(self, batch_size: int, return_tensors: str):
+        pass
+
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("The frames of all videos are concatenated: `pixel_values_videos` has one row per frame slice")
+    def test_apply_chat_template_video(self, batch_size: int, return_tensors: str):
+        pass
 
     def test_video_placeholder(self):
         processor = self.get_processor()
