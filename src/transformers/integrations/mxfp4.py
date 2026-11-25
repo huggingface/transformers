@@ -216,11 +216,12 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
         triton_kernels_hub.tensor.wrap_torch_tensor,
     )
     layout = triton_kernels_hub.tensor_details.layout
-    StridedLayout = triton_kernels_hub.tensor_details.layout.StridedLayout
 
     value_layout, value_layout_opts = layout.make_default_matmul_mxfp4_w_layout(mx_axis=1)
     w = convert_layout(wrap_torch_tensor(w, dtype=FP4), value_layout, **value_layout_opts)
-    w_scale = convert_layout(wrap_torch_tensor(w_scale), StridedLayout)
+    # The scales in the swizzled layout of the hardware too, as vLLM does: the matmul reads them faster
+    scale_layout, scale_layout_opts = layout.make_default_matmul_mxfp4_w_scale_layout(mx_axis=1, num_warps=8)
+    w_scale = convert_layout(wrap_torch_tensor(w_scale), scale_layout, **scale_layout_opts)
     return w, w_scale
 
 
