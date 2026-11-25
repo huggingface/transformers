@@ -1052,8 +1052,9 @@ class Molmo2Processor(ProcessorMixin):
             num_image_tokens, num_image_patches = [], []
             for image_size in image_sizes:
                 image_grid, num_crops = self.image_processor.get_image_grid_and_crops(*image_size, images_kwargs)
-                image_string = self.replace_image_token({"image_grids": [image_grid]}, image_idx=0)
-                num_image_tokens.append(len(self.tokenizer.tokenize(image_string)))
+                # `<im_patch>` tokens of the low-res view followed by those of the high-res view
+                resized_h, resized_w, height, width = image_grid
+                num_image_tokens.append(resized_h * resized_w + height * width)
                 num_image_patches.append(num_crops)
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 

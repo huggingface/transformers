@@ -30,12 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import (
-    use_experts_implementation,
-    use_kernel_forward_from_hub,
-    use_kernel_func_from_hub_with_fallback,
-    use_kernelized_func,
-)
+from ...integrations import use_experts_implementation, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import (
     create_causal_mask,
@@ -99,7 +94,6 @@ class Inkling2CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
         return self.image_outputs.pooler_output
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class Inkling2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -114,7 +108,7 @@ class Inkling2RMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -123,12 +117,14 @@ class Inkling2RMSNorm(nn.Module):
 class Inkling2UnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
-        hidden_states = hidden_states * torch.rsqrt(hidden_states.square().mean(-1, keepdim=True) + self.eps)
+        hidden_states = hidden_states * torch.rsqrt(
+            hidden_states.square().mean(-1, keepdim=True) + self.variance_epsilon
+        )
         return hidden_states.to(input_dtype)
 
 
