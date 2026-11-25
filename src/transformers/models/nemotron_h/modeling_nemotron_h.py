@@ -1207,9 +1207,12 @@ class NemotronHModel(NemotronHPreTrainedModel):
         )
 
 
-# Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->NemotronH, JAMBA->NEMOTRON_H
+@auto_docstring
 class NemotronHForCausalLM(NemotronHPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
+    _tp_plan = {}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config: NemotronHConfig):
         super().__init__(config)
