@@ -51,7 +51,9 @@ print(tokenizer.decode(outputs[0, inputs["input_ids"].shape[1] :], skip_special_
 
 - The chat template enables thinking by default. In multi-turn conversations, set `preserve_thinking=True` to keep
   reasoning from earlier assistant turns in the prompt.
-- `output_hidden_states` and `output_attentions` return outputs from the final decoder pass.
+- `output_hidden_states=True` returns the initial embeddings and one hidden state per decoder layer call across all
+  passes. With eager attention, `output_attentions=True` returns one attention map per layer call. The original
+  checkpoint implementation returns outputs from the final pass only.
 - Continuous batching (`generate_batch`) is currently unsupported.
 
 ## NanbeigeConfig

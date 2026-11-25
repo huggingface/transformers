@@ -25,7 +25,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...utils.type_validators import interval
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -134,7 +134,8 @@ class NanbeigeAttention(LlamaAttention):
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.o_proj(attn_output), attn_weights
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class NanbeigeDecoderLayer(LlamaDecoderLayer):
@@ -144,12 +145,15 @@ class NanbeigeDecoderLayer(LlamaDecoderLayer):
 
 
 class NanbeigePreTrainedModel(LlamaPreTrainedModel):
-    pass
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(NanbeigeDecoderLayer, num_hidden_layers_key="total_num_hidden_layers"),
+        "attentions": NanbeigeAttention,
+    }
 
 
 class NanbeigeModel(LlamaModel):
     @merge_with_config_defaults
-    @can_return_tuple
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -191,41 +195,23 @@ class NanbeigeModel(LlamaModel):
         )
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
         hidden_states = inputs_embeds
-        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
-        output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)
 
         for loop_idx in range(num_loops):
-            is_final_loop = loop_idx == num_loops - 1
-            outputs = self._run_loop(
-                hidden_states,
-                attention_mask=causal_mask,
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                cache=cache,
-                cache_offset=loop_idx * num_layers,
-                use_cache=use_cache,
-                apply_norm=is_final_loop or not self.config.skip_loop_final_norm,
-                output_hidden_states=output_hidden_states if is_final_loop else False,
-                output_attentions=output_attentions if is_final_loop else False,
-                return_dict=True,
-                **kwargs,
-            )
-            hidden_states = outputs.last_hidden_state
+            cache_offset = loop_idx * num_layers
+            for decoder_layer in self.layers:
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask,
+                    position_embeddings=position_embeddings,
+                    position_ids=position_ids,
+                    cache=cache,
+                    cache_offset=cache_offset,
+                    use_cache=use_cache,
+                    **kwargs,
+                )
+            if loop_idx == num_loops - 1 or not self.config.skip_loop_final_norm:
+                hidden_states = self.norm(hidden_states)
 
-        return outputs
-
-    @capture_outputs
-    def _run_loop(
-        self,
-        hidden_states: torch.Tensor,
-        apply_norm: bool,
-        cache: Cache | None = None,
-        **kwargs,
-    ) -> BaseModelOutputWithPast:
-        for decoder_layer in self.layers:
-            hidden_states = decoder_layer(hidden_states, cache=cache, **kwargs)
-        if apply_norm:
-            hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states, cache=cache)
 
 
