@@ -98,28 +98,6 @@ jobs:
           echo "=== Disk ===" && df -h
           echo "=== Top processes by memory ===" && ps aux --sort=-%mem | head -20
 
-      - name: "Test: test_initialization"
-        # Replaced by the vllm-test-init matrix job below.
-        if: false
-        working-directory: vllm
-        run: |
-          pytest -v -s tests/models/test_initialization.py
-
-      - name: "Test: test_transformers"
-        # Replaced by the vllm-test-transformers job below (dedicated runner, fresh RAM).
-        if: false
-        working-directory: vllm
-        run: |
-          pytest -v -s tests/models/transformers/
-
-      - name: "Test: multimodal processing"
-        # Replaced by the vllm-test-multimodal-processing matrix job below.
-        if: false
-        working-directory: vllm
-        run: |
-          pytest -v -s tests/models/multimodal/processing/test_transformers_image.py \
-                       tests/models/multimodal/processing/test_transformers_audio.py
-
       - name: "Test: test_mapping"
         if: always()
         working-directory: vllm
@@ -250,10 +228,12 @@ jobs:
         env:
           PYTHONPATH: /tmp
         run: |
-          # test_mtp_draft_loads_mtp_weights needs a GPU (vLLM runs test_backend.py on GPU only)
+          # test_mtp_draft_loads_mtp_weights and test_mtp_draft_for_multimodal_model need a GPU ("Cannot access accelerator
+          # device when none is available"; vLLM runs test_backend.py on GPU only)
           pytest -p hf_ci_memory -v -s tests/models/transformers/ \
             --num-shards=4 --shard-id=$SHARD_ID \
-            --deselect tests/models/transformers/test_backend.py::test_mtp_draft_loads_mtp_weights
+            --deselect tests/models/transformers/test_backend.py::test_mtp_draft_loads_mtp_weights \
+            --deselect tests/models/transformers/test_backend.py::test_mtp_draft_for_multimodal_model
 
   # NOTE: This job was created to verify that the two mamba_mixer CPU bugs patched in
   # vllm-test-init (conv1d weight 2D→3D, out_proj transpose non-contiguous) are indeed
@@ -490,6 +470,11 @@ jobs:
       SHARD_ID: ${{ matrix.shard }}
       # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
       VLLM_CPU_CI_ENV: "1"
+      # 16 GiB KV cache (like vLLM's CPU CI, run-cpu-test.sh) instead of the workflow's 32: before starting, vLLM checks that
+      # the KV cache fits in the container's free memory (limit - usage), and the usage includes the page cache of the
+      # model files read by the previous tests / steps of this job. With 32 GiB, the 7-9B models failed this check
+      # ("Available memory on node 0 (... GiB) ... is less than requested memory for kv (32.0 GiB)").
+      VLLM_CPU_KVCACHE_SPACE: 16
 
     steps:
       - name: Checkout Transformers
@@ -530,7 +515,7 @@ jobs:
             --deselect 'tests/models/multimodal/pooling/test_siglip.py::test_models[float-google/siglip2-giant-opt-patch16-384]'
 
       # A few small language models that vLLM doesn't mark `cpu_model` (same transformers comparison as above). In one shard
-      # (only 3 models). The other models of this file run in `vllm-test-hf-comparison-language`.
+      # (only 3 models). The other models of this file run in "Test: other language models generation".
       - name: "Test: more language models generation"
         if: ${{ !cancelled() && matrix.shard == 1 }}
         working-directory: vllm
@@ -546,6 +531,25 @@ jobs:
         working-directory: vllm
         run: |
           pytest -v -s tests/samplers/test_beam_search.py::test_beam_search_single_input
+
+      # The other models of tests/models/language/generation/test_common.py that vLLM doesn't mark `cpu_model` (up to 8B),
+      # and Mistral-7B (test_mistral.py), on 2 shards. Not included: MiniCPM4.1-8B and HyperCLOVAX-SEED-Think-14B
+      # (`large_gpu_mark`: skip on CPU), chatglm3-6b (skips with transformers main: `max_transformers_version="4.48"` in
+      # vLLM's tests/models/registry.py).
+      - name: "Test: other language models generation (shard ${{ matrix.shard }} / 4)"
+        if: ${{ !cancelled() && (matrix.shard == 1 || matrix.shard == 2) }}
+        working-directory: vllm
+        run: |
+          case "$SHARD_ID" in
+            1)
+              pytest -v -s tests/models/language/generation/test_common.py tests/models/language/generation/test_mistral.py::test_models \
+                -k "gpt2 or Qwen3-8B or Mistral-7B"
+              ;;
+            2)
+              pytest -v -s tests/models/language/generation/test_common.py \
+                -k "slovak-gpt-j-405M or tiny_starcoder_py or pythia-70m or starcoder2-3b or tiny-mixtral-30m or Apertus-8B or Domyn-Edge-Base"
+              ;;
+          esac
 
       # State-space / hybrid models (Zamba2, Granite 4.0, Falcon-H1, LFM2) vs transformers. In one shard. Not included:
       # - the tests of test_hybrid.py without a transformers reference (vLLM vs vLLM).
@@ -634,62 +638,6 @@ jobs:
         working-directory: vllm
         run: |
           pytest -v -s 'tests/models/language/pooling_mteb_test/test_jina.py::test_embed_models_mteb[model_info2]'
-
-  # The models of tests/models/language/generation/test_common.py that vLLM doesn't mark `cpu_model` (up to 8B; the
-  # `cpu_model` ones and opt-350m / phi-2 / stablelm-3b run in `vllm-test-hf-comparison`), and Mistral-7B
-  # (test_mistral.py), vs transformers. In their own job: after the steps of `vllm-test-hf-comparison` on the same runner,
-  # vLLM's CPU KV cache pre-check failed ("Available memory on node 0 (... GiB) ... is less than requested memory for kv
-  # (32.0 GiB)"): vLLM counts the memory used by the job so far (cgroup usage, incl. the page cache of the model files).
-  # Not included: MiniCPM4.1-8B and HyperCLOVAX-SEED-Think-14B (`large_gpu_mark`: skip on CPU), chatglm3-6b (skips with
-  # transformers main: `max_transformers_version="4.48"` in vLLM's tests/models/registry.py).
-  vllm-test-hf-comparison-language:
-    permissions:
-      contents: read
-    # aws-m8i-8xl-cache: sufficient RAM + writable shared cache mount (2xl is read-only).
-    name: "Test vLLM vs transformers outputs, more language models (shard ${{ matrix.shard }} / 2)"
-    needs: find-vllm-commit
-    runs-on:
-      group: aws-m8i-8xl-cache
-    container:
-      image: huggingface/transformers-torch-light
-      options: "--shm-size=16gb -v /mnt/cache/.cache/huggingface:/mnt/cache/"
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1]
-    env:
-      HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-      SHARD_ID: ${{ matrix.shard }}
-      # Like vLLM's CPU CI (set by its run-cpu-test.sh): eager mode instead of inductor, no warmup.
-      VLLM_CPU_CI_ENV: "1"
-
-    steps:
-      - name: Checkout Transformers
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          repository: huggingface/transformers
-          persist-credentials: false
-          path: transformers
-
-      - name: Set up vLLM, transformers and the test dependencies
-        uses: ./transformers/.github/actions/vllm-ci-setup
-        with:
-          vllm-commit: ${{ needs.find-vllm-commit.outputs.vllm_commit }}
-
-      - name: "Test: more language models generation (shard ${{ matrix.shard }} / 2)"
-        if: ${{ !cancelled() }}
-        working-directory: vllm
-        run: |
-          case "$SHARD_ID" in
-            0)
-              pytest -v -s tests/models/language/generation/test_common.py tests/models/language/generation/test_mistral.py::test_models \
-                -k "gpt2 or Qwen3-8B or Mistral-7B"
-              ;;
-            1)
-              pytest -v -s tests/models/language/generation/test_common.py \
-                -k "slovak-gpt-j-405M or tiny_starcoder_py or pythia-70m or starcoder2-3b or tiny-mixtral-30m or Apertus-8B or Domyn-Edge-Base"
-              ;;
-          esac
 
   # Multimodal generation with vLLM's Transformers modeling backend, compared with transformers (`hf_runner`): the
   # generation counterpart of `tests/models/transformers/` (run in `vllm-test-transformers`). One matrix entry per test
@@ -1104,7 +1052,7 @@ jobs:
       image: huggingface/transformers-torch-light
     # Run when test jobs fail, but not when the run is cancelled (unlike `always()`).
     if: ${{ !cancelled() }}
-    needs: [find-vllm-commit, vllm-test-examples, vllm-test-init, vllm-test-transformers, vllm-test-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison, vllm-test-hf-comparison-language, vllm-test-multimodal-generation, vllm-test-tokenizer-features, vllm-test-multimodal-hf-comparison, vllm-test-multimodal-hf-comparison-more, vllm-test-hf-comparison-misc]
+    needs: [find-vllm-commit, vllm-test-examples, vllm-test-init, vllm-test-transformers, vllm-test-multimodal-processing, vllm-test-tokenizers-configs, vllm-test-hf-comparison, vllm-test-multimodal-generation, vllm-test-tokenizer-features, vllm-test-multimodal-hf-comparison, vllm-test-multimodal-hf-comparison-more, vllm-test-hf-comparison-misc]
     # Override workflow-level permissions to add actions:read (needed to fetch job logs).
     permissions:
       actions: read
