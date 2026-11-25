@@ -182,7 +182,12 @@ class Inkling2LoopMessageGate(nn.Module):
     def forward(self, hidden_states: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
         hidden_states, message = hidden_states.float(), message.float()
         gate_hidden_states = torch.cat([self.norm(hidden_states), self.norm(message)], dim=-1)
-        gate_hidden_states = self.down_proj(gate_hidden_states.to(self.down_proj.weight.dtype)).float()
+        gate_dtype = (
+            self.down_proj.weight.dtype
+            if self.down_proj.weight.dtype.is_floating_point
+            else gate_hidden_states.dtype
+        )
+        gate_hidden_states = self.down_proj(gate_hidden_states.to(gate_dtype)).float()
 
         forget_gate = torch.tanh(self.forget_gate_proj(gate_hidden_states))
         message_gate = torch.tanh(self.message_gate_proj(gate_hidden_states))
@@ -385,6 +390,12 @@ class Inkling2LoopPreTrainedModel(Inkling2PreTrainedModel):
         "Inkling2LoopFullDecoderLayer",
         "Inkling2LoopSlidingLoopDecoderLayer",
         "Inkling2LoopFullLoopDecoderLayer",
+    ]
+    _keep_in_fp32_modules = [
+        "q_message_gate.down_proj",
+        "k_message_gate.down_proj",
+        "v_message_gate.down_proj",
+        "mlp_message_gate.down_proj",
     ]
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",

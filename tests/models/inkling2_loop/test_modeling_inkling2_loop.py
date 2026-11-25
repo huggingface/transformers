@@ -139,6 +139,50 @@ class Inkling2LoopTextModelTest(CausalLMModelTest, unittest.TestCase):
             self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
+    def test_message_gate_quantization_and_dtype_preservation(self):
+        from transformers.models.inkling2_loop.modeling_inkling2_loop import (
+            Inkling2LoopMessageGate,
+            Inkling2LoopPreTrainedModel,
+        )
+        from transformers.quantizers.base import HfQuantizer
+        from transformers.quantizers.quantizers_utils import should_convert_module
+
+        # 1. Verify Inkling2LoopPreTrainedModel registers message gate down_proj modules in _keep_in_fp32_modules
+        for gate_name in ("q_message_gate", "k_message_gate", "v_message_gate", "mlp_message_gate"):
+            self.assertIn(f"{gate_name}.down_proj", Inkling2LoopPreTrainedModel._keep_in_fp32_modules)
+
+        # 2. Verify should_convert_module properly excludes all message gate linear modules
+        patterns = list(Inkling2LoopPreTrainedModel._keep_in_fp32_modules) + list(
+            Inkling2LoopPreTrainedModel._keep_in_fp32_modules_strict
+        )
+        self.assertFalse(should_convert_module("model.layers.6.q_message_gate.down_proj", patterns))
+        self.assertFalse(should_convert_module("model.layers.6.q_message_gate.message_gate_proj", patterns))
+        self.assertFalse(should_convert_module("model.layers.6.q_message_gate.forget_gate_proj", patterns))
+        self.assertTrue(should_convert_module("model.layers.6.self_attn.q_proj", patterns))
+
+        # 3. Verify HfQuantizer.get_modules_to_not_convert includes both keep_in_fp32 and strict modules
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = self.model_tester.base_model_class(config)
+        not_convert = HfQuantizer.get_modules_to_not_convert(model, keep_in_fp32_modules=model._keep_in_fp32_modules)
+        for gate_name in ("q_message_gate", "k_message_gate", "v_message_gate", "mlp_message_gate"):
+            self.assertIn(f"{gate_name}.down_proj", not_convert)
+        self.assertIn("message_gate_proj", not_convert)
+        self.assertIn("forget_gate_proj", not_convert)
+
+        # 4. Verify Inkling2LoopMessageGate forward preserves float activations even with non-floating weight dtype
+        text_config = config.get_text_config(decoder=True) if hasattr(config, "get_text_config") else config
+        gate = Inkling2LoopMessageGate(text_config)
+        gate.down_proj.weight = torch.nn.Parameter(
+            torch.randint(0, 255, gate.down_proj.weight.shape, dtype=torch.uint8),
+            requires_grad=False,
+        )
+        gate.down_proj.forward = lambda x: torch.zeros(x.shape[0], x.shape[1], text_config.loop_gate_rank, dtype=torch.float32)
+        h = torch.randn(2, 4, text_config.hidden_size)
+        m = torch.randn(2, 4, text_config.hidden_size)
+        out = gate(h, m)
+        self.assertEqual(out.shape, (2, 4, text_config.hidden_size))
+        self.assertEqual(out.dtype, torch.float32)
+
 
 class Inkling2LoopVisionText2TextModelTester(VLMModelTester):
     base_model_class = Inkling2LoopModel
@@ -223,6 +267,50 @@ class Inkling2LoopVisionText2TextModelTest(VLMModelTest, unittest.TestCase):
         if dtype in ("fp16", "bf16"):
             self.skipTest("Low-precision rounding differences across expert kernels exceed the 1e-4 tolerance")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
+
+    def test_message_gate_quantization_and_dtype_preservation(self):
+        from transformers.models.inkling2_loop.modeling_inkling2_loop import (
+            Inkling2LoopMessageGate,
+            Inkling2LoopPreTrainedModel,
+        )
+        from transformers.quantizers.base import HfQuantizer
+        from transformers.quantizers.quantizers_utils import should_convert_module
+
+        # 1. Verify Inkling2LoopPreTrainedModel registers message gate down_proj modules in _keep_in_fp32_modules
+        for gate_name in ("q_message_gate", "k_message_gate", "v_message_gate", "mlp_message_gate"):
+            self.assertIn(f"{gate_name}.down_proj", Inkling2LoopPreTrainedModel._keep_in_fp32_modules)
+
+        # 2. Verify should_convert_module properly excludes all message gate linear modules
+        patterns = list(Inkling2LoopPreTrainedModel._keep_in_fp32_modules) + list(
+            Inkling2LoopPreTrainedModel._keep_in_fp32_modules_strict
+        )
+        self.assertFalse(should_convert_module("model.layers.6.q_message_gate.down_proj", patterns))
+        self.assertFalse(should_convert_module("model.layers.6.q_message_gate.message_gate_proj", patterns))
+        self.assertFalse(should_convert_module("model.layers.6.q_message_gate.forget_gate_proj", patterns))
+        self.assertTrue(should_convert_module("model.layers.6.self_attn.q_proj", patterns))
+
+        # 3. Verify HfQuantizer.get_modules_to_not_convert includes both keep_in_fp32 and strict modules
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = self.model_tester.base_model_class(config)
+        not_convert = HfQuantizer.get_modules_to_not_convert(model, keep_in_fp32_modules=model._keep_in_fp32_modules)
+        for gate_name in ("q_message_gate", "k_message_gate", "v_message_gate", "mlp_message_gate"):
+            self.assertIn(f"{gate_name}.down_proj", not_convert)
+        self.assertIn("message_gate_proj", not_convert)
+        self.assertIn("forget_gate_proj", not_convert)
+
+        # 4. Verify Inkling2LoopMessageGate forward preserves float activations even with non-floating weight dtype
+        text_config = config.get_text_config(decoder=True) if hasattr(config, "get_text_config") else config
+        gate = Inkling2LoopMessageGate(text_config)
+        gate.down_proj.weight = torch.nn.Parameter(
+            torch.randint(0, 255, gate.down_proj.weight.shape, dtype=torch.uint8),
+            requires_grad=False,
+        )
+        gate.down_proj.forward = lambda x: torch.zeros(x.shape[0], x.shape[1], text_config.loop_gate_rank, dtype=torch.float32)
+        h = torch.randn(2, 4, text_config.hidden_size)
+        m = torch.randn(2, 4, text_config.hidden_size)
+        out = gate(h, m)
+        self.assertEqual(out.shape, (2, 4, text_config.hidden_size))
+        self.assertEqual(out.dtype, torch.float32)
 
     @unittest.skip(
         "Inkling2LoopModel does not support SDPA: text attention adds a relative position bias and a per-token sink"
