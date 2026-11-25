@@ -141,11 +141,9 @@ class MixtralRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        # Scale after casting back to the input dtype, as the original implementations do (autocast runs it in fp32)
+        normalized = nn.functional.rms_norm(hidden_states, hidden_states.shape[-1:], eps=self.variance_epsilon)
+        return self.weight * normalized.to(hidden_states.dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
