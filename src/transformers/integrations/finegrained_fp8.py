@@ -1620,12 +1620,6 @@ class Fp8Dequantize(ConversionOps):
         except Exception:
             # scale can be a single tensor in extreme cases where it was not wrapped properly but is [1,0].
             scale_rows, scale_cols = 1, 1
-        if rows % scale_rows or cols % scale_cols:
-            raise ValueError(
-                f"Weight shape ({rows}, {cols}) not divisible by scale grid ({scale_rows}, {scale_cols})."
-            )
-        block_m = rows // scale_rows
-        block_n = cols // scale_cols
         # ``ue8m0`` (``float8_e8m0fnu``) scales have no CUDA ``mul`` kernel, and casting
         # the FP8 weight to that dtype loses precision. Promote both sides to fp32 for
         # the math; prefer the destination parameter's dtype when known so eager modules
@@ -1641,6 +1635,18 @@ class Fp8Dequantize(ConversionOps):
             s_fp32 = (scales.to(torch.float32) - 127.0).exp2()
         else:
             s_fp32 = scales.to(torch.float32)
+        if rows % scale_rows or cols % scale_cols:
+            # A ragged last block (e.g. DeepSeek's 576-row `kv_a_proj_with_mqa` with 128-row blocks): each scale is
+            # spread over its block of the configured size, cropped to the weight
+            block_m, block_n = self.hf_quantizer.quantization_config.weight_block_size
+            if -(-rows // block_m) != scale_rows or -(-cols // block_n) != scale_cols:
+                raise ValueError(
+                    f"Weight shape ({rows}, {cols}) does not match scale grid ({scale_rows}, {scale_cols})."
+                )
+            s = s_fp32.repeat_interleave(block_m, -2)[..., :rows, :].repeat_interleave(block_n, -1)[..., :cols]
+            return (quantized_fp32 * s).to(output_dtype)
+        block_m = rows // scale_rows
+        block_n = cols // scale_cols
         original_shape = quantized_fp32.shape
         q = quantized_fp32.reshape(-1, scale_rows, block_m, scale_cols, block_n)
         s = s_fp32.reshape(-1, scale_rows, scale_cols).unsqueeze(-1).unsqueeze(2)
