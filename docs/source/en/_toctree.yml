@@ -1499,6 +1499,8 @@
         title: MGP-STR
       - local: model_doc/minicpmv2_5
         title: MiniCPM-Llama3-V 2.5
+      - local: model_doc/minicpmo2_6
+        title: MiniCPM-o 2.6
       - local: model_doc/minicpm_ocr
         title: MiniCPM-OCR
       - local: model_doc/minicpmv4_6

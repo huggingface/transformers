@@ -2294,6 +2294,12 @@ def _build_checkpoint_conversion_mapping():
     # inherits the shared RT-DETR renames, like its PP-DocLayoutV2/V3 siblings.
     mapping["pp_doclayout_v4"] += mapping["rt_detr"].copy()
 
+    mapping["minicpmo2_6"] = mapping["minicpmv2_5"].copy()
+    mapping["minicpmo2_6"] += [
+        WeightRenaming(r"^apm\.", "model.audio_tower."),
+        WeightRenaming(r"^audio_projection_layer\.linear(\d)\.", r"model.audio_projector.linear_\1."),
+    ]
+
     mapping["bailing_hybrid"] = mapping["qwen2_moe"].copy()
     mapping["bailing_hybrid"] += [
         WeightRenaming(r"^model\.word_embeddings\.", "model.embed_tokens."),
