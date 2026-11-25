@@ -19,6 +19,7 @@ import dataclasses
 import json
 import math
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -90,6 +91,9 @@ class TrainerState:
         stateful_callbacks (`list[StatefulTrainerCallback]`, *optional*):
             Callbacks attached to the `Trainer` that should have their states be saved or restored.
             Relevant callbacks should implement a `state` and `from_state` function.
+        train_dataloader_state_dict (`dict[str, Any]`, *optional*):
+            Present if the trainer is using a stateful dataloader to serve training data.
+            State dict which tracks the inner state of a training dataset StatefulDataLoader.
     """
 
     epoch: float = 0
@@ -112,6 +116,7 @@ class TrainerState:
     trial_name: str | None = None
     trial_params: dict[str, str | float | int | bool] | None = None
     stateful_callbacks: list["TrainerCallback"] | None = None
+    train_dataloader_state_dict: dict[str, Any] | None = None
 
     def __post_init__(self):
         if self.log_history is None:

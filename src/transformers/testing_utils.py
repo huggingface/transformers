@@ -74,6 +74,7 @@ from .utils import (
     GGUF_MIN_VERSION,
     MISTRAL_COMMON_MIN_VERSION,
     SAFE_WEIGHTS_INDEX_NAME,
+    TORCHDATA_MIN_VERSION,
     TRITON_MIN_VERSION,
     WEIGHTS_INDEX_NAME,
     is_accelerate_available,
@@ -181,6 +182,7 @@ from .utils import (
     is_torchaudio_available,
     is_torchcodec_available,
     is_torchcodec_greater_or_equal,
+    is_torchdata_available,
     is_torchvision_available,
     is_triton_available,
     is_vision_available,
@@ -1112,6 +1114,15 @@ def require_torch_multi_xpu(test_case):
         return unittest.skip(reason="test requires PyTorch XPU")(test_case)
 
     return unittest.skipUnless(torch.xpu.device_count() > 1, "test requires multiple XPUs")(test_case)
+
+
+def require_torchdata(test_case, min_version: str = TORCHDATA_MIN_VERSION):
+    """
+    Decorator marking a test that requires torchdata. These tests are skipped when torchdata isn't installed.
+    """
+    return unittest.skipUnless(
+        is_torchdata_available(min_version), f"test requires torchdata version >= {min_version}"
+    )(test_case)
 
 
 def require_torch_multi_hpu(test_case):

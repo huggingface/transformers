@@ -54,6 +54,8 @@ class TrainerAcceleratorConfigTest(TestCasePlus):
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+            if hasattr(trainer.accelerator, "use_stateful_dataloader"):
+                self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
             # gradient accumulation kwargs configures gradient_state
             self.assertNotIn("sync_each_batch", trainer.accelerator.gradient_state.plugin_kwargs)
 
@@ -80,6 +82,8 @@ class TrainerAcceleratorConfigTest(TestCasePlus):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+            if hasattr(trainer.accelerator, "use_stateful_dataloader"):
+                self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
     def test_accelerator_config_from_yaml(self):
         # Checks that accelerator kwargs can be passed through
@@ -105,6 +109,8 @@ class TrainerAcceleratorConfigTest(TestCasePlus):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+            if hasattr(trainer.accelerator, "use_stateful_dataloader"):
+                self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
     def test_accelerator_config_from_dataclass(self):
         # Checks that accelerator kwargs can be passed through
@@ -126,6 +132,8 @@ class TrainerAcceleratorConfigTest(TestCasePlus):
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+            if hasattr(trainer.accelerator, "use_stateful_dataloader"):
+                self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
     def test_accelerate_config_from_dataclass_grad_accum(self):
         # Checks that accelerator kwargs can be passed through
@@ -172,6 +180,8 @@ class TrainerAcceleratorConfigTest(TestCasePlus):
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
             self.assertEqual(trainer.accelerator.even_batches, True)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+            if hasattr(trainer.accelerator, "use_stateful_dataloader"):
+                self.assertEqual(trainer.accelerator.use_stateful_dataloader, False)
 
     def test_accelerator_custom_state(self):
         AcceleratorState._reset_state(reset_partial_state=True)

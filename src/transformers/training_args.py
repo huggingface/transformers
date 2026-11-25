@@ -596,6 +596,10 @@ class TrainingArguments:
                 - `use_configured_state` (`bool`, defaults to `False`): Use pre-initialized
                     `AcceleratorState`/`PartialState` instead of creating new one. May cause issues with
                     hyperparameter tuning.
+                - `use_stateful_dataloader` (`bool`, defaults to `False`): Whether to have the dataloaders
+                    prepared by the Accelerator be backed by
+                    [torchdata.StatefulDataLoader](https://github.com/pytorch/data/tree/main/torchdata/stateful_dataloader).
+                    This requires `accelerate` version 1.0.0 or higher, and `torchdata` version 0.8.0 to be installed.
 
         parallelism_config (`ParallelismConfig`, *optional*):
             Parallelism configuration for the training run. Requires Accelerate `1.10.1`

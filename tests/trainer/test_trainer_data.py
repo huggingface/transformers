@@ -39,10 +39,12 @@ from transformers.testing_utils import (
     backend_device_count,
     require_accelerate,
     require_torch,
+    require_torchdata,
     torch_device,
 )
 from transformers.tokenization_utils_base import BatchEncoding
 from transformers.trainer_pt_utils import (
+    AcceleratorConfig,
     BatchRebalanceSampler,
     DistributedLengthGroupedSampler,
     DistributedSamplerWithLoop,
@@ -134,6 +136,66 @@ class TrainerDataloaderTest(TestCasePlus):
             dataloader_drop_last=True,
             output_dir=tmp_dir,
         )
+        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
+        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
+
+        # Check passing a new dataset for evaluation works
+        new_eval_dataset = RegressionDataset(length=128)
+        self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
+
+    @require_accelerate
+    @require_torchdata
+    def test_train_and_eval_dataloaders_with_use_stateful_dataloader(self):
+        """Identical to `test_train_and_eval_dataloaders`, however with an AcceleratorConfig that sets `use_stateful_dataloader=True`
+        (Note: Is a separate test instead of parameterized due to dependencies.)
+        """
+        accelerator_config = AcceleratorConfig(use_stateful_dataloader=True)
+        if torch_device == "cuda":
+            n_gpu = max(1, backend_device_count(torch_device))
+        else:
+            n_gpu = 1
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(
+            learning_rate=0.1,
+            per_device_train_batch_size=16,
+            accelerator_config=accelerator_config,
+            output_dir=tmp_dir,
+        )
+        self.assertTrue(trainer.use_stateful_dataloader)
+        self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16 * n_gpu)
+        trainer = get_regression_trainer(
+            learning_rate=0.1,
+            per_device_eval_batch_size=16,
+            accelerator_config=accelerator_config,
+            output_dir=tmp_dir,
+        )
+        self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16 * n_gpu)
+
+        # Check drop_last works
+        trainer = get_regression_trainer(
+            train_len=66,
+            eval_len=74,
+            learning_rate=0.1,
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=32,
+            accelerator_config=accelerator_config,
+            output_dir=tmp_dir,
+        )
+        self.assertTrue(trainer.use_stateful_dataloader)
+        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu) + 1)
+        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu) + 1)
+
+        trainer = get_regression_trainer(
+            train_len=66,
+            eval_len=74,
+            learning_rate=0.1,
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=32,
+            dataloader_drop_last=True,
+            accelerator_config=accelerator_config,
+            output_dir=tmp_dir,
+        )
+        self.assertTrue(trainer.use_stateful_dataloader)
         self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
         self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
 

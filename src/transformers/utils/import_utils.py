@@ -167,6 +167,7 @@ BITSANDBYTES_MIN_VERSION = "0.46.1"
 SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
+TORCHDATA_MIN_VERSION = "0.8.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
@@ -839,6 +840,13 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
         return False
     is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
     return is_available and version.parse(accelerate_version) >= version.parse(min_version)
+
+
+@lru_cache
+@_make_compile_constant
+def is_torchdata_available(min_version: str = TORCHDATA_MIN_VERSION) -> bool:
+    is_available, torchdata_version = _is_package_available("torchdata", return_version=True)
+    return is_available and version.parse(torchdata_version) >= version.parse(min_version)
 
 
 @lru_cache

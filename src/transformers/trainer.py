@@ -177,6 +177,7 @@ from .utils import (
     is_torch_musa_available,
     is_torch_npu_available,
     is_torch_xla_available,
+    is_torchdata_available,
     logging,
 )
 from .utils.import_utils import requires
@@ -848,6 +849,15 @@ class Trainer:
         # this would have been updated above, no need for it anymore
         accelerator_config.pop("gradient_accumulation_kwargs")
 
+        use_stateful_dataloader = accelerator_config.pop("use_stateful_dataloader", False)
+        if use_stateful_dataloader:
+            if not is_torchdata_available():
+                raise ImportError(
+                    "`use_stateful_dataloader` requires `torchdata` to be installed. Please install torchdata to use this feature."
+                )
+            dataloader_config.use_stateful_dataloader = use_stateful_dataloader
+        self.use_stateful_dataloader = use_stateful_dataloader
+
         fsdp_plugin = None
         if self.args.fsdp_plugin_args is not None:
             from accelerate.utils import FullyShardedDataParallelPlugin
@@ -940,12 +950,18 @@ class Trainer:
         By default uses accelerate's `skip_first_batches`. Subclass and override this method if you want to customize
         the behavior, e.g. for stateful or streaming dataloaders that cannot be skipped this way.
 
+        When `use_stateful_dataloader` is enabled, the dataloader state saved in the checkpoint is restored
+        instead, so training resumes mid-epoch without re-iterating over the already seen batches.
+
         Args:
             dataloader (`torch.utils.data.DataLoader`):
                 The training dataloader to skip batches from.
             num_batches (`int`):
                 The number of batches to skip.
         """
+        if self.use_stateful_dataloader:
+            dataloader.load_state_dict(self.state.train_dataloader_state_dict)
+            return dataloader
         return skip_first_batches(dataloader, num_batches)
 
     def get_eval_dataloader(self, eval_dataset: str | Dataset | None = None) -> DataLoader:
@@ -1710,6 +1726,12 @@ class Trainer:
             os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
             self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            if self.state.train_dataloader_state_dict is None and self.use_stateful_dataloader:
+                raise ValueError(
+                    "TrainerArguments.accelerator_config.use_stateful_dataloader is true, however a checkpoint with"
+                    " no saved dataloader state_dict has been loaded. If this is the correct checkpoint to be loaded,"
+                    " please set `accelerator_config.use_stateful_dataloader` to false."
+                )
             if self.state.best_model_checkpoint is not None and not os.path.isdir(self.state.best_model_checkpoint):
                 logger.warning(
                     f"The best checkpoint {self.state.best_model_checkpoint} recorded in the resumed state does not "
@@ -1969,6 +1991,8 @@ class Trainer:
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
+                    if self.use_stateful_dataloader:
+                        self.state.train_dataloader_state_dict = train_dataloader.state_dict()
                     self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
                     self._maybe_log_save_evaluate(
                         self._tr_loss,
