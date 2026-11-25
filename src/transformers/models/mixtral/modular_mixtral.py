@@ -34,6 +34,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.output_capturing import OutputRecorder
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,
@@ -42,7 +43,6 @@ from ..mistral.modeling_mistral import (
     MistralForTokenClassification,
     MistralModel,
     MistralPreTrainedModel,
-    MistralRMSNorm,
     MistralRotaryEmbedding,
 )
 from .configuration_mixtral import MixtralConfig
@@ -200,7 +200,7 @@ class MixtralSparseMoeBlock(nn.Module):
         return hidden_states
 
 
-class MixtralRMSNorm(MistralRMSNorm):
+class MixtralRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -258,7 +258,6 @@ class MixtralPreTrainedModel(MistralPreTrainedModel):
         "attentions": MixtralAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range

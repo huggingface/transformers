@@ -84,9 +84,6 @@ class BeamConfig(Qwen3MoeConfig):
         "layers.*.self_attn.gate_bias": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn": "local_params",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -353,7 +350,6 @@ class BeamPreTrainedModel(DeepseekV3PreTrainedModel):
     # DeepseekV3 uses this to drop its MTP layer, which Beam does not have.
     _keys_to_ignore_on_load_unexpected = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, BeamTopKRouter):

@@ -32,11 +32,16 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     """
 
     model_type = "hunyuan_v1_moe"
-    keys_to_ignore_at_inference = ["cache"]
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.query_layernorm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.key_layernorm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.shared_mlp.gate_proj": "colwise",
+        "layers.*.mlp.shared_mlp.up_proj": "colwise",
+        "layers.*.mlp.shared_mlp.down_proj": "rowwise",
     }
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",

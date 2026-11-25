@@ -27,8 +27,8 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
-from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
+from ..granite.modeling_granite import GraniteRotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
     MixtralExperts,
@@ -39,7 +39,7 @@ from ..mixtral.modeling_mixtral import (
 from .configuration_granitemoe import GraniteMoeConfig
 
 
-class GraniteMoeRMSNorm(GraniteRMSNorm):
+class GraniteMoeRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -138,7 +138,6 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GraniteMoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _can_compile_fullgraph = True
@@ -148,7 +147,6 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
         "attentions": GraniteMoeAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, GraniteMoeExperts):

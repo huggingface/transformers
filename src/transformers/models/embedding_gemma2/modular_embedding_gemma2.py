@@ -28,7 +28,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MultimodalBaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import (
     AudioKwargs,
@@ -50,12 +50,12 @@ from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import AutoConfig
 from ..gemma3.modeling_gemma3 import Gemma3DecoderLayer, Gemma3MLP, Gemma3TextModel, apply_rotary_pos_emb
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.modeling_gemma4 import (
     Gemma4AudioModelOutput,
     Gemma4Model,
     Gemma4MultimodalEmbedder,
     Gemma4PreTrainedModel,
-    Gemma4RMSNorm,
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
     eager_attention_forward,
@@ -215,7 +215,7 @@ class EmbeddingGemma2Config(PreTrainedConfig):
     initializer_range: float | None = 0.02
 
 
-class EmbeddingGemma2RMSNorm(Gemma4RMSNorm):
+class EmbeddingGemma2RMSNorm(Gemma3nRMSNorm):
     pass
 
 
@@ -326,9 +326,9 @@ class EmbeddingGemma2Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(
         self,
@@ -415,10 +415,7 @@ class EmbeddingGemma2EncoderLayer(Gemma3DecoderLayer):
 class EmbeddingGemma2PreTrainedModel(Gemma4PreTrainedModel):
     config: EmbeddingGemma2Config
     _no_split_modules = ["EmbeddingGemma2EncoderLayer"]
-    # Deletes the inherited attribute: both entries were KV-cache related, which we do not have.
-    _skip_keys_device_placement = AttributeError()
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, EmbeddingGemma2RotaryEmbedding):
@@ -539,25 +536,24 @@ class EmbeddingGemma2AudioModelOutput(Gemma4AudioModelOutput):
     pass
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for EmbeddingGemma2 outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class EmbeddingGemma2ModelOutput(BaseModelOutput):
-    r"""
-    image_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    audio_hidden_states (`torch.Tensor`, *optional*):
-        A `torch.Tensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    """
+class EmbeddingGemma2ModelOutput(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_hidden_states(self):
+        logger.warning_once(
+            "`image_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.image_outputs.pooler_output
 
-    image_hidden_states: torch.Tensor | None = None
-
-    audio_hidden_states: torch.Tensor | None = None
+    @property
+    def audio_hidden_states(self):
+        logger.warning_once(
+            "`audio_hidden_states` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.audio_outputs.pooler_output` to obtain pooled features."
+        )
+        return self.audio_outputs.pooler_output
 
 
 @auto_docstring(
@@ -575,6 +571,8 @@ class EmbeddingGemma2Model(Gemma4Model):
         r"(^|\.)audio_tower\.",
         r"(^|\.)embed_audio\.",
     ]
+
+    _supports_flash_attn = True  # no bidirectional mask over image tokens, unlike Gemma4
 
     def __init__(self, config: EmbeddingGemma2Config):
         super().__init__(config)
@@ -671,6 +669,7 @@ class EmbeddingGemma2Model(Gemma4Model):
 
         image_mask, video_mask, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds)
         multimodal_mask = image_mask | video_mask | audio_mask
+        mm_encoder_outputs = {}
 
         # Replace image id with PAD if the image token if OOV, to avoid index-errors
         if inputs_embeds is None:
@@ -679,8 +678,11 @@ class EmbeddingGemma2Model(Gemma4Model):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, image_position_ids, return_dict=True).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_outputs = self.get_image_features(pixel_values, image_position_ids, return_dict=True)
+            mm_encoder_outputs["image"] = image_outputs
+            image_features = torch.cat(image_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -696,10 +698,13 @@ class EmbeddingGemma2Model(Gemma4Model):
             )
 
         if pixel_values_videos is not None:
-            video_features = self.get_video_features(
+            video_outputs = self.get_video_features(
                 pixel_values_videos, video_position_ids, num_frames_per_video, return_dict=True
-            ).pooler_output
-            video_features = torch.cat(video_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+            mm_encoder_outputs["video"] = video_outputs
+            video_features = torch.cat(video_outputs.pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -717,6 +722,7 @@ class EmbeddingGemma2Model(Gemma4Model):
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
             audio_output = self.get_audio_features(input_features, input_features_mask, return_dict=True)
+            mm_encoder_outputs["audio"] = audio_output
             audio_features = audio_output.pooler_output
             audio_mask_from_encoder = audio_output.attention_mask  # True = valid
 
@@ -744,11 +750,7 @@ class EmbeddingGemma2Model(Gemma4Model):
         )
 
         return EmbeddingGemma2ModelOutput(
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-            audio_hidden_states=audio_features if input_features is not None else None,
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=mm_encoder_outputs.get("audio")
         )
 
 

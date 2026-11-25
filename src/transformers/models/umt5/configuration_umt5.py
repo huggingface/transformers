@@ -32,7 +32,6 @@ class UMT5Config(PreTrainedConfig):
     """
 
     model_type = "umt5"
-    keys_to_ignore_at_inference = ["cache"]
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "num_heads",
@@ -72,7 +71,8 @@ class UMT5Config(PreTrainedConfig):
         if self.feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
-        kwargs.pop("tie_word_embeddings", None)
+        # Preserve the checkpoint setting for decoder output scaling, although UMT5 always ties the weights.
+        self.scale_decoder_outputs = kwargs.pop("tie_word_embeddings", None) is not False
         self.tie_word_embeddings = True  # force it for T5 family
 
         super().__post_init__(**kwargs)

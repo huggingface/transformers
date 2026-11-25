@@ -37,13 +37,13 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
-from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm, Olmo2RotaryEmbedding
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
     Olmo3DecoderLayer,
     Olmo3ForCausalLM,
     Olmo3MLP,
-    Olmo3RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -52,8 +52,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextPreTrainedModel,
     Qwen3NextRMSNormGated,
     apply_mask_to_padding_states,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
 )
@@ -181,7 +179,7 @@ class OlmoHybridRMSNormGated(Qwen3NextRMSNormGated):
     pass
 
 
-class OlmoHybridRMSNorm(Olmo3RMSNorm):
+class OlmoHybridRMSNorm(Olmo2RMSNorm):
     pass
 
 
@@ -265,7 +263,13 @@ class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class OlmoHybridGatedDeltaNet(nn.Module):
     """
@@ -349,10 +353,9 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         # branching lives inside `ShortConvolution` and in the recurrent-vs-chunk kernel dispatch
         # below, each of which gates on `seq_len == 1` locally.
         if use_cache:
-            conv_state = cache.get_conv_state(self.layer_idx, state_idx=0)
             recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
         else:
-            conv_state, recurrent_state = None, None
+            recurrent_state = None
 
         mixed_qkv = torch.cat(
             [
@@ -363,31 +366,14 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             dim=-1,
         ).transpose(1, 2)
 
-        # Single token decode path
-        if conv_state is not None and seq_len == 1 and not cache.is_recording_past(self.layer_idx):
-            mixed_qkv = causal_conv1d_update(
-                mixed_qkv,
-                conv_state,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-            )
-        # Multi token prefill or simple "full" prefill
-        else:
-            # Concatenated state for prefill
-            if cache is not None:
-                mixed_qkv = cache.update_conv_state(mixed_qkv, self.layer_idx, conv_kernel_size=self.conv_kernel_size)
-
-            mixed_qkv = causal_conv1d_fn(
-                mixed_qkv,
-                weight=self.conv1d.weight.squeeze(1),
-                bias=self.conv1d.bias,
-                activation=self.activation,
-                **kwargs,
-            )
-
-            # Cut out any tail
-            mixed_qkv = mixed_qkv[:, :, -seq_len:]
+        mixed_qkv = causal_conv1d_forward(
+            self.conv1d,
+            mixed_qkv,
+            cache,
+            self.layer_idx,
+            activation=self.activation,
+            **kwargs,
+        )
 
         q, k, v = torch.split(
             mixed_qkv.transpose(1, 2),
@@ -505,7 +491,6 @@ class OlmoHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         "attentions": OlmoHybridAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, OlmoHybridGatedDeltaNet):

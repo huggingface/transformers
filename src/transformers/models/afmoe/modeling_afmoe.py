@@ -77,7 +77,6 @@ class AfmoeRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
-    @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -88,7 +87,6 @@ class AfmoeRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@use_kernel_forward_from_hub("RMSNorm")
 class AfmoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
@@ -209,7 +207,7 @@ class AfmoeSparseMoeBlock(nn.Module):
         self.router = AfmoeTokenChoiceRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
-        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
+        self.expert_bias = nn.Parameter(torch.zeros(config.num_experts, dtype=torch.float32), requires_grad=False)
 
     def forward(self, hidden_states):
         batch_size, seq_len, hidden_dim = hidden_states.shape
@@ -463,7 +461,6 @@ class AfmoePreTrainedModel(PreTrainedModel):
     config: AfmoeConfig
     base_model_prefix = "model"
     _no_split_modules = ["AfmoeDecoderLayer"]
-    _skip_keys_device_placement = ["cache"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(AfmoeTokenChoiceRouter, index=0),
         "hidden_states": AfmoeDecoderLayer,
@@ -477,8 +474,8 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "q_norm",
         "k_norm",
         "norm",
-        "expert_bias",
     ]
+    _keep_in_fp32_modules_strict = ["expert_bias"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True

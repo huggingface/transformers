@@ -328,7 +328,6 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
     # No longer used as we directly use our masks instead
     _keys_to_ignore_on_load_unexpected = ["attn.bias", "crossattention.bias"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)

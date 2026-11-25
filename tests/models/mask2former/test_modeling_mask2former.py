@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -49,35 +50,33 @@ if is_vision_available():
     from PIL import Image
 
 
-class Mask2FormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        is_training=True,
-        use_auxiliary_loss=False,
-        num_queries=10,
-        num_channels=3,
-        min_size=32 * 8,
-        max_size=32 * 8,
-        num_labels=4,
-        hidden_dim=64,
-        num_attention_heads=4,
-        num_hidden_layers=2,
-    ):
+class Mask2FormerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "is_training": True,
+        "use_auxiliary_loss": False,
+        "num_queries": 10,
+        "num_channels": 3,
+        "min_size": 256,  # 32 * 8
+        "max_size": 256,  # 32 * 8
+        "num_labels": 4,
+        "hidden_dim": 64,
+        "num_attention_heads": 4,
+        "num_hidden_layers": 2,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["mask_feature_size"] = values["hidden_dim"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_auxiliary_loss = use_auxiliary_loss
-        self.num_queries = num_queries
-        self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
-        self.num_labels = num_labels
-        self.hidden_dim = hidden_dim
-        self.mask_feature_size = hidden_dim
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -197,6 +196,8 @@ class Mask2FormerModelTester:
 
 @require_torch
 class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Mask2FormerModelTester
+
     all_model_classes = (Mask2FormerModel, Mask2FormerForUniversalSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": Mask2FormerModel} if is_torch_available() else {}
 

@@ -21,7 +21,7 @@ import numpy as np
 from ...audio_utils import load_audio
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
 from ...utils.deprecation import deprecate_attr
@@ -38,6 +38,8 @@ AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 
 @auto_docstring
 class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
+    videos_kwargs = {"return_metadata": True}
+
     def __init__(
         self,
         image_processor=None,
@@ -99,8 +101,8 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 
         if videos is not None:
-            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            video_num_patches = [sum(videos_inputs["num_patches"])]
+            videos_kwargs = {"temporal_patch_size": self.video_temporal_patch_dim, **output_kwargs["videos_kwargs"]}
+            videos_inputs = self.video_processor(videos=videos, **videos_kwargs)
 
         audio_num_tokens = []
         if audio is not None:
@@ -121,14 +123,11 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
                 self.replace_image_token(image_inputs, idx) for idx in range(len(image_inputs["image_grid_hw"]))
             ]
         if videos is not None:
-            assert len(text) == 1, "Video is not supported for batch size > 1"
+            if len(text) != 1:
+                raise ValueError(f"Videos are only supported with a single prompt, but got {len(text)} prompts.")
             videos_replacements = [
-                self.replace_video_token(
-                    videos_inputs,
-                    0,
-                    num_frames=video_num_patches[0],
-                    video_metadata=output_kwargs.get("videos_kwargs", {}).get("video_metadata", None),
-                )
+                self.replace_video_token(videos_inputs, idx)
+                for idx in range(len(videos_inputs["pixel_values_videos"]))
             ]
         if audio is not None:
             audio_replacements = [
@@ -145,7 +144,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        # the video processor also returns the per-frame token counts used for the placeholder expansion above
         videos_inputs = {k: v for k, v in videos_inputs.items() if k in self.video_processor.model_input_names}
         output_data = {**text_inputs, **image_inputs, **videos_inputs}
         result = BatchFeature(data=output_data, tensor_type=return_tensors)
@@ -165,20 +163,23 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         """Expand `<video>` into one `<img>...</img>` chunk per temporal patch (tubelet).
 
         Each chunk is labeled with the timestamps of the frames it packs, joined by " and "
-        ("Frame" for the first frame in the tubelet, "frame" for the rest). The tokenizer has no
-        real `<video>` token, so the chunks use the image token; the model tells image from video
-        by which `pixel_values_*` argument was passed.
+        ("Frame" for the first frame in the tubelet, "frame" for the rest), taken from the
+        `video_metadata` the video processor returns. The tokenizer has no real `<video>` token, so
+        the chunks use the image token; the model tells image from video by which `pixel_values_*`
+        argument was passed.
         """
-        num_frames = kwargs["num_frames"]
-        video_metadata = kwargs.get("video_metadata")
-        tokens_per_tubelet = int(video_inputs["num_tokens"][video_idx])
+        num_frames = int(video_inputs["num_frames"][video_idx])
+        video_metadata = video_inputs["video_metadata"][video_idx]
+        n_groups = video_inputs["pixel_values_videos"].shape[1]
+        height, width = video_inputs["pixel_values_videos"].shape[-2:]
+        patch_size, merge_size = self.video_processor.patch_size, round(1 / self.video_processor.downsample_ratio)
+        tokens_per_tubelet = (height // patch_size) * (width // patch_size) // merge_size**2
         each_group = self.image_start_token + self.image_token * tokens_per_tubelet + self.image_end_token
 
         temporal_patch_dim = self.video_temporal_patch_dim
-        n_groups = (num_frames + temporal_patch_dim - 1) // temporal_patch_dim
 
-        source_fps = video_metadata.fps if (video_metadata is not None and video_metadata.fps) else None
-        frames_indices = video_metadata.frames_indices if video_metadata is not None else None
+        source_fps = video_metadata.fps or None
+        frames_indices = video_metadata.frames_indices
         if source_fps is not None:
             frame_duration_ms = int(1000.0 / source_fps)
 
@@ -250,6 +251,33 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             length = (length + add_pad) // stride + 1
         return length
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            merge_size = round(1 / images_kwargs.get("downsample_ratio", self.image_processor.downsample_ratio))
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs, len(image_sizes))
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [num_patches // merge_size**2 for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
     def batch_decode(self, *args, **kwargs):
         """Forward to the tokenizer's [`~PreTrainedTokenizer.batch_decode`]."""
         return self.tokenizer.batch_decode(*args, **kwargs)
@@ -268,12 +296,6 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __getattr__ = deprecate_attr(

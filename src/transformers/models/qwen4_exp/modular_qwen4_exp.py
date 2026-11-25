@@ -33,14 +33,13 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..mamba.modeling_mamba import causal_conv1d_fn, causal_conv1d_forward, causal_conv1d_update
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5Attention,
     Qwen3_5GatedDeltaNet,
     Qwen3_5RMSNorm,
     Qwen3_5TextRotaryEmbedding,
     apply_mask_to_padding_states,
-    causal_conv1d_fn,
-    causal_conv1d_update,
     rotate_half,
     torch_chunk_gated_delta_rule,
     torch_recurrent_gated_delta_rule,
@@ -51,6 +50,7 @@ from ..qwen3_5_moe.configuration_qwen3_5_moe import (
     Qwen3_5MoeVisionConfig,
 )
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
+    Qwen3_5MoeBaseModelOutputWithPast,
     Qwen3_5MoeForCausalLM,
     Qwen3_5MoeForConditionalGeneration,
     Qwen3_5MoeModel,
@@ -124,9 +124,6 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
 
     model_type = "qwen4_exp_text"
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
@@ -291,17 +288,21 @@ class Qwen4ExpConfig(Qwen3_5MoeConfig):
     base_model_fsdp_plan = None
 
 
+class Qwen4ExpBaseModelOutputWithPast(Qwen3_5MoeBaseModelOutputWithPast):
+    pass
+
+
 class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
 @no_inherit_decorator
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
-    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
-        super().__init__(dim, eps=eps)
+    def __init__(self, hidden_size: int, group_size: int | None = None, eps: float = 1e-6):
+        super().__init__(hidden_size, eps=eps)
         self.group_size = group_size
-        if group_size is not None and dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
+        if group_size is not None and hidden_size % group_size != 0:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
 
     def _norm(self, x: torch.Tensor) -> torch.Tensor:
         if self.group_size is not None:
@@ -317,7 +318,13 @@ class Qwen4ExpTextRMSNormGated(Qwen3NextRMSNormGated):
 
 
 @use_kernelized_func(
-    [torch_recurrent_gated_delta_rule, torch_chunk_gated_delta_rule, causal_conv1d_fn, causal_conv1d_update]
+    [
+        torch_recurrent_gated_delta_rule,
+        torch_chunk_gated_delta_rule,
+        causal_conv1d_forward,
+        causal_conv1d_fn,
+        causal_conv1d_update,
+    ]
 )
 class Qwen4ExpTextGatedDeltaNet(Qwen3_5GatedDeltaNet):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
@@ -849,7 +856,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
     # during forward. Note that if it fits on accelerator (e.g. huge B200 gpus), then it will not be skipped, and will be put on device
     _no_placement_params = ["ple.ple_embedding.ngram_embedding.weight"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Qwen4ExpTextGatedDeltaNet):
@@ -1028,7 +1034,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
-    config: Qwen4ExpTextConfig
+    pass
 
 
 @auto_docstring
@@ -1056,7 +1062,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MoeModelOutputWithPast:
+    ) -> tuple | Qwen4ExpBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1126,7 +1132,9 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return outputs
+        return Qwen4ExpBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
+        )
 
 
 @auto_docstring

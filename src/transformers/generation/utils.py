@@ -160,6 +160,7 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "input_features",
     "input_features_mask",
     "input_values",
+    "padding_mask",
     "input_values_mask",
     "pixel_values_videos",
     "num_local_patches",
@@ -485,7 +486,12 @@ class DeferredStopCheck(StopCheck):
             self.cache.crop(-steps_to_undo)
             # We also need to deactivate past_recording, since we are giving the cache back to the user and it may lead to unneeded
             # memory spike on the next prefill
-            for layer in self.cache.layers:
+            cache_layers = (
+                self.cache.self_attention_cache.layers
+                if isinstance(self.cache, EncoderDecoderCache)
+                else self.cache.layers
+            )
+            for layer in cache_layers:
                 if hasattr(layer, "record_past"):
                     layer.record_past = False
         return steps_to_undo
@@ -742,9 +748,14 @@ class GenerationMixin(ContinuousMixin):
                 is_first_iteration=is_first_iteration,
             )
             if isinstance(attention_mask, dict):
-                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
+                # Only tensors have a memory layout: flex attention returns a `BlockMask`, which is passed through
+                attention_mask = {
+                    k: v.contiguous() if isinstance(v, torch.Tensor) else v for k, v in attention_mask.items()
+                }
             else:
-                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
+                attention_mask = (
+                    attention_mask.contiguous() if isinstance(attention_mask, torch.Tensor) else attention_mask
+                )
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
@@ -1243,16 +1254,9 @@ class GenerationMixin(ContinuousMixin):
         new tokens of the total sequence.
         Note that this function never slices inputs, this is performed in `prepare_inputs_for_generation`.
         """
-        # update cache keeping its naming used in model code
-        for possible_cache_name in ALL_CACHE_NAMES:
-            if possible_cache_name in outputs:
-                # TODO (joao): remove output/input mismatch when these old models (xlnet, reformer) are deprecated
-                if possible_cache_name in ("past_buckets_states", "mems"):
-                    cache_name = "cache"
-                else:
-                    cache_name = possible_cache_name
-                model_kwargs[cache_name] = getattr(outputs, possible_cache_name)
-                break
+        # Add the cache as input if present in outputs
+        if "cache" in outputs:
+            model_kwargs["cache"] = outputs["cache"]
 
         # update token_type_ids with last value
         if (token_type_ids := model_kwargs.get("token_type_ids")) is not None:
@@ -1543,7 +1547,7 @@ class GenerationMixin(ContinuousMixin):
             processors.append(
                 PrefixConstrainedLogitsProcessor(
                     prefix_allowed_tokens_fn,
-                    generation_config.num_beams,
+                    max(generation_config.num_beams, generation_config.num_return_sequences),
                 )
             )
         if generation_config.forced_bos_token_id is not None:
@@ -3472,6 +3476,8 @@ class GenerationMixin(ContinuousMixin):
                 nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
             )
             topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
+            topk_log_probs, order = topk_log_probs.sort(dim=-1, descending=True)
+            topk_indices = topk_indices.gather(dim=-1, index=order)
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
 
@@ -3970,23 +3976,14 @@ class GenerationMixin(ContinuousMixin):
             `return_dict_in_generate=True` or a [`~generation.GenerateEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
-        # The cache must be dynamic for assisted generation, and the check must happen AFTER preparing cache
-        if not model_kwargs["use_cache"]:
-            raise ValueError("assisted generate requires `use_cache=True`")
-        if (
-            generation_config.cache_implementation in ["static", "hybrid", "sliding_window"]
-            or type(model_kwargs.get("cache")) is StaticCache
-        ):
-            raise ValueError("assisted generate is not supported with Static cache classes`")
-
-        # Same tensor the stopping criteria are built from
-        eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
-
         # Make sure we can record past on the cache
         cache = model_kwargs.get("cache")
         if cache is None:
-            raise RuntimeError("assisted decoding requires a cache")
+            raise RuntimeError("Assisted decoding requires a cache")
         cache.activate_past_recording()
+
+        # Same tensor the stopping criteria are built from
+        eos_token_id = getattr(generation_config, "_eos_token_tensor", None)
 
         # Get the candidate generator, given the parameterization
         candidate_generator = self._get_candidate_generator(
@@ -4031,6 +4028,13 @@ class GenerationMixin(ContinuousMixin):
         is_first_iteration = True  # to preserve the same API in the output as other generation methods
         outputs = None
         n_matches = 0
+
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
+
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
@@ -4080,8 +4084,21 @@ class GenerationMixin(ContinuousMixin):
             if candidate_generator.requires_model_outputs:
                 model_inputs |= candidate_generator.model_kwargs_overrides
 
-            # 2.2. Run a forward pass on the candidate sequence
-            outputs = self(**model_inputs)
+            # 2.2. Run a forward pass on the candidate sequence.
+            # Note that the 1st iteration, i.e. prefill, is exempt of both compilation and expert implementation swap, as it
+            # would be counter-productive
+            if is_first_iteration:
+                outputs = self(**model_inputs)
+            else:
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs)
+
+            # Some layers (e.g. linear attention, which cannot roll back a recurrent state), only know whether they can `crop` after they
+            # have been properly initialized, so check it only now after prefill and before first `crop`
+            if is_first_iteration and not outputs.cache.is_croppable:
+                raise ValueError(
+                    "Assisted decoding requires a cache that can be cropped to restore the states after draft verification"
+                )
 
             # 2.3. Process the new logits
             # .float() is needed to retain precision for later logits manipulations
@@ -4458,8 +4475,10 @@ def _speculative_sampling(
     # When probability_ratio > 1 (i.e. q_i(x) < p_i(x), or "assistant probability of the candidate token is smaller
     # than the model probability for the same token"), keep the token. Otherwise reject with p = 1 - probability_ratio
     # (= keep with p = probability_ratio). Keep all the tokens until the first rejection
+    # `r_i` is in [0, 1): a strict `<` accepts with probability exactly `probability_ratio`, so a token the model
+    # assigns zero probability is never accepted (`<=` would accept it when `r_i` is exactly 0)
     r_i = torch.rand_like(probability_ratio)
-    is_accepted = r_i <= probability_ratio
+    is_accepted = r_i < probability_ratio
     n_matches = ((~is_accepted).cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
 
     # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
