@@ -425,9 +425,8 @@ class MiniCPMV4_5CrossAttention(nn.Module):
 
 class MiniCPMV4_5Resampler(nn.Module):
     """
-    Perceiver-style resampler: `resampler_n_latents` learned queries cross-attend to the patch features of one image
-    slice, so every slice becomes `resampler_n_latents` tokens at the language model's width. Keys get a 2D sin-cos
-    position embedding of the slice's patch grid; values do not.
+    The resampler of MiniCPM-V 2.6. For videos, each row of keys holds a group of frames, with each frame's timestamp
+    embedding added to its keys.
     """
 
     def __init__(self, config: MiniCPMV4_5Config):
@@ -465,7 +464,8 @@ class MiniCPMV4_5Resampler(nn.Module):
         kv = self.ln_kv(self.kv_proj(vision_features))
         pos_embed = self.get_2d_pos_embed(patch_position_ids)
         if temporal_ids is not None:
-            pos_embed = pos_embed + self.get_temporal_pos_embed(temporal_ids)
+            temporal = self.get_temporal_pos_embed(temporal_ids)
+            pos_embed = (pos_embed.unflatten(1, (temporal_ids.shape[1], -1)) + temporal[:, :, None]).flatten(1, 2)
         pos_embed = (pos_embed * pixel_attention_mask[..., None]).to(kv.dtype)
         queries = self.ln_q(self.query).unsqueeze(0).expand(kv.shape[0], -1, -1)
         attention_mask = create_bidirectional_mask(
@@ -582,7 +582,7 @@ class MiniCPMV4_5Model(MiniCPMV4_5PreTrainedModel):
         patch_position_ids_videos (`torch.LongTensor` of shape `(num_frame_slices, max_patches, 2)`, *optional*):
             `(row, col)` of each patch in its frame slice's patch grid.
         temporal_ids (`torch.LongTensor` of shape `(num_groups, max_frames)`, *optional*):
-            Timestamp of each frame of each (group, slice), in `time_scale` steps; -1 pads shorter groups.
+            Timestamp of each frame of each (group, slice), in 0.1 s steps; -1 pads shorter groups.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -649,7 +649,7 @@ class MiniCPMV4_5Model(MiniCPMV4_5PreTrainedModel):
         patch_position_ids_videos (`torch.LongTensor` of shape `(num_frame_slices, max_patches, 2)`):
             `(row, col)` of each patch in its slice's patch grid.
         temporal_ids (`torch.LongTensor` of shape `(num_groups, max_frames)`):
-            Timestamp of each frame of each (group, slice), in `time_scale` steps; -1 pads shorter groups.
+            Timestamp of each frame of each (group, slice), in 0.1 s steps; -1 pads shorter groups.
         """
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values_videos.to(self.vision_tower.dtype),
@@ -665,8 +665,7 @@ class MiniCPMV4_5Model(MiniCPMV4_5PreTrainedModel):
             values = frame_values.new_zeros(*is_frame.shape, *frame_values.shape[1:])
             values[is_frame] = frame_values
             grouped.append(values.flatten(1, 2))
-        frame_ids = temporal_ids[..., None].expand(-1, -1, pixel_attention_mask_videos.shape[-1]).flatten(1)
-        vision_outputs.pooler_output = self.resampler(*grouped, temporal_ids=frame_ids)
+        vision_outputs.pooler_output = self.resampler(*grouped, temporal_ids=temporal_ids)
         return vision_outputs
 
 
@@ -743,7 +742,7 @@ class MiniCPMV4_5ForConditionalGeneration(MiniCPMV4_5PreTrainedModel, Generation
         patch_position_ids_videos (`torch.LongTensor` of shape `(num_frame_slices, max_patches, 2)`, *optional*):
             `(row, col)` of each patch in its frame slice's patch grid.
         temporal_ids (`torch.LongTensor` of shape `(num_groups, max_frames)`, *optional*):
-            Timestamp of each frame of each (group, slice), in `time_scale` steps; -1 pads shorter groups.
+            Timestamp of each frame of each (group, slice), in 0.1 s steps; -1 pads shorter groups.
 
         Example:
 
@@ -824,7 +823,7 @@ class MiniCPMV4_5ForConditionalGeneration(MiniCPMV4_5PreTrainedModel, Generation
         patch_position_ids_videos (`torch.LongTensor` of shape `(num_frame_slices, max_patches, 2)`):
             `(row, col)` of each patch in its slice's patch grid.
         temporal_ids (`torch.LongTensor` of shape `(num_groups, max_frames)`):
-            Timestamp of each frame of each (group, slice), in `time_scale` steps; -1 pads shorter groups.
+            Timestamp of each frame of each (group, slice), in 0.1 s steps; -1 pads shorter groups.
         """
         return self.model.get_video_features(
             pixel_values_videos=pixel_values_videos,

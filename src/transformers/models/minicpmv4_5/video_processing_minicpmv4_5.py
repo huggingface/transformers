@@ -38,11 +38,9 @@ from ...video_utils import VideoInput, VideoMetadata
 class MiniCPMV4_5VideoProcessorKwargs(VideosKwargs, total=False):
     r"""
     max_num_frames (`int`, *optional*, defaults to 180):
-        Maximum number of frames sampled per video before packing.
+        Maximum number of frame groups per video; up to `max_num_frames * max_num_packing` frames are sampled.
     max_num_packing (`int`, *optional*, defaults to 3):
         Maximum number of consecutive frames packed into one group, which the resampler turns into one set of tokens.
-    time_scale (`float`, *optional*, defaults to 0.1):
-        Resolution, in seconds, of the frame timestamps given to the resampler.
     max_slice_nums (`int`, *optional*, defaults to 1):
         Maximum number of slices each frame is split into.
     scale_resolution (`int`, *optional*, defaults to 448):
@@ -55,7 +53,6 @@ class MiniCPMV4_5VideoProcessorKwargs(VideosKwargs, total=False):
 
     max_num_frames: int
     max_num_packing: int
-    time_scale: float
     max_slice_nums: int
     scale_resolution: int
     patch_size: int
@@ -135,7 +132,7 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
             fps (`float`, *optional*):
                 Frames per second to sample.
             max_num_frames (`int`, *optional*):
-                Maximum number of frames sampled before packing.
+                Maximum number of frame groups; up to `max_num_frames * max_num_packing` frames are sampled.
             max_num_packing (`int`, *optional*):
                 Maximum number of frames packed into one group.
         Returns:
@@ -151,13 +148,10 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
         max_num_packing = max_num_packing if max_num_packing is not None else self.max_num_packing
 
         if num_frames is None:
-            num_packing = self.get_num_packing(metadata.duration, fps, max_num_frames, max_num_packing)
-            if num_packing == 1:
+            if fps * int(metadata.duration) <= max_num_frames:
                 num_frames = round(min(fps, round(metadata.fps)) * min(max_num_frames, metadata.duration))
-            elif metadata.duration * fps / max_num_frames <= max_num_packing:
-                num_frames = round(metadata.duration * fps)
             else:
-                num_frames = round(max_num_frames * max_num_packing)
+                num_frames = round(min(metadata.duration * fps, max_num_frames * max_num_packing))
         gap = metadata.total_num_frames / num_frames
         return [int(i * gap + gap / 2) for i in range(num_frames)]
 
@@ -356,22 +350,22 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
         slice_mode: bool,
         max_num_frames: int,
         max_num_packing: int,
-        time_scale: float,
         video_metadata: list[VideoMetadata],
-        fps: float | None = None,
+        fps: float,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        fps = fps if fps is not None else self.fps
         slices, temporal_ids, grids, num_groups = [], [], [], []
         for video, metadata in zip(videos, video_metadata):
-            # Timestamps on the original `time_scale` grid (frames without metadata are taken as sampled at `fps`),
+            # Timestamps on the original 0.1 s grid (frames without metadata are taken as sampled at `fps`),
             # then groups of consecutive frames
             video_fps = metadata.fps or fps
             duration = metadata.duration or metadata.total_num_frames / video_fps
             timestamps = np.asarray(metadata.frames_indices) / video_fps
-            scale = np.arange(0, duration, time_scale)
-            frame_ids = (scale[np.abs(scale[None, :] - timestamps[:, None]).argmin(-1)] / time_scale).astype(np.int32)
+            scale = np.arange(0, duration, self.time_scale)
+            frame_ids = (scale[np.abs(scale[None, :] - timestamps[:, None]).argmin(-1)] / self.time_scale).astype(
+                np.int32
+            )
             num_packing = self.get_num_packing(duration, fps, max_num_frames, max_num_packing)
 
             frames, grid, _ = self.resize_and_split_patches(
@@ -400,14 +394,14 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
 
         # One row of patches per frame slice, padded to the longest, as for images
         sizes = [(s.shape[-2] // patch_size, s.shape[-1] // patch_size) for s in slices]
-        rows = [s.unfold(1, patch_size, patch_size).unfold(2, patch_size, patch_size) for s in slices]
-        rows = [r.permute(0, 3, 1, 2, 4).reshape(r.shape[0], patch_size, -1) for r in rows]
+        rows = [self.reshape_by_patch(s[None, None], patch_size)[0, 0] for s in slices]
         num_patches = [height * width for height, width in sizes]
         max_patches = max(num_patches)
+        device = slices[0].device
         pixel_values = torch.stack([F.pad(r, (0, (max_patches - n) * patch_size)) for r, n in zip(rows, num_patches)])
-        patch_index = torch.arange(max_patches)[None, :]
-        pixel_attention_mask = patch_index < torch.tensor(num_patches)[:, None]
-        widths = torch.tensor([width for _, width in sizes])[:, None]
+        patch_index = torch.arange(max_patches, device=device)[None, :]
+        pixel_attention_mask = patch_index < torch.tensor(num_patches, device=device)[:, None]
+        widths = torch.tensor([width for _, width in sizes], device=device)[:, None]
         patch_position_ids = torch.stack([patch_index // widths, patch_index % widths], dim=-1)
         max_frames = max(len(ids) for ids in temporal_ids)
         temporal_ids = torch.tensor([ids + [-1] * (max_frames - len(ids)) for ids in temporal_ids])

@@ -101,3 +101,19 @@ class MiniCPMV4_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         group = f"<image>{processor.video_token * 4}</image>"
         expected = processor.tokenizer("\n".join([group] * 3))
         self.assertListEqual(inputs["input_ids"][0].tolist(), expected["input_ids"])
+
+        # Frames twice as wide as `scale_resolution` get an overview and 1 x 2 slices each
+        video = np.random.randint(255, size=(7, 64, 128, 3), dtype=np.uint8)
+        inputs = processor(
+            text=processor.video_token,
+            videos=[video],
+            video_metadata=[metadata],
+            max_slice_nums=2,
+            return_tensors="pt",
+        )
+
+        self.assertEqual(inputs["pixel_values_videos"].shape[0], 7 * 3)
+        self.assertListEqual(inputs["temporal_ids"].tolist(), [[0, 1, 2]] * 3 + [[3, 4, 5]] * 3 + [[6, -1, -1]] * 3)
+        slices = f"<slice>{processor.video_token * 4}</slice>" * 2
+        expected = processor.tokenizer("\n".join([group + slices] * 3))
+        self.assertListEqual(inputs["input_ids"][0].tolist(), expected["input_ids"])

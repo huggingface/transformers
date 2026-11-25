@@ -21,6 +21,7 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
+    require_torchcodec,
     slow,
     torch_device,
 )
@@ -141,6 +142,7 @@ class MiniCPMV4_5IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_torchcodec
     def test_small_model_video_generation(self):
         processor = AutoProcessor.from_pretrained(self.model_id)
         model = MiniCPMV4_5ForConditionalGeneration.from_pretrained(
@@ -158,10 +160,12 @@ class MiniCPMV4_5IntegrationTest(unittest.TestCase):
                 ],
             }
         ]
+        # At most 20 groups, so the 10 s clip is packed 3 frames per group
         inputs = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             enable_thinking=False,
+            max_num_frames=20,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
