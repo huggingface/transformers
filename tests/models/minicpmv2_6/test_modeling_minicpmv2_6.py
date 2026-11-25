@@ -138,8 +138,8 @@ class MiniCPMV2_6IntegrationTest(unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", None): (
-                    "The image features two cats lying on a pink blanket. There are also two remote controls present in "
-                    "the scene."
+                    "The image features two cats lying on a pink surface. There are also remote controls present in the "
+                    "scene."
                 ),
             }
         )
