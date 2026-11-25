@@ -1164,7 +1164,7 @@ class LinearAttentionCacheLayerMixin(ABC):
         to retrieve previous full states.
         """
         self.record_past = True
-        self.recurrent_states_history = []
+        self.recurrent_states_history = {}
 
     def crop(self, tokens_to_remove: int):
         """
@@ -1194,8 +1194,8 @@ class LinearAttentionCacheLayerMixin(ABC):
                     ..., -tokens_to_remove - self.conv_kernel_size[i] : -tokens_to_remove
                 ]
                 # Reassign the recurrent states, and drop all the history
-                self.recurrent_states[i] = self.recurrent_states_history[-tokens_to_remove]
-                self.recurrent_states_history = []
+                self.recurrent_states[i] = self.recurrent_states_history[i][-tokens_to_remove]
+                self.recurrent_states_history[i] = []
 
     def get_max_length(self) -> int:
         # LinearAttention layer have no sequence length dimension, so simply return -1 here
@@ -1299,7 +1299,7 @@ class LinearAttentionLayer(LinearAttentionCacheLayerMixin):
             self.recurrent_states[state_idx].copy_(recurrent_states)
         else:
             self.recurrent_states[state_idx].copy_(recurrent_states[-1])
-            self.recurrent_states_history = recurrent_states[:-1]
+            self.recurrent_states_history[state_idx] = recurrent_states[:-1]
         return self.recurrent_states[state_idx]
 
 
