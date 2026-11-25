@@ -137,7 +137,6 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         return emb.to(torch.get_default_dtype())
 
-    @torch.no_grad()
     def forward(self, input_ids: torch.Tensor, cache_length: int = 0):
         bsz, codebooks, seq_len = input_ids.size()
         # Create the position ids from the input token ids.
@@ -396,7 +395,6 @@ class MusicgenPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, MusicgenSinusoidalPositionalEmbedding):

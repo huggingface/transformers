@@ -678,10 +678,9 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
     ]
     supports_gradient_checkpointing = True
     _can_record_outputs = None  # override
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over image tokens
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
         if isinstance(module, DiffusionGemmaTextRotaryEmbedding):
@@ -945,7 +944,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            self.create_masks_for_generate(
+            causal_mask_mapping = self.create_masks_for_generate(
                 config=self.config.get_text_config(),
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -998,12 +997,13 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
 
         # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
         # Smaller Gemma models use a conventional casual attention mask
-        if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            block_sequence_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-            if mm_token_type_ids is not None:
-                block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
-
-            mask_kwargs["block_sequence_ids"] = block_sequence_ids
+        if (
+            getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision"
+            and mm_token_type_ids is not None
+        ):
+            mask_kwargs["block_sequence_ids"] = get_block_sequence_ids_for_mask(
+                mm_token_type_ids, device=inputs_embeds.device
+            )
 
         return create_masks_for_generate(**mask_kwargs)
 

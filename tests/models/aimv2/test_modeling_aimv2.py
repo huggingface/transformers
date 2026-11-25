@@ -33,6 +33,7 @@ from transformers.utils import (
     is_vision_available,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_image_processing_common import load_coco_image
 from ...test_modeling_common import (
@@ -61,39 +62,34 @@ if is_vision_available():
     from transformers import AutoImageProcessor, AutoProcessor
 
 
-class Aimv2VisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=False,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
+class Aimv2VisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": False,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+    }
 
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -175,6 +171,8 @@ class Aimv2VisionModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = Aimv2VisionModelTester
+
     all_model_classes = (Aimv2VisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -218,40 +216,29 @@ class Aimv2VisionModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
 
-class Aimv2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=False,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=25,
-    ):
+class Aimv2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": False,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 25,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -303,6 +290,8 @@ class Aimv2TextModelTester:
 
 @require_torch
 class Aimv2TextModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Aimv2TextModelTester
+
     all_model_classes = (Aimv2TextModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -323,8 +312,20 @@ class Aimv2TextModelTest(Aimv2ModelTesterMixin, unittest.TestCase):
         pass
 
 
-class Aimv2ModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=False):
+class Aimv2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # need bs for batching_equivalence test
+        values["batch_size"] = Aimv2TextModelTester.get_small_config_defaults(**(text_kwargs or {}))["batch_size"]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -333,8 +334,8 @@ class Aimv2ModelTester:
         self.parent = parent
         self.text_model_tester = Aimv2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Aimv2VisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -376,6 +377,8 @@ class Aimv2ModelTester:
 
 @require_torch
 class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Aimv2ModelTester
+
     additional_model_inputs = ["pixel_values"]
     all_model_classes = (Aimv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (

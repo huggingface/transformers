@@ -40,19 +40,12 @@ class GraniteMoeModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = GraniteMoeModel
 
-    def __init__(
-        self,
-        parent,
-        num_attention_heads=4,
-        num_key_value_heads=4,
-        intermediate_size=40,  # multiple of 4 for grouped_mm 16-byte alignment
-    ):
-        super().__init__(
-            parent,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            intermediate_size=intermediate_size,
-        )
+    small_config_overrides = {
+        "num_attention_heads": 4,
+        "num_key_value_heads": 4,
+        # multiple of 4 for grouped_mm 16-byte alignment
+        "intermediate_size": 40,
+    }
 
 
 @require_torch

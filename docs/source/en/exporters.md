@@ -56,8 +56,13 @@ from transformers.exporters import ExportedModel
 
 exported.program  # the backend's program
 exported.save_pretrained("exported-model")  # model.<suffix>, export.json, config.json
-loaded = ExportedModel.from_pretrained("exported-model")
+loaded = ExportedModel.from_pretrained("exported-model", trust_remote_code=True)  # a Dynamo .pt2, see below
 ```
+
+> [!WARNING]
+> A Dynamo `.pt2` is a pickle, so loading one runs code from it. [`~ExportedModel.from_pretrained`] refuses it, from
+> the Hub or a local directory, unless you pass `trust_remote_code=True`. Only pass it for an export you trust, as
+> you would for a model with custom code. ONNX, OpenVINO and ExecuTorch programs load without it.
 
 A directory holds one export, since `export.json` and `config.json` have fixed names. Keep exports to several
 formats in their own subfolders (`onnx/`, `openvino/`) and load them with `subfolder="onnx"`.
@@ -886,8 +891,8 @@ config = OnnxConfig(ort_fusions="dml")
 
 | | `"cpu"` | `"cuda"` | `"webgpu"` | `"dml"` |
 |---|---|---|---|---|
-| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now ([slower](https://github.com/microsoft/onnxruntime/issues/33869)) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
-| Other attention | plain ops for now ([slower](https://github.com/microsoft/onnxruntime/issues/33873)) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
+| Attention with a key-value cache | `GroupQueryAttention`, rotary included | `GroupQueryAttention` with its query and key norms; the prefill keeps `MultiHeadAttention` for now (slower) | `GroupQueryAttention`, rotary as its own `RotaryEmbedding` | `MultiHeadAttention`, rotary as its own `RotaryEmbedding` |
+| Other attention | plain ops for now (slower) | `MultiHeadAttention` | `MultiHeadAttention` | `MultiHeadAttention` |
 | Mixture of experts | unfused | `MoE` | unfused | unfused |
 | CUDA graphs | — | static exports can replay | — | — |
 

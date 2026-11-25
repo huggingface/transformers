@@ -356,7 +356,6 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, config.hidden_size, 2, dtype=torch.float) / config.hidden_size))
         return inv_freq
 
-    @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor, cached_frames: int | None = None):
         # `cached_frames` is the number of cached left-context frames (0 offline). This Transformer-XL
         # style relative encoding spans the full key length `L = current chunk + cached_frames`, with
@@ -814,7 +813,6 @@ class NemotronAsrStreamingPreTrainedModel(PreTrainedModel):
         "attentions": NemotronAsrStreamingEncoderAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         std = getattr(self.config, "initializer_range", 0.02)

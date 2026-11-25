@@ -40,7 +40,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ModelOutputWithPast,
     AudioFlamingo3PreTrainedModel,
 )
-from ..auto import AutoConfig, AutoModelForAudioFrameClassification
+from ..auto import AutoConfig, AutoModel, AutoModelForAudioFrameClassification
 from ..glmasr.modeling_glmasr import apply_rotary_pos_emb, eager_attention_forward
 from ..nemotron3_diarization.configuration_nemotron3_diarization import Nemotron3DiarizationAudioConfig
 from ..nemotron3_diarization.modeling_nemotron3_diarization import (
@@ -330,7 +330,6 @@ class Nemotron3_5TranscribePreTrainedModel(AudioFlamingo3PreTrainedModel):
         r"^ctc_timestamp\.tokenizer\.model_proto$",
     ]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, Nemotron3_5TranscribeSpeakerEmbedding):
@@ -632,7 +631,10 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
 
     def __init__(self, config: Nemotron3_5TranscribeConfig):
         super().__init__(config)
-        self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.audio_tower = AutoModel.from_config(config.audio_config).to(dtype=torch.float32)
+        self.multi_modal_projector = nn.Linear(
+            config.audio_config.hidden_size, config.text_config.hidden_size, dtype=torch.float32
+        )
         self.word_timestamp_encoder = Nemotron3_5TranscribeWordTimestampModel(config.word_timestamp_config)
 
     def _embed_input_ids(self, input_ids: torch.LongTensor) -> torch.Tensor:
