@@ -1037,13 +1037,13 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         """
         return self.patch_embedding
 
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling | tuple[torch.Tensor, ...]:
         r"""
@@ -1075,7 +1075,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # num_concurrent_media and num_chunks are both currently 1
         batch_size_times_num_tiles, num_channels, height, width = pixel_values.shape
@@ -1110,6 +1109,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             freqs_ci=freqs_ci,
+            return_dict=True,
         )
 
         hidden_state = output.last_hidden_state
@@ -1124,9 +1124,6 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         hidden_states = output.hidden_states if output_hidden_states else None
 
         attentions = output.attentions if output_attentions else None
-
-        if not return_dict:
-            return tuple(v for v in [hidden_state, hidden_states, attentions] if v is not None)
 
         return BaseModelOutputWithPooling(
             last_hidden_state=hidden_state,
@@ -1174,7 +1171,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.vision_model(pixel_values, **kwargs)
+        image_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
         # `pooler_output` holds the projected features, one entry per image tile, as in the other VLMs.
         # Generation expands it for beam search and `num_return_sequences`.
         image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
