@@ -45,7 +45,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_dory import DoryConfig
 
 
@@ -419,7 +419,7 @@ class DoryPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": DoryDecoderLayer,
+        "hidden_states": OutputRecorder(DoryDecoderLayer, num_hidden_layers_key="total_num_hidden_layers"),
         "attentions": DoryAttention,
     }
 

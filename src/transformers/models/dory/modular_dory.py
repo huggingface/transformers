@@ -36,7 +36,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
@@ -248,6 +248,11 @@ class DoryLMHead(nn.Linear):
 
 
 class DoryPreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(DoryDecoderLayer, num_hidden_layers_key="total_num_hidden_layers"),
+        "attentions": DoryAttention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
