@@ -124,8 +124,8 @@ def mla_varlen_attention(q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seql
     block_n = 32
     row_blocks = triton.cdiv((1 if decode else max_seqlen_q) * num_heads, block_m)
     num_splits = 1
-    if decode:  # the padded sequences count as busy: the real ones are fewer
-        num_splits = min(16, triton.next_power_of_2(triton.cdiv(8 * _NUM_SMS, num_seqs * row_blocks)))
+    if decode:  # about one wave of programs (the padded sequences count too): more splits cost more in the merge
+        num_splits = min(16, triton.next_power_of_2(triton.cdiv(_NUM_SMS, num_seqs * row_blocks)))
     partial_out = partial_lse = out
     if num_splits > 1:
         partial_out = torch.empty(num_splits, num_tokens * num_heads, d_latent_p, dtype=torch.float32, device=q.device)
