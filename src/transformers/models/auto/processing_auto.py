@@ -45,7 +45,7 @@ from .configuration_auto import (
 from .feature_extraction_auto import AutoFeatureExtractor
 from .image_processing_auto import AutoImageProcessor
 from .tokenization_auto import AutoTokenizer
-from .video_processing_auto import AutoVideoProcessor
+from .video_processing_auto import VIDEO_PROCESSOR_MAPPING, AutoVideoProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -356,8 +356,15 @@ class AutoProcessor:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         # At this stage, there doesn't seem to be a `Processor` class available for this model.
-        # Let's try the commonly available classes
-        for klass in (AutoTokenizer, AutoImageProcessor, AutoVideoProcessor, AutoFeatureExtractor):
+        # Let's try the commonly available classes. Video-only models often ship a legacy
+        # `preprocessor_config.json` and no video processor config, so the image processor would
+        # otherwise win and reject `videos=` inputs. Prefer the video processor for those models.
+        processor_classes = (
+            (AutoTokenizer, AutoVideoProcessor, AutoImageProcessor, AutoFeatureExtractor)
+            if isinstance(config, PreTrainedConfig) and type(config) in VIDEO_PROCESSOR_MAPPING
+            else (AutoTokenizer, AutoImageProcessor, AutoVideoProcessor, AutoFeatureExtractor)
+        )
+        for klass in processor_classes:
             try:
                 return klass.from_pretrained(
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
