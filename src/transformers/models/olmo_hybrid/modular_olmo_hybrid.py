@@ -432,8 +432,9 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             chunked_beta, sequential_beta = torch.tensor_split(beta, [effective_sequence_length], dim=1)
             chunked_g, sequential_g = torch.tensor_split(g, [effective_sequence_length], dim=1)
 
+            all_outputs = []
             # First, perform the fast chunked computation
-            output, chunked_last_recurrent_state = torch_chunk_gated_delta_rule(
+            chunked_attn_out, chunked_last_recurrent_state = torch_chunk_gated_delta_rule(
                 chunked_query,
                 chunked_key,
                 chunked_value,
@@ -445,6 +446,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                 cu_seqlens=kwargs.pop("cu_seq_lens_q", None),
                 **kwargs,
             )
+            all_outputs.append(chunked_attn_out)
             # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
             intermediate_recurrent_states = []
             last_recurrent_state = chunked_last_recurrent_state
@@ -461,8 +463,11 @@ class OlmoHybridGatedDeltaNet(nn.Module):
                     **kwargs,
                 )
                 # Combine them
-                output = torch.cat([output, local_output], dim=1)
+                all_outputs.append(local_output)
                 intermediate_recurrent_states.append(last_recurrent_state)
+
+            # Cat all outputs
+            output = torch.cat(all_outputs, dim=1)
 
             # In case we needed intermediate states, we return them, otherwise the last one is the chunked one
             last_recurrent_state = (
