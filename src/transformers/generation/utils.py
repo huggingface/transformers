@@ -4520,8 +4520,7 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     if len(outputs) == 0:
         new_tuple = ()
         for layer in new_outputs:
-            last_dim_size = cur_len if is_decoder_attention else layer.shape[-1]
-            new_tuple += (layer[..., :cur_len, :last_dim_size],)
+            new_tuple += (layer[..., :cur_len, :cur_len],) if is_decoder_attention else (layer[:, :cur_len],)
         outputs += (new_tuple,)
         # The first iteration contains the prompt + 1 generated token, let's update the length variables accordingly
         cur_len += 1
@@ -4530,7 +4529,6 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     for i in range(added_len):
         new_tuple = ()
         for layer in new_outputs:
-            last_dim_size = cur_len + i if is_decoder_attention else layer.shape[-1]
-            new_tuple += (layer[..., i : i + 1, :last_dim_size],)
+            new_tuple += (layer[..., i : i + 1, : cur_len + i],) if is_decoder_attention else (layer[:, i : i + 1],)
         outputs += (new_tuple,)
     return outputs
