@@ -47,18 +47,18 @@ from .configuration_falcon_mamba import FalconMambaConfig
 class FalconMambaWeightlessRMSNorm(torch.nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         # Dummy weights that are not used (only for imitating the kernels path)
         self.weight = nn.Buffer(torch.ones(hidden_size, requires_grad=False), persistent=False)
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
 
     def extra_repr(self):
-        return f"eps={self.eps}"
+        return f"eps={self.variance_epsilon}"
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):

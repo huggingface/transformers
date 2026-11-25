@@ -34,11 +34,10 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..llama.modeling_llama import LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralModel,
     MixtralPreTrainedModel,
-    MixtralRMSNorm,
     MixtralRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -50,7 +49,7 @@ from .configuration_jetmoe import JetMoeConfig
 logger = logging.get_logger(__name__)
 
 
-class JetMoeRMSNorm(MixtralRMSNorm):
+class JetMoeRMSNorm(LlamaRMSNorm):
     pass
 
 
