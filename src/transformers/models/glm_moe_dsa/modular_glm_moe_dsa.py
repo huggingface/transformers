@@ -28,7 +28,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
@@ -41,6 +40,7 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32PreTrainedModel,
     DeepseekV32RotaryEmbedding,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -123,7 +123,7 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         super().__post_init__(**kwargs)
 
 
-class GlmMoeDsaRMSNorm(DeepseekV3RMSNorm):
+class GlmMoeDsaRMSNorm(LlamaRMSNorm):
     pass
 
 
