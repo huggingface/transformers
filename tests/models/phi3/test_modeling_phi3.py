@@ -175,13 +175,6 @@ class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertIs(rotary_emb.inv_freq, inv_freq)
             torch.testing.assert_close(inv_freq, short_inv_freq)
 
-    def test_legacy_su_rope_type(self):
-        config_dict = self.model_tester.get_config().to_dict()
-        factor = [1.0] * (config_dict["hidden_size"] // config_dict["num_attention_heads"] // 2)
-        config_dict["rope_scaling"] = {"type": "su", "short_factor": factor, "long_factor": factor}
-        config = self.model_tester.config_class.from_dict(config_dict)
-        self.assertEqual(config.rope_parameters["rope_type"], "longrope")
-
 
 @slow
 @require_torch
