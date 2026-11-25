@@ -25,8 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import positive_int_field
 from ..llama.configuration_llama import LlamaConfig
@@ -88,6 +87,7 @@ class NanbeigeMLP(LlamaMLP):
 
 
 class NanbeigeAttention(LlamaAttention):
+    @no_inherit_decorator
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -127,7 +127,9 @@ class NanbeigeAttention(LlamaAttention):
 
 
 class NanbeigeDecoderLayer(LlamaDecoderLayer):
-    pass
+    @no_inherit_decorator
+    def forward(self, **super_kwargs):
+        return super().forward(**super_kwargs)
 
 
 class NanbeigePreTrainedModel(LlamaPreTrainedModel):
@@ -135,7 +137,6 @@ class NanbeigePreTrainedModel(LlamaPreTrainedModel):
 
 
 class NanbeigeModel(LlamaModel):
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring
@@ -219,7 +220,6 @@ class NanbeigeModel(LlamaModel):
 
 
 class NanbeigeForCausalLM(LlamaForCausalLM):
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     @can_return_tuple
     @auto_docstring
     def forward(

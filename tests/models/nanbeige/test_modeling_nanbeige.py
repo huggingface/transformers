@@ -15,8 +15,8 @@
 
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -38,6 +38,10 @@ class NanbeigeModelTester(CausalLMModelTester):
 @require_torch
 class NanbeigeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = NanbeigeModelTester
+
+    @unittest.skip("New model: `cache` only, no `past_key_values` BC")
+    def test_bc_cache_name_forward(self):
+        pass
 
     def test_two_loop_chunked_prefill_and_decode_match_full_forward(self):
         tester = self.model_tester_class(self, batch_size=2, num_loops=2)
@@ -64,3 +68,30 @@ class NanbeigeModelTest(CausalLMModelTest, unittest.TestCase):
         torch.testing.assert_close(torch.cat(logits, dim=1), expected_logits, rtol=1e-4, atol=1e-4)
         for layer_idx in range(num_cache_layers):
             self.assertEqual(outputs.cache.get_seq_length(layer_idx), input_ids.shape[1])
+
+
+@slow
+@require_torch_accelerator
+class NanbeigeIntegrationTest(unittest.TestCase):
+    checkpoint = "Nanbeige/Nanbeige4.2-3B"
+    revision = "b82e54bd609793562a75cbf9337970a93369eab5"
+
+    def test_bf16_generation(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, revision=self.revision)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.checkpoint,
+            revision=self.revision,
+            dtype=torch.bfloat16,
+            device_map=torch_device,
+        )
+        self.assertIsInstance(model, NanbeigeForCausalLM)
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "What is the capital of France? Answer with the city name."}],
+            add_generation_prompt=True,
+            enable_thinking=False,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(model.device)
+        outputs = model.generate(**inputs, max_new_tokens=2, do_sample=False)
+        new_tokens = outputs[0, inputs["input_ids"].shape[1] :]
+        self.assertEqual(tokenizer.decode(new_tokens, skip_special_tokens=True), "Paris")
