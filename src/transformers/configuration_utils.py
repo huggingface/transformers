@@ -490,7 +490,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         # Attention/Experts implementation to use, if relevant (it sets it recursively on sub-configs)
         self._output_attentions: bool | None = kwargs.pop("output_attentions", False)
-        self._attn_implementation: str | None = kwargs.pop("attn_implementation", None)
+        # Some Hub configs serialize `_attn_implementation`: an explicit `attn_implementation` is applied on top of it
+        attn_implementation = kwargs.pop("attn_implementation", None)
+        self._attn_implementation: str | None = kwargs.pop("_attn_implementation", attn_implementation)
+        if attn_implementation is not None:
+            self._attn_implementation = attn_implementation
         self._experts_implementation: str | None = kwargs.pop("experts_implementation", None)
 
         # HeterogeneousConfigMixin: `per_layer_config` should be applied last, as heterogeneity needs to have all of the other kwargs set
