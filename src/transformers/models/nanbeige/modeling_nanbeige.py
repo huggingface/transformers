@@ -359,22 +359,21 @@ class NanbeigeModel(NanbeigePreTrainedModel):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
 
         if use_cache and cache is None:
             cache = DynamicCache(config=self.config)
 
-        num_layers = len(self.layers)
+        num_layers = self.config.num_hidden_layers
         num_loops = self.config._effective_num_loops
-        if cache is not None and num_loops > 1 and len(cache.layers) == num_layers:
-            # Each pass reuses the decoder weights and writes to its own cache slots.
+        if cache is not None and len(cache.layers) == num_layers:
+            # Later passes write to their own cache layers, appended after the first pass's layers.
             cache.layers += [copy.deepcopy(layer) for layer in cache.layers * (num_loops - 1)]
 
         if position_ids is None:
             past_seen_tokens = cache.get_seq_length() if cache is not None else 0
-            position_ids = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None, :] + past_seen_tokens
-            )
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
