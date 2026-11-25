@@ -302,6 +302,11 @@ class PagedAttentionCache:
             sliding = self.cache_allocators[SLIDING_ATTENTION]
             ring_tokens = sliding.sliding_window + self.max_request_step_tokens
             sliding.ring_size = ceil(ring_tokens / sliding.tokens_per_page) * sliding.tokens_per_page
+        # [scratch] Otherwise a step stores only the last window of a longer prompt (`get_write_indices`): a request that
+        # shares the prompt's blocks would resume before the end of the window and read keys that were never written
+        elif SLIDING_ATTENTION in self.cache_allocators:
+            self.cache_allocators[SLIDING_ATTENTION].use_block_sharing = False
+            self.use_prefix_sharing = False
         # FA3 checks the new tokens of a whole step against the width of the block table, so it spans max_batch_tokens
         if self.use_varlen_block_table:
             min_blocks = max(ceil(self.max_batch_tokens / ca.tokens_per_page) for ca in self.cache_allocators.values())

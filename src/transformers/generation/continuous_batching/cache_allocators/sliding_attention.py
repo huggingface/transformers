@@ -29,7 +29,10 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
     of the page `(position // tokens_per_page) % num_ring_pages`: decode steps read the ring through a block table.
     """
 
-    supports_block_sharing = False
+    # [scratch] Blocks are shared while they hold their first pass of the ring: a block is hashed only before its request
+    # wraps around the ring, and a request about to overwrite a shared or hashed block takes a fresh one instead. Its old
+    # content is out of the window by then (the ring holds the window and a step's new tokens), so nothing is copied
+    supports_block_sharing = True
     supports_block_table = True
     layer_type = "sliding_attention"
 
@@ -76,6 +79,58 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
         total_length = min(past_length + query_length, self.ring_size)
         total_blocks = (total_length + self.tokens_per_page - 1) // self.tokens_per_page
         return max(0, total_blocks - allocated_blocks)
+
+    def _blocks_to_unshare(self, request_id: str, past_length: int, query_length: int) -> list[int]:
+        """The ring positions (block table indices) the new tokens write a second time or more and whose block is shared
+        or hashed: the request takes a fresh block there before writing."""
+        end = past_length + query_length
+        start = max(past_length, self.ring_size)
+        block_table = self.block_table.get(request_id)
+        if end <= self.ring_size or not block_table:
+            return []
+        num_ring_pages = self.ring_size // self.tokens_per_page
+        first_page, last_page = start // self.tokens_per_page, (end - 1) // self.tokens_per_page
+        ring_pages = range(num_ring_pages) if last_page - first_page + 1 >= num_ring_pages else (
+            p % num_ring_pages for p in range(first_page, last_page + 1)
+        )  # fmt: skip
+        ledger = self.ledger
+        return [
+            i for i in dict.fromkeys(ring_pages)
+            if i < len(block_table) and (block_table[i] in ledger.shared_ref_counts or block_table[i] in ledger.block_to_hash)
+        ]  # fmt: skip
+
+    def needs_new_blocks(self, request_id: str, past_length: int, query_length: int) -> int:
+        """Returns the number of new blocks needed to store the new tokens for a given request, including the fresh
+        blocks that replace shared or hashed ones the request is about to overwrite."""
+        allocated_blocks = len(self.block_table.get(request_id, []))
+        new_blocks = self._compute_blocks_needed(allocated_blocks, past_length, query_length)
+        return new_blocks + len(self._blocks_to_unshare(request_id, past_length, query_length))
+
+    def allocate_cache_to_request(self, request_id: str, past_length: int, query_length: int) -> None:
+        """Allocates enough cache to the request to store the new tokens, and replaces the shared or hashed blocks the new
+        tokens overwrite (second pass of the ring) with fresh ones."""
+        super().allocate_cache_to_request(request_id, past_length, query_length)
+        block_table = self.block_table[request_id]
+        to_unshare = self._blocks_to_unshare(request_id, past_length, query_length)
+        if to_unshare:
+            fresh_blocks = self.pool.get_free_blocks(self.index, len(to_unshare))
+            for i, fresh_block in zip(to_unshare, fresh_blocks):
+                old_block, block_table[i] = block_table[i], fresh_block
+                if self.ledger.release(old_block):
+                    self.pool.free_blocks(self.index, [old_block])
+
+    def mark_complete_blocks(self, request_id: str, token_ids: list[int], new_new_blocks: int) -> None:
+        """Registers the content hashes of the request's complete blocks, while the request has not wrapped around the
+        ring: afterwards its blocks no longer hold the tokens their position in the table stands for."""
+        if len(token_ids) > self.ring_size:
+            return
+        super().mark_complete_blocks(request_id, token_ids, new_new_blocks)
+
+    def count_shareable_blocks(self, source_request_id: str, past_length: int) -> int:
+        """A fork shares the source's blocks only while the source has not wrapped around the ring."""
+        if past_length > self.ring_size:
+            return 0
+        return super().count_shareable_blocks(source_request_id, past_length)
 
     # ______________________________________________ INPUT PREPARATION _______________________________________________ #
 
