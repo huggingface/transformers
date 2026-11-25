@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from dataclasses import dataclass
 
 from torch import nn
@@ -25,8 +26,10 @@ from torch import nn
 from transformers import AutoModel
 
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling, MultimodalModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
+from ...utils import auto_docstring, can_return_tuple, is_torch_available
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_colqwen2 import ColQwen2Config
 
 
@@ -44,35 +47,38 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
 
 
 @auto_docstring(
     custom_intro="""
-    Base class for ColQwen2 embeddings output.
+    Base class for ColQwen2 embeddings output. Contains the outputs of the language model backbone and the
+    outputs of vision encoder.
     """
 )
 @dataclass
-class ColQwen2ForRetrievalOutput(ModelOutput):
+class ColQwen2ForRetrievalOutput(MultimodalModelOutput):
     r"""
     loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
     embeddings (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The embeddings of the model.
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+    cache (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
+    image_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Output of the image encoder: `last_hidden_state`, `pooler_output`, `hidden_states` and `attentions`.
+        `None` if no images were processed.
     """
 
     loss: torch.Tensor | None = None
     embeddings: torch.Tensor | None = None
-    past_key_values: Cache | None = None
+    cache: Cache | None = None
     hidden_states: tuple[torch.Tensor] | None = None
     attentions: tuple[torch.Tensor] | None = None
+    image_outputs: BaseModelOutputWithPooling | None = None
 
 
 @auto_docstring(
@@ -105,12 +111,13 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         labels: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
@@ -150,7 +157,7 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -171,9 +178,10 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
         return ColQwen2ForRetrievalOutput(
             embeddings=embeddings,
-            past_key_values=vlm_output.past_key_values,
+            cache=vlm_output.cache,
             hidden_states=vlm_hidden_states,
             attentions=vlm_output.attentions,
+            image_outputs=vlm_output.image_outputs,
         )
 
 

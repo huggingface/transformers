@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import dataclasses
 import inspect
 import json
 import os
@@ -1681,6 +1682,40 @@ class ProcessorTesterMixin:
         expected_prompt = "You are a helpful assistant.<|special_start|>user\nWhich of these animals is making the sound?<|special_end|>\nYou are a helpful assistant.<|special_start|>assistant\nIt is a cow.<|special_end|>\n"
         self.assertEqual(formatted_prompt, expected_prompt)
 
+    def test_chat_template_message_objects(self):
+        """Regression test for #50773: message objects should be handled like the equivalent dicts."""
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        @dataclasses.dataclass
+        class Message:
+            role: str
+            content: list
+            tool_calls: list | None = None
+
+        @dataclasses.dataclass
+        class ImageURLBlock:
+            image_url: dict
+            type: str = "image_url"
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{{ message.role }}{% if message.tool_calls is defined %} (tool calls){% endif %}:"
+            "{% for block in message.content %} {{ block.type }}={{ block.url or block.text }}{% endfor %}"
+            "{% endfor %}"
+        )
+        messages = [
+            Message(
+                "user",
+                [ImageURLBlock({"url": "https://example.com/cat.png"}), {"type": "text", "text": "What is this?"}],
+            )
+        ]
+
+        # The message has a `.content`, but it's still a single conversation and not a batch, so we get a single string
+        formatted_prompt = processor.apply_chat_template(messages, tokenize=False, chat_template=dummy_template)
+        self.assertEqual(formatted_prompt, "user: image=https://example.com/cat.png text=What is this?")
+
     def test_apply_chat_template_assistant_mask(self):
         processor = self.get_processor()
 
@@ -2008,26 +2043,41 @@ class ProcessorTesterMixin:
                 else:
                     processor_inputs[modality] = prepare_method()
 
+        # The offsets index the text after replacement, so capture the text the processor tokenizes
+        expanded_texts = []
+        get_text_with_replacements = processor.get_text_with_replacements
+
+        def capture_text_with_replacements(*args, **kwargs):
+            text, offsets = get_text_with_replacements(*args, **kwargs)
+            expanded_texts.append(text)
+            return text, offsets
+
         # Test combined processing
-        model_inputs = processor(
-            **processor_inputs,
-            add_special_tokens=False,
-            padding=False,
-            truncation=False,
-            max_length=None,
-            return_text_replacement_offsets=True,
-            **processing_kwargs,
-        )
-        detokenized_text = processor.tokenizer.batch_decode(
-            model_inputs["input_ids"], skip_special_tokens=False, clean_up_tokenization_spaces=True
-        )
+        with patch.object(processor, "get_text_with_replacements", side_effect=capture_text_with_replacements):
+            model_inputs = processor(
+                **processor_inputs,
+                add_special_tokens=False,
+                padding=False,
+                truncation=False,
+                max_length=None,
+                return_text_replacement_offsets=True,
+                **processing_kwargs,
+            )
+        if expanded_texts:
+            expanded_text = expanded_texts[-1]
+            expanded_text = [expanded_text] if isinstance(expanded_text, str) else expanded_text
+        else:
+            # Processors that don't expand the text with `get_text_with_replacements`
+            expanded_text = processor.tokenizer.batch_decode(
+                model_inputs["input_ids"], skip_special_tokens=False, clean_up_tokenization_spaces=True
+            )
         self.assertIn("text_replacement_offsets", model_inputs)
 
         for i, sample_offsets in enumerate(model_inputs["text_replacement_offsets"]):
             for curr_dict in sample_offsets:
                 self.assertIn(curr_dict["type"], modalities)
                 start, end = curr_dict["new_span"]
-                self.assertEqual(detokenized_text[i][start:end], curr_dict["replacement"])
+                self.assertEqual(expanded_text[i][start:end], curr_dict["replacement"])
 
     def test_no_redundant_default_kwargs(self):
         """Tests that a processor doesn't define redundant default kwargs for a modality if the subprocessor
@@ -2048,6 +2098,7 @@ class ProcessorTesterMixin:
             "Kosmos2_5Processor",  # Hub config doesn't match processor defaults
             "LlavaNextProcessor",  # Hub config doesn't match processor defaults
             "Pix2StructProcessor",  # __call__ relies on add_special_tokens default
+            "Qwen3ASRProcessor",  # Original checkpoints use WhisperFeatureExtractor
             "ShieldGemma2Processor",  # Hub config doesn't match processor defaults
             "VideoLlama3Processor",  # Hub config doesn't match processor defaults
         }

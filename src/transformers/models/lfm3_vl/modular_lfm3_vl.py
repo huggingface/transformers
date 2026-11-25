@@ -21,10 +21,15 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested
 from ...vision_utils import get_max_seqlen, get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import AutoConfig, AutoModel
@@ -41,6 +46,9 @@ from ..qwen2_vl.modeling_qwen2_vl import (
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLVisionConfig
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLVisionAttention, Qwen3VLVisionRotaryEmbedding
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="LiquidAI/LFM3-VL-2B")
@@ -336,44 +344,44 @@ class Lfm3VlMultiModalProjector(nn.Module):
         return hidden_states
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Lfm3Vl outputs, with hidden states and attentions.
-    """
-)
+@auto_docstring
 @dataclass
-class Lfm3VlModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    image_pooler_output (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_image_tokens, hidden_size)`.
-        Image features produced by the vision encoder and projected to the language model hidden size.
-    video_pooler_output (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_video_tokens, hidden_size)`.
-        Video features produced by the vision encoder and projected to the language model hidden size.
-    """
+class Lfm3VlModelOutputWithPast(MultimodalBaseModelOutputWithPast):
+    @property
+    def image_pooler_output(self):
+        logger.warning_once(
+            "`image_pooler_output` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return torch.cat(self.image_outputs.pooler_output, dim=0)
 
-    image_pooler_output: torch.FloatTensor | None = None
-    video_pooler_output: torch.FloatTensor | None = None
+    @property
+    def video_pooler_output(self):
+        logger.warning_once(
+            "`video_pooler_output` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
+        )
+        return torch.cat(self.video_outputs.pooler_output, dim=0)
 
 
-@auto_docstring(
-    custom_intro="""
-    Base class for Lfm3Vl causal language model (or autoregressive) outputs.
-    """
-)
+@auto_docstring
 @dataclass
-class Lfm3VlCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    image_pooler_output (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_image_tokens, hidden_size)`.
-        Image features produced by the vision encoder and projected to the language model hidden size.
-    video_pooler_output (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(num_video_tokens, hidden_size)`.
-        Video features produced by the vision encoder and projected to the language model hidden size.
-    """
+class Lfm3VlCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
+    @property
+    def image_pooler_output(self):
+        logger.warning_once(
+            "`image_pooler_output` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
+        )
+        return torch.cat(self.image_outputs.pooler_output, dim=0)
 
-    image_pooler_output: torch.FloatTensor | None = None
-    video_pooler_output: torch.FloatTensor | None = None
+    @property
+    def video_pooler_output(self):
+        logger.warning_once(
+            "`video_pooler_output` is deprecated and will return a list of all hidden "
+            "states per layer from v5.30; Use `out.video_outputs.pooler_output` to obtain pooled features."
+        )
+        return torch.cat(self.video_outputs.pooler_output, dim=0)
 
 
 class Lfm3VlModel(Qwen2VLModel):
@@ -414,12 +422,13 @@ class Lfm3VlModel(Qwen2VLModel):
     ) -> tuple | BaseModelOutputWithPooling:
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -471,19 +480,16 @@ class Lfm3VlModel(Qwen2VLModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         return Lfm3VlModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_pooler_output=image_features if mm_encoder_outputs.get("image") is not None else None,
-            video_pooler_output=video_features if mm_encoder_outputs.get("video") is not None else None,
+            **outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
+            video_outputs=mm_encoder_outputs.get("video"),
         )
 
 
@@ -513,12 +519,13 @@ class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
         """
         return super().get_video_features(**super_kwargs)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
@@ -560,7 +567,7 @@ class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
@@ -584,11 +591,11 @@ class Lfm3VlForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return Lfm3VlCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_pooler_output=outputs.image_pooler_output,
-            video_pooler_output=outputs.video_pooler_output,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
     def _prepare_position_ids_for_generation(self):

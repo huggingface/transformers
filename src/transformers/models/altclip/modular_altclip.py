@@ -155,9 +155,7 @@ class AltRobertaEmbeddings(RobertaEmbeddings):
 
 
 class AltRobertaSelfAttention(ChineseCLIPTextSelfAttention):
-    def __init__(self, config):
-        super().__init__(config)
-        self.is_causal = False
+    pass
 
 
 class AltRobertaSelfOutput(RobertaSelfOutput):
@@ -233,7 +231,6 @@ class AltCLIPPreTrainedModel(CLIPPreTrainedModel):
         "attentions": AltCLIPAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(self, module)

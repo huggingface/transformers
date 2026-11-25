@@ -254,18 +254,24 @@ class DistributedMixin:
         # HSDP shards each replica with the FSDP plan.
         fsdp_plan = dict(self.fsdp_plan) if distributed_config.dp_size > 1 else {}
 
+        # `tp_plan={}` is an explicit request for no TP rules (e.g. the EP plan alone across the TP ranks).
+        tp_disabled = distributed_config.tp_plan == {}
         for kind, plan in (("tp", tp_plan), ("ep", ep_plan), ("fsdp", fsdp_plan)):
             size = distributed_config.dp_size if kind == "fsdp" else getattr(distributed_config, f"{kind}_size")
-            if size > 1 and not plan:
+            if size > 1 and not plan and not (kind == "tp" and tp_disabled):
                 raise ValueError(
                     f"`{kind}_size={size}` was requested, but `{type(self).__name__}` has no `{kind}_plan`. Pass "
                     f"`{kind}_plan` in `DistributedConfig`, add `base_model_{kind}_plan` to the model's config, "
                     f"or set `{kind}_size=1`."
                 )
 
-        if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
+        if "ep_router" in ep_plan.values() or "moe_tp_experts" in ep_plan.values():
             raise ValueError(
-                "`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`."
+                "The `ep_router` and `moe_tp_experts` parallel styles have been deprecated (removal in v5.28.0). "
+                "Use expert parallelism with `ep_dispatch_experts` and `grouped_gemm` instead. "
+                "Most MoE models already define this as their default `ep_plan`, so an explicit "
+                "plan is usually unnecessary. To preserve the previous masking and all-reduce behavior, use "
+                '`DistributedConfig(ep_implementation="all_reduce")`.'
             )
 
         # EP rules take precedence: drop TP rules on EP modules and their children.
@@ -324,10 +330,7 @@ class DistributedMixin:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
 
-            if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
-                # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
-                model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
-            elif "ep_dispatch_experts" in ep_plan.values():
+            if "ep_dispatch_experts" in ep_plan.values():
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(

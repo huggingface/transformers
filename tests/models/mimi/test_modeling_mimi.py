@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -62,48 +63,33 @@ def prepare_inputs_dict(
 
 
 @require_torch
-class MimiModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=5,
-        num_channels=1,
-        is_training=False,
-        intermediate_size=40,
-        hidden_size=32,
-        num_filters=8,
-        num_residual_layers=1,
-        upsampling_ratios=[8, 4],
-        codebook_size=64,
-        vector_quantization_hidden_dimension=64,
-        codebook_dim=64,
-        upsample_groups=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        sliding_window=4,
-        use_cache=False,
-        max_position_embeddings=512,
-    ):
+class MimiModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 5,
+        "num_channels": 1,
+        "is_training": False,
+        "intermediate_size": 40,
+        "hidden_size": 32,
+        "num_filters": 8,
+        "num_residual_layers": 1,
+        "upsampling_ratios": [8, 4],
+        "codebook_size": 64,
+        "vector_quantization_hidden_dimension": 64,
+        "codebook_dim": 64,
+        "upsample_groups": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "sliding_window": 4,
+        "use_cache": False,
+        "max_position_embeddings": 512,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.intermediate_size = intermediate_size
-        self.hidden_size = hidden_size
-        self.num_filters = num_filters
-        self.num_residual_layers = num_residual_layers
-        self.upsampling_ratios = upsampling_ratios
-        self.codebook_size = codebook_size
-        self.vector_quantization_hidden_dimension = vector_quantization_hidden_dimension
-        self.codebook_dim = codebook_dim
-        self.upsample_groups = upsample_groups
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.sliding_window = sliding_window
-        self.use_cache = use_cache
-        self.max_position_embeddings = max_position_embeddings
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self, input_values_length=None):
         input_values = floats_tensor(
@@ -162,6 +148,8 @@ class MimiModelTester:
 
 @require_torch
 class MimiModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = MimiModelTester
+
     all_model_classes = (MimiModel,) if is_torch_available() else ()
     is_encoder_decoder = True
 
@@ -415,7 +403,7 @@ class MimiIntegrationTest(unittest.TestCase):
                 decoder_outputs_first_part = model.decode(audio_codes[:, :, : audio_codes.shape[2] // 2])
                 decoder_outputs_second_part = model.decode(
                     audio_codes[:, :, audio_codes.shape[2] // 2 :],
-                    decoder_past_key_values=decoder_outputs_first_part.decoder_past_key_values,
+                    decoder_cache=decoder_outputs_first_part.decoder_cache,
                 )
 
                 audio_output_entire_context = model.decode(audio_codes)[0]
@@ -459,7 +447,7 @@ class MimiIntegrationTest(unittest.TestCase):
         audio_codes = model.encode(inputs["input_values"]).audio_codes
 
         # streaming chunk by chunk
-        encoder_past_key_values = None
+        encoder_cache = None
         padding_cache = None
         encoded_frames_list = []
 
@@ -468,10 +456,10 @@ class MimiIntegrationTest(unittest.TestCase):
             encoder_outputs = model.encode(
                 input_values_chunk,
                 padding_cache=padding_cache,
-                encoder_past_key_values=encoder_past_key_values,
+                encoder_cache=encoder_cache,
                 use_streaming=True,
             )
-            encoder_past_key_values = encoder_outputs.encoder_past_key_values
+            encoder_cache = encoder_outputs.encoder_cache
             padding_cache = encoder_outputs.padding_cache
             encoded_frames_list.append(encoder_outputs.audio_codes)
 

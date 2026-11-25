@@ -33,7 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_attr
+from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import requires
 from ..auto import AutoConfig, AutoModel
@@ -60,6 +60,7 @@ class PI0Processor(ProcessorMixin):
         "padding_side": "right",
         "return_tensors": "pt",
     }
+    state_in_prompt = False
 
     def __init__(
         self,
@@ -164,14 +165,9 @@ class PI0Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         output_kwargs["images_kwargs"].pop("return_tensors", None)
 
-        prompt_strings = []
-        for sample, image_list in zip(text, batched_images):
-            sample = (
-                f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}{sample}\n"
-            )
-            prompt_strings.append(sample)
-
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        if state is not None:
+            state = self.normalize(torch.as_tensor(state, dtype=torch.float32), "state")
+        text_inputs = self.tokenizer(self.build_prompts(text, batched_images, state), **output_kwargs["text_kwargs"])
 
         # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
         num_cameras = torch.tensor([len(sample_images) for sample_images in batched_images])
@@ -196,13 +192,21 @@ class PI0Processor(ProcessorMixin):
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
             model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
-        if state is not None:
-            state = self.normalize(torch.as_tensor(state, dtype=torch.float32), "state")
+        if state is not None and not self.state_in_prompt:
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
             model_inputs["state"] = state.view(-1, self.max_state_dim)
 
         return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+
+    def build_prompts(
+        self, text: list[str], batched_images: list[list[ImageInput]], state: torch.Tensor | None
+    ) -> list[str]:
+        """Builds one prompt per sample: image tokens for each camera, then the task text."""
+        return [
+            f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}{sample}\n"
+            for sample, image_list in zip(text, batched_images)
+        ]
 
     def normalize(self, values: torch.Tensor, feature: str) -> torch.Tensor:
         """Normalizes `state` or `actions` with the dataset mean and standard deviation."""
@@ -391,7 +395,6 @@ class PI0PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "state"
     supports_gradient_checkpointing = True
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -407,6 +410,8 @@ class PI0PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class PI0Model(PI0PreTrainedModel):
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over the action tokens
+
     def __init__(self, config: PI0Config):
         super().__init__(config)
         self.dit = AutoModel.from_config(config.dit_config)
@@ -441,25 +446,26 @@ class PI0Model(PI0PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        action_embeds: torch.Tensor,  # aka `suffix_emb` (noise + state + timestep)
+        action_embeds: torch.Tensor,  # aka `suffix_emb`
         input_ids: torch.Tensor | None = None,
         pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         pixel_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,  # aka `prefix_emb` or merged image+text emb
-        past_key_values: Cache | None = None,  # must-have for prefix tuning
+        cache: Cache | None = None,  # must-have for prefix tuning
         **kwargs,
     ) -> BaseModelOutputWithPast:
         r"""
         action_embeds (`torch.Tensor`, *optional*):
-            The embeddings of input actions and robot states.
+            Embeddings of the suffix tokens fed to the action expert.
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
         """
-        if pixel_values is not None and past_key_values is None:
+        if pixel_values is not None and cache is None:
             if attention_mask is not None and position_ids is None:
                 position_ids = attention_mask.cumsum(-1) - 1
 
@@ -468,13 +474,13 @@ class PI0Model(PI0PreTrainedModel):
 
             # PI0 always passes a prefix and we need to hardcode it to correctly build a mask
             token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
-            past_key_values = self.vlm(
+            cache = self.vlm(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
                 token_type_ids=token_type_ids,
                 use_cache=True,
-            ).past_key_values
+            ).cache
 
         if attention_mask is not None and attention_mask.ndim != 2:
             raise ValueError("Only two-dimensional attention masks are accepted for now!")
@@ -491,13 +497,13 @@ class PI0Model(PI0PreTrainedModel):
             dit_attention_mask = torch.cat([attention_mask, noise_mask], dim=1)
             dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1] :]
 
-        # We have three blocks: vlm-inputss, state and actions from which only 1 token is `state`
-        # The mask should be bidirectional within each block and to prev blocks, but not to next blocks
-        vlm_input_length = past_key_values.get_seq_length()
+        # Two blocks: the prefix (VLM tokens and any state token) and the action chunk.
+        # The mask is bidirectional within each block and to earlier blocks, but not to later blocks.
+        vlm_block_length = cache.get_seq_length() + action_embeds.shape[1] - self.config.chunk_size
         block_sequence_ids = torch.cat(
             [
-                torch.zeros(vlm_input_length + 1, device=action_embeds.device, dtype=torch.long),
-                torch.ones(action_embeds.shape[1] - 1, device=action_embeds.device, dtype=torch.long),
+                torch.zeros(vlm_block_length, device=action_embeds.device, dtype=torch.long),
+                torch.ones(self.config.chunk_size, device=action_embeds.device, dtype=torch.long),
             ]
         )
         block_sequence_ids = block_sequence_ids[None, :].repeat(action_embeds.shape[0], 1)
@@ -505,7 +511,7 @@ class PI0Model(PI0PreTrainedModel):
             config=self.config.dit_config,
             inputs_embeds=action_embeds,
             attention_mask=dit_attention_mask,
-            past_key_values=past_key_values,
+            cache=cache,
             block_sequence_ids=block_sequence_ids,
         )
 
@@ -513,7 +519,7 @@ class PI0Model(PI0PreTrainedModel):
             inputs_embeds=action_embeds,
             attention_mask=bidirectional_mask,
             position_ids=dit_position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         return dit_output
@@ -523,6 +529,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
     _tp_plan = {"action_out_proj": "colwise_gather_output"}
+
+    _supports_flash_attn = False  # Flash Attention drops the bidirectional mask over the action tokens
 
     def __init__(self, config: PI0Config):
         super().__init__(config)
@@ -534,6 +542,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         state: torch.Tensor,
@@ -545,7 +554,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
+        cache: Cache | None = None,
         actions: torch.Tensor = None,  # aka labels
         **kwargs,
     ) -> CausalLMOutputWithPast:
@@ -601,7 +610,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
             action_embeds=action_time_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             **kwargs,
         )
         last_hidden_states = outputs.last_hidden_state[:, -self.config.chunk_size :]
@@ -615,7 +624,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         return CausalLMOutputWithPast(
             loss=loss,
             logits=predicted_velocity,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -658,14 +667,14 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             position_ids = attention_mask.cumsum(-1) - 1
         inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
         token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
-        past_key_values = self.model.vlm(
+        cache = self.model.vlm(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             use_cache=True,
-        ).past_key_values
-        prefix_length = past_key_values.get_seq_length()
+        ).cache
+        prefix_length = cache.get_seq_length()
 
         # 3. Denoise `num_steps` times
         dt = -1.0 / num_steps
@@ -678,12 +687,12 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 timestep=time_tensor,
                 pixel_attention_mask=pixel_attention_mask,
                 attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                cache=cache,
                 **kwargs,
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
+            cache.crop(prefix_length - cache.get_seq_length())
             noise = noise + dt * output.logits
         return noise
 
