@@ -577,10 +577,12 @@ class GraniteMoeHybridMambaLayer(nn.Module):
 
     def cache_states(self) -> list[tuple[tuple[int, ...], torch.dtype]]:
         """[scratch] The shape and dtype of the states continuous batching keeps per request for this layer: the last
-        inputs of the causal convolution, then the SSM state."""
+        inputs of the causal convolution, then the SSM state, both in the model's dtype as vLLM keeps them (an fp32
+        SSM state is 4 MiB per layer and request on Granite-4.0-H-Small: about 50 requests fit next to the weights on
+        an H100)."""
         return [
             ((self.conv_dim, self.conv_kernel_size - 1), self.conv1d.weight.dtype),
-            ((self.num_heads, self.head_dim, self.ssm_state_size), torch.float32),
+            ((self.num_heads, self.head_dim, self.ssm_state_size), self.conv1d.weight.dtype),
         ]
 
     def _paged_forward(self, hidden_states: torch.Tensor, cache: PagedAttentionCache, kwargs) -> torch.Tensor:
