@@ -318,30 +318,29 @@ class FalconH1Mixer(BambaMixer):
             chunked_C, sequential_C = torch.tensor_split(C, [effective_sequence_length], dim=1)
 
             all_outputs = []
-            last_scan_recurrent_state = recurrent_state
             # First, perform the fast scan computation (if we don't need only sequential)
-            if chunked_hidden_states.numel() > 0:
-                scan_output = mamba2_chunk_scan(
-                    chunked_hidden_states.view(batch_size, effective_sequence_length, -1, self.head_dim),
-                    chunked_dt,
-                    A,
-                    chunked_B.view(batch_size, effective_sequence_length, self.n_groups, -1),
-                    chunked_C.view(batch_size, effective_sequence_length, self.n_groups, -1),
-                    chunk_size=self.chunk_size,
-                    D=self.D,
-                    z=None,
-                    return_final_states=cache is not None,
-                    dt_bias=self.dt_bias,
-                    dt_softplus=True,
-                    initial_states=recurrent_state,
-                    dt_limit=self.time_step_limit,
-                    **kwargs,
-                )
-                # The number of outputs varies depending on the flag
-                if cache is not None:
-                    scan_output, last_scan_recurrent_state = scan_output
-                # Collect it
-                all_outputs.append(scan_output)
+            scan_output = mamba2_chunk_scan(
+                chunked_hidden_states.view(batch_size, effective_sequence_length, -1, self.head_dim),
+                chunked_dt,
+                A,
+                chunked_B.view(batch_size, effective_sequence_length, self.n_groups, -1),
+                chunked_C.view(batch_size, effective_sequence_length, self.n_groups, -1),
+                chunk_size=self.chunk_size,
+                D=self.D,
+                z=None,
+                return_final_states=cache is not None,
+                dt_bias=self.dt_bias,
+                dt_softplus=True,
+                initial_states=recurrent_state,
+                dt_limit=self.time_step_limit,
+                **kwargs,
+            )
+            # The number of outputs varies depending on the flag
+            last_scan_recurrent_state = recurrent_state
+            if cache is not None:
+                scan_output, last_scan_recurrent_state = scan_output
+            # Collect it
+            all_outputs.append(scan_output)
 
             # If we need to return intermediate recurrent state, we now do it sequentially after the chunked part
             intermediate_recurrent_states = []
