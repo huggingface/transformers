@@ -92,6 +92,23 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         self.assertTrue((causal_mask == EXPECTED_PACKED_MASK).all())
 
+    def test_packed_sequence_mask_sdpa_varlen(self):
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+
+        # A single row packing 3 sequences of 4, 2 and 4 tokens: SDPA gets their cumulative lengths, for its varlen kernel
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3]])
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=torch.empty((1, 10), dtype=torch.float16),
+            attention_mask=None,
+            cache=None,
+            position_ids=position_ids,
+        )
+
+        self.assertEqual(causal_mask.tolist(), [0, 4, 6, 10])
+        self.assertEqual(causal_mask.dtype, torch.int32)
+
     def test_packed_sequence_mask_eager(self):
         config = LlamaConfig()
         config._attn_implementation = "eager"

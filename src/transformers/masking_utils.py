@@ -814,8 +814,9 @@ def _preprocess_mask_arguments(
         kv_offset (`int`):
             An offset to indicate at which first position the key and values states will refer to.
     """
-    # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom)
-    if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) == 4:
+    # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom). So are SDPA's 1D
+    # cumulative lengths of packed rows, already prepared too
+    if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) in (1, 4):
         return True, attention_mask, None, None, None, None, None
 
     # If the cache is from CB, immediate exit as well, we don't need any mask
@@ -1000,6 +1001,20 @@ def create_causal_mask(
         allow_is_causal_skip = False
     if packed_sequence_mask is not None:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+
+    # SDPA attends over packed rows with its varlen kernel: it gets their cumulative lengths instead of a dense mask
+    if (
+        packed_sequence_mask is not None
+        and config._attn_implementation == "sdpa"
+        and batch_size == 1
+        and or_mask_function is None
+        and and_mask_function is None
+        and block_sequence_ids is None
+        # Sparse-attention indexers (`index_topk`) select their keys on the dense mask
+        and getattr(config, "index_topk", None) is None
+        and not is_tracing(packed_sequence_mask)
+    ):
+        return F.pad(torch.bincount(packed_sequence_mask[0]).cumsum(0), (1, 0)).to(torch.int32)
 
     # We now create the mask
     causal_mask = mask_interface(
