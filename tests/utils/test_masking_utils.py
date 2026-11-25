@@ -72,42 +72,34 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 @require_torch
 class MaskTest(MemoryCleanupMixin, unittest.TestCase):
     def test_packed_sequence_mask_sdpa(self):
-        config = LlamaConfig()
+        config = LlamaConfig(sliding_window=3)
         config._attn_implementation = "sdpa"
 
-        batch_size = 2
-        sequence_length = 10
-
-        # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
+        # Packed rows of 4, 2, 4 and 6, 4 tokens: SDPA gets the cumulative lengths over the flattened batch, for its
+        # varlen kernel, with or without a sliding window (passed by the attention layers)
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
+        for mask_function in (create_causal_mask, create_sliding_window_causal_mask):
+            mask = mask_function(
+                config=config,
+                inputs_embeds=torch.empty((2, 10), dtype=torch.float16),
+                attention_mask=None,
+                cache=None,
+                position_ids=position_ids,
+            )
+            self.assertEqual(mask.tolist(), [0, 4, 6, 10, 16, 20])
+            self.assertEqual(mask.dtype, torch.int32)
 
-        causal_mask = create_causal_mask(
+        # Padded rows keep the dense mask
+        attention_mask = torch.ones((2, 10), dtype=torch.long)
+        attention_mask[1, -1] = 0
+        mask = create_causal_mask(
             config=config,
-            # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
-            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
-            attention_mask=None,
+            inputs_embeds=torch.empty((2, 10), dtype=torch.float16),
+            attention_mask=attention_mask,
             cache=None,
             position_ids=position_ids,
         )
-
-        self.assertTrue((causal_mask == EXPECTED_PACKED_MASK).all())
-
-    def test_packed_sequence_mask_sdpa_varlen(self):
-        config = LlamaConfig()
-        config._attn_implementation = "sdpa"
-
-        # A single row packing 3 sequences of 4, 2 and 4 tokens: SDPA gets their cumulative lengths, for its varlen kernel
-        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3]])
-        causal_mask = create_causal_mask(
-            config=config,
-            inputs_embeds=torch.empty((1, 10), dtype=torch.float16),
-            attention_mask=None,
-            cache=None,
-            position_ids=position_ids,
-        )
-
-        self.assertEqual(causal_mask.tolist(), [0, 4, 6, 10])
-        self.assertEqual(causal_mask.dtype, torch.int32)
+        self.assertEqual(mask.shape, (2, 1, 10, 10))
 
     def test_packed_sequence_mask_eager(self):
         config = LlamaConfig()

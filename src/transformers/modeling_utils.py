@@ -80,7 +80,7 @@ from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kernelize
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
-from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.sdpa_attention import eager_packed_sequences_attention_forward, sdpa_attention_forward
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
@@ -5276,6 +5276,9 @@ class AttentionInterface(GeneralInterface):
             raise KeyError(
                 f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"
             )
+        # The model's eager attention, which attends over each sequence of packed rows separately
+        if attn_implementation == "eager" and attn_implementation not in self:
+            return functools.partial(eager_packed_sequences_attention_forward, default)
         return super().get(attn_implementation, default)
 
 

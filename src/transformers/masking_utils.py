@@ -764,6 +764,37 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
     return packed_sequence_mask
 
 
+def packed_sequences_cu_seq_lens(
+    config: PreTrainedConfig,
+    packed_sequence_mask: torch.Tensor | None,
+    attention_mask: torch.Tensor | None,
+    needs_dense_mask: bool,
+) -> torch.Tensor | None:
+    """
+    Packed rows are attended over by SDPA's varlen kernel, and by eager one sequence at a time, which take the
+    cumulative lengths of the sequences over the flattened batch instead of a dense mask. Returns them, or `None` when
+    the dense mask is needed.
+
+    The attention layers pass their own `sliding_window`, as for flash attention.
+    """
+    if (
+        packed_sequence_mask is None
+        or config._attn_implementation not in ("sdpa", "eager")
+        or needs_dense_mask
+        # Sparse-attention indexers (`index_topk`) select their keys on the dense mask
+        or getattr(config, "index_topk", None) is not None
+        # The number of sequences is data-dependent
+        or is_tracing(packed_sequence_mask)
+        or (attention_mask is not None and not attention_mask.all())
+    ):
+        return None
+    # Sequence ids continue from one row to the next
+    sequences_per_row = packed_sequence_mask[:, -1] + 1
+    row_offsets = F.pad(sequences_per_row.cumsum(0)[:-1], (1, 0))
+    sequence_ids = (packed_sequence_mask + row_offsets[:, None]).flatten()
+    return F.pad(torch.bincount(sequence_ids).cumsum(0), (1, 0)).to(torch.int32)
+
+
 def _preprocess_mask_arguments(
     config: PreTrainedConfig,
     inputs_embeds: torch.Tensor,
@@ -963,6 +994,14 @@ def create_causal_mask(
     if early_exit:
         return attention_mask
 
+    # A mask the caller needs materialized, or that combines other masks, stays dense
+    needs_dense_mask = not allow_is_causal_skip or any(
+        overlay is not None for overlay in (or_mask_function, and_mask_function, block_sequence_ids)
+    )
+    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, attention_mask, needs_dense_mask)
+    if cu_seq_lens is not None:
+        return cu_seq_lens
+
     batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
     mask_factory_function = causal_mask_function
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
@@ -1001,20 +1040,6 @@ def create_causal_mask(
         allow_is_causal_skip = False
     if packed_sequence_mask is not None:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
-
-    # SDPA attends over packed rows with its varlen kernel: it gets their cumulative lengths instead of a dense mask
-    if (
-        packed_sequence_mask is not None
-        and config._attn_implementation == "sdpa"
-        and batch_size == 1
-        and or_mask_function is None
-        and and_mask_function is None
-        and block_sequence_ids is None
-        # Sparse-attention indexers (`index_topk`) select their keys on the dense mask
-        and getattr(config, "index_topk", None) is None
-        and not is_tracing(packed_sequence_mask)
-    ):
-        return F.pad(torch.bincount(packed_sequence_mask[0]).cumsum(0), (1, 0)).to(torch.int32)
 
     # We now create the mask
     causal_mask = mask_interface(
@@ -1207,6 +1232,14 @@ def create_sliding_window_causal_mask(
     )
     if early_exit:
         return attention_mask
+
+    # A mask the caller needs materialized, or that combines other masks, stays dense
+    needs_dense_mask = not allow_is_causal_skip or any(
+        overlay is not None for overlay in (or_mask_function, and_mask_function, block_sequence_ids)
+    )
+    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, attention_mask, needs_dense_mask)
+    if cu_seq_lens is not None:
+        return cu_seq_lens
 
     sliding_window = getattr(config, "sliding_window", None)
     if sliding_window is None:

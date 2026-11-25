@@ -1,6 +1,5 @@
-import functools
-import inspect
 import os
+from collections.abc import Callable
 from typing import cast
 
 import torch
@@ -13,7 +12,8 @@ logger = logging.get_logger(__name__)
 
 
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
-_is_torch_greater_or_equal_than_2_10 = is_torch_greater_or_equal("2.10", accept_dev=True)
+_is_torch_greater_or_equal_than_2_11 = is_torch_greater_or_equal("2.11", accept_dev=True)
+_is_torch_greater_or_equal_than_2_12 = is_torch_greater_or_equal("2.12", accept_dev=True)
 _is_torch_greater_or_equal_than_2_13 = is_torch_greater_or_equal("2.13", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
@@ -95,14 +95,6 @@ def create_position_bias_mask(
     return position_bias_mask.contiguous()
 
 
-@functools.cache
-def _varlen_attn_parameters() -> frozenset[str]:
-    """The keyword arguments of the installed torch's `varlen_attn`, which gained causal and GQA support over time."""
-    from torch.nn.attention.varlen import varlen_attn
-
-    return frozenset(inspect.signature(varlen_attn).parameters)
-
-
 def sdpa_varlen_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -115,29 +107,32 @@ def sdpa_varlen_attention_forward(
     dropout: float = 0.0,
     scaling: float | None = None,
     is_causal: bool | None = None,
+    sliding_window: int | None = None,
     sequence_lengths: list[int] | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     """
-    Attention over sequences packed along the length of a batch of one, `(1, heads, total_length, head_dim)`,
-    delimited by `cu_seq_lens_q` (and `cu_seq_lens_k`).
+    Attention over sequences packed along the length, `(batch, heads, length, head_dim)`, delimited by `cu_seq_lens_q`
+    (and `cu_seq_lens_k`) over the flattened batch.
 
     Runs torch's varlen kernel when it supports the inputs: CUDA, half precision, no dropout, and a head size that is a
-    multiple of 8 up to 256, the same for values; causal attention needs its `window_size`. Otherwise, reads the lengths on the host and
-    attends over each sequence separately.
+    multiple of 8 up to 256, the same for values. Otherwise, reads the lengths on the host and attends over each
+    sequence separately.
     """
+    batch_size, num_heads, _, head_dim = query.shape
     cu_seq_lens_k = cu_seq_lens_q if cu_seq_lens_k is None else cu_seq_lens_k
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
+    # One packed row of all the sequences: a view for a batch of one
+    query, key, value = (states.transpose(0, 1).flatten(1, 2)[None] for states in (query, key, value))
     use_varlen = (
-        _is_torch_greater_or_equal_than_2_10
+        _is_torch_greater_or_equal_than_2_11
         and query.is_cuda
         and query.dtype in (torch.float16, torch.bfloat16)
         and dropout == 0.0
-        and (not is_causal or "window_size" in _varlen_attn_parameters())
         # Head sizes the flash kernel supports, the same for values (unlike MLA's)
-        and query.shape[-1] % 8 == 0
-        and query.shape[-1] <= 256
-        and value.shape[-1] == query.shape[-1]
+        and head_dim % 8 == 0
+        and head_dim <= 256
+        and value.shape[-1] == head_dim
     )
     if use_varlen:
         from torch.nn.attention.varlen import varlen_attn
@@ -146,11 +141,11 @@ def sdpa_varlen_attention_forward(
         # valid bounds that need no host sync
         max_length_q = query.shape[2] if max_length_q is None else max_length_q
         max_length_k = key.shape[2] if max_length_k is None else max_length_k
-        varlen_kwargs = {"scale": scaling}
-        if is_causal:
-            varlen_kwargs["window_size"] = (-1, 0)
+        # Keys a query sees on its left and right, -1 for all of them
+        window_size = (-1 if sliding_window is None else sliding_window - 1, 0 if is_causal else -1)
+        varlen_kwargs = {}
         if query.shape[1] != key.shape[1]:
-            if "enable_gqa" in _varlen_attn_parameters():
+            if _is_torch_greater_or_equal_than_2_12:
                 varlen_kwargs["enable_gqa"] = True
             else:
                 key = repeat_kv(key, query.shape[1] // key.shape[1])
@@ -166,23 +161,123 @@ def sdpa_varlen_attention_forward(
                 cu_seq_lens_k.to(torch.int32),
                 max_length_q,
                 max_length_k,
+                scale=scaling,
+                window_size=window_size,
                 **varlen_kwargs,
             ),
         )
-        return attn_output.unsqueeze(0), None
+        return attn_output.view(batch_size, -1, num_heads, head_dim), None
 
-    # The fallback splits the sequences, which needs their lengths on the host: read once per forward when the model
-    # passes them (shared by queries and keys), here otherwise
+    attn_output, _ = per_sequence_attention_forward(
+        sdpa_attention_forward,
+        module,
+        query,
+        key,
+        value,
+        cu_seq_lens_q,
+        cu_seq_lens_k,
+        sequence_lengths=sequence_lengths,
+        is_causal=is_causal,
+        sliding_window=sliding_window,
+        dropout=dropout,
+        scaling=scaling,
+        **kwargs,
+    )
+    return attn_output.view(batch_size, -1, num_heads, head_dim), None
+
+
+def per_sequence_attention_forward(
+    attention_fn: Callable,
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    cu_seq_lens_q: torch.Tensor,
+    cu_seq_lens_k: torch.Tensor,
+    sequence_lengths: list[int] | None = None,
+    is_causal: bool = True,
+    sliding_window: int | None = None,
+    causal_needs_mask: bool = False,
+    return_attention_weights: bool = False,
+    **kwargs,
+) -> tuple[torch.Tensor, list[torch.Tensor] | None]:
+    """
+    Calls `attention_fn` on each of the sequences packed along the length of a batch of one, with a mask only where
+    the attention needs it: a (causal) window narrower than the sequence, or causal attention itself when
+    `causal_needs_mask` (eager has no causal flag). Returns the outputs concatenated along the length, `(1, length,
+    heads, head_dim)`, and each sequence's weights if `return_attention_weights` (otherwise freed as it goes).
+    """
+    # Splitting needs the lengths on the host: read once per forward when the model passes them (shared by queries
+    # and keys), here otherwise
     if sequence_lengths is not None:
         lengths_q = lengths_k = sequence_lengths
     else:
         lengths_q = (cu_seq_lens_q[1:] - cu_seq_lens_q[:-1]).tolist()
         lengths_k = (cu_seq_lens_k[1:] - cu_seq_lens_k[:-1]).tolist()
-    attn_outputs = [
-        sdpa_attention_forward(module, q, k, v, None, dropout=dropout, scaling=scaling, is_causal=is_causal, **kwargs)
-        for q, k, v in zip(query.split(lengths_q, dim=2), key.split(lengths_k, dim=2), value.split(lengths_k, dim=2))
-    ]
-    return torch.cat([attn_output for attn_output, _ in attn_outputs], dim=1), None
+    attn_outputs, attn_weights = [], []
+    for q, k, v in zip(query.split(lengths_q, dim=2), key.split(lengths_k, dim=2), value.split(lengths_k, dim=2)):
+        mask = None
+        if (is_causal and causal_needs_mask) or (sliding_window is not None and k.shape[2] > sliding_window):
+            visible = torch.ones(q.shape[2], k.shape[2], dtype=torch.bool, device=q.device)
+            visible = visible.tril() if is_causal else visible
+            visible = visible.triu(1 - sliding_window) if sliding_window is not None else visible
+            mask = torch.zeros(visible.shape, dtype=q.dtype, device=q.device)
+            mask = mask.masked_fill(~visible, torch.finfo(q.dtype).min)[None, None]
+        attn_output, weights = attention_fn(module, q, k, v, mask, is_causal=is_causal, **kwargs)
+        attn_outputs.append(attn_output)
+        if return_attention_weights:
+            attn_weights.append(weights)
+        del weights
+    return torch.cat(attn_outputs, dim=1), attn_weights if return_attention_weights else None
+
+
+def eager_packed_sequences_attention_forward(
+    eager_attention_forward: Callable,
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    sliding_window: int | None = None,
+    **kwargs,
+) -> tuple[torch.Tensor, torch.Tensor | None]:
+    """
+    A model's `eager_attention_forward`, attending over each sequence of packed rows separately when the mask is their
+    cumulative lengths over the flattened batch (from `create_causal_mask`): small per-sequence masks instead of a
+    dense one over the whole rows. The weights are block-diagonal, kept only when attentions are recorded.
+    """
+    if attention_mask is None or attention_mask.ndim != 1:
+        return eager_attention_forward(
+            module, query, key, value, attention_mask, sliding_window=sliding_window, **kwargs
+        )
+    batch_size, num_heads, length, head_dim = query.shape
+    record_attentions = kwargs.get("output_attentions", getattr(module.config, "output_attentions", False))
+    # One packed row of all the sequences: a view for a batch of one
+    query, key, value = (states.transpose(0, 1).flatten(1, 2)[None] for states in (query, key, value))
+    attn_output, sequence_weights = per_sequence_attention_forward(
+        eager_attention_forward,
+        module,
+        query,
+        key,
+        value,
+        attention_mask,
+        attention_mask,
+        is_causal=getattr(module, "is_causal", True),
+        sliding_window=sliding_window,
+        causal_needs_mask=True,
+        return_attention_weights=record_attentions,
+        **kwargs,
+    )
+    attn_weights = None
+    if sequence_weights is not None:
+        attn_weights = query.new_zeros(batch_size, num_heads, length, length)
+        start = 0
+        for weights in sequence_weights:
+            row, offset = divmod(start, length)
+            end = offset + weights.shape[-1]
+            attn_weights[row, :, offset:end, offset:end] = weights[0]
+            start += weights.shape[-1]
+    return attn_output.view(batch_size, length, num_heads, head_dim), attn_weights
 
 
 def sdpa_attention_forward(
