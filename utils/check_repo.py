@@ -212,6 +212,8 @@ IGNORE_NON_TESTED = [
     "VibeVoiceAcousticTokenizerEncoderModel",
     "PocketTTSAudioTokenizerEncoderModel",
     "PocketTTSAudioTokenizerDecoderModel",
+    "VoxtralTtsAcousticTransformer",  # Building part of bigger (tested) model: VoxtralTtsForTextToSpeech
+    "VoxtralTtsCodecModel",  # Building part of bigger (tested) model: VoxtralTtsForTextToSpeech
     "MimiEncoderModel",
     "MimiDecoderModel",
     "DiffusionGemmaDecoderModel",

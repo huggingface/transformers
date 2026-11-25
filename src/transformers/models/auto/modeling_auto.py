@@ -645,6 +645,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("voxtral_realtime", "VoxtralRealtimeModel"),
         ("voxtral_realtime_encoder", "VoxtralRealtimeEncoder"),
         ("voxtral_realtime_text", "VoxtralRealtimeTextModel"),
+        ("voxtral_tts", "VoxtralTtsModel"),
+        ("voxtral_tts_acoustic_transformer", "VoxtralTtsAcousticTransformer"),
+        ("voxtral_tts_codec", "VoxtralTtsCodecModel"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-bert", "Wav2Vec2BertModel"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
@@ -2023,6 +2026,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vits", "VitsModel"),
+        ("voxtral_tts", "VoxtralTtsForTextToSpeech"),
     ]
 )
 
