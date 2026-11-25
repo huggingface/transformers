@@ -821,6 +821,8 @@
         title: MiMo-V2-Flash
       - local: model_doc/minicpm3
         title: MiniCPM3
+      - local: model_doc/minicpm5_moe
+        title: MiniCPM5-15B-A2.5B
       - local: model_doc/minimax
         title: MiniMax
       - local: model_doc/minimax_m2
