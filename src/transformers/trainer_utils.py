@@ -212,18 +212,18 @@ class EvalPrediction:
     Evaluation output (always contains labels), to be used to compute metrics.
 
     Parameters:
-        predictions (`np.ndarray`): Predictions of the model.
-        label_ids (`np.ndarray`): Targets to be matched.
+        predictions (`np.ndarray` or `torch.Tensor`): Predictions of the model.
+        label_ids (`np.ndarray` or `torch.Tensor`): Targets to be matched.
         inputs (`np.ndarray`, *optional*): Input data passed to the model.
-        losses (`np.ndarray`, *optional*): Loss values computed during evaluation.
+        losses (`np.ndarray` or `torch.Tensor`, *optional*): Loss values computed during evaluation.
     """
 
     def __init__(
         self,
-        predictions: np.ndarray | tuple[np.ndarray],
-        label_ids: np.ndarray | tuple[np.ndarray],
+        predictions: np.ndarray | torch.Tensor | tuple[np.ndarray] | tuple[torch.Tensor],
+        label_ids: np.ndarray | torch.Tensor | tuple[np.ndarray] | tuple[torch.Tensor],
         inputs: np.ndarray | tuple[np.ndarray] | None = None,
-        losses: np.ndarray | tuple[np.ndarray] | None = None,
+        losses: np.ndarray | torch.Tensor | tuple[np.ndarray] | tuple[torch.Tensor] | None = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
