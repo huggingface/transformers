@@ -32,7 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoConfig, AutoModel
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
     VibeVoiceAcousticTokenizerPreTrainedModel,
 )
@@ -121,7 +121,7 @@ class VibeVoiceAsrConfig(PreTrainedConfig):
         self.acoustic_tokenizer_chunk_size = int(value) * hop_length
 
 
-class VibeVoiceAsrRMSNorm(Qwen2RMSNorm):
+class VibeVoiceAsrRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -289,8 +289,8 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel, MultimodalMixin):
             padding_mask = (positions < num_audio_tokens[:, None]).cpu()
             combined_features, split_sizes = combined_features[padding_mask], num_audio_tokens
         else:
-            split_sizes = combined_features.new_full(
-                (combined_features.shape[0],), combined_features.shape[1], dtype=torch.long
+            split_sizes = torch.full(
+                combined_features.shape[:1], combined_features.shape[1], device=combined_features.device
             )
             combined_features = combined_features.flatten(0, 1)
         return BaseModelOutputWithSplitSizes(

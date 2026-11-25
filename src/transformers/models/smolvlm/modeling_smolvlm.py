@@ -525,7 +525,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel, MultimodalMixin):
         image_features = self.connector(image_hidden_states)
         image_outputs = BaseModelOutputWithSplitSizes(
             **image_outputs,
-            split_sizes=image_features.new_full((image_features.shape[0],), image_features.shape[1], dtype=torch.long),
+            split_sizes=torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device),
         )
         image_outputs.pooler_output = image_features.flatten(0, 1)
 

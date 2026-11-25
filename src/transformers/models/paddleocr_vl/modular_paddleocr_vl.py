@@ -41,6 +41,7 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ...processing_utils import (
+    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -65,8 +66,8 @@ from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
     Ernie4_5MLP,
     Ernie4_5Model,
-    Ernie4_5RMSNorm,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniAttention,
 )
@@ -249,6 +250,33 @@ class PaddleOCRVLProcessor(ProcessorMixin):
         num_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // (merge_size * merge_size)
         return self.image_token * num_tokens
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
 @strict
@@ -382,7 +410,7 @@ class PaddleOCRAttention(Qwen2_5OmniAttention):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.use_bias)
 
 
-class PaddleOCRRMSNorm(Ernie4_5RMSNorm):
+class PaddleOCRRMSNorm(LlamaRMSNorm):
     pass
 
 

@@ -40,7 +40,7 @@ from ...vision_utils import get_vision_attention_seqlens, get_vision_position_id
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
-from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
 from ..llama.modeling_llama import eager_attention_forward
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
@@ -320,7 +320,7 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
             self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
 
 
-class MiniMaxM3VLRMSNorm(Gemma3RMSNorm):
+class MiniMaxM3VLRMSNorm(GemmaRMSNorm):
     """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
 
 
@@ -1058,16 +1058,14 @@ class MiniMaxM3VLModel(LlavaModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_embeds = mm_encoder_outputs["image"].pooler_output
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_embeds = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_embeds = mm_encoder_outputs["video"].pooler_output
-            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_embeds = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )

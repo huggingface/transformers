@@ -706,14 +706,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         video_features = self.apply_pooling(video_features)
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
         image_newline = self.image_newline[None, None, :].repeat(batch_size, 1, 1).to(video_features.device)
-        vision_outputs.pooler_output = torch.cat((video_features, image_newline), dim=1)
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs,
-            split_sizes=vision_outputs.pooler_output.new_full(
-                (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
+        features = torch.cat((video_features, image_newline), dim=1)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
+        vision_outputs.pooler_output = features.flatten(0, 1)
         return vision_outputs
 
     @merge_with_config_defaults
@@ -789,8 +785,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             )
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )

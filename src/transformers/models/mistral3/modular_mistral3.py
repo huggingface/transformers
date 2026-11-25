@@ -29,20 +29,20 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import accepts_precomputed_kwargs, can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import select_hidden_states
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaModel,
     LlavaPreTrainedModel,
     TransformersKwargs,
 )
-from ..mistral.modeling_mistral import MistralRMSNorm
 from .configuration_mistral3 import Mistral3Config
 
 
 logger = logging.get_logger(__name__)
 
 
-class Mistral3RMSNorm(MistralRMSNorm):
+class Mistral3RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -223,8 +223,7 @@ class Mistral3Model(LlavaModel):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )

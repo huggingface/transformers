@@ -430,11 +430,11 @@ class HYV4VLAttention(nn.Module):
 class HYV4VLUnweightedRMSNorm(nn.Module):
     def __init__(self, eps: float = 1.0e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # We compute the inverse (i.e. we do not apply `x * ...`)
-        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+        return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.variance_epsilon).to(x.dtype)
 
 
 class HYV4VLMLP(nn.Module):
@@ -1426,7 +1426,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel, MultimodalMixin):
         merge = self.config.vision_config.spatial_merge_size
         vision_outputs = BaseModelOutputWithSplitSizes(
             **vision_outputs,
-            split_sizes=(image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1)),
+            split_sizes=image_grid_thw[:, 0] * (image_grid_thw[:, 1] // merge) * (image_grid_thw[:, 2] // merge + 1),
         )
         return vision_outputs
 

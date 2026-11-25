@@ -68,7 +68,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
+class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithSplitSizes):
     r"""
     audio_mel_mask (`torch.BoolTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`
@@ -118,16 +118,16 @@ class Gemma3nCausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
 
 
 class Gemma3nRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -1170,7 +1170,7 @@ class Gemma3nTextAttention(nn.Module):
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.q_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma3nRMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
         # Layers sharing kv states don't need any weight matrices
         if not self.is_kv_shared_layer:
@@ -1180,8 +1180,8 @@ class Gemma3nTextAttention(nn.Module):
             self.v_proj = nn.Linear(
                 config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
             )
-            self.k_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-            self.v_norm = Gemma3nRMSNorm(dim=config.head_dim, eps=config.rms_norm_eps, with_scale=False)
+            self.k_norm = Gemma3nRMSNorm(config.head_dim, eps=config.rms_norm_eps)
+            self.v_norm = Gemma3nRMSNorm(config.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
@@ -1945,14 +1945,10 @@ class Gemma3nModel(Gemma3nPreTrainedModel, MultimodalMixin):
         ).permute(0, 2, 1)
         # Normalize and embed the soft tokens into language model space.
         last_hidden_state *= self.config.vision_config.hidden_size**0.5
-        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs,
-            split_sizes=vision_outputs.pooler_output.new_full(
-                (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
+        features = self.embed_vision(inputs_embeds=last_hidden_state)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
+        vision_outputs.pooler_output = features.flatten(0, 1)
         return vision_outputs
 
     def get_placeholder_mask(
@@ -2093,8 +2089,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -2103,25 +2098,8 @@ class Gemma3nModel(Gemma3nPreTrainedModel, MultimodalMixin):
         # Merge text and audio
         audio_outputs = None
         if input_features is not None and input_features_mask is not None:
-            audio_outputs = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
-            audio_features = audio_outputs.pooler_output
-            audio_mask = audio_outputs.audio_mel_mask
-
-            # The Gemma3nProcessor expects all audio will be 30s in length and inserts 188 audio soft tokens into the
-            # text to account for this. However, the audio preprocessing and encoder do not gurarantee they will
-            # produce 188 soft tokens; they will produce at most that many tokens, but they may produce fewer tokens
-            # depending on the length of the longest audio input in the batch. When we encounter this situation, we pad
-            # the audio feature out to 188 soft tokens with the embedding of the last token in the embed_audio vocab.
-            audio_padding_toks = torch.tensor([[self.vocab_size - 1]], dtype=torch.long, device=audio_features.device)
-            audio_padding_embs = self.embed_audio(input_ids=audio_padding_toks)
-            audio_features = torch.where(audio_mask.unsqueeze(-1), audio_padding_embs, audio_features)
-
-            audio_batch_size, audio_seq_len, audio_embed_dim = audio_features.shape
-            extra_padding_tokens = self.config.audio_soft_tokens_per_image - audio_seq_len
-            extra_padding_features = audio_padding_embs.expand(audio_batch_size, extra_padding_tokens, audio_embed_dim)
-
-            audio_features = torch.cat((audio_features, extra_padding_features), dim=1)
-            audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            audio_outputs = self.get_audio_embeddings(input_features, ~input_features_mask, return_dict=True)
+            audio_features = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, special_audio_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, audio_features=audio_features
             )
@@ -2151,24 +2129,39 @@ class Gemma3nModel(Gemma3nPreTrainedModel, MultimodalMixin):
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
-    def get_audio_features(
+    def get_audio_embeddings(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
         r"""
-        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
+        input_features (`torch.Tensor` of shape `(num_audios, seq_length, num_features)`):
             The tensors corresponding to the input audio.
-        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
-            The attention mask for the input audio.
+        input_features_mask (`torch.Tensor` of shape `(num_audios, seq_length)`):
+            The mask of the padding frames of the input audio.
         """
         audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(
             input_features, input_features_mask, return_dict=True, **kwargs
         )
         audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-        audio_outputs.pooler_output = audio_embeds
 
+        # The processor inserts `audio_soft_tokens_per_image` (188) soft tokens per audio, as if all audios were 30s
+        # long, but the encoder produces at most that many, depending on the longest audio in the batch. Padding and
+        # missing soft tokens are the embedding of the last token in the audio vocab, one row per soft token.
+        padding_ids = torch.full((1, 1), self.vocab_size - 1, dtype=torch.long, device=audio_embeds.device)
+        padding_embeds = self.embed_audio(input_ids=padding_ids)
+        audio_embeds = torch.where(audio_outputs.audio_mel_mask.unsqueeze(-1), padding_embeds, audio_embeds)
+        num_audios, num_soft_tokens, embed_dim = audio_embeds.shape
+        missing_embeds = padding_embeds.expand(
+            num_audios, self.config.audio_soft_tokens_per_image - num_soft_tokens, embed_dim
+        )
+        audio_embeds = torch.cat((audio_embeds, missing_embeds), dim=1)
+
+        audio_outputs.pooler_output = audio_embeds.flatten(0, 1)
+        audio_outputs.split_sizes = torch.full(
+            (num_audios,), self.config.audio_soft_tokens_per_image, device=audio_embeds.device
+        )
         return audio_outputs
 
 

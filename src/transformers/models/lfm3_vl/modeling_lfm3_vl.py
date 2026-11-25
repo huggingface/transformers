@@ -695,16 +695,14 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_features
             )

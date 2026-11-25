@@ -59,16 +59,16 @@ logger = logging.get_logger(__name__)
 
 
 class EmbeddingGemma2RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -354,9 +354,9 @@ class EmbeddingGemma2Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-        self.q_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+        self.q_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.v_norm = EmbeddingGemma2RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
     def forward(
         self,
@@ -634,18 +634,6 @@ class EmbeddingGemma2ModelOutput(MultimodalBaseModelOutputWithPast):
         return self.audio_outputs.pooler_output
 
 
-def get_video_split_sizes(
-    tokens_per_frame: torch.LongTensor, num_frames_per_video: torch.LongTensor
-) -> torch.LongTensor:
-    """Each video's number of tokens, the sum of its frames' `tokens_per_frame`, without a host sync."""
-    video_index = torch.repeat_interleave(
-        torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-        num_frames_per_video.to(tokens_per_frame.device),
-        output_size=len(tokens_per_frame),
-    )
-    return tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(0, video_index, tokens_per_frame)
-
-
 @auto_docstring(
     custom_intro="""
     The EmbeddingGemma 2 model: a vision backbone, an audio backbone and a text backbone whose final hidden
@@ -875,6 +863,34 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
         )
 
     @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
+    def get_audio_embeddings(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | EmbeddingGemma2AudioModelOutput:
+        r"""
+        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
+            The tensors corresponding to the input audio.
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
+            The attention mask for the input audio.
+        """
+        if self.audio_tower is None:
+            raise ValueError(
+                "Audio features were requested, but the model was initialized without an audio_config. "
+                "Cannot process audio without an audio tower and audio embedder."
+            )
+
+        audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
+        valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
+        audio_outputs.pooler_output = audio_embeds[valid_mask]
+        audio_outputs.split_sizes = valid_mask.sum(-1)
+        return audio_outputs
+
+    @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
     def get_video_embeddings(
         self,
@@ -913,39 +929,12 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
         last_hidden_state = vision_outputs.last_hidden_state
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         k_squared = self.config.vision_config.pooling_kernel_size**2
+        # Each video's tokens are the sum of its frames', read at each video's last frame
         tokens_per_frame = (video_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
-        )
+        video_ends = tokens_per_frame.cumsum(0)[num_frames_per_video.to(tokens_per_frame.device).cumsum(0) - 1]
+        split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
-    def get_audio_embeddings(
-        self,
-        input_features: torch.Tensor,
-        input_features_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | EmbeddingGemma2AudioModelOutput:
-        r"""
-        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
-            The tensors corresponding to the input audio.
-        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
-            The attention mask for the input audio.
-        """
-        if self.audio_tower is None:
-            raise ValueError(
-                "Audio features were requested, but the model was initialized without an audio_config. "
-                "Cannot process audio without an audio tower and audio embedder."
-            )
-
-        audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
-        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
-        valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
-        audio_outputs.pooler_output = audio_embeds[valid_mask]
-        audio_outputs.split_sizes = valid_mask.sum(-1)
-        return audio_outputs
 
 
 __all__ = ["EmbeddingGemma2Model", "EmbeddingGemma2PreTrainedModel", "EmbeddingGemma2TextModel"]

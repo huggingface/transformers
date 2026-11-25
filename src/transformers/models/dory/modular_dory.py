@@ -48,15 +48,15 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..llama4.modeling_llama4 import Llama4TextL2Norm
+from ..llama4.modeling_llama4 import Llama4TextWeightlessRMSNorm
 from .configuration_dory import DoryConfig
 
 
-class DoryL2Norm(Llama4TextL2Norm):
+class DoryL2Norm(Llama4TextWeightlessRMSNorm):
     """Projects onto the unit sphere: nGPT keeps every hidden state at norm 1, not RMS 1."""
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).sum(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).sum(-1, keepdim=True) + self.variance_epsilon)
 
 
 class DoryRotaryEmbedding(Gemma3RotaryEmbedding):

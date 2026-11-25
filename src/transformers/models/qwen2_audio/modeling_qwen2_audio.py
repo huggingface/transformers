@@ -25,7 +25,8 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, ModelOutput
+from ...modeling_multimodal_utils import MultimodalMixin
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithSplitSizes, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging, torch_compilable_check
@@ -416,7 +417,7 @@ class Qwen2AudioMultiModalProjector(nn.Module):
     The Qwen2Audio model which consists of an audio backbone and a language model, without a language modeling head.
     """
 )
-class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
+class Qwen2AudioModel(Qwen2AudioPreTrainedModel, MultimodalMixin):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
         self.audio_tower = AutoModel.from_config(config.audio_config)  # Usually a `Qwen2AudioEncoder` instance
@@ -441,6 +442,64 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
             raise ValueError(f"{padding_side} is not `left` or `right`.")
         self._padding_side = padding_side
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Encodes the audios and projects them into the language model space, one row per audio token."
+    )
+    def get_audio_embeddings(
+        self,
+        input_features: torch.Tensor,
+        feature_attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithSplitSizes:
+        r"""
+        input_features (`torch.Tensor` of shape `(num_audios, num_mel_bins, feature_sequence_length)`):
+            Float values of mel features extracted from the raw speech waveform.
+        feature_attention_mask (`torch.Tensor` of shape `(num_audios, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices.
+        """
+        audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
+            feature_attention_mask.sum(-1)
+        )
+        batch_size, _, max_mel_seq_len = input_features.shape
+        max_seq_len = (max_mel_seq_len - 2) // 2 + 1
+        # Create a sequence tensor of shape (batch_size, max_seq_len)
+        seq_range = (
+            torch.arange(0, max_seq_len, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device)
+            .unsqueeze(0)
+            .expand(batch_size, max_seq_len)
+        )
+        lengths_expand = audio_feat_lengths.unsqueeze(1).expand(batch_size, max_seq_len)
+        # Create mask
+        padding_mask = seq_range >= lengths_expand
+        audio_attention_mask_2d = (~padding_mask).to(dtype=torch.long, device=audio_feat_lengths.device)
+
+        dummy_embeds = torch.zeros(
+            (batch_size, max_seq_len, 1),
+            dtype=input_features.dtype,
+            device=input_features.device,
+        )
+
+        audio_attention_mask = create_bidirectional_mask(
+            config=self.audio_tower.config,
+            inputs_embeds=dummy_embeds,
+            attention_mask=audio_attention_mask_2d,
+        )
+
+        audio_outputs = self.audio_tower(input_features, attention_mask=audio_attention_mask, **kwargs)
+        selected_audio_feature = audio_outputs.last_hidden_state
+        audio_embeds = self.multi_modal_projector(selected_audio_feature)
+        # Only each audio's real tokens, without the padding
+        valid_mask = torch.arange(audio_embeds.shape[1], device=audio_embeds.device)[None, :]
+        valid_mask = valid_mask < audio_output_lengths.to(audio_embeds.device)[:, None]
+        return BaseModelOutputWithSplitSizes(
+            last_hidden_state=selected_audio_feature,
+            pooler_output=audio_embeds[valid_mask],
+            hidden_states=audio_outputs.hidden_states,
+            attentions=audio_outputs.attentions,
+            split_sizes=audio_output_lengths,
+        )
+
     def _merge_input_ids_with_audio_features(
         self, audio_features, num_audio_tokens, inputs_embeds, input_ids, attention_mask, labels
     ):
@@ -448,10 +507,10 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
         Merge input_ids with audio features into final embeddings
 
         Args:
-            audio_features (`torch.Tensor` of shape `(num_audios, max_audio_tokens, embed_dim)`):
-                All audio vectors of all audios in the batch
+            audio_features (`torch.Tensor` of shape `(total_audio_tokens, embed_dim)`):
+                The audio embeddings of all the audios in the batch, one after the other
             num_audio_tokens (`torch.LongTensor` of shape `(num_audios)`):
-                The length of audio embeddings of each audio as stacked in `audio_features`
+                The number of audio embeddings of each audio in `audio_features`
             inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embed_dim)`):
                 Token embeddings before merging with audio embeddings
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -527,11 +586,8 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
                         i j Y Y Y Y Y k l m n
                     ]
         """
-        num_audios, max_audio_tokens, embed_dim = audio_features.shape
-        audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(
-            num_audio_tokens.device
-        ) < num_audio_tokens.unsqueeze(1)
-        masked_audio_features = audio_features[audio_features_mask].view(-1, embed_dim)
+        num_audios, embed_dim = len(num_audio_tokens), audio_features.shape[-1]
+        masked_audio_features = audio_features
         batch_size, sequence_length = input_ids.shape
         _left_padding = torch.any(attention_mask[:, 0] == 0)
         _right_padding = torch.any(attention_mask[:, -1] == 0)
@@ -677,37 +733,8 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
 
             # 2. Merge text and audios
             if input_features is not None and input_ids.shape[1] != 1:
-                audio_feat_lengths, audio_output_lengths = self.audio_tower._get_feat_extract_output_lengths(
-                    feature_attention_mask.sum(-1)
-                )
-                batch_size, _, max_mel_seq_len = input_features.shape
-                max_seq_len = (max_mel_seq_len - 2) // 2 + 1
-                # Create a sequence tensor of shape (batch_size, max_seq_len)
-                seq_range = (
-                    torch.arange(0, max_seq_len, dtype=audio_feat_lengths.dtype, device=audio_feat_lengths.device)
-                    .unsqueeze(0)
-                    .expand(batch_size, max_seq_len)
-                )
-                lengths_expand = audio_feat_lengths.unsqueeze(1).expand(batch_size, max_seq_len)
-                # Create mask
-                padding_mask = seq_range >= lengths_expand
-                audio_attention_mask_2d = (~padding_mask).to(dtype=torch.long, device=audio_feat_lengths.device)
-
-                dummy_embeds = torch.zeros(
-                    (batch_size, max_seq_len, 1),
-                    dtype=inputs_embeds.dtype,
-                    device=inputs_embeds.device,
-                )
-
-                audio_attention_mask = create_bidirectional_mask(
-                    config=self.audio_tower.config,
-                    inputs_embeds=dummy_embeds,
-                    attention_mask=audio_attention_mask_2d,
-                )
-
-                audio_outputs = self.audio_tower(input_features, attention_mask=audio_attention_mask)
-                selected_audio_feature = audio_outputs.last_hidden_state
-                audio_features = self.multi_modal_projector(selected_audio_feature)
+                audio_outputs = self.get_audio_embeddings(input_features, feature_attention_mask, return_dict=True)
+                audio_features, audio_output_lengths = audio_outputs.pooler_output, audio_outputs.split_sizes
 
                 # if we have consecutive audio tokens, then it means we expanded input_ids in processing
                 audio_tokens = input_ids == self.config.audio_token_id
@@ -721,11 +748,6 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
                         audio_features, audio_output_lengths, inputs_embeds, input_ids, attention_mask, labels
                     )
                 else:
-                    num_audios, max_audio_tokens, embed_dim = audio_features.shape
-                    audio_features_mask = torch.arange(max_audio_tokens, device=audio_features.device)[None, :]
-                    audio_features_mask = audio_features_mask < audio_output_lengths.to(audio_features.device)[:, None]
-                    audio_features = audio_features[audio_features_mask]
-
                     n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
                     n_audio_features = audio_features.shape[0]
                     torch_compilable_check(
@@ -761,7 +783,7 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
     The QWEN2AUDIO model which consists of an audio backbone and a language model.
     """
 )
-class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
+class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, MultimodalMixin, GenerationMixin):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
         self.model = Qwen2AudioModel(config)

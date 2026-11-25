@@ -28,6 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
@@ -136,16 +137,10 @@ class AyaVisionModel(LlavaModel):
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         pooler_output = self.multi_modal_projector(selected_image_feature)
-        image_outputs.pooler_output = pooler_output.reshape(
-            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
-        )
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=image_outputs.pooler_output.new_full(
-                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        features = pooler_output.reshape(selected_image_feature.shape[0], -1, self.config.text_config.hidden_size)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     @can_return_tuple
@@ -253,7 +248,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         >>> gen_tokens = model.generate(**inputs, max_new_tokens=300, do_sample=True, temperature=0.3)
         >>> processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
         ```"""
-        super().forward(
+        outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
@@ -262,11 +257,29 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
-            labels=labels,
-            logits_to_keep=logits_to_keep,
             image_sizes=image_sizes,
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
+        logits = logits * self.config.text_config.logit_scale
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return AyaVisionCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            cache=outputs.cache,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
         )
 
 

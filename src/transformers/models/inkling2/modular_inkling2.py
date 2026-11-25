@@ -263,7 +263,9 @@ class Inkling2UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.float()
-        hidden_states = hidden_states * torch.rsqrt(hidden_states.square().mean(-1, keepdim=True) + self.eps)
+        hidden_states = hidden_states * torch.rsqrt(
+            hidden_states.square().mean(-1, keepdim=True) + self.variance_epsilon
+        )
         return hidden_states.to(input_dtype)
 
 

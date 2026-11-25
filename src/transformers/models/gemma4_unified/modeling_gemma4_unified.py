@@ -61,7 +61,7 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..auto.modeling_auto import AutoModel
+from ..auto import AutoModel
 from .configuration_gemma4_unified import (
     Gemma4UnifiedAudioConfig,
     Gemma4UnifiedConfig,
@@ -159,16 +159,16 @@ class Gemma4UnifiedModelOutputWithPast(MultimodalBaseModelOutputWithPast):
 
 
 class Gemma4UnifiedRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
+    def __init__(self, hidden_size: int, eps: float = 1e-6, with_scale: bool = True):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
+            self.weight = nn.Parameter(torch.ones(hidden_size), requires_grad=True)
 
     def _norm(self, hidden_states: torch.Tensor):
-        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.variance_epsilon
         # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to address compiler differences between Torch and JAX
         return hidden_states * torch.pow(mean_squared, -0.5)
 
@@ -352,11 +352,11 @@ class Gemma4UnifiedTextAttention(nn.Module):
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.q_norm = Gemma4UnifiedRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma4UnifiedRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
         # Layers sharing kv states don't need any weight matrices
         if not self.is_kv_shared_layer:
-            self.k_norm = Gemma4UnifiedRMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+            self.k_norm = Gemma4UnifiedRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.v_norm = Gemma4UnifiedRMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
 
             self.k_proj = nn.Linear(
@@ -927,18 +927,6 @@ def get_block_sequence_ids_for_mask(mm_token_type_ids: torch.Tensor, device: tor
     return block_sequence_ids
 
 
-def get_video_split_sizes(
-    tokens_per_frame: torch.LongTensor, num_frames_per_video: torch.LongTensor
-) -> torch.LongTensor:
-    """Each video's number of tokens, the sum of its frames' `tokens_per_frame`, without a host sync."""
-    video_index = torch.repeat_interleave(
-        torch.arange(len(num_frames_per_video), device=tokens_per_frame.device),
-        num_frames_per_video.to(tokens_per_frame.device),
-        output_size=len(tokens_per_frame),
-    )
-    return tokens_per_frame.new_zeros(len(num_frames_per_video)).index_add_(0, video_index, tokens_per_frame)
-
-
 @auto_docstring(
     custom_intro="""
     The base Gemma 4 model comprising a vision backbone, an audio backbone, and a language model without a
@@ -997,8 +985,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
 
         # Flatten valid patches: keep only non-padding patches across the batch
         # The final output shape is (total_valid_patches, text_hidden_size)
-        pooler_output = vision_outputs.pooler_output[non_pad_mask]
-        vision_outputs.pooler_output = pooler_output
+        vision_outputs.pooler_output = vision_outputs.pooler_output[non_pad_mask]
         vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=non_pad_mask.sum(dim=-1))
         return vision_outputs
 
@@ -1108,8 +1095,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
             mm_encoder_outputs["image"] = self.get_image_embeddings(pixel_values, image_position_ids, return_dict=True)
 
         if mm_encoder_outputs.get("image") is not None:
-            image_features = mm_encoder_outputs["image"].pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_image_tokens = image_mask.sum()
@@ -1130,8 +1116,7 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
             )
 
         if mm_encoder_outputs.get("video") is not None:
-            video_features = mm_encoder_outputs["video"].pooler_output
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            video_features = mm_encoder_outputs["video"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
 
             # Confirm the number of soft tokens from the vision tower matches the number of slots in the embeddings.
             n_video_tokens = video_mask.sum()
@@ -1206,6 +1191,41 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         )
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Projects raw audio waveform features directly into language model space (no audio tower)."
+    )
+    def get_audio_embeddings(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> Gemma4UnifiedAudioModelOutput:
+        r"""
+        input_features (`torch.Tensor` of shape `(num_audios, num_tokens, audio_embed_dim)`):
+            Raw waveform features. Each token is a frame of `audio_samples_per_token` (640)
+            raw audio samples. For unified models this replaces the mel spectrogram + conformer pipeline.
+        input_features_mask (`torch.BoolTensor` of shape `(num_audios, num_tokens)`, *optional*):
+            Mask indicating valid (non-padding) audio tokens. `True` = valid, `False` = padding.
+        """
+        if self.embed_audio is None:
+            raise ValueError(
+                "Audio features were requested, but the model was initialized without an audio_config. "
+                "Cannot process audio without an audio embedder."
+            )
+
+        audio_embeds = self.embed_audio(inputs_embeds=input_features)
+        # Only the real audio soft tokens, as the image getter drops padding too
+        if input_features_mask is not None:
+            input_features_mask = input_features_mask.to(audio_embeds.device)
+            pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
+        else:
+            split_sizes = torch.full(audio_embeds.shape[:1], audio_embeds.shape[1], device=audio_embeds.device)
+            pooler_output = audio_embeds.flatten(0, 1)
+        return Gemma4UnifiedAudioModelOutput(
+            pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
+        )
+
+    @can_return_tuple
     @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
     def get_video_embeddings(
         self,
@@ -1236,48 +1256,14 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across all frames
-        pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
-        vision_outputs.pooler_output = pooler_output
-        tokens_per_frame = non_pad_mask.sum(dim=-1)
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=get_video_split_sizes(tokens_per_frame, num_frames_per_video)
-        )
+        vision_outputs.pooler_output = vision_outputs.pooler_output[
+            non_pad_mask
+        ]  # (total_valid_patches, text_hidden_size)
+        # Each video's tokens are the sum of its frames', read at each video's last frame
+        video_ends = non_pad_mask.sum(dim=-1).cumsum(0)[num_frames_per_video.to(non_pad_mask.device).cumsum(0) - 1]
+        split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Projects raw audio waveform features directly into language model space (no audio tower)."
-    )
-    def get_audio_embeddings(
-        self,
-        input_features: torch.Tensor,
-        input_features_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> Gemma4UnifiedAudioModelOutput:
-        r"""
-        input_features (`torch.Tensor` of shape `(num_audios, num_tokens, audio_embed_dim)`):
-            Raw waveform features. Each token is a frame of `audio_samples_per_token` (640)
-            raw audio samples. For unified models this replaces the mel spectrogram + conformer pipeline.
-        input_features_mask (`torch.BoolTensor` of shape `(num_audios, num_tokens)`, *optional*):
-            Mask indicating valid (non-padding) audio tokens. `True` = valid, `False` = padding.
-        """
-        if self.embed_audio is None:
-            raise ValueError(
-                "Audio features were requested, but the model was initialized without an audio_config. "
-                "Cannot process audio without an audio embedder."
-            )
-
-        audio_embeds = self.embed_audio(inputs_embeds=input_features)
-        # Only the real audio soft tokens, as the image getter drops padding too
-        if input_features_mask is not None:
-            input_features_mask = input_features_mask.to(audio_embeds.device)
-            pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
-        else:
-            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
-            pooler_output = audio_embeds.flatten(0, 1)
-        return Gemma4UnifiedAudioModelOutput(
-            pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
-        )
 
 
 def create_masks_for_vision_model(

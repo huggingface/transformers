@@ -380,8 +380,8 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel, MultimodalMixin):
             input_features_mask = input_features_mask.to(projected_embeds.device)
             pooler_output, split_sizes = projected_embeds[input_features_mask], input_features_mask.sum(-1)
         else:
-            split_sizes = projected_embeds.new_full(
-                (projected_embeds.shape[0],), projected_embeds.shape[1], dtype=torch.long
+            split_sizes = torch.full(
+                projected_embeds.shape[:1], projected_embeds.shape[1], device=projected_embeds.device
             )
             pooler_output = projected_embeds.flatten(0, 1)
         audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=split_sizes)

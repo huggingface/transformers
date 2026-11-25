@@ -181,16 +181,10 @@ class AyaVisionModel(AyaVisionPreTrainedModel, MultimodalMixin):
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         pooler_output = self.multi_modal_projector(selected_image_feature)
-        image_outputs.pooler_output = pooler_output.reshape(
-            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
-        )
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=image_outputs.pooler_output.new_full(
-                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        features = pooler_output.reshape(selected_image_feature.shape[0], -1, self.config.text_config.hidden_size)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     def get_placeholder_mask(
@@ -358,6 +352,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, MultimodalMixi
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
+        logits = logits * self.config.text_config.logit_scale
 
         loss = None
         if labels is not None:
