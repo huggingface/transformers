@@ -48,7 +48,7 @@ if is_torch_available():
     from safetensors.torch import save_file as safe_save_file
     from torch.utils._pytree import tree_map
 
-    from ..core_model_loading import revert_weight_conversion
+    from ..core_model_loading import _revert_weight_conversion_per_transform, revert_weight_conversion
 
 if _check_distributed_checkpointing_available():
     from torch.distributed.checkpoint.hf_storage import HuggingFaceStorageReader, HuggingFaceStorageWriter
@@ -166,14 +166,16 @@ def save_sharded_state_dict(
     Write a TP- or FSDP-sharded `state_dict` as regular safetensors files, with every rank writing some of the files.
     Every rank must call this function.
 
-        1. The files are planned on meta tensors with the global shapes, so every rank gets the same plan without
-           moving any data. The files are at most `max_shard_size`, and for large models at most a `world_size`-th
-           of the model, so that there are at least as many files as ranks.
+        1. Everything is planned on meta tensors with the global shapes, so every rank gets the same plan without
+           moving any data: the groups of weights reverted together by one weight conversion, the reverted weights,
+           and their split into files. The files are at most `max_shard_size`, and for large models at most a
+           `world_size`-th of the model, so that there are at least as many files as ranks.
         2. File `i` is written by rank `i % world_size`, in rounds of `world_size` files: all ranks join the
-           `full_tensor()` gathers of the round and each owner keeps its file on CPU. Then all owners revert the
-           weight conversions and write their file in parallel. CPU memory per rank is bounded by one file.
+           `full_tensor()` gathers of the groups of the round, and each owner reverts the groups of its file and
+           keeps the weights on CPU. Then all owners write their file in parallel. CPU memory per rank is bounded by
+           one file.
 
-    Returns the split of the (non-reverted) state dict and the weight map of the files that were written.
+    Returns the split of the reverted state dict and the weight map of the files that were written.
     """
     if not _is_torch_distributed_initialized():
         raise ValueError(
@@ -183,65 +185,89 @@ def save_sharded_state_dict(
     rank = _get_torch_distributed_rank()
     world_size = _get_torch_distributed_world_size()
 
-    meta_state_dict = {
-        name: torch.empty(tensor.shape, dtype=tensor.dtype, device="meta") for name, tensor in state_dict.items()
-    }
+    def to_meta(tensors: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        # Fresh meta tensors: the reverted weights can be views of a shared storage, which would skew the file sizes.
+        return {name: torch.empty(tensor.shape, dtype=tensor.dtype, device="meta") for name, tensor in tensors.items()}
+
+    def revert(tensors: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        return revert_weight_conversion(model, tensors) if save_original_format else tensors
+
+    # The split is planned on the reverted weights, so that the weights reverted together by a conversion never
+    # have to be in the same file.
+    meta_state_dict = to_meta(state_dict)
+    if save_original_format:
+        reverted_groups = _revert_weight_conversion_per_transform(model, meta_state_dict)
+    else:
+        reverted_groups = [([name], {name: tensor}) for name, tensor in meta_state_dict.items()]
+    groups = [input_names for input_names, _ in reverted_groups]
+    planned_outputs = [to_meta(reverted) for _, reverted in reverted_groups]
+    reverted_state_dict = {name: tensor for outputs in planned_outputs for name, tensor in outputs.items()}
+
     # At least one file per rank, so that every rank writes: the files are at most a `world_size`-th of the model.
     # `max_shard_size` is only an upper bound, so smaller files still honor it. Small models keep their files, since
     # writing them takes little time anyway.
-    total_bytes = sum(tensor.nbytes for tensor in meta_state_dict.values())
+    total_bytes = sum(tensor.nbytes for tensor in reverted_state_dict.values())
     file_size = min(
         convert_file_size_to_int(max_shard_size),
-        max(-(-total_bytes // world_size), _MIN_FILE_BYTES_PER_RANK),
+        max(-(-total_bytes // world_size), _MIN_CAPPED_FILE_BYTES),
     )
     state_dict_split = split_torch_state_dict_into_shards(
-        meta_state_dict, filename_pattern=filename_pattern, max_shard_size=file_size
+        reverted_state_dict, filename_pattern=filename_pattern, max_shard_size=file_size
     )
-    files = list(state_dict_split.filename_to_tensors.items())
+    weight_map = state_dict_split.tensor_to_filename
+    files = list(state_dict_split.filename_to_tensors)
 
-    # The final names of the weights in each file, after reverting the weight conversions.
-    weight_map = {}
-    for filename, names in files:
-        if save_original_format:
-            names = revert_weight_conversion(model, {name: meta_state_dict[name] for name in names})
-        weight_map.update(dict.fromkeys(names, filename))
+    # The groups each file needs, in the order of their first weight in the file. A group whose weights go to
+    # several files is gathered and reverted for each of them.
+    output_group = {name: index for index, outputs in enumerate(planned_outputs) for name in outputs}
+    file_groups = {filename: [] for filename in files}
+    for filename, names in state_dict_split.filename_to_tensors.items():
+        for name in names:
+            if output_group[name] not in file_groups[filename]:
+                file_groups[filename].append(output_group[name])
 
     with torch.no_grad():
         for round_start in range(0, len(files), world_size):
             round_files = files[round_start : round_start + world_size]
             # The files of the round are gathered in lockstep: at step `k`, all ranks join the gathers of the `k`-th
-            # tensor of every file, then each owner copies its tensor to CPU. Gathering one file after the other
-            # would make the copies run one rank at a time, since an owner blocked in `.cpu()` delays the gathers
-            # of the next file.
+            # group of every file, then each owner reverts its group and copies it to CPU. Gathering one file after
+            # the other would make the copies run one rank at a time, since an owner blocked in `.cpu()` delays the
+            # gathers of the next file.
             shard = {}
-            for k in range(max(len(names) for _, names in round_files)):
-                owned_tensor = None
-                for owner, (_, names) in enumerate(round_files):
-                    if k >= len(names):
+            for k in range(max(len(file_groups[filename]) for filename in round_files)):
+                owned_group = None
+                for owner, filename in enumerate(round_files):
+                    if k >= len(file_groups[filename]):
                         continue
-                    tensor = state_dict[names[k]]
-                    # Collective: every rank must gather, even if it does not own the file.
-                    if is_dtensor(tensor):
-                        tensor = tensor.full_tensor()
+                    group_index = file_groups[filename][k]
+                    tensors = {}
+                    for name in groups[group_index]:
+                        tensor = state_dict[name]
+                        # Collective: every rank must gather, even if it does not own the file.
+                        if is_dtensor(tensor):
+                            tensor = tensor.full_tensor()
+                        if owner == rank:
+                            tensors[name] = tensor.detach()
                     if owner == rank:
-                        owned_tensor = (names[k], tensor)
-                if owned_tensor is not None:
-                    name, tensor = owned_tensor
-                    shard[name] = tensor.detach().cpu()
+                        owned_group = (filename, group_index, tensors)
+                if owned_group is None:
+                    continue
+                filename, group_index, tensors = owned_group
+                outputs = revert(tensors)
+                planned = planned_outputs[group_index]
+                if {name: (t.shape, t.dtype) for name, t in outputs.items()} != {
+                    name: (t.shape, t.dtype) for name, t in planned.items()
+                }:
+                    raise RuntimeError(
+                        f"The weights reverted from {groups[group_index]} do not match the ones planned on meta tensors."
+                    )
+                for name, tensor in outputs.items():
+                    if weight_map[name] == filename:
+                        shard[name] = tensor.contiguous().cpu()
+                del tensors, outputs
 
-            if rank >= len(round_files):
-                continue
-            filename = round_files[rank][0]
-            if save_original_format:
-                shard = revert_weight_conversion(model, shard)
-            expected_names = {name for name, file in weight_map.items() if file == filename}
-            if set(shard) != expected_names:
-                raise RuntimeError(
-                    f"The weights reverted for {filename} do not match the ones planned on meta tensors: "
-                    f"{sorted(set(shard) ^ expected_names)}."
-                )
-            shard = {name: tensor.contiguous() for name, tensor in shard.items()}
-            safe_save_file(shard, os.path.join(save_directory, filename), metadata=metadata)
+            if rank < len(round_files):
+                safe_save_file(shard, os.path.join(save_directory, round_files[rank]), metadata=metadata)
             del shard
 
     # The files are only complete once every owner is done writing.
@@ -249,8 +275,8 @@ def save_sharded_state_dict(
     return state_dict_split, weight_map
 
 
-# The files of a sharded save are not made smaller than this to give every rank its own file.
-_MIN_FILE_BYTES_PER_RANK = 2**30
+# When the files are made smaller to give every rank its own file, they are not made smaller than this.
+_MIN_CAPPED_FILE_BYTES = 2**30
 
 
 def consolidate_distributed_checkpoint(

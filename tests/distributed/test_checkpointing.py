@@ -30,8 +30,10 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from safetensors.torch import load_file
 
     from transformers import LlamaConfig, LlamaForCausalLM, MixtralConfig, MixtralForCausalLM
+    from transformers.core_model_loading import Chunk, WeightConverter
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import (
         _load_model_checkpoint_distributed,
@@ -109,8 +111,23 @@ def _test_save_one_file_per_rank(rank, directory, source_config):
             f"{directory}/seed", distributed_config=DistributedConfig(**source_config)
         )
         # The tiny model is below the size where files are capped, so lower that limit.
-        with patch("transformers.distributed.checkpoint._MIN_FILE_BYTES_PER_RANK", 1):
+        with patch("transformers.distributed.checkpoint._MIN_CAPPED_FILE_BYTES", 1):
             model.save_pretrained(f"{directory}/saved")
+
+
+def _test_save_conversion_across_files(rank, directory):
+    with _distributed_context(rank, directory):
+        model = LlamaForCausalLM.from_pretrained(f"{directory}/seed", distributed_config=DistributedConfig(tp_size=4))
+        # As if q, k and v had been loaded from a fused `qkv_proj`: the save fuses them back.
+        model._weight_conversions = [
+            WeightConverter(
+                source_patterns="self_attn.qkv_proj.weight",
+                target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            )
+        ]
+        # Files small enough to split q, k and v if the split were planned before reverting the conversion.
+        model.save_pretrained(f"{directory}/saved", max_shard_size="1KB")
 
 
 def _test_save_for_consolidation(rank, directory):
@@ -281,6 +298,26 @@ class DistributedUtilsTest(unittest.TestCase):
             torch.testing.assert_close(
                 MixtralForCausalLM.from_pretrained(f"{directory}/saved").state_dict(), reference.state_dict()
             )
+
+    def test_save_conversion_across_files(self):
+        # The weights reverted together by a conversion are gathered as a group, whatever files they are in.
+        with tempfile.TemporaryDirectory() as directory:
+            reference = LlamaForCausalLM(self.config)
+            reference.save_pretrained(f"{directory}/seed")
+            mp.spawn(_test_save_conversion_across_files, args=(directory,), nprocs=4, join=True)
+
+            saved_index = json.loads(Path(f"{directory}/saved/{SAFE_WEIGHTS_INDEX_NAME}").read_text(encoding="utf-8"))
+            saved = {}
+            for filename in set(saved_index["weight_map"].values()):
+                saved.update(load_file(f"{directory}/saved/{filename}"))
+            expected = reference.state_dict()
+            for layer in range(self.config.num_hidden_layers):
+                prefix = f"model.layers.{layer}.self_attn"
+                self.assertNotIn(f"{prefix}.q_proj.weight", saved)
+                torch.testing.assert_close(
+                    saved[f"{prefix}.qkv_proj.weight"],
+                    torch.cat([expected[f"{prefix}.{name}_proj.weight"] for name in "qkv"]),
+                )
 
     @parameterized.expand(PARALLEL_CONFIGS.items())
     def test_save_one_file_per_rank(self, _, source_config):
