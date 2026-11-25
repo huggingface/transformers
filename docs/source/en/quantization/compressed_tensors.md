@@ -71,13 +71,15 @@ A compressed-tensors checkpoint stores its weights compressed. [`CompressedTenso
 | default | kept in the compressed-tensors format: every serialized tensor (`weight_packed`, `weight_scale`, `weight_zero_point`, ...) loads as stored | compressed-tensors owns the layers and decompresses the model on the first forward pass |
 | `dequantize=True` | decompressed while loading into the model dtype (e.g. BF16) | a plain dense model with no `quantization_scheme` left, so w8a8 activations aren't quantized either; it can be fine-tuned or saved in that dtype |
 | `use_optimized_inference=True` | kept quantized | layers whose scheme has a kernel run through it, currently W8A8 fp8; inference only |
-| `weight_only=True` | NVFP4 bytes and scales kept in torchao tensors | BF16 activations, with activation quantization explicitly disabled; inference only |
+| `weight_only=True` (NVFP4 only) | NVFP4 bytes and scales kept in torchao tensors | BF16 activations, with activation quantization explicitly disabled; inference only |
 
 With the default, [`~PreTrainedModel.save_pretrained`] writes the compressed tensors back unchanged, so a loaded model saves in the same compressed-tensors format.
 
 ## NVFP4 weight-only loading
 
 Pass `weight_only=True` to load a compressed-tensors `nvfp4-pack-quantized` checkpoint into torchao's `NVFP4Tensor`. This mode preserves the original packed weights and block scales without requantizing or converting the entire model to BF16. Install `compressed-tensors>=0.15.0` and a compatible `torchao>=0.16.0` build exposing `torchao.prototype.mx_formats.nvfp4_tensor.NVFP4Tensor`.
+
+This mode enables reuse of existing NVFP4 checkpoints on supported devices without native NVFP4 GEMMs, retaining packed weight storage while executing Linear operations in BF16. Currently, `weight_only=True` supports only NVFP4; other quantized formats are rejected.
 
 > [!WARNING]
 > This is an explicit change from W4A4 to W4A16: the checkpoint's input activation quantization is disabled, so outputs can differ from its original deployment. The current torchao weight-only path dequantizes each Linear weight for every forward call, then performs BF16 Linear. It is not a native or fused FP4 GEMM, and this loading mode does not imply a speedup. Temporary dequantization allocations also contribute to peak memory.
@@ -87,15 +89,13 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, CompressedTensorsConfig
 
 model_id = "RedHatAI/Qwen3-14B-NVFP4"
-revision = "cc120e7bc68557313002275d51db65096ca24303"
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    revision=revision,
     quantization_config=CompressedTensorsConfig(weight_only=True),
     dtype=torch.bfloat16,
     device_map="xpu",  # Or a single CUDA device, e.g. "cuda:0".
 )
-tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=8, do_sample=False)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))

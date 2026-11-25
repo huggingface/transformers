@@ -95,13 +95,12 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                     "Install a compatible build with `pip install 'torchao>=0.16.0'`."
                 )
             try:
-                from torchao.prototype.mx_formats.nvfp4_tensor import NVFP4Tensor
+                from torchao.prototype.mx_formats.nvfp4_tensor import NVFP4Tensor  # noqa: F401
             except ImportError as error:
                 raise ImportError(
                     "NVFP4 weight-only loading requires a torchao build providing "
                     "`torchao.prototype.mx_formats.nvfp4_tensor.NVFP4Tensor`. Upgrade torchao."
                 ) from error
-            self.nvfp4_tensor_class = NVFP4Tensor
             device_map = kwargs.get("device_map")
             if device_map is not None:
                 if not isinstance(device_map, dict) or set(device_map) != {""}:
@@ -230,10 +229,10 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         if self.use_nvfp4_weight_only:
+            from torchao.prototype.mx_formats.nvfp4_tensor import NVFP4Tensor
+
             missing = [
-                name
-                for name in self.nvfp4_modules
-                if not isinstance(model.get_submodule(name).weight, self.nvfp4_tensor_class)
+                name for name in self.nvfp4_modules if not isinstance(model.get_submodule(name).weight, NVFP4Tensor)
             ]
             if missing:
                 raise ValueError(f"Missing NVFP4 packed weights for selected modules: {missing}.")

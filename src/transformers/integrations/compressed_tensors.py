@@ -31,6 +31,8 @@ class CompressedTensorsNVFP4Deserialize(ConversionOps):
         self.hf_quantizer = hf_quantizer
 
     def convert(self, input_dict, source_patterns, model=None, full_layer_name=None, **kwargs):
+        from torchao.prototype.mx_formats.nvfp4_tensor import NVFP4Tensor
+
         if model is None or full_layer_name is None:
             raise ValueError("NVFP4 deserialization requires a model and a full layer name.")
         serialized_names = dict(zip(source_patterns, self.hf_quantizer.serialized_names["weight"]))
@@ -86,7 +88,7 @@ class CompressedTensorsNVFP4Deserialize(ConversionOps):
         per_tensor_scale = global_scale.reshape(()).reciprocal()
         if not torch.isfinite(per_tensor_scale):
             raise ValueError(f"{module_name}.weight_global_scale has a nonfinite reciprocal.")
-        weight = self.hf_quantizer.nvfp4_tensor_class(
+        weight = NVFP4Tensor(
             packed.contiguous(),
             scales.contiguous(),
             block_size=16,
