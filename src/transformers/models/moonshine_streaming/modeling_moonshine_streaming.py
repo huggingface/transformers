@@ -886,13 +886,6 @@ class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the MoonshineStreaming encoder so that its parameters will
-        not be updated during training.
-        """
-        self.encoder.requires_grad_(False)
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
