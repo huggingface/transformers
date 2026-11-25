@@ -40,11 +40,32 @@ class InklingImageProcessorKwargs(ImagesKwargs, total=False):
     rescale_image_max_upscaled_long_edge: int | None
 
 
+def get_patch_grid(height: int, width: int, patch_size: int) -> tuple[int, int]:
+    """Returns the `(num_rows, num_cols)` patch grid `divide_to_patches` splits an image of the given size into."""
+    return (height + patch_size - 1) // patch_size, width // patch_size + 1
+
+
+def get_rescaled_size(
+    height: int, width: int, rescale_image_frac: float | None, rescale_image_max_upscaled_long_edge: int | None
+) -> tuple[int, int]:
+    """Returns the `(height, width)` an image of the given size is rescaled to before being divided into patches."""
+    if rescale_image_frac is None:
+        return height, width
+    long_edge = max(height, width)
+    target_long_edge = long_edge * rescale_image_frac
+    if rescale_image_max_upscaled_long_edge is not None:
+        target_long_edge = min(target_long_edge, max(rescale_image_max_upscaled_long_edge, long_edge))
+    ratio = target_long_edge / long_edge
+    if ratio == 1.0:
+        return height, width
+    # half-up rounding to match reference
+    return math.floor(height * ratio + 0.5), math.floor(width * ratio + 0.5)
+
+
 # Slightly different from `image_transforms.divide_to_patches`
 def divide_to_patches(image: "torch.Tensor", patch_size: int) -> list["torch.Tensor"]:
     height, width = image.shape[-2], image.shape[-1]
-    num_rows = (height + patch_size - 1) // patch_size
-    num_cols = width // patch_size + 1
+    num_rows, num_cols = get_patch_grid(height, width, patch_size)
 
     patches = []
     for i in range(num_rows):
@@ -135,17 +156,12 @@ class InklingImageProcessor(TorchvisionBackend):
         per_image_patches: list[torch.Tensor] = []
         num_patches: list[int] = []
         for image in images:
-            if rescale_image_frac is not None:
-                height, width = image.shape[-2:]
-                long_edge = max(height, width)
-                target_long_edge = long_edge * rescale_image_frac
-                if rescale_image_max_upscaled_long_edge is not None:
-                    target_long_edge = min(target_long_edge, max(rescale_image_max_upscaled_long_edge, long_edge))
-                ratio = target_long_edge / long_edge
-                if ratio != 1.0:
-                    # half-up rounding to match reference
-                    new_size = SizeDict(height=math.floor(height * ratio + 0.5), width=math.floor(width * ratio + 0.5))
-                    image = self.resize(image, new_size, resample=resample)
+            height, width = image.shape[-2:]
+            new_height, new_width = get_rescaled_size(
+                height, width, rescale_image_frac, rescale_image_max_upscaled_long_edge
+            )
+            if (new_height, new_width) != (height, width):
+                image = self.resize(image, SizeDict(height=new_height, width=new_width), resample=resample)
             image_patches = divide_to_patches(image, size.height)
             image_patches = [im.float() for im in image_patches]  # so we can pad with -1.0
             image_patches = self.pad(
@@ -165,6 +181,30 @@ class InklingImageProcessor(TorchvisionBackend):
             "num_patches": torch.tensor(num_patches),
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None) -> int:
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        images_kwargs = images_kwargs or {}
+        size = images_kwargs.get("size", self.size)
+        rescale_image_frac = images_kwargs.get("rescale_image_frac", self.rescale_image_frac)
+        rescale_image_max_upscaled_long_edge = images_kwargs.get(
+            "rescale_image_max_upscaled_long_edge", self.rescale_image_max_upscaled_long_edge
+        )
+        height, width = get_rescaled_size(height, width, rescale_image_frac, rescale_image_max_upscaled_long_edge)
+        num_rows, num_cols = get_patch_grid(height, width, size["height"])
+        return num_rows * num_cols
 
 
 __all__ = ["InklingImageProcessor"]
