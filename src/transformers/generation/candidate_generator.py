@@ -1108,7 +1108,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
                     #    logits as input.
                     # 3. compare the output logits with the next candidate token. If they are -inf, then the next
                     #    candidate token is forbidden and we don't want to generate it.
-                    if self.logits_processor is not None:
+                    if self.logits_processor:
                         sequence_with_candidate = input_ids
                         fake_input_logits = torch.ones(
                             (bsz, self.vocab_size), device=input_ids.device, dtype=torch.float32
