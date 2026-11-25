@@ -54,7 +54,7 @@ For the chat model:
 
 ```bash
 wget https://axtkn4xl5cip.objectstorage.us-phoenix-1.oci.customer-oci.com/n/axtkn4xl5cip/b/adept-public-data/o/8b_chat_model_release.tar
-tar -xvf 8b_base_model_release.tar
+tar -xvf 8b_chat_model_release.tar
 ```
 
 Then, model can be loaded via:
