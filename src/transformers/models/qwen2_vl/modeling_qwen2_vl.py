@@ -75,7 +75,8 @@ class Qwen2VLRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # Scale after casting back to the input dtype, as the original implementations do (autocast runs it in fp32)
+        # Don't pass the weight to rms_norm: scaling after the cast to the input dtype (autocast runs rms_norm in
+        # fp32) keeps the rounding and output dtype of the original implementations, fusing it shifts the logits
         normalized = nn.functional.rms_norm(hidden_states, hidden_states.shape[-1:], eps=self.variance_epsilon)
         return self.weight * normalized.to(hidden_states.dtype)
 
