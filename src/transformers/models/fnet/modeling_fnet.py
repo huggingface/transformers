@@ -194,7 +194,6 @@ class FNetFourierTransform(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->FNet
 class FNetIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -210,7 +209,6 @@ class FNetIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->FNet
 class FNetOutput(nn.Module):
     def __init__(self, config):
         super().__init__()

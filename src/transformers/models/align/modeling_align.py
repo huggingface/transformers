@@ -635,7 +635,6 @@ class AlignTextSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->AlignText
 class AlignTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -672,7 +671,6 @@ class AlignTextAttention(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->AlignText
 class AlignTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -688,7 +686,6 @@ class AlignTextIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->AlignText
 class AlignTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
