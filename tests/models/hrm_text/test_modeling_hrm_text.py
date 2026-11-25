@@ -140,7 +140,7 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertEqual(len(attentions), config.num_hidden_layers)
+            self.assertEqual(len(attentions), config.total_num_hidden_layers)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -152,7 +152,7 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), config.num_hidden_layers)
+            self.assertEqual(len(attentions), config.total_num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -174,7 +174,7 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
 
             self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), config.num_hidden_layers)
+            self.assertEqual(len(self_attentions), config.total_num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
@@ -196,7 +196,7 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = config.num_hidden_layers + 1
+            expected_num_layers = config.total_num_hidden_layers + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             seq_length = self.model_tester.seq_length

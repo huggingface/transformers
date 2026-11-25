@@ -281,7 +281,6 @@ class Zamba2Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        layer_idx: int,
         attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
@@ -294,7 +293,7 @@ class Zamba2Attention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
         if self.config.use_shared_attention_adapter:
-            adapter_layer_idx = self.layer_dic[layer_idx]
+            adapter_layer_idx = self.layer_dic[self.layer_idx]
             query_states = query_states + self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
             key_states = key_states + self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
             value_states = value_states + self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
@@ -308,7 +307,7 @@ class Zamba2Attention(nn.Module):
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, layer_idx, kwargs=kwargs)
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -869,7 +868,13 @@ class Zamba2MambaMixer(nn.Module):
 
 
 class Zamba2MLP(nn.Module):
-    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int | None = None):
+    def __init__(
+        self,
+        config: Zamba2Config,
+        num_fwd_mem_blocks=None,
+        block_id: int | None = None,
+        layer_idx: int | None = None,
+    ):
         """
         This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
@@ -880,6 +885,7 @@ class Zamba2MLP(nn.Module):
         self.intermediate_size = config.intermediate_size
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
+        self.layer_idx = layer_idx
 
         self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
@@ -899,10 +905,10 @@ class Zamba2MLP(nn.Module):
         layer_block_map = config.hybrid_layer_ids
         self.layer_dic = {value: index for index, value in enumerate(layer_block_map)}
 
-    def forward(self, hidden_state, layer_idx=None):
+    def forward(self, hidden_state):
         gate_up_state = self.gate_up_proj(hidden_state)
-        layer_idx = self.layer_dic[layer_idx]
-        gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
+        adapter_idx = self.layer_dic[self.layer_idx]
+        gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[adapter_idx](hidden_state)
 
         gate_up_state = torch.chunk(gate_up_state, 2, dim=-1)
         hidden_state = self.act_fn(gate_up_state[0]) * gate_up_state[1]
@@ -915,8 +921,8 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         super().__init__()
         self.block_id = block_id
         num_gs = len(config.hybrid_layer_ids)
-        self.self_attn = Zamba2Attention(config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
-        self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
+        self.self_attn = Zamba2Attention(config, layer_idx=layer_idx, num_fwd_mem_blocks=num_gs, block_id=block_id)
+        self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id, layer_idx=layer_idx)
         self.input_layernorm = Zamba2RMSNorm(config.attention_hidden_size, eps=config.rms_norm_eps)
         self.pre_ff_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -925,7 +931,6 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: torch.Tensor,
-        layer_idx: int,
         attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         position_embeddings: torch.LongTensor | None = None,
@@ -952,7 +957,6 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            layer_idx=layer_idx,
             attention_mask=attention_mask,
             cache=cache,
             position_embeddings=position_embeddings,
@@ -960,7 +964,7 @@ class Zamba2AttentionDecoderLayer(nn.Module):
         )
 
         hidden_states = self.pre_ff_layernorm(hidden_states)
-        hidden_states = self.feed_forward(hidden_states, layer_idx)
+        hidden_states = self.feed_forward(hidden_states)
 
         return hidden_states
 
@@ -1061,7 +1065,6 @@ class Zamba2HybridLayer(GradientCheckpointingLayer):
         transformer_hidden_states = self.shared_transformer(
             hidden_states,
             original_hidden_states=original_hidden_states,
-            layer_idx=layer_idx,
             attention_mask=causal_mask,
             cache=cache,
             position_embeddings=position_embeddings,
@@ -1254,7 +1257,7 @@ class Zamba2Model(Zamba2PreTrainedModel):
                 # over hybrid layers) both follow hybrid-layer order, as do the published checkpoints.
                 block_id = hybrid_layer_count % self.config.num_mem_blocks
                 hybrid_layer_count += 1
-                attn_block = Zamba2AttentionDecoderLayer(self.config, block_id=block_id)
+                attn_block = Zamba2AttentionDecoderLayer(self.config, block_id=block_id, layer_idx=layer_id)
                 linear_layer = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
                 layers.append(Zamba2HybridLayer(attn_block, linear_layer, mamba_layer))
             else:

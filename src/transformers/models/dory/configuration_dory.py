@@ -104,6 +104,22 @@ class DoryConfig(PreTrainedConfig):
             }
         super().__post_init__(**kwargs)
 
+    @property
+    def total_num_hidden_layers(self) -> int:
+        """Total number of decoder layers visited in each forward pass. This takes the recurrent loops into account."""
+        return self.num_hidden_layers + (self.n_recurrent_loops - 1) * self.n_recurrent_layers
+
+    @property
+    def cache_layer_map(self) -> list[int]:
+        """The `layer_idx` of the layer that owns each cache layer. Loops after the first add cache layers for the
+        recurrent layers after the model's own: one set per loop in `per_loop` mode, one shared read-only set in
+        `last_loop` mode."""
+        recurrent = list(range(self.n_input_layers, self.n_input_layers + self.n_recurrent_layers))
+        num_extra = self.n_recurrent_loops - 1
+        if self.recurrent_kv_cache_mode == "last_loop":
+            num_extra = min(num_extra, 1)
+        return [*range(self.num_hidden_layers), *recurrent * num_extra]
+
     @classmethod
     def from_dict(cls, config_dict, **kwargs):
         # Validate the loop override during construction, before the base loader applies remaining kwargs.

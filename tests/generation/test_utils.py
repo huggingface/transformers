@@ -2998,8 +2998,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         config = config.get_text_config(decoder=True)
 
         # Check the size is coherent
-        num_hidden_layers = config.num_hidden_layers
-        self.assertEqual(num_hidden_layers, len(cache))
+        self.assertEqual(len(config.cache_layer_map), len(cache))
 
         def check_linear_attention_shapes(layer, num_conv_states, conv_shape, recurrent_shape):
             # assert we have as many conv states as necessary
@@ -3022,8 +3021,9 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     self.assertEqual(layer.recurrent_states[i].shape, recurrent_shape)
 
         # Check each layer has the correct shape
-        for layer_idx, layer in enumerate(cache.layers):
+        for cache_idx, layer in enumerate(cache.layers):
             # Fields may vary by layer on a heterogeneous config, so resolve the shapes per layer.
+            layer_idx = config.cache_layer_map[cache_idx]
             layer_config = config.per_layer_config[layer_idx]
             num_conv_states = getattr(layer_config, "number_of_conv_states", 1)
             conv_shape = self._get_conv_state_shape(batch_size, layer_config)

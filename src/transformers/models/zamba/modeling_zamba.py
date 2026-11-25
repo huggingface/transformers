@@ -148,7 +148,6 @@ class ZambaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        layer_idx: int,
         attention_mask: torch.Tensor | None,
         cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -161,7 +160,7 @@ class ZambaAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, layer_idx, kwargs=kwargs)
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -648,7 +647,6 @@ class ZambaAttentionDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         original_hidden_states: torch.Tensor,
-        layer_idx: int,
         attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         use_cache: bool | None = False,
@@ -661,7 +659,6 @@ class ZambaAttentionDecoderLayer(nn.Module):
                 This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
                 concatenated tensor is then used as input of the pre-attention RMSNorm
                 (see fig. 2 in https://huggingface.co/papers/2405.16712).
-            layer_idx (`int`): layer_idx in the forward pass. Used to distinguish Zamba's tied transformer layers.
             attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             cache (`Cache`, *optional*): cached past key and value projection states
@@ -673,7 +670,6 @@ class ZambaAttentionDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            layer_idx=layer_idx,
             attention_mask=attention_mask,
             cache=cache,
             use_cache=use_cache,
@@ -775,7 +771,6 @@ class ZambaHybridLayer(GradientCheckpointingLayer):
         transformer_hidden_states = self.shared_transf(
             hidden_states,
             original_hidden_states=original_hidden_states,
-            layer_idx=layer_idx,
             attention_mask=causal_mask,
             cache=cache,
             use_cache=use_cache,
@@ -855,7 +850,7 @@ class ZambaModel(ZambaPreTrainedModel):
             mamba = ZambaMambaDecoderLayer(config, layer_idx=layer_id)
             if layer_type == "hybrid":
                 linear = nn.Linear(self.config.hidden_size, self.config.hidden_size, bias=False)
-                layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config), linear, mamba))
+                layers.append(ZambaHybridLayer(ZambaAttentionDecoderLayer(config, layer_idx=layer_id), linear, mamba))
                 if self._tied_weights_keys is None:
                     self._tied_weights_keys = {
                         rf"layers.(?!{layer_id}\.)\d+.shared_transf": f"layers.{layer_id}.shared_transf"

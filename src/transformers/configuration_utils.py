@@ -645,6 +645,12 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         logger.warning_once("`use_return_dict` is deprecated! Use `return_dict` instead!")
         return self.return_dict
 
+    @property
+    def cache_layer_map(self) -> list[int]:
+        """The `layer_idx` of the layer that owns each cache layer: one per layer, then one per extra call for models that
+        call layers more than once per forward pass (e.g. looped models), which override this."""
+        return list(range(self.num_hidden_layers))
+
     @torch_dtype.setter
     def torch_dtype(self, value):
         logger.warning_once("`torch_dtype` is deprecated! Use `dtype` instead!")

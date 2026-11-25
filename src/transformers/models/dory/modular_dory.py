@@ -36,7 +36,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
@@ -248,6 +248,11 @@ class DoryLMHead(nn.Linear):
 
 
 class DoryPreTrainedModel(LlamaPreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(DoryDecoderLayer, num_hidden_layers_key="total_num_hidden_layers"),
+        "attentions": DoryAttention,
+    }
+
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
@@ -329,14 +334,16 @@ class DoryModel(LlamaModel):
         recurrent_end = recurrent_start + n_recurrent
         last_loop_only = self.config.recurrent_kv_cache_mode == "last_loop"
 
-        if cache is not None and len(cache.layers) == self.config.num_hidden_layers:
-            # Extra cache layers, appended at the end: `per_loop` loops 1, 2, ... write to copies of the recurrent
-            # layers, `last_loop` loops before the last read them without writing
-            recurrent_cache = cache.layers[recurrent_start:recurrent_end]
+        if cache is not None and len(cache.layers) >= self.config.num_hidden_layers:
+            # Loops after the first use the cache layers after the model's own (see `DoryConfig.cache_layer_map`), which
+            # caches not built from the config lack. `last_loop` loops before the last read the recurrent layers' caches
+            # without writing
+            cache_layer_map = self.config.cache_layer_map
+            cache.layers += [copy.deepcopy(cache.layers[i]) for i in cache_layer_map[len(cache.layers) :]]
             if last_loop_only:
-                cache.layers += [DoryPastReader(c) for c in recurrent_cache]
-            else:
-                cache.layers += [copy.deepcopy(c) for c in recurrent_cache * (n_loops - 1)]
+                for i in range(self.config.num_hidden_layers, len(cache_layer_map)):
+                    if not isinstance(cache.layers[i], DoryPastReader):
+                        cache.layers[i] = DoryPastReader(cache.layers[cache_layer_map[i]])
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers[:recurrent_start]:
