@@ -47,16 +47,17 @@ messages = [
 ]
 inputs = processor.apply_chat_template(
     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-).to(model.device, dtype=model.dtype)
+).to(model.device)
 generated = model.generate(**inputs, max_new_tokens=64)
-print(processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)[0])
+print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"].shape[1] :])[0])
 ```
 
 ## Notes
 
 - In a prompt, each audio is marked with `<|audio|>`. The processor splits audio longer than 30 s into 30 s windows and expands the marker to 25 `<|audio|>` tokens per second of audio, each second wrapped in `<|audio_start|>` and `<|audio_end|>`.
 - Images are marked with `<unk>` and expanded as in [MiniCPM-V 2.6](minicpmv2_6); the chat template adds `<image_id>N</image_id>` before each image.
-- When the conversation contains audio, the chat template drops the default system prompt and opens the assistant turn with `<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>`, as the original `chat()` does. The model then ends its answer with `<|tts_eos|>`, which `skip_special_tokens=True` removes.
+- When the conversation contains audio, the chat template drops the default system prompt and opens the assistant turn with `<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>`, as the original `chat()` does. The model then ends its answer with `<|tts_eos|>`, a special token.
+- Every audio is encoded on its own. The original's omni mode, which merges the audios of one message (one per second of video) into a single stream, isn't supported.
 
 ## MiniCPMO2_6Config
 

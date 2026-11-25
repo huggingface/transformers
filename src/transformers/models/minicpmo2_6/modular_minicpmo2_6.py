@@ -161,15 +161,11 @@ class MiniCPMO2_6AudioEncoderLayer(Qwen2AudioEncoderLayer):
 
 @auto_docstring(
     custom_intro="""
-    The audio encoder of MiniCPM-o 2.6, without any head or projection on top.
+    The audio encoder of MiniCPM-o 2.6: a Whisper encoder over up to 30 s of audio per row, where each frame attends to
+    the frames of its own 1 s chunk and of all earlier ones.
     """
 )
 class MiniCPMO2_6AudioEncoder(Qwen2AudioEncoder):
-    """
-    Whisper encoder over up to 30 s of audio per row, where each frame attends to the frames of its own 1 s chunk and
-    of all earlier ones.
-    """
-
     config: MiniCPMO2_6AudioConfig
     # The chunked attention mask can't be expressed with flash attention's padding-only masks
     _supports_flash_attn = False
@@ -262,7 +258,7 @@ class MiniCPMO2_6Model(MiniCPMV2_6Model):
             Which mel frames are real (`1`) rather than padding (`0`).
         """
         audio_outputs = self.audio_tower(
-            input_features, attention_mask=input_features_mask, return_dict=True, **kwargs
+            input_features.to(self.audio_tower.dtype), attention_mask=input_features_mask, return_dict=True, **kwargs
         )
         audio_embeds = self.audio_projector(audio_outputs.last_hidden_state)
         _, num_tokens = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1))
@@ -431,7 +427,7 @@ class MiniCPMO2_6ForConditionalGeneration(MiniCPMV2_6ForConditionalGeneration):
         ...     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ... ).to(model.device)
         >>> generated = model.generate(**inputs, max_new_tokens=32)
-        >>> processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)[0]
+        >>> processor.post_process_image_text_to_text(generated[:, inputs["input_ids"].shape[1] :])[0]
         ```"""
         outputs = self.model(
             input_ids=input_ids,
@@ -535,11 +531,13 @@ class MiniCPMO2_6Processor(MiniCPMV2_6Processor):
         return audio_inputs, audio_replacements
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
-        # Each second of audio (25 tokens) gets its own <|audio_start|>...<|audio_end|>, as the checkpoint was trained
-        num_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        # Each second of audio gets its own <|audio_start|>...<|audio_end|>, as the checkpoint was trained
+        num_tokens, tokens_per_second = audio_inputs["num_audio_tokens"][audio_idx], 25
         return "".join(
-            self.audio_start_token + self.audio_token * min(25, num_tokens - start) + self.audio_end_token
-            for start in range(0, num_tokens, 25)
+            self.audio_start_token
+            + self.audio_token * min(tokens_per_second, num_tokens - start)
+            + self.audio_end_token
+            for start in range(0, num_tokens, tokens_per_second)
         )
 
     def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
@@ -583,7 +581,6 @@ class MiniCPMO2_6Processor(MiniCPMV2_6Processor):
 
     @property
     def unused_input_names(self) -> list[str]:
-        # Each image's slice grid and each audio's token count, which the processor needs for the placeholder text
         return ["grids", "num_audio_tokens"]
 
 

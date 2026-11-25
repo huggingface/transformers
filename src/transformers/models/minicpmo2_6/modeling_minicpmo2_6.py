@@ -643,13 +643,17 @@ def chunked_limited_mask_function(left_ctx: int, right_ctx: int) -> Callable:
 
 @auto_docstring(
     custom_intro="""
-    The audio encoder of MiniCPM-o 2.6, without any head or projection on top.
+    The audio encoder of MiniCPM-o 2.6: a Whisper encoder over up to 30 s of audio per row, where each frame attends to
+    the frames of its own 1 s chunk and of all earlier ones.
     """
 )
 class MiniCPMO2_6AudioEncoder(MiniCPMO2_6PreTrainedModel):
     """
-    Whisper encoder over up to 30 s of audio per row, where each frame attends to the frames of its own 1 s chunk and
-    of all earlier ones.
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    [`MiniCPMO2_6AudioEncoderLayer`].
+
+    Args:
+        config: MiniCPMO2_6AudioEncoderConfig
     """
 
     config: MiniCPMO2_6AudioConfig
@@ -900,7 +904,7 @@ class MiniCPMO2_6Model(MiniCPMO2_6PreTrainedModel):
             Which mel frames are real (`1`) rather than padding (`0`).
         """
         audio_outputs = self.audio_tower(
-            input_features, attention_mask=input_features_mask, return_dict=True, **kwargs
+            input_features.to(self.audio_tower.dtype), attention_mask=input_features_mask, return_dict=True, **kwargs
         )
         audio_embeds = self.audio_projector(audio_outputs.last_hidden_state)
         _, num_tokens = self.audio_tower._get_feat_extract_output_lengths(input_features_mask.sum(-1))
@@ -1000,7 +1004,7 @@ class MiniCPMO2_6ForConditionalGeneration(MiniCPMO2_6PreTrainedModel, Generation
         ...     messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ... ).to(model.device)
         >>> generated = model.generate(**inputs, max_new_tokens=32)
-        >>> processor.batch_decode(generated[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)[0]
+        >>> processor.post_process_image_text_to_text(generated[:, inputs["input_ids"].shape[1] :])[0]
         ```"""
         outputs = self.model(
             input_ids=input_ids,

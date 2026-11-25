@@ -88,7 +88,6 @@ class MiniCPMO2_6Processor(ProcessorMixin):
 
     @property
     def unused_input_names(self) -> list[str]:
-        # Each image's slice grid and each audio's token count, which the processor needs for the placeholder text
         return ["grids", "num_audio_tokens"]
 
     def _get_num_multimodal_tokens(self, image_sizes=None, audio_lengths=None, **kwargs):
@@ -139,11 +138,13 @@ class MiniCPMO2_6Processor(ProcessorMixin):
         return audio_inputs, audio_replacements
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
-        # Each second of audio (25 tokens) gets its own <|audio_start|>...<|audio_end|>, as the checkpoint was trained
-        num_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        # Each second of audio gets its own <|audio_start|>...<|audio_end|>, as the checkpoint was trained
+        num_tokens, tokens_per_second = audio_inputs["num_audio_tokens"][audio_idx], 25
         return "".join(
-            self.audio_start_token + self.audio_token * min(25, num_tokens - start) + self.audio_end_token
-            for start in range(0, num_tokens, 25)
+            self.audio_start_token
+            + self.audio_token * min(tokens_per_second, num_tokens - start)
+            + self.audio_end_token
+            for start in range(0, num_tokens, tokens_per_second)
         )
 
     @property
