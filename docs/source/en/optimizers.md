@@ -104,6 +104,7 @@ Transformers integrates third-party optimizers for specialized training scenario
 | APOLLO | `apollo-torch` | `apollo_adamw` | Memory-efficient full-param via random projections; rank-1 sufficient |
 | GrokAdamW | `grokadamw` | `grokadamw` | Targets delayed generalization (grokking) |
 | LOMO / AdaLomo | `lomo-optim` | `lomo` / `adalomo` | Fuses gradient + update step for low-memory full-param fine-tuning |
+| Muon | `torch>=2.9` | `muon` | Orthogonalized momentum updates for 2-D hidden weights, AdamW for the other parameters |
 | Schedule Free | `schedulefree` | `schedule_free_adamw`, `schedule_free_radam`, `schedule_free_sgd` | Eliminates LR annealing; pair with `lr_scheduler_type="constant"` |
 | GaLore | `galore-torch` | `galore_adamw`, `galore_adafactor`, `galore_adamw_8bit` | Full-parameter learning via gradient low-rank projection |
 | StableAdamW | `torch-optimi` | `stable_adamw` | AdamW + AdaFactor update clipping; no gradient clipping needed |
@@ -183,6 +184,35 @@ pip install lomo-optim
 args = TrainingArguments(
 +   optim="adalomo",
     learning_rate=2e-6,
+    ...  # remaining args from the TrainingArguments intro config
+)
+```
+
+</hfoption>
+<hfoption id="Muon">
+
+```bash
+pip install -U "torch>=2.9"
+```
+
+[Muon](https://kellerjordan.github.io/posts/muon/) orthogonalizes the momentum update of each 2-D weight matrix with a Newton-Schulz iteration. `optim="muon"` uses PyTorch's `torch.optim.Muon` for the hidden weight matrices and AdamW for the embeddings, the output head, norms and biases, wrapped in a single optimizer so learning-rate schedulers and checkpointing work as usual.
+
+Both optimizers use `learning_rate`. Muon's update is scaled with `adjust_lr_fn="match_rms_adamw"` so a learning rate tuned for AdamW is a reasonable starting point. `adam_beta1`, `adam_beta2` and `adam_epsilon` apply to the AdamW part.
+
+```diff
+args = TrainingArguments(
++   optim="muon",
+    learning_rate=2e-4,
+    ...  # remaining args from the TrainingArguments intro config
+)
+```
+
+Pass Muon hyperparameters (`momentum`, `nesterov`, `ns_steps`, `adjust_lr_fn`) through `optim_args`.
+
+```diff
+args = TrainingArguments(
+    optim="muon",
++   optim_args="momentum=0.95,ns_steps=5,adjust_lr_fn=original",
     ...  # remaining args from the TrainingArguments intro config
 )
 ```

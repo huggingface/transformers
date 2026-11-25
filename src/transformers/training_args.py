@@ -156,6 +156,7 @@ class OptimizerNames(ExplicitEnum):
     APOLLO_ADAMW = "apollo_adamw"
     APOLLO_ADAMW_LAYERWISE = "apollo_adamw_layerwise"
     STABLE_ADAMW = "stable_adamw"
+    MUON = "muon"
 
 
 def _convert_str_dict(passed_value: dict):
@@ -232,6 +233,7 @@ class TrainingArguments:
                 - `"sgd"`: Stochastic Gradient Descent with momentum
                 - `"adafactor"`: Memory-efficient optimizer for large models
                 - `"adamw_8bit"`: 8-bit AdamW (requires bitsandbytes)
+                - `"muon"`: Muon for 2-D hidden weight matrices and AdamW for all other parameters (requires torch>=2.9)
                 See [`OptimizerNames`] for the complete list.
         optim_args (`str`, *optional*):
             Optional arguments that are supplied to optimizers such as AnyPrecisionAdamW, AdEMAMix, and GaLore.

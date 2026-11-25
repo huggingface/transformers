@@ -19,6 +19,7 @@ GaLore, Apollo, Stable AdamW, Liger kernel, optimizer choice resolution, factory
 and model parameter inspection.
 """
 
+import copy
 import tempfile
 
 import numpy as np
@@ -43,6 +44,7 @@ from transformers.testing_utils import (
     require_schedulefree,
     require_torch,
     require_torch_accelerator,
+    require_torch_greater_or_equal,
     require_torch_optimi,
 )
 from transformers.trainer_utils import check_target_module_exists
@@ -498,6 +500,113 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self._check_lr_display_with_scheduler("stable_adamw", _ATTN_MLP_TARGET_MODULES, num_train_epochs=10)
 
     # ---------------------------------------------------------------------------
+    # Muon tests
+    # ---------------------------------------------------------------------------
+
+    @require_torch_greater_or_equal("2.9")
+    def test_muon(self):
+        self._train_with_llama("muon", max_steps=5)
+
+    @require_torch_greater_or_equal("2.9")
+    def test_muon_param_groups(self):
+        from transformers.trainer_optimizer import MuonWithAdamW
+
+        tiny_llama, train_dataset = self._get_llama_and_dataset()
+        args = TrainingArguments(self.get_auto_remove_tmp_dir(), optim="muon", weight_decay=0.01)
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=10)
+        optimizer = trainer.optimizer
+        self.assertIsInstance(optimizer, MuonWithAdamW)
+
+        muon_ids = {id(p) for group in optimizer.muon.param_groups for p in group["params"]}
+        adamw_ids = {id(p) for group in optimizer.adamw.param_groups for p in group["params"]}
+        self.assertFalse(muon_ids & adamw_ids)
+        self.assertEqual(muon_ids | adamw_ids, {id(p) for p in tiny_llama.parameters()})
+
+        # Embeddings and the output head go to AdamW, every other 2-D weight goes to Muon
+        for name, param in tiny_llama.named_parameters():
+            if param.ndim == 2 and "embed_tokens" not in name and "lm_head" not in name:
+                self.assertIn(id(param), muon_ids, name)
+            else:
+                self.assertIn(id(param), adamw_ids, name)
+
+        # Weight decay is applied to 2-D parameters only
+        for group in optimizer.param_groups:
+            expected_weight_decay = args.weight_decay if group["params"][0].ndim >= 2 else 0.0
+            self.assertEqual(group["weight_decay"], expected_weight_decay)
+
+    @require_torch_greater_or_equal("2.9")
+    def test_muon_lr_scheduler_reaches_both_optimizers(self):
+        tiny_llama, train_dataset = self._get_llama_and_dataset()
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            optim="muon",
+            learning_rate=1e-3,
+            warmup_steps=4,
+            lr_scheduler_type="linear",
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=10)
+        optimizer = trainer.optimizer
+        for _ in range(2):
+            optimizer.step()
+            trainer.lr_scheduler.step()
+
+        expected_lr = 1e-3 * 2 / 4
+        inner_groups = optimizer.muon.param_groups + optimizer.adamw.param_groups
+        self.assertEqual(len(inner_groups), len(optimizer.param_groups))
+        for group in inner_groups:
+            self.assertAlmostEqual(group["lr"], expected_lr)
+
+    @require_torch_greater_or_equal("2.9")
+    def test_muon_optim_args(self):
+        tiny_llama, train_dataset = self._get_llama_and_dataset()
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            optim="muon",
+            optim_args="momentum=0.9,nesterov=False,ns_steps=3,adjust_lr_fn=original",
+            adam_beta1=0.85,
+            adam_beta2=0.95,
+        )
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=10)
+        muon_group = trainer.optimizer.muon.param_groups[0]
+        self.assertEqual(muon_group["momentum"], 0.9)
+        self.assertIs(muon_group["nesterov"], False)
+        self.assertEqual(muon_group["ns_steps"], 3)
+        self.assertEqual(muon_group["adjust_lr_fn"], "original")
+        self.assertEqual(trainer.optimizer.adamw.param_groups[0]["betas"], (0.85, 0.95))
+
+        args = TrainingArguments(self.get_auto_remove_tmp_dir(), optim="muon", optim_args="foo=1")
+        trainer = Trainer(tiny_llama, args, train_dataset=train_dataset)
+        with self.assertRaisesRegex(ValueError, "Unsupported `optim_args` key for Muon: foo"):
+            trainer.create_optimizer_and_scheduler(num_training_steps=10)
+
+    @require_torch_greater_or_equal("2.9")
+    def test_muon_resume_from_checkpoint(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        kwargs = {
+            "optim": "muon",
+            "learning_rate": 1e-3,
+            "max_steps": 6,
+            "save_steps": 3,
+            "per_device_train_batch_size": 4,
+            "report_to": "none",
+        }
+
+        model, train_dataset = self._get_llama_and_dataset()
+        trainer = Trainer(model, TrainingArguments(tmp_dir, **kwargs), train_dataset=train_dataset)
+        trainer.train()
+        expected_state = {k: v.clone() for k, v in trainer.model.state_dict().items()}
+
+        torch.manual_seed(0)
+        model, _ = self._get_llama_and_dataset()
+        trainer = Trainer(model, TrainingArguments(tmp_dir, **kwargs), train_dataset=train_dataset)
+        trainer.train(resume_from_checkpoint=f"{tmp_dir}/checkpoint-3")
+        for name, value in trainer.model.state_dict().items():
+            torch.testing.assert_close(value, expected_state[name], msg=name)
+
+    # ---------------------------------------------------------------------------
     # Misc optimizer tests
     # ---------------------------------------------------------------------------
 
@@ -589,6 +698,56 @@ class TrainerOptimizerTest(TestCasePlus):
         # Verify is_optimizer_factory correctly identifies factories vs optimizer classes
         self.assertFalse(is_optimizer_factory(MockComplexOptimizer))  # Optimizer class should return False
         self.assertTrue(is_optimizer_factory(MockOptimizerFactory))  # Factory class should return True
+
+    @require_torch_greater_or_equal("2.9")
+    def test_muon_with_adamw_load_state_dict(self):
+        from transformers.trainer_optimizer import _MuonFactory
+
+        def make_model():
+            torch.manual_seed(0)
+            return nn.Sequential(nn.Embedding(10, 8), nn.Linear(8, 8), nn.LayerNorm(8), nn.Linear(8, 10))
+
+        def train(model, optimizer, steps):
+            torch.manual_seed(1)
+            for _ in range(steps):
+                model(torch.randint(0, 10, (4, 3))).logsumexp(-1).mean().backward()
+                optimizer.step()
+                optimizer.zero_grad()
+
+        kwargs = {"muon_kwargs": {"lr": 1e-2}, "adamw_kwargs": {"lr": 1e-2}}
+        model = make_model()
+        optimizer = _MuonFactory()(model, **kwargs)
+        train(model, optimizer, 2)
+        model_state = {k: v.clone() for k, v in model.state_dict().items()}
+        optimizer_state = copy.deepcopy(optimizer.state_dict())
+        train(model, optimizer, 2)
+
+        resumed_model = make_model()
+        resumed_model.load_state_dict(model_state)
+        resumed_optimizer = _MuonFactory()(resumed_model, **kwargs)
+        resumed_optimizer.load_state_dict(optimizer_state)
+        self.assertIs(resumed_optimizer.muon.param_groups[0], resumed_optimizer.param_groups[0])
+        self.assertIs(resumed_optimizer.adamw.state, resumed_optimizer.state)
+        train(resumed_model, resumed_optimizer, 2)
+
+        for param, resumed_param in zip(model.parameters(), resumed_model.parameters()):
+            torch.testing.assert_close(param, resumed_param)
+
+    @require_torch_greater_or_equal("2.9")
+    def test_muon_factory_edge_cases(self):
+        from transformers.trainer_optimizer import _MuonFactory
+
+        # Only 2-D weights are trainable (e.g. LoRA adapters): no AdamW optimizer is created
+        model = nn.Sequential(nn.Linear(8, 8, bias=False), nn.Linear(8, 8, bias=False))
+        optimizer = _MuonFactory()(model, muon_kwargs={"lr": 1e-2})
+        self.assertIsNone(optimizer.adamw)
+        model(torch.randn(2, 8)).sum().backward()
+        optimizer.step()
+
+        # Nothing for Muon to optimize
+        model = nn.Sequential(nn.Embedding(10, 8), nn.LayerNorm(8))
+        with self.assertRaisesRegex(ValueError, "Muon found no trainable 2-D weight matrices"):
+            _MuonFactory()(model)
 
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()

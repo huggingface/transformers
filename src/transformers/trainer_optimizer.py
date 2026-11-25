@@ -38,6 +38,7 @@ from .utils import (
     is_grokadamw_available,
     is_lomo_available,
     is_schedulefree_available,
+    is_torch_greater_or_equal,
     is_torch_optimi_available,
     is_torchao_available,
     strtobool,
@@ -549,6 +550,149 @@ def _get_stable_adamw(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     return StableAdamW, ctx.optimizer_kwargs
 
 
+class MuonWithAdamW(torch.optim.Optimizer):
+    """
+    A single optimizer that runs `torch.optim.Muon` on some parameter groups and `torch.optim.AdamW` on the others.
+
+    Muon only supports 2-D parameters and is meant for hidden weight matrices, so embeddings, the output head, norms
+    and biases are handed to AdamW. The two inner optimizers share this optimizer's `param_groups` and `state`, so
+    learning-rate schedulers, `zero_grad`, `state_dict` and `load_state_dict` work as they do for any optimizer.
+
+    Args:
+        muon_param_groups (`list[dict]`):
+            Parameter groups optimized by Muon. Every parameter must be 2-D.
+        adamw_param_groups (`list[dict]`):
+            Parameter groups optimized by AdamW. May be empty.
+        muon_kwargs (`dict`, *optional*):
+            Keyword arguments passed to `torch.optim.Muon`.
+        adamw_kwargs (`dict`, *optional*):
+            Keyword arguments passed to `torch.optim.AdamW`.
+    """
+
+    def __init__(
+        self,
+        muon_param_groups: list[dict[str, Any]],
+        adamw_param_groups: list[dict[str, Any]],
+        muon_kwargs: dict[str, Any] | None = None,
+        adamw_kwargs: dict[str, Any] | None = None,
+    ):
+        muon_param_groups = [group for group in muon_param_groups if len(group["params"]) > 0]
+        adamw_param_groups = [group for group in adamw_param_groups if len(group["params"]) > 0]
+        if not muon_param_groups:
+            raise ValueError(
+                "Muon found no trainable 2-D weight matrices to optimize. Use another optimizer for this model."
+            )
+        self.muon = torch.optim.Muon(muon_param_groups, **(muon_kwargs or {}))
+        self.adamw = torch.optim.AdamW(adamw_param_groups, **(adamw_kwargs or {})) if adamw_param_groups else None
+        inner_param_groups = self.muon.param_groups + (self.adamw.param_groups if self.adamw is not None else [])
+        super().__init__(inner_param_groups, {})
+        self._link_inner_optimizers()
+
+    def _link_inner_optimizers(self):
+        # Point the inner optimizers at this optimizer's group dicts and state, so changes made through
+        # `self.param_groups` (e.g. by a scheduler) or restored by `load_state_dict` reach them.
+        num_muon_groups = len(self.muon.param_groups)
+        self.muon.param_groups = self.param_groups[:num_muon_groups]
+        self.muon.state = self.state
+        if self.adamw is not None:
+            self.adamw.param_groups = self.param_groups[num_muon_groups:]
+            self.adamw.state = self.state
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+        self.muon.step()
+        if self.adamw is not None:
+            self.adamw.step()
+        return loss
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        super().load_state_dict(state_dict)
+        self._link_inner_optimizers()
+
+
+class _MuonFactory:
+    """
+    Builds a [`MuonWithAdamW`] optimizer from the model, following the factory contract of `Trainer.create_optimizer`.
+
+    Trainable 2-D parameters go to Muon, except those of embedding layers and of the output embeddings (`lm_head`).
+    All other trainable parameters go to AdamW. Weight decay is applied to parameters with at least 2 dimensions, which
+    leaves out biases and norm weights.
+    """
+
+    def __call__(
+        self,
+        model: torch.nn.Module,
+        weight_decay: float = 0.0,
+        muon_kwargs: dict[str, Any] | None = None,
+        adamw_kwargs: dict[str, Any] | None = None,
+    ) -> MuonWithAdamW:
+        excluded_modules = [module for module in model.modules() if isinstance(module, torch.nn.Embedding)]
+        for getter_name in ("get_input_embeddings", "get_output_embeddings"):
+            getter = getattr(model, getter_name, None)
+            if getter is None:
+                continue
+            try:
+                module = getter()
+            except NotImplementedError:
+                module = None
+            if module is not None:
+                excluded_modules.append(module)
+        excluded_ids = {id(param) for module in excluded_modules for param in module.parameters()}
+
+        muon_params, adamw_decay_params, adamw_no_decay_params = [], [], []
+        for param in model.parameters():
+            if not param.requires_grad:
+                continue
+            if param.ndim == 2 and id(param) not in excluded_ids:
+                muon_params.append(param)
+            elif param.ndim >= 2:
+                adamw_decay_params.append(param)
+            else:
+                adamw_no_decay_params.append(param)
+
+        return MuonWithAdamW(
+            muon_param_groups=[{"params": muon_params, "weight_decay": weight_decay}],
+            adamw_param_groups=[
+                {"params": adamw_decay_params, "weight_decay": weight_decay},
+                {"params": adamw_no_decay_params, "weight_decay": 0.0},
+            ],
+            muon_kwargs=muon_kwargs,
+            adamw_kwargs=adamw_kwargs,
+        )
+
+
+def _get_muon(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
+    """Get Muon for 2-D hidden weight matrices combined with AdamW for all other parameters."""
+    if not is_torch_greater_or_equal("2.9"):
+        raise ImportError(
+            "`optim='muon'` requires `torch>=2.9`, which provides `torch.optim.Muon`. "
+            "Upgrade it with `pip install -U torch`."
+        )
+
+    muon_kwargs = {"lr": ctx.args.learning_rate, "adjust_lr_fn": "match_rms_adamw"}
+    parsers = {
+        "momentum": float,
+        "nesterov": lambda value: bool(strtobool(value)),
+        "ns_steps": int,
+        "adjust_lr_fn": str,
+    }
+    for key, value in ctx.optim_args.items():
+        if key not in parsers:
+            raise ValueError(f"Unsupported `optim_args` key for Muon: {key}. Supported keys: {', '.join(parsers)}.")
+        muon_kwargs[key] = parsers[key](value)
+
+    optimizer_kwargs = {
+        "weight_decay": ctx.args.weight_decay,
+        "muon_kwargs": muon_kwargs,
+        "adamw_kwargs": {"lr": ctx.args.learning_rate, **ctx.adam_kwargs},
+    }
+    return _MuonFactory, optimizer_kwargs
+
+
 # =============================================================================
 # Dispatch table
 # =============================================================================
@@ -612,6 +756,7 @@ _OPTIMIZER_HANDLERS: dict[str, OptimizerHandler] = {
     OptimizerNames.RMSPROP: _get_rmsprop,
     OptimizerNames.GROKADAMW: _get_grokadamw,
     OptimizerNames.STABLE_ADAMW: _get_stable_adamw,
+    OptimizerNames.MUON: _get_muon,
     OptimizerNames.LOMO: _get_lomo_optimizer,
     OptimizerNames.ADALOMO: _get_lomo_optimizer,
     **dict.fromkeys(_BITSANDBYTES_OPTIMIZERS, _get_bitsandbytes_optimizer),
