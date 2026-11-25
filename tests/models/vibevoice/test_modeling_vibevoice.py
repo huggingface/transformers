@@ -271,6 +271,7 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             # Base model doesn't appear in AutoModel but rather a generatiev model is there
             # FIXME eustlib, model with gen head deserves to be in task-specific mapping
             "test_training",
+            "test_kernels_can_run_without_crashing_training",
             "test_training_gradient_checkpointing",
             "test_training_gradient_checkpointing_use_reentrant_false",
             "test_training_gradient_checkpointing_use_reentrant_true",

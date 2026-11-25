@@ -16,8 +16,11 @@
 import unittest
 
 from transformers import AutoTokenizer, Lfm3ForCausalLM, Lfm3Model, is_torch_available
+from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     Expectations,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -143,6 +146,34 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
                     disable_compile=True,
                 )
             self.assertTrue(torch.equal(dynamic, static), layer_types)
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_kernels_can_run_without_crashing_training(self):
+        """Overriden as lfm3 requires half precision for its kernels"""
+        if not self.model_tester.is_training:
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+            ]:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device, dtype=torch.bfloat16)
+            model.train()
+            model.use_kernels = True
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = {
+                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
+            }
+            loss = model(**inputs).loss
+            loss.backward()
 
 
 @require_torch_accelerator
