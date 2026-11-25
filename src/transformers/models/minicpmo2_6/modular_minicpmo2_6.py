@@ -161,11 +161,14 @@ class MiniCPMO2_6AudioEncoderLayer(Qwen2AudioEncoderLayer):
 
 @auto_docstring(
     custom_intro="""
-    The audio encoder of MiniCPM-o 2.6: a Whisper encoder over up to 30 s of audio per row, where each frame attends to
-    the frames of its own 1 s chunk and of all earlier ones.
+    The audio encoder of MiniCPM-o 2.6, without any head or projection on top.
     """
 )
 class MiniCPMO2_6AudioEncoder(Qwen2AudioEncoder):
+    """
+    Whisper encoder over up to 30 s of audio per row; each frame attends to its own 1 s chunk and to all earlier ones.
+    """
+
     config: MiniCPMO2_6AudioConfig
     # The chunked attention mask can't be expressed with flash attention's padding-only masks
     _supports_flash_attn = False
@@ -209,6 +212,8 @@ class MiniCPMO2_6AudioEncoder(Qwen2AudioEncoder):
             and_mask_function=chunked_limited_mask_function(left_ctx=-1, right_ctx=self.config.chunk_size - 1),
         )
         for encoder_layer in self.layers:
+            if self.training and torch.rand([]) < self.layerdrop:
+                continue
             hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
 
         return BaseModelOutputWithPooling(last_hidden_state=self.layer_norm(hidden_states))
@@ -322,7 +327,7 @@ class MiniCPMO2_6Model(MiniCPMV2_6Model):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        mm_encoder_outputs = dict(mm_encoder_outputs) if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values,
@@ -522,7 +527,8 @@ class MiniCPMO2_6Processor(MiniCPMV2_6Processor):
         # Audio longer than 30 s is split into 30 s windows, one row of `input_features` each
         window = self.feature_extractor.n_samples
         windows = [waveform[start : start + window] for waveform in audio for start in range(0, len(waveform), window)]
-        audio_inputs = self.feature_extractor(windows, **kwargs)
+        # Always zero-padded to 30 s, as the checkpoint's features were computed
+        audio_inputs = self.feature_extractor(windows, **{**kwargs, "padding": "max_length"})
         audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
         audio_inputs["num_audio_tokens"] = self._get_num_multimodal_tokens(
             audio_lengths=[len(waveform) for waveform in audio]

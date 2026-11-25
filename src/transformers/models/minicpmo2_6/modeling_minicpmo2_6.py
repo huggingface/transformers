@@ -643,17 +643,12 @@ def chunked_limited_mask_function(left_ctx: int, right_ctx: int) -> Callable:
 
 @auto_docstring(
     custom_intro="""
-    The audio encoder of MiniCPM-o 2.6: a Whisper encoder over up to 30 s of audio per row, where each frame attends to
-    the frames of its own 1 s chunk and of all earlier ones.
+    The audio encoder of MiniCPM-o 2.6, without any head or projection on top.
     """
 )
 class MiniCPMO2_6AudioEncoder(MiniCPMO2_6PreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`MiniCPMO2_6AudioEncoderLayer`].
-
-    Args:
-        config: MiniCPMO2_6AudioEncoderConfig
+    Whisper encoder over up to 30 s of audio per row; each frame attends to its own 1 s chunk and to all earlier ones.
     """
 
     config: MiniCPMO2_6AudioConfig
@@ -725,6 +720,8 @@ class MiniCPMO2_6AudioEncoder(MiniCPMO2_6PreTrainedModel):
             and_mask_function=chunked_limited_mask_function(left_ctx=-1, right_ctx=self.config.chunk_size - 1),
         )
         for encoder_layer in self.layers:
+            if self.training and torch.rand([]) < self.layerdrop:
+                continue
             hidden_states = encoder_layer(hidden_states, attention_mask, **kwargs)
 
         return BaseModelOutputWithPooling(last_hidden_state=self.layer_norm(hidden_states))
@@ -858,7 +855,7 @@ class MiniCPMO2_6Model(MiniCPMO2_6PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        mm_encoder_outputs = dict(mm_encoder_outputs) if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values,

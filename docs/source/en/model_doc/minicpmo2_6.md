@@ -57,7 +57,7 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 - In a prompt, each audio is marked with `<|audio|>`. The processor splits audio longer than 30 s into 30 s windows and expands the marker to 25 `<|audio|>` tokens per second of audio, each second wrapped in `<|audio_start|>` and `<|audio_end|>`.
 - Images are marked with `<unk>` and expanded as in [MiniCPM-V 2.6](minicpmv2_6); the chat template adds `<image_id>N</image_id>` before each image.
 - When the conversation contains audio, the chat template drops the default system prompt and opens the assistant turn with `<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>`, as the original `chat()` does. The model then ends its answer with `<|tts_eos|>`, a special token.
-- Every audio is encoded on its own. The original's omni mode, which merges the audios of one message (one per second of video) into a single stream, isn't supported.
+- Every audio is encoded on its own. When one message holds several audios (in omni mode, one 1 s clip per video frame), the original code concatenates them before encoding, so later clips see the earlier ones; here they don't.
 
 ## MiniCPMO2_6Config
 
