@@ -2102,9 +2102,7 @@ class ModelTesterMixin(ExportTesterMixin):
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            inputs = {
-                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
-            }
+            inputs = {k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
             loss = model(**inputs).loss
             loss.backward()
 

@@ -169,9 +169,7 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
             model.train()
             model.use_kernels = True
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            inputs = {
-                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
-            }
+            inputs = {k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
             loss = model(**inputs).loss
             loss.backward()
 
