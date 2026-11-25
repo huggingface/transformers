@@ -179,7 +179,9 @@ generated_ids = model.generate(**inputs, max_new_tokens=1024)
 
 [[autodoc]] Ovis2_5Model
     - forward
+    - get_image_embeddings
     - get_image_features
+    - get_video_embeddings
     - get_video_features
 
 ## Ovis2_5ForConditionalGeneration

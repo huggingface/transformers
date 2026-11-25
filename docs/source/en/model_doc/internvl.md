@@ -346,6 +346,7 @@ decoded_outputs
 
 [[autodoc]] InternVLModel
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## InternVLForConditionalGeneration

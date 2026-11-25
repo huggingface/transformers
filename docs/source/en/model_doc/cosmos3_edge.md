@@ -99,7 +99,9 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True))
 
 [[autodoc]] Cosmos3EdgeModel
     - forward
+    - get_image_embeddings
     - get_image_features
+    - get_video_embeddings
     - get_video_features
 
 ## Cosmos3EdgeTextModel

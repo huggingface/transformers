@@ -901,7 +901,6 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
     _no_split_modules = ["Ernie4_5_VLMoeVisionBlock"]
     _input_embed_layer = "patch_embed"
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Ernie4_5_VLMoeMoeBlock, index=1),
         "hidden_states": Ernie4_5_VLMoeVisionBlock,
         "attentions": Ernie4_5_VLMoeVisionAttention,
     }

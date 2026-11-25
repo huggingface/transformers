@@ -315,6 +315,7 @@ with torch.no_grad():
 
 [[autodoc]] Sam3TrackerModel
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## Sam3TrackerPreTrainedModel
