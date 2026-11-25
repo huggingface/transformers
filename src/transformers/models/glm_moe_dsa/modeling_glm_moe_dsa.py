@@ -553,13 +553,15 @@ def _proto_kv_b_dequantized(module):
     return w
 
 
-_PROTO_PER_QUERY_INDEXER = _os.environ.get("PROTO_PER_QUERY_INDEXER", "0") == "1"
+# [scratch] On by default in the umbrella: the per-request indexer (and its prefill path, window scores) never builds
+# the [M, N] scores of the packed batch, which ran GLM-5.3 out of memory on B300 (24 GiB at 8k queries)
+_PROTO_PER_QUERY_INDEXER = _os.environ.get("PROTO_PER_QUERY_INDEXER", "1") == "1"
 # When every request's context fits in index_topk, the indexer selects all visible tokens whatever the scores: only
 # its keys need caching (for later, longer contexts), the query projection, scoring and top-k are skipped
-_PROTO_INDEXER_SKIP = _os.environ.get("PROTO_INDEXER_SKIP", "0") == "1"
+_PROTO_INDEXER_SKIP = _os.environ.get("PROTO_INDEXER_SKIP", "1") == "1"
 # WP prefill (bench only): batches above 512 query tokens (prefill) also take the per-request path, so nothing reads
 # the engine's [M, N + M] mask any more and the indexer never scores a query against another request's keys
-_PROTO_PREFILL = _os.environ.get("PROTO_PREFILL", "0") == "1"
+_PROTO_PREFILL = _os.environ.get("PROTO_PREFILL", "1") == "1"
 # WP prefill (bench only): fp32 GEMMs on tensor cores (TF32). The fp32 GEMMs of this model (router, indexer scores) take
 # bf16 values cast to fp32, which TF32's 10-bit mantissa holds exactly, so only the summation order changes
 if _os.environ.get("PROTO_TF32", "0") == "1":
@@ -580,7 +582,7 @@ def _proto_scores_bf16(q, keys):
 # WP prefill (bench only): when a prefill batch has to score (some context longer than index_topk), one Triton launch
 # computes the masked scores of the packed batch (`integrations/_proto_mqa_kernels.py`) instead of gathering every
 # query's keys into [M, max_k, D] and scoring in fp32
-_PROTO_PREFILL_MQA = _os.environ.get("PROTO_PREFILL_MQA", "0") == "1"
+_PROTO_PREFILL_MQA = _os.environ.get("PROTO_PREFILL_MQA", "1") == "1"
 _PROTO_PREFILL_MQA_SORTED = _os.environ.get("PROTO_PREFILL_MQA_SORTED", "0") == "1"
 # WP prefill (bench only): give FlashMLA's sparse kernel the number of valid entries of every list (`topk_length`), so
 # its time follows the keys a query really attends to instead of the padded list width. Same output, bit for bit
