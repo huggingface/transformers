@@ -26,7 +26,7 @@ from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
-from .cache_allocators import LINEAR_ATTENTION
+from .cache_allocators import INDEXED_ATTENTION, LINEAR_ATTENTION
 from .cache_allocators.compressed_latents import mla_block_table_enabled
 from .utils import WorkloadHints, get_accelerator_graph_name, logger, proto_no_mask
 
@@ -148,8 +148,12 @@ def ensure_decode_fast_path_is_available(
     """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0. If it is
     available, and no user-provided max blocks per request, set it to the fallback default."""
     # The block table path needs to be supported by every attention type to be available
+    # [scratch] MLA allocators take the block table when `mla_block_table_enabled` (their class attribute keeps the
+    # prototype's environment flag)
     all_types_support_block_table = all(
-        ATTN_TYPE_TO_ALLOCATOR[attn_type].supports_block_table for attn_type in group_layers_by_attn_type(config)
+        ATTN_TYPE_TO_ALLOCATOR[attn_type].supports_block_table
+        or (attn_type == INDEXED_ATTENTION and mla_block_table_enabled(config))
+        for attn_type in group_layers_by_attn_type(config)
     )
     if cb_config.max_blocks_per_request != 0 and not all_types_support_block_table:
         if user_requested:
