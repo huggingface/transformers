@@ -49,7 +49,9 @@ else:
 quantize_dense(model, spec)
 compile_config = CompileConfig()
 compile_config._compile_all_devices = True
-compiled = {"cache_implementation": "static", "compile_config": compile_config}
+compiled = {"cache_implementation": "static"}
+if os.environ.get("NO_COMPILE") != "1":
+    compiled["compile_config"] = compile_config
 
 prompt = "Write a short story about a lighthouse keeper who finds a message in a bottle."
 
@@ -115,6 +117,10 @@ def reset():
         for k in ("spin_seconds", "work_seconds", "ahead_reads", "jobs_done"):
             if hasattr(r, k):
                 setattr(r, k, 0)
+        for k in ("latency", "pending_guess", "guess_layers", "guess_exact", "guess_held", "guess_wanted",
+                  "guess_no_router", "guess_not_decode", "guess_no_ahead", "guess_calls"):
+            if hasattr(r, k):
+                setattr(r, k, type(getattr(r, k))() if k in ("latency",) else ({} if k == "pending_guess" else 0))
 
 
 def generate(n):
@@ -132,6 +138,114 @@ torch.mps.synchronize()
 for _, store in stores:
     store.trace = []
 
+if os.environ.get("TRACE_ITEM") == "1":
+    import collections, threading, traceback
+
+    _seen = collections.Counter()
+    _cost = collections.Counter()
+    _orig_item, _orig_int, _orig_float = torch.Tensor.item, torch.Tensor.__int__, torch.Tensor.__float__
+
+    def _timed(fn, self, tag=""):
+        t = time.perf_counter()
+        try:
+            return fn(self)
+        finally:
+            _cost[tag + _key()] += time.perf_counter() - t
+
+    def _key():
+        st = traceback.extract_stack(limit=16)
+        chain = " <- ".join(f"{f.name}:{f.lineno}" for f in st[-9:-3] if "profile_decode" not in f.filename)
+        return f"[{threading.current_thread().name}] {chain}"
+
+    def _item(self):
+        _seen[_key()] += 1
+        t = time.perf_counter()
+        try:
+            return _orig_item(self)
+        finally:
+            _cost[_key()] += time.perf_counter() - t
+
+    def _int(self):
+        _seen[_key()] += 1
+        return _orig_int(self)
+
+    def _float(self):
+        _seen[_key()] += 1
+        return _orig_float(self)
+
+    _orig_bool, _orig_tolist, _orig_len = torch.Tensor.__bool__, torch.Tensor.tolist, torch.Tensor.__len__
+
+    def _bool(self):
+        _seen["BOOL " + _key()] += 1
+        t = time.perf_counter()
+        try:
+            return _orig_bool(self)
+        finally:
+            _cost["BOOL " + _key()] += time.perf_counter() - t
+
+    def _tolist(self, *a, **k):
+        _seen["TOLIST " + _key()] += 1
+        t = time.perf_counter()
+        try:
+            return _orig_tolist(self, *a, **k)
+        finally:
+            _cost["TOLIST " + _key()] += time.perf_counter() - t
+
+    def _len(self):
+        _seen["LEN " + _key()] += 1
+        return _orig_len(self)
+
+    torch.Tensor.item, torch.Tensor.__int__, torch.Tensor.__float__ = _item, _int, _float
+    torch.Tensor.__bool__, torch.Tensor.tolist, torch.Tensor.__len__ = _bool, _tolist, _len
+    print("TRACE_ITEM on: every scalar sync is attributed to its callers at exit", flush=True)
+    import atexit
+
+    def _dump():
+        print("\n=== scalar sync callers (count, total ms, ms/call) ===", flush=True)
+        for key, sec in _cost.most_common(12):
+            n = _seen.get(key, 0) or 1
+            print(f"{n:6d}  {sec * 1000:9.1f} ms  {sec / n * 1000:7.3f} ms/call  {key}", flush=True)
+    atexit.register(_dump)
+
+if os.environ.get("TRACE_OPS"):
+    import collections, threading, time as _t, traceback
+
+    _ops_seen = collections.Counter()
+    _ops_cost = collections.Counter()
+
+    def _wrap(name):
+        orig = getattr(torch.Tensor, name)
+
+        def inner(self, *a, **k):
+            st = traceback.extract_stack(limit=14)
+            key = name + " [" + threading.current_thread().name + "] " + " <- ".join(
+                f"{f.name}:{f.lineno}" for f in st[-8:-3] if "profile_decode" not in f.filename
+            )
+            t = _t.perf_counter()
+            try:
+                return orig(self, *a, **k)
+            finally:
+                _ops_seen[key] += 1
+                _ops_cost[key] += _t.perf_counter() - t
+
+        setattr(torch.Tensor, name, inner)
+
+    for _n in [x.strip() for x in os.environ["TRACE_OPS"].split(",") if x.strip()]:
+        _wrap(_n)
+    print(f"TRACE_OPS on: {os.environ['TRACE_OPS']}", flush=True)
+    import atexit
+
+    def _dump_ops():
+        print("\n=== op callers (count, total ms, ms/call) ===", flush=True)
+        for key, sec in _ops_cost.most_common(15):
+            n = _ops_seen.get(key, 0) or 1
+            print(f"{n:7d}  {sec * 1000:9.1f} ms  {sec / n * 1000:7.3f} ms/call  {key}", flush=True)
+    atexit.register(_dump_ops)
+
+mark = os.environ.get("DECODE_MARK")
+if mark:  # let a tracer attach to the measured window instead of the checkpoint load
+    open(mark, "w").write(str(os.getpid()))
+    print(f"decode window marker: {mark} pid {os.getpid()}", flush=True)
 reset()
 # Main-thread CPU (issue) time vs wall: wall - cpu = blocked on the GPU.
 _t0, _c0 = time.perf_counter(), time.thread_time()
@@ -211,3 +325,38 @@ for r in host_routers():
         print("route() cpu breakdown (ms/token): " + "  ".join(
             f"{k} {v / len(steps) * 1000:.2f}" for k, v in rt.items() if k != "calls"), flush=True)
 print(f"router thread spin/work   {snap.get('spin_seconds', 0.0) / len(steps) * 1000:8.2f} / {snap.get('work_seconds', 0.0) / len(steps) * 1000:.2f} ms/token (runs beside the GPU)", flush=True)
+
+
+# Handshake and prediction instrumentation (events-on path): how long the submit -> routing-landed round trip
+# takes, how much of that is the miss install, and how well the ahead-read prediction does.
+def _pct(values, q):
+    if not values:
+        return 0.0
+    values = sorted(values)
+    return values[min(len(values) - 1, int(q * len(values)))] * 1000
+
+
+for r in host_routers():
+    lat = getattr(r, "latency", None)
+    if not lat:
+        continue
+    n_steps = max(len(steps), 1)
+    lat_ms = [x[1] for x in lat]
+    inst_ms = [x[2] for x in lat]
+    layers = len({x[0] for x in lat})
+    print("", flush=True)
+    print(f"handshake submit->landed  p50 {_pct(lat_ms, 0.5):6.3f}  p90 {_pct(lat_ms, 0.9):6.3f}  "
+          f"p99 {_pct(lat_ms, 0.99):6.3f} ms   (mean {sum(lat_ms) / len(lat_ms) * 1000:.3f})", flush=True)
+    print(f"handshake install (miss)  p50 {_pct(inst_ms, 0.5):6.3f}  p90 {_pct(inst_ms, 0.9):6.3f}  "
+          f"p99 {_pct(inst_ms, 0.99):6.3f} ms", flush=True)
+    print(f"handshake calls {len(lat)}  over {layers} layers, {len(lat) / n_steps:.1f}/token   "
+          f"sum {sum(lat_ms) / n_steps * 1000:.2f} ms/token", flush=True)
+    held, wanted, exact, gl = getattr(r, "guess_held", 0), getattr(r, "guess_wanted", 0), getattr(r, "guess_exact", 0), getattr(r, "guess_layers", 0)
+    if gl:
+        print(f"guess layers {gl}  exact-layer {exact / gl * 100:5.1f}%  "
+              f"recall {held and min(held, wanted) / max(wanted, 1) * 100:5.1f}%  "
+              f"(predicted {held / gl:.1f} experts/layer, used {wanted / gl:.1f})", flush=True)
+    else:
+        print("guess layers 0: no prediction was ever compared", flush=True)
+    print(f"guess calls {getattr(r, 'guess_calls', 0)}  no router {getattr(r, 'guess_no_router', 0)}  "
+          f"not decode {getattr(r, 'guess_not_decode', 0)}  no next layer {getattr(r, 'guess_no_ahead', 0)}", flush=True)

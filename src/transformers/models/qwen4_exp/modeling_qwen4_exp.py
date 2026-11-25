@@ -1866,9 +1866,17 @@ class Qwen4ExpVisionAttention(nn.Module):
         else:
             # Other implementations: Process each chunk separately
             lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
+            if lengths.numel() == 1:
+                # Single sequence: the split is the identity. `lengths.tolist()` would drain the MPS queue once per
+                # tensor per forward (~8.6 ms on unified memory: the copy is free, the ordering wait is not), and
+                # this runs twice per decode step.
+                splits = [(query_states, key_states, value_states)]
+            else:
+                splits = [
+                    torch.split(tensor, lengths.tolist(), dim=2)
+                    for tensor in (query_states, key_states, value_states)
+                ]
+                splits = list(zip(*splits))
 
             attn_outputs = [
                 attention_interface(
@@ -1882,7 +1890,7 @@ class Qwen4ExpVisionAttention(nn.Module):
                     is_causal=False,
                     **kwargs,
                 )[0]
-                for q, k, v in zip(*splits)
+                for q, k, v in splits
             ]
             attn_output = torch.cat(attn_outputs, dim=1)
 

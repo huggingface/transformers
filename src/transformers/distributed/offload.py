@@ -519,6 +519,14 @@ class ExpertsOffloadStore:
         index = self.order.index(layer)
         return self.order[index + 1 : index + 1 + self.lookahead]
 
+    def ahead_layer(self, layer):
+        """The layer right after `layer`, independent of the prefetch `lookahead`: the target of the routing guess.
+
+        `lookahead` stays 0 by default (read-ahead was 3x wasteful and had an eviction hazard); predicting the next
+        layer is a separate experiment and must not be silently tied to it."""
+        index = self.order.index(layer)
+        return self.order[index + 1] if index + 1 < len(self.order) else None
+
 
 def _prefetch_to_mps_supported() -> bool:
     """Whether safetensors' `prefetch` can read into existing MPS tensors (`device="mps"`, `out=`)."""
@@ -550,6 +558,11 @@ class _MPSHostRouter:
     # the knee, not a tuned optimum. See `benchmark_v2/experts_offload/max_ahead_sweep.py`.
     MAX_AHEAD = int(os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_MAX_AHEAD", "16"))
     COMMIT_EVERY = int(os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_COMMIT_EVERY", "2"))
+    # Install the next layer's experts from the router guess while this layer resolves. Always keeps every
+    # resident expert of the next layer (the read-ahead eviction hazard), so it costs evictions when the guess is
+    # wrong. Off by default: `lookahead=0` is the shipped path and the guess is an experiment.
+    GUESS = os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_GUESS", "0") == "1"
+    RT_TIMING = os.environ.get("ROUTE_TIMING", "0") == "1"
 
     def __init__(self, store, ext):
         self.store, self.ext = store, ext
@@ -563,7 +576,18 @@ class _MPSHostRouter:
         self.deferred: list[tuple[str, list[int]]] = []  # resolved calls whose pass-2 entries reset later
         self.spin_seconds = self.work_seconds = 0.0  # host thread: waiting for routings / resolving them
         self.jobs_done = self.ahead_reads = 0
+        # Handshake and prediction instrumentation (read by the profiling scripts, see `handshake_stats`):
+        # `latency` is submit -> routing landed, i.e. what the device-side wait is exposed to; `install` is the
+        # miss-install work after that. `guess_*` prices the ahead-read prediction against the next layer's routing.
+        self.latency = []  # (layer, latency_s, install_s) per resolved call
+        self.guess_layers = self.guess_exact = 0
+        self.guess_held = self.guess_wanted = 0  # predicted experts / actually used experts over those layers
+        self.pending_guess = {}  # layer -> the expert set predicted for it by the previous layer
+        # Why the prediction may never run: no router found next to the experts, a batched (non-decode) input, or
+        # no next streamed layer.
+        self.guess_no_router = self.guess_not_decode = self.guess_no_ahead = self.guess_calls = 0
         self.event = ext.event_new()
+        self.rt_times = {"calls": 0, "copy": 0.0, "spin": 0.0, "put": 0.0, "flush": 0.0} if self.RT_TIMING else None
         self.counter = 0
         self.jobs = queue.SimpleQueue()
         self.buffers: dict[str, torch.Tensor] = {}  # layer -> routing buffer (int32, -1 = not landed)
@@ -601,9 +625,16 @@ class _MPSHostRouter:
     def guess(self, layer, hidden_states, top_k_index):
         """The next streamed layer's experts as its router would pick them on this layer's input (decode only; an
         empty tensor otherwise): what the host reads ahead."""
-        ahead = self.store.next_layers(layer)
-        router = self.store.routers.get(ahead[0]) if ahead else None
-        if router is None or top_k_index.shape[0] != 1:
+        self.guess_calls += 1
+        if not self.GUESS:  # the guess is an experiment: do not pay for it on the shipped path
+            return top_k_index.new_empty(0)
+        nxt = self.store.ahead_layer(layer)
+        router = self.store.routers.get(nxt) if nxt else None
+        if router is None:
+            self.guess_no_router += 1
+            return top_k_index.new_empty(0)
+        if top_k_index.shape[0] != 1:
+            self.guess_not_decode += 1
             return top_k_index.new_empty(0)
         return _route(router, hidden_states, top_k_index.shape[-1]).reshape(-1).to(top_k_index.dtype)
 
@@ -617,7 +648,15 @@ class _MPSHostRouter:
             ctypes.memset(self.ext.cpu_address(buffer), 0xFF, buffer.numel() * 4)
         if (layer, self.store.params[layer][0]) not in self.layout:
             self._locate(layer)
-        buffer[: 2 * n + g].copy_(torch.cat([top_k_index.reshape(-1), slots.reshape(-1), guess]))
+        # Three narrow copies instead of `torch.cat` + one copy: the cat allocated and dispatched a kernel per
+        # layer (48/token) only to concatenate two int tensors the shared buffer already has room for.
+        rt = self.rt_times
+        t0 = time.perf_counter() if rt else 0.0
+        buffer[:n].copy_(top_k_index.reshape(-1))
+        buffer[n : 2 * n].copy_(slots.reshape(-1))
+        if g:
+            buffer[2 * n : 2 * n + g].copy_(guess)
+        t1 = time.perf_counter() if rt else 0.0
         self.counter += 1
         # Each wait commits a command buffer at most every `COMMIT_EVERY`: past ~64 in flight Metal stops the queue,
         # so the host stays at most `MAX_AHEAD` layers ahead of the device
@@ -625,8 +664,17 @@ class _MPSHostRouter:
             if self.error is not None:
                 break
             time.sleep(0)
-        self.jobs.put((layer, n, g, self.counter, self.ext.cpu_address(buffer)))
+        t2 = time.perf_counter() if rt else 0.0
+        self.jobs.put((layer, n, g, self.counter, self.ext.cpu_address(buffer), time.perf_counter()))
+        t3 = time.perf_counter() if rt else 0.0
         self.ext.flush()  # the copy's writes reach the host at its encoder's end: end it now, before pass 1
+        if rt:
+            t4 = time.perf_counter()
+            rt["calls"] += 1
+            rt["copy"] += t1 - t0
+            rt["spin"] += t2 - t1
+            rt["put"] += t3 - t2
+            rt["flush"] += t4 - t3
         if self.error is not None:
             raise RuntimeError("experts offload host thread failed") from self.error
 
@@ -728,7 +776,7 @@ class _MPSHostRouter:
             ctypes.memmove(self.ext.cpu_address(self.store.device_tables[name]), entries.data_ptr(), entries.nbytes)
         pool.dirty.clear()
 
-    def _resolve(self, layer, n, g, counter, address):
+    def _resolve(self, layer, n, g, counter, address, submitted=None):
         store, pool = self.store, self.store.pool_of[layer]
         stamps = self._stamps(pool)
         start = time.perf_counter()
@@ -743,6 +791,15 @@ class _MPSHostRouter:
         view = (ctypes.c_int32 * (2 * n + g)).from_address(address)
         values = view[:]
         experts, slots, guesses = values[:n], values[n : 2 * n], values[2 * n :]
+        # Price the prediction the previous layer made for this one, then stop holding it.
+        predicted = self.pending_guess.pop(layer, None)
+        if predicted is not None:
+            used = set(experts)
+            self.guess_layers += 1
+            self.guess_held += len(predicted)
+            self.guess_wanted += len(used)
+            self.guess_exact += int(used <= predicted)
+        install_start = time.perf_counter()
         keep = {(layer, e) for e in experts}
         if status == 1:
             ctypes.memset(address, 0xFF, (2 * n + g) * 4)
@@ -762,18 +819,22 @@ class _MPSHostRouter:
             self.deferred.append((layer, misses))
             store.hits += n - len(misses)
             store.misses += len(misses)
+        signalled = time.perf_counter()  # end of the critical path: the device may resume after this
         # Off the critical path: reset the pass-2 entries of earlier calls, read the next layer's guess ahead
         self._reset_pass2(exclude=layer)
-        ahead = store.next_layers(layer)
-        if guesses and ahead:
-            nxt = ahead[0]
+        nxt = store.ahead_layer(layer) if self.GUESS else None
+        if nxt is None:
+            self.guess_no_ahead += 1
+        if guesses and nxt:
+            ahead = [nxt]
+            self.pending_guess[nxt] = set(guesses)  # priced against nxt's real routing when it resolves
             npool = store.pool_of[nxt]
             self._stamps(npool)
             wanted = {(nxt, e) for e in guesses}
             # Experiment: read-ahead for `nxt` may run while the GPU is in `nxt`'s pass 1. Evicting a
             # resident `nxt` expert then overwrites a slot pass 1 may read (e6e0218 KeyError / silent
             # wrong output). Keep every resident expert of `nxt` for this install.
-            if os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_PIN_AHEAD", "0") == "1":
+            if self.GUESS or os.environ.get("TRANSFORMERS_EXPERTS_OFFLOAD_PIN_AHEAD", "0") == "1":
                 keep = keep | wanted | {key for key in npool.cache if key[0] == nxt}
             else:
                 keep = keep | wanted  # upstream behaviour: never evict an expert this pass wants
@@ -783,6 +844,8 @@ class _MPSHostRouter:
                 self.ahead_reads += len(absent)
         self.work_seconds += time.perf_counter() - landed
         self.jobs_done += 1
+        if submitted is not None and len(self.latency) < 200_000:
+            self.latency.append((layer, landed - submitted, signalled - install_start))
 
 
 class ExpertsOffloadLayer(TensorParallelLayer):
