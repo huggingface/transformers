@@ -963,8 +963,20 @@ def _flash_attention_forward(
     # Padding free (i.e. sequences flattened into one total sequence) and cu_seqlen and max_length are provided
     if is_fa_with_varlen_kwargs:
         q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
+        # [scratch] FA3 takes attention sinks on Hopper only, elsewhere they join through the log-sum-exp (its varlen
+        # call returns it), as in the paged branch above
+        sinks = flash_kwargs_fn.keywords.get("s_aux")
+        sinks_by_lse = (
+            sinks is not None
+            and is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=3)
+            and (_PROTO_SINKS_BY_LSE or torch.cuda.get_device_capability()[0] != 9)
+        )
+        if sinks_by_lse:
+            flash_kwargs_fn = partial(flash_kwargs_fn.func, **{**flash_kwargs_fn.keywords, "s_aux": None})
         flash_kwargs = flash_kwargs_fn(max_seqlen_q=max_length_q, max_seqlen_k=max_length_k)
         out = flash_varlen_fn(q, k, v, cu_seqlens_q=cu_seq_lens_q, cu_seqlens_k=cu_seq_lens_k, **flash_kwargs)
+        if sinks_by_lse:  # lse is [heads, tokens]
+            out = out[0] * torch.sigmoid(out[1].transpose(0, 1) - sinks.float())[..., None].to(out[0].dtype)
         out = out[0] if isinstance(out, tuple) else out
         return out.view(batch_size, -1, *out.shape[-2:])
 
