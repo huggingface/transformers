@@ -484,6 +484,17 @@ class TestBuildGenerationConfig(unittest.TestCase):
         result = self._make_handler()._build_generation_config({"logit_bias": {"42": 1.0}}, GenerationConfig())
         self.assertEqual(result.sequence_bias, {(42,): 1.0})
 
+    def test_logit_bias_integer_values(self):
+        # OpenAI documents `logit_bias` values as integers from -100 to 100, which `sequence_bias` rejects as is.
+        from transformers import GenerationConfig
+        from transformers.generation.logits_process import SequenceBiasLogitsProcessor
+
+        result = self._make_handler()._build_generation_config(
+            {"logit_bias": {"42": -100, "7": 5}}, GenerationConfig()
+        )
+        self.assertEqual(result.sequence_bias, {(42,): -100.0, (7,): 5.0})
+        SequenceBiasLogitsProcessor(sequence_bias=result.sequence_bias)
+
     def test_stop_strings(self):
         from transformers import GenerationConfig
 
