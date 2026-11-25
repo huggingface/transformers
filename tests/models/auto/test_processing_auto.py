@@ -19,6 +19,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from shutil import copyfile
+from unittest.mock import patch
 
 from huggingface_hub import snapshot_download, upload_folder
 
@@ -34,6 +35,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     BaseVideoProcessor,
+    BertConfig,
     BertTokenizer,
     CLIPImageProcessor,
     FeatureExtractionMixin,
@@ -43,6 +45,7 @@ from transformers import (
     LlavaProcessor,
     ProcessorMixin,
     SiglipImageProcessor,
+    VideoMAEConfig,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
@@ -735,3 +738,66 @@ class ProcessorPushToHubTester(unittest.TestCase):
                 # When we save as single files, tokenizers and processors share a chat template, which means
                 # the reloaded tokenizer should get the chat template as well
                 self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
+
+
+class AutoProcessorVideoFallbackTest(unittest.TestCase):
+    """Regression tests for https://github.com/huggingface/transformers/issues/51232.
+
+    Video checkpoints without a dedicated `Processor` class can only be resolved through
+    ``AutoProcessor``'s last-resort fallback. The fallback must prefer the video processor
+    over the image processor for video models, otherwise a legacy ``preprocessor_config.json``
+    makes ``AutoProcessor`` return an image processor that rejects ``videos=`` inputs.
+    """
+
+    @staticmethod
+    def _processor_returning(value):
+        class _Processor:
+            @classmethod
+            def from_pretrained(cls, *args, **kwargs):
+                return value
+
+        return _Processor
+
+    @staticmethod
+    def _unavailable_processor():
+        class _Processor:
+            @classmethod
+            def from_pretrained(cls, *args, **kwargs):
+                raise OSError("not available in this test")
+
+        return _Processor
+
+    def _resolved_processor_for(self, config):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            patches = [
+                patch(
+                    "transformers.models.auto.processing_auto.AutoTokenizer",
+                    self._unavailable_processor(),
+                ),
+                patch(
+                    "transformers.models.auto.processing_auto.AutoImageProcessor",
+                    self._processor_returning("image"),
+                ),
+                patch(
+                    "transformers.models.auto.processing_auto.AutoVideoProcessor",
+                    self._processor_returning("video"),
+                ),
+                patch(
+                    "transformers.models.auto.processing_auto.AutoFeatureExtractor",
+                    self._unavailable_processor(),
+                ),
+            ]
+            for patcher in patches:
+                patcher.start()
+            try:
+                return AutoProcessor.from_pretrained(tmpdirname)
+            finally:
+                for patcher in reversed(patches):
+                    patcher.stop()
+
+    def test_video_model_prefers_video_processor_over_image_processor(self):
+        self.assertEqual(self._resolved_processor_for(VideoMAEConfig()), "video")
+
+    def test_non_video_model_keeps_image_processor_priority(self):
+        self.assertEqual(self._resolved_processor_for(BertConfig()), "image")
