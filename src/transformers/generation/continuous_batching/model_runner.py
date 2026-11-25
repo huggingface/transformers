@@ -796,7 +796,7 @@ class ModelRunner:
         quant_method = quant_method or getattr(quantization, "quant_method", None)
         if str(quant_method) not in ("fp8", "QuantizationMethod.FP8"):
             torch._dynamo.config.recompile_limit = max(
-                torch._dynamo.config.recompile_limit, int(os.environ.get("PROTO_RECOMPILE_LIMIT", 256))
+                torch._dynamo.config.recompile_limit, int(os.environ.get("PROTO_RECOMPILE_LIMIT", 1024))
             )
             torch._dynamo.config.accumulated_recompile_limit = max(
                 torch._dynamo.config.accumulated_recompile_limit, 4096
