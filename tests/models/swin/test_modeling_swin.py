@@ -21,6 +21,7 @@ from transformers import SwinConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -40,62 +41,50 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class SwinModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=32,
-        patch_size=2,
-        num_channels=3,
-        embed_dim=16,
-        depths=[1, 2, 1],
-        num_heads=[2, 2, 4],
-        window_size=2,
-        mlp_ratio=2.0,
-        qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        drop_path_rate=0.1,
-        hidden_act="gelu",
-        use_absolute_embeddings=False,
-        patch_norm=True,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        is_training=True,
-        scope=None,
-        use_labels=True,
-        type_sequence_label_size=10,
-        encoder_stride=8,
-        out_features=["stage1", "stage2"],
-        out_indices=[1, 2],
-    ):
+class SwinModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 32,
+        "patch_size": 2,
+        "num_channels": 3,
+        "embed_dim": 16,
+        "depths": [1, 2, 1],
+        "num_heads": [2, 2, 4],
+        "window_size": 2,
+        "mlp_ratio": 2.0,
+        "qkv_bias": True,
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "drop_path_rate": 0.1,
+        "hidden_act": "gelu",
+        "use_absolute_embeddings": False,
+        "patch_norm": True,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-5,
+        "is_training": True,
+        "scope": None,
+        "use_labels": True,
+        "type_sequence_label_size": 10,
+        "encoder_stride": 8,
+        "out_features": ["stage1", "stage2"],
+        "out_indices": [1, 2],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # num_patches and seq_length used by SDPA equivalence tests (bool_masked_pos handling)
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches
+        values["num_masks"] = num_patches // 2
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.embed_dim = embed_dim
-        self.depths = depths
-        self.num_heads = num_heads
-        self.window_size = window_size
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.drop_path_rate = drop_path_rate
-        self.hidden_act = hidden_act
-        self.use_absolute_embeddings = use_absolute_embeddings
-        self.patch_norm = patch_norm
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.is_training = is_training
-        self.scope = scope
-        self.use_labels = use_labels
-        self.type_sequence_label_size = type_sequence_label_size
-        self.encoder_stride = encoder_stride
-        self.out_features = out_features
-        self.out_indices = out_indices
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -176,7 +165,7 @@ class SwinModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
         # test greyscale images
@@ -187,7 +176,7 @@ class SwinModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -220,6 +209,8 @@ class SwinModelTester:
 
 @require_torch
 class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = SwinModelTester
+
     all_model_classes = (
         (
             SwinModel,
@@ -237,7 +228,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SwinModelTester(self)
@@ -249,6 +239,23 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             common_properties=["image_size", "patch_size", "num_channels"],
         )
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        import copy
+
+        config = copy.deepcopy(config)
+        if hasattr(config, "attention_probs_dropout_prob"):
+            config.attention_probs_dropout_prob = 0
+        # Swin uses embed_dim and num_heads (list). Ensure head_dim >= requested_dim by scaling embed_dim.
+        if hasattr(config, "embed_dim") and hasattr(config, "num_heads"):
+            num_heads = config.num_heads
+            min_heads = min(num_heads) if isinstance(num_heads, (list, tuple)) else num_heads
+            head_dim = config.embed_dim // min_heads
+            if head_dim < requested_dim:
+                scale = max(requested_dim // head_dim, 1)
+                config.embed_dim *= scale
+        return config
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -256,13 +263,13 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
+    @unittest.skip(
+        reason="Swin always passes a non-null combined attention mask (relative position bias + optional "
+        "cyclic-shift mask) to the attention interface. Flash attention does not support non-null "
+        "additive attn_mask, so this kernel cannot be used with Swin."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
-
-    def test_training_gradient_checkpointing(self):
-        super().test_training_gradient_checkpointing()
 
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -308,6 +315,7 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
+            # Attentions are captured per stage (one per SwinStage), not per transformer block.
             expected_num_attentions = len(self.model_tester.depths)
             self.assertEqual(len(attentions), expected_num_attentions)
 
@@ -375,10 +383,12 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
-        self.assertListEqual(
-            list(hidden_states[0].shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
-        )
+        if model_class.__name__ != "SwinBackbone":
+            # Sequence format (B, N, C): last two dims are [num_patches, embed_dim]
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [num_patches, self.model_tester.embed_dim],
+            )
 
         if model_class.__name__ != "SwinBackbone":
             reshaped_hidden_states = outputs.reshaped_hidden_states
@@ -472,7 +482,7 @@ class SwinModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
+        expected_slice = torch.tensor([-0.0970, -0.6469, -0.0927]).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
@@ -498,6 +508,8 @@ class SwinModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class SwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = SwinModelTester
+
     all_model_classes = (SwinBackbone,) if is_torch_available() else ()
     config_class = SwinConfig
 

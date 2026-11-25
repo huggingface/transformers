@@ -24,6 +24,7 @@ from transformers import ClapAudioConfig, ClapConfig, ClapProcessor, ClapTextCon
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -47,57 +48,44 @@ if is_torch_available():
     )
 
 
-class ClapAudioModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=60,
-        num_mel_bins=16,
-        window_size=4,
-        spec_size=64,
-        patch_size=2,
-        patch_stride=2,
-        seq_length=16,
-        freq_ratio=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        patch_embeds_hidden_size=16,
-        projection_dim=32,
-        depths=[2, 2],
-        num_hidden_layers=2,
-        num_heads=[2, 2],
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class ClapAudioModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 60,
+        "num_mel_bins": 16,
+        "window_size": 4,
+        "spec_size": 64,
+        "patch_size": 2,
+        "patch_stride": 2,
+        "seq_length": 16,
+        "freq_ratio": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "patch_embeds_hidden_size": 16,
+        "projection_dim": 32,
+        "depths": [2, 2],
+        "num_hidden_layers": 2,
+        "num_heads": [2, 2],
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_mel_bins = num_mel_bins
-        self.window_size = window_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.depths = depths
-        self.num_heads = num_heads
-        self.num_attention_heads = num_heads[0]
-        self.seq_length = seq_length
-        self.spec_size = spec_size
-        self.freq_ratio = freq_ratio
-        self.patch_stride = patch_stride
-        self.patch_embeds_hidden_size = patch_embeds_hidden_size
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_attention_heads"] = values["num_heads"][0]
+        return values
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, 1, self.hidden_size, self.num_mel_bins])
@@ -157,13 +145,15 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = ClapAudioModelTester
+
     all_model_classes = (ClapAudioModel, ClapAudioModelWithProjection) if is_torch_available() else ()
 
     test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = ClapAudioModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ClapAudioConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ClapAudioConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -242,22 +232,6 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="ClapAudioModel does not output any loss term in the forward pass")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "laion/clap-htsat-fused"
@@ -272,46 +246,33 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(hasattr(model, "audio_projection"))
 
 
-class ClapTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        scope=None,
-        projection_hidden_act="relu",
-    ):
+class ClapTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "scope": None,
+        "projection_hidden_act": "relu",
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.projection_hidden_act = projection_hidden_act
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -375,11 +336,13 @@ class ClapTextModelTester:
 
 @require_torch
 class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = ClapTextModelTester
+
     all_model_classes = (ClapTextModel, ClapTextModelWithProjection) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = ClapTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ClapTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ClapTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -394,22 +357,6 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="ClapTextModel does not use inputs_embeds")
@@ -430,18 +377,24 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertTrue(hasattr(model, "text_projection"))
 
 
-class ClapModelTester:
-    def __init__(self, parent, text_kwargs=None, audio_kwargs=None, is_training=True):
+class ClapModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,  # ClapTextModelTester's batch_size: need bs for batching_equivalence test
+        "is_training": True,
+    }
+
+    def __init__(self, parent, text_kwargs=None, audio_kwargs=None, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
         if text_kwargs is None:
             text_kwargs = {}
         if audio_kwargs is None:
             audio_kwargs = {}
-
-        self.parent = parent
         self.text_model_tester = ClapTextModelTester(parent, **text_kwargs)
         self.audio_model_tester = ClapAudioModelTester(parent, **audio_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -483,6 +436,8 @@ class ClapModelTester:
 
 @require_torch
 class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = ClapModelTester
+
     all_model_classes = (ClapModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClapModel} if is_torch_available() else {}
 
@@ -570,7 +525,9 @@ class ClapModelIntegrationTest(unittest.TestCase):
             expected_mean = EXPECTED_MEANS_UNFUSED[padding]
 
             self.assertTrue(
-                torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
+                torch.allclose(
+                    audio_embed.pooler_output.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3
+                )
             )
 
     def test_integration_fused(self):
@@ -597,7 +554,9 @@ class ClapModelIntegrationTest(unittest.TestCase):
             expected_mean = EXPECTED_MEANS_FUSED[padding]
 
             self.assertTrue(
-                torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
+                torch.allclose(
+                    audio_embed.pooler_output.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3
+                )
             )
 
     def test_batched_fused(self):
@@ -624,7 +583,9 @@ class ClapModelIntegrationTest(unittest.TestCase):
             expected_mean = EXPECTED_MEANS_FUSED[padding]
 
             self.assertTrue(
-                torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
+                torch.allclose(
+                    audio_embed.pooler_output.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3
+                )
             )
 
     def test_batched_unfused(self):
@@ -649,5 +610,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
             expected_mean = EXPECTED_MEANS_FUSED[padding]
 
             self.assertTrue(
-                torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
+                torch.allclose(
+                    audio_embed.pooler_output.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3
+                )
             )

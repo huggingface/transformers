@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
-
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -114,8 +111,8 @@ class RobertaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         errors: str = "replace",
         bos_token: str = "<s>",
         eos_token: str = "</s>",
@@ -171,11 +168,14 @@ class RobertaTokenizer(TokenizersBackend):
             **kwargs,
         )
         self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(sep_token), self.sep_token_id),
-            cls=(str(cls_token), self.cls_token_id),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=trim_offsets,
+            (str(sep_token), self.sep_token_id),
+            (str(cls_token), self.cls_token_id),
+            trim_offsets,
+            add_prefix_space,
         )
 
 
-__all__ = ["RobertaTokenizer"]
+# RobertaTokenizerFast is an alias for RobertaTokenizer (since RobertaTokenizer is already a fast tokenizer)
+RobertaTokenizerFast = RobertaTokenizer
+
+__all__ = ["RobertaTokenizer", "RobertaTokenizerFast"]

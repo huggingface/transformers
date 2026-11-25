@@ -21,6 +21,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import AwqConfig
 
 from ..utils import is_accelerate_available, is_gptqmodel_available, is_torch_available, logging
 from ..utils.quantization_config import AwqBackend
@@ -39,9 +40,7 @@ class AwqQuantizer(HfQuantizer):
 
     # AWQ requires data calibration - we support only inference
     requires_calibration = True
-
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    quantization_config: "AwqConfig"
 
     def validate_environment(self, **kwargs):
         if not is_gptqmodel_available():
@@ -53,10 +52,7 @@ class AwqQuantizer(HfQuantizer):
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
 
     def update_dtype(self, dtype):
-        if dtype is None:
-            dtype = torch.float16
-            logger.info("Loading the model in `torch.float16`. To overwrite it, set `dtype` manually.")
-        elif dtype == torch.bfloat16 and (torch.cuda.is_available() or torch.xpu.is_available()):
+        if dtype == torch.bfloat16 and (torch.cuda.is_available() or torch.xpu.is_available()):
             logger.warning(
                 "`torch.bfloat16` is not supported for AWQ CUDA/XPU kernels yet. Casting to `torch.float16`."
             )
@@ -65,13 +61,11 @@ class AwqQuantizer(HfQuantizer):
             logger.warning("We suggest you to set `dtype=torch.float16` for better efficiency on CUDA/XPU with AWQ.")
         return dtype
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules, add_default_skips=True
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules, add_default_skips=True
         )
 
         model = replace_with_awq_linear(

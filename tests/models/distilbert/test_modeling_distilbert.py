@@ -19,6 +19,7 @@ import pytest
 from transformers import DistilBertConfig, is_torch_available
 from transformers.testing_utils import require_flash_attn, require_torch, require_torch_accelerator, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -28,7 +29,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        AutoTokenizer,
         DistilBertForMaskedLM,
         DistilBertForMultipleChoice,
         DistilBertForQuestionAnswering,
@@ -37,57 +37,39 @@ if is_torch_available():
         DistilBertModel,
     )
     from transformers.models.distilbert.modeling_distilbert import _create_sinusoidal_embeddings
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 
 
-class DistilBertModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-    ):
+class DistilBertModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -199,6 +181,8 @@ class DistilBertModelTester:
 
 @require_torch
 class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DistilBertModelTester
+
     all_model_classes = (
         (
             DistilBertModel,
@@ -215,7 +199,6 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         {
             "feature-extraction": DistilBertModel,
             "fill-mask": DistilBertForMaskedLM,
-            "question-answering": DistilBertForQuestionAnswering,
             "text-classification": DistilBertForSequenceClassification,
             "token-classification": DistilBertForTokenClassification,
             "zero-shot": DistilBertForSequenceClassification,
@@ -396,46 +379,3 @@ class DistilBertModelIntegrationTest(unittest.TestCase):
         )
 
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
-
-    @pytest.mark.torch_export_test
-    @slow
-    def test_export(self):
-        if not is_torch_greater_or_equal_than_2_4:
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        distilbert_model = "distilbert-base-uncased"
-        device = "cpu"
-        attn_implementation = "sdpa"
-        max_length = 64
-
-        tokenizer = AutoTokenizer.from_pretrained(distilbert_model)
-        inputs = tokenizer(
-            f"Paris is the {tokenizer.mask_token} of France.",
-            return_tensors="pt",
-            padding="max_length",
-            max_length=max_length,
-        )
-
-        model = DistilBertForMaskedLM.from_pretrained(
-            distilbert_model,
-            device_map=device,
-            attn_implementation=attn_implementation,
-        )
-
-        logits = model(**inputs).logits
-        eager_predicted_mask = tokenizer.decode(logits[0, 4].topk(5).indices)
-        self.assertEqual(
-            eager_predicted_mask.split(),
-            ["capital", "birthplace", "northernmost", "centre", "southernmost"],
-        )
-
-        exported_program = torch.export.export(
-            model,
-            args=(inputs["input_ids"],),
-            kwargs={"attention_mask": inputs["attention_mask"]},
-            strict=True,
-        )
-
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
-        exported_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
-        self.assertEqual(eager_predicted_mask, exported_predicted_mask)

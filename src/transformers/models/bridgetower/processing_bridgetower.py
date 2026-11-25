@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,47 +16,21 @@ Processor class for BridgeTower.
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 
 
-class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_length": False,
-            "verbose": True,
-        },
-        "images_kwargs": {
-            "do_normalize": True,
-            "do_center_crop": True,
-        },
-    }
-
-
+@auto_docstring
 class BridgeTowerProcessor(ProcessorMixin):
-    r"""
-    Constructs a BridgeTower processor which wraps a Roberta tokenizer and BridgeTower image processor into a single
-    processor.
-
-    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerImageProcessor`] and
-    [`RobertaTokenizerFast`]. See the docstring of [`~BridgeTowerProcessor.__call__`] and
-    [`~BridgeTowerProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`BridgeTowerImageProcessor`):
-            An instance of [`BridgeTowerImageProcessor`]. The image processor is a required input.
-        tokenizer (`RobertaTokenizerFast`):
-            An instance of ['RobertaTokenizerFast`]. The tokenizer is a required input.
-    """
-
-    valid_processor_kwargs = BridgeTowerProcessorKwargs
+    images_kwargs = {
+        "do_normalize": True,
+        "do_center_crop": True,
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"BridgeTowerProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["BridgeTowerProcessor"]

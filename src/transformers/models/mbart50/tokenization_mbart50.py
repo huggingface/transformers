@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -86,7 +84,8 @@ class MBart50Tokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: str | dict | list | None = None,
+        _spm_precompiled_charsmap: str | None = None,
         src_lang=None,
         tgt_lang=None,
         eos_token="</s>",
@@ -160,19 +159,11 @@ class MBart50Tokenizer(TokenizersBackend):
             )
         )
 
-        # Set normalizer equivalent to Precompiled + Strip + Replace from tokenizer.json
-        # When loading from pretrained, this will be overridden by the tokenizer.json config
-        # When creating from extractor (vocab), this provides equivalent behavior
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),  # Precompiled converts newlines/tabs to spaces
-                normalizers.NFKC(),  # Precompiled does NFKC normalization
-                normalizers.Strip(left=False, right=True),  # Strip trailing whitespace (matches tokenizer.json)
-                normalizers.Replace(
-                    Regex(r" {2,}"), "▁"
-                ),  # Replace multiple spaces with underscore (matches tokenizer.json)
-            ]
-        )
+        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]
+        if _spm_precompiled_charsmap is not None:
+            normalizers_ = [normalizers.Precompiled(_spm_precompiled_charsmap)] + normalizers_
+
+        self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
@@ -256,7 +247,7 @@ class MBart50Tokenizer(TokenizersBackend):
         self,
         src_texts: list[str],
         src_lang: str = "en_XX",
-        tgt_texts: Optional[list[str]] = None,
+        tgt_texts: list[str] | None = None,
         tgt_lang: str = "ro_RO",
         **kwargs,
     ) -> BatchEncoding:
@@ -303,7 +294,7 @@ class MBart50Tokenizer(TokenizersBackend):
         )
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self, raw_inputs, return_tensors: str, src_lang: str | None, tgt_lang: str | None, **extra_kwargs
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:

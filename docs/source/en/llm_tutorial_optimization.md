@@ -5,7 +5,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 -->
 
@@ -51,15 +51,14 @@ To give some examples of how much VRAM it roughly takes to load a model in bfloa
 - [**Bloom**](https://huggingface.co/bigscience/bloom) requires 2 \* 176 GB = **352 GB** VRAM
 - [**Llama-2-70b**](https://huggingface.co/meta-llama/Llama-2-70b-hf) requires 2 \* 70 GB = **140 GB** VRAM
 - [**Falcon-40b**](https://huggingface.co/tiiuae/falcon-40b) requires 2 \* 40 GB = **80 GB** VRAM
-- [**MPT-30b**](https://huggingface.co/mosaicml/mpt-30b) requires 2 \* 30 GB = **60 GB** VRAM
 - [**bigcode/starcoder**](https://huggingface.co/bigcode/starcoder) requires 2 \* 15.5 = **31 GB** VRAM
 
-As of writing this document, the largest GPU chip on the market is the A100 & H100 offering 80GB of VRAM. Most of the models listed before require more than 80GB just to be loaded and therefore necessarily require [tensor parallelism](https://huggingface.co/docs/transformers/perf_train_gpu_many#tensor-parallelism) and/or [pipeline parallelism](https://huggingface.co/docs/transformers/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism).
+As of writing this document, the largest GPU chip on the market is the A100 & H100 offering 80GB of VRAM. Most of the models listed before require more than 80GB just to be loaded and therefore necessarily require [tensor parallelism](./perf_train_gpu_many#tensor-parallelism) and/or [pipeline parallelism](./perf_train_gpu_many#pipeline-parallelism).
 
-🤗 Transformers now supports tensor parallelism for supported models having `base_tp_plan` in their respective config classes. Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelism). Furthermore, if you're interested in writing models in a tensor-parallelism-friendly way, feel free to have a look at [the text-generation-inference library](https://github.com/huggingface/text-generation-inference/tree/main/server/text_generation_server/models/custom_modeling).
+🤗 Transformers now supports tensor parallelism for supported models having `base_tp_plan` in their respective config classes. Learn more about Tensor Parallelism [here](./perf_train_gpu_many#tensor-parallelism). Furthermore, if you're interested in writing models in a tensor-parallelism-friendly way, feel free to have a look at [the text-generation-inference library](https://github.com/huggingface/text-generation-inference/tree/main/server/text_generation_server/models/custom_modeling).
 
 Naive pipeline parallelism is supported out of the box. For this, simply load the model with `device="auto"` which will automatically place the different layers on the available GPUs as explained [here](https://huggingface.co/docs/accelerate/v0.22.0/en/concept_guides/big_model_inference).
-Note, however that while very effective, this naive pipeline parallelism does not tackle the issues of GPU idling. For this more advanced pipeline parallelism is required as explained [here](https://huggingface.co/docs/transformers/en/perf_train_gpu_many#naive-model-parallelism-vertical-and-pipeline-parallelism).
+Note, however that while very effective, this naive pipeline parallelism does not tackle the issues of GPU idling. For this more advanced pipeline parallelism is required as explained [here](./perf_train_gpu_many#pipeline-parallelism).
 
 If you have access to an 8 x 80GB A100 node, you could load BLOOM as follows
 
@@ -79,7 +78,7 @@ In this guide, we will use [bigcode/octocoder](https://huggingface.co/bigcode/oc
 
 Since the model is loaded in bfloat16 precision, using our rule of thumb above, we would expect the memory requirement to run inference with `bigcode/octocoder` to be around 31 GB VRAM. Let's give it a try.
 
-We first load the model and tokenizer and then pass both to Transformers' [pipeline](https://huggingface.co/docs/transformers/main_classes/pipelines) object.
+We first load the model and tokenizer and then pass both to Transformers' [pipeline](./main_classes/pipelines) object.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -111,10 +110,10 @@ def bytes_to_giga_bytes(bytes):
   return bytes / 1024 / 1024 / 1024
 ```
 
-Let's call [`torch.cuda.memory.max_memory_allocated`](https://docs.pytorch.org/docs/stable/generated/torch.cuda.memory.max_memory_allocated.html) to measure the peak GPU memory allocation.
+Let's call [`torch.accelerator.memory.max_memory_allocated`](https://docs.pytorch.org/docs/main/generated/torch.accelerator.memory.max_memory_allocated.html) to measure the peak accelerator memory allocation.
 
 ```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
+bytes_to_giga_bytes(torch.accelerator.max_memory_allocated())
 ```
 
 **Output**:
@@ -141,8 +140,8 @@ import torch
 
 def flush():
   gc.collect()
-  torch.cuda.empty_cache()
-  torch.cuda.reset_peak_memory_stats()
+  torch.accelerator.empty_cache()
+  torch.accelerator.reset_peak_memory_stats()
 ```
 
 Let's call it now for the next experiment.
@@ -215,7 +214,7 @@ Here is a Python function that transforms bytes to Giga bytes:\n\n```python\ndef
 Nice, we're getting the same result as before, so no loss in accuracy! Let's look at how much memory was used this time.
 
 ```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
+bytes_to_giga_bytes(torch.accelerator.max_memory_allocated())
 ```
 
 **Output**:
@@ -258,7 +257,7 @@ Here is a Python function that transforms bytes to Giga bytes:\n\n```\ndef bytes
 We're almost seeing the same output text as before - just the `python` is missing just before the code snippet. Let's see how much memory was required.
 
 ```python
-bytes_to_giga_bytes(torch.cuda.max_memory_allocated())
+bytes_to_giga_bytes(torch.accelerator.max_memory_allocated())
 ```
 
 **Output**:
@@ -286,13 +285,13 @@ Overall, we saw that running OctoCoder in 8-bit precision reduced the required G
 
 4-bit quantization allows the model to be run on GPUs such as RTX3090, V100, and T4 which are quite accessible for most people.
 
-For more information on quantization and to see how one can quantize models to require even less GPU VRAM memory than 4-bit, we recommend looking into the [`GPT-QModel`](https://huggingface.co/docs/transformers/main/en/main_classes/quantization#gptqmodel) implementation.
+For more information on quantization and to see how one can quantize models to require even less GPU VRAM memory than 4-bit, we recommend looking into the [`GPT-QModel`](./quantization/gptq) implementation.
 
 > As a conclusion, it is important to remember that model quantization trades improved memory efficiency against accuracy and in some cases inference time.
 
 If GPU memory is not a constraint for your use case, there is often no need to look into quantization. However many GPUs simply can't run LLMs without quantization methods and in this case, 4-bit and 8-bit quantization schemes are extremely useful tools.
 
-For more in-detail usage information, we strongly recommend taking a look at the [Transformers Quantization Docs](https://huggingface.co/docs/transformers/main_classes/quantization#general-usage).
+For more in-detail usage information, we strongly recommend taking a look at the [Transformers Quantization Docs](./quantization/overview).
 Next, let's look into how we can improve computational and memory efficiency by using better algorithms and an improved model architecture.
 
 ## 2. Flash Attention
@@ -416,10 +415,7 @@ As an alternative, *ALiBi* proposes a much simpler relative position encoding sc
 
 As shown in the [ALiBi](https://huggingface.co/papers/2108.12409) paper, this simple relative positional encoding allows the model to retain a high performance even at very long text input sequences.
 
-*ALiBi* is used in multiple of today's most important LLMs, such as:
-
-- [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
-- [**BLOOM**](https://huggingface.co/bigscience/bloom)
+*ALiBi* is used in multiple of today's most important LLMs, such as [BLOOM](https://huggingface.co/bigscience/bloom)
 
 Both *RoPE* and *ALiBi* position encodings can extrapolate to input lengths not seen during training whereas it has been shown that extrapolation works much better out-of-the-box for *ALiBi* as compared to *RoPE*.
 For ALiBi, one simply increases the values of the lower triangular position matrix to match the length of the input sequence.
@@ -437,12 +433,12 @@ In conclusion, LLMs that are intended to be deployed in tasks that require handl
 
 Auto-regressive text generation with LLMs works by iteratively putting in an input sequence, sampling the next token, appending the next token to the input sequence, and continuing to do so until the LLM produces a token that signifies that the generation has finished.
 
-Please have a look at [Transformer's Generate Text Tutorial](https://huggingface.co/docs/transformers/llm_tutorial#generate-text) to get a more visual explanation of how auto-regressive generation works.
+Please have a look at [Transformer's Generate Text Tutorial](./llm_tutorial#default-generate) to get a more visual explanation of how auto-regressive generation works.
 
 Let's run a quick code snippet to show how auto-regressive works in practice. We will simply take the most likely next token via `torch.argmax`.
 
 ```python
-input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"].to("cuda")
+input_ids = tokenizer(prompt, return_tensors="pt")["input_ids"].to(model.device)
 
 for _ in range(5):
   next_logits = model(input_ids)["logits"][:, -1:]
@@ -468,7 +464,7 @@ shape of input_ids torch.Size([1, 25])
 
 As we can see every time we increase the text input tokens by the just sampled token.
 
-With very few exceptions, LLMs are trained using the [causal language modeling objective](https://huggingface.co/docs/transformers/tasks/language_modeling#causal-language-modeling) and therefore mask the upper triangle matrix of the attention score - this is why in the two diagrams above the attention scores are left blank (*a.k.a* have 0 probability). For a quick recap on causal language modeling you can refer to the [*Illustrated Self Attention blog*](https://jalammar.github.io/illustrated-gpt2/#part-2-illustrated-self-attention).
+With very few exceptions, LLMs are trained using the [causal language modeling objective](./tasks/language_modeling#causal-language-modeling) and therefore mask the upper triangle matrix of the attention score - this is why in the two diagrams above the attention scores are left blank (*a.k.a* have 0 probability). For a quick recap on causal language modeling you can refer to the [*Illustrated Self Attention blog*](https://jalammar.github.io/illustrated-gpt2/#part-2-illustrated-self-attention).
 
 As a consequence, tokens *never* depend on later tokens, more specifically the $\mathbf{q}_i$ vector is never put in relation with any key, values vectors $\mathbf{k}_j, \mathbf{v}_j$ if $j > i$ . Instead $\mathbf{q}_i$ only attends to previous key-value vectors $\mathbf{k}_{m < i}, \mathbf{v}_{m < i} \text{ , for } m \in \{0, \ldots i - 1\}$. In order to reduce unnecessary computation, one can therefore cache each layer's key-value vectors for all previous timesteps.
 
@@ -476,17 +472,17 @@ In the following, we will tell the LLM to make use of the key-value cache by ret
 In Transformers, we can retrieve the key-value cache by passing the `use_cache` flag to the `forward` call and can then pass it with the current token.
 
 ```python
-past_key_values = None # past_key_values is the key-value cache
+cache = None # cache is the key-value cache
 generated_tokens = []
-next_token_id = tokenizer(prompt, return_tensors="pt")["input_ids"].to("cuda")
+next_token_id = tokenizer(prompt, return_tensors="pt")["input_ids"].to(model.device)
 
 for _ in range(5):
-  next_logits, past_key_values = model(next_token_id, past_key_values=past_key_values, use_cache=True).to_tuple()
+  next_logits, cache = model(next_token_id, cache=cache, use_cache=True).to_tuple()
   next_logits = next_logits[:, -1:]
   next_token_id = torch.argmax(next_logits, dim=-1)
 
   print("shape of input_ids", next_token_id.shape)
-  print("length of key-value cache", past_key_values.get_seq_length())  # past_key_values are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
+  print("length of key-value cache", cache.get_seq_length())  # cache are of shape [num_layers, 0 for k, 1 for v, batch_size, length, hidden_dim]
   generated_tokens.append(next_token_id.item())
 
 generated_text = tokenizer.batch_decode(generated_tokens)
@@ -518,7 +514,7 @@ Using the key-value cache has two advantages:
 - Significant increase in computational efficiency as less computations are performed compared to computing the full $\mathbf{QK}^T$ matrix. This leads to an increase in inference speed
 - The maximum required memory is not increased quadratically with the number of generated tokens, but only increases linearly.
 
-> One should *always* make use of the key-value cache as it leads to identical results and a significant speed-up for longer input sequences. Transformers has the key-value cache enabled by default when making use of the text pipeline or the [`generate` method](https://huggingface.co/docs/transformers/main_classes/text_generation). We have an entire guide dedicated to caches [here](./kv_cache).
+> One should *always* make use of the key-value cache as it leads to identical results and a significant speed-up for longer input sequences. Transformers has the key-value cache enabled by default when making use of the text pipeline or the [`generate` method](./main_classes/text_generation). We have an entire guide dedicated to caches [here](./kv_cache).
 
 <Tip warning={true}>
 
@@ -547,7 +543,7 @@ Two things should be noted here:
   1. Keeping all the context is crucial for LLMs deployed in chat so that the LLM understands all the previous context of the conversation. E.g. for the example above the LLM needs to understand that the user refers to the population when asking `"And how many are in Germany"`.
   2. The key-value cache is extremely useful for chat as it allows us to continuously grow the encoded chat history instead of having to re-encode the chat history again from scratch (as e.g. would be the case when using an encoder-decoder architecture).
 
-In `transformers`, a `generate` call will return `past_key_values` when `return_dict_in_generate=True` is passed, in addition to the default `use_cache=True`. Note that it is not yet available through the `pipeline` interface.
+In `transformers`, a `generate` call will return `cache` when `return_dict_in_generate=True` is passed, in addition to the default `use_cache=True`. Note that it is not yet available through the `pipeline` interface.
 
 ```python
 # Generation as usual
@@ -556,12 +552,12 @@ model_inputs = tokenizer(prompt, return_tensors='pt')
 generation_output = model.generate(**model_inputs, max_new_tokens=60, return_dict_in_generate=True)
 decoded_output = tokenizer.batch_decode(generation_output.sequences)[0]
 
-# Piping the returned `past_key_values` to speed up the next conversation round
+# Piping the returned `cache` to speed up the next conversation round
 prompt = decoded_output + "\nQuestion: How can I modify the function above to return Mega bytes instead?\n\nAnswer: Here"
 model_inputs = tokenizer(prompt, return_tensors='pt')
 generation_output = model.generate(
   **model_inputs,
-  past_key_values=generation_output.past_key_values,
+  cache=generation_output.cache,
   max_new_tokens=60,
   return_dict_in_generate=True
 )
@@ -616,7 +612,6 @@ MQA has seen wide adoption by the community and is now used by many of the most 
 
 - [**Falcon**](https://huggingface.co/tiiuae/falcon-40b)
 - [**PaLM**](https://huggingface.co/papers/2204.02311)
-- [**MPT**](https://huggingface.co/mosaicml/mpt-30b)
 - [**BLOOM**](https://huggingface.co/bigscience/bloom)
 
 Also, the checkpoint used in this notebook - `bigcode/octocoder` - makes use of MQA.

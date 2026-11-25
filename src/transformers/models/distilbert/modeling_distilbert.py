@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present, the HuggingFace Inc. team, The Google AI Language Team and Facebook, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ part from HuggingFace PyTorch version of Google AI Bert model (https://github.co
 """
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -28,7 +26,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import get_activation
-from ...configuration_utils import PreTrainedConfig
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -50,7 +47,8 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_distilbert import DistilBertConfig
 
 
@@ -81,27 +79,25 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
 
 
 class Embeddings(nn.Module):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
 
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
         input_ids: torch.Tensor,
-        input_embeds: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
     ) -> torch.Tensor:
         if input_ids is not None:
-            input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
+            inputs_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
 
-        seq_length = input_embeds.size(1)
+        seq_length = inputs_embeds.size(1)
 
         if position_ids is None:
             # Setting the position-ids to the registered buffer in constructor, it helps
@@ -115,7 +111,7 @@ class Embeddings(nn.Module):
 
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
-        embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
+        embeddings = inputs_embeds + position_embeddings  # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings)  # (bs, max_seq_length, dim)
         return embeddings
@@ -127,8 +123,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -139,7 +135,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -152,7 +147,7 @@ def eager_attention_forward(
 
 
 class DistilBertSelfAttention(nn.Module):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__()
         self.config = config
 
@@ -177,7 +172,7 @@ class DistilBertSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -188,9 +183,9 @@ class DistilBertSelfAttention(nn.Module):
         key_layer = self.k_lin(hidden_states).view(*hidden_shape).transpose(1, 2)
         value_layer = self.v_lin(hidden_states).view(*hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -208,7 +203,7 @@ class DistilBertSelfAttention(nn.Module):
 
 
 class FFN(nn.Module):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__()
         self.dropout = nn.Dropout(p=config.dropout)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -229,7 +224,7 @@ class FFN(nn.Module):
 
 
 class TransformerBlock(GradientCheckpointingLayer):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__()
 
         # Have an even number of Configure multi-heads
@@ -245,9 +240,9 @@ class TransformerBlock(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, ...]:
+    ) -> torch.Tensor:
         # Self-Attention
         attention_output, _ = self.attention(
             hidden_states,
@@ -264,7 +259,7 @@ class TransformerBlock(GradientCheckpointingLayer):
 
 
 class Transformer(nn.Module):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__()
         self.n_layers = config.n_layers
         self.layer = nn.ModuleList([TransformerBlock(config) for _ in range(config.n_layers)])
@@ -273,9 +268,9 @@ class Transformer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[BaseModelOutput]:
+    ) -> BaseModelOutput:
         for layer_module in self.layer:
             hidden_states = layer_module(
                 hidden_states,
@@ -301,24 +296,25 @@ class DistilBertPreTrainedModel(PreTrainedModel):
         "attentions": DistilBertSelfAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights."""
         super()._init_weights(module)
-        if isinstance(module, Embeddings) and self.config.sinusoidal_pos_embds:
-            init.copy_(
-                module.position_embeddings.weight,
-                create_sinusoidal_embeddings(
-                    self.config.max_position_embeddings,
-                    self.config.dim,
-                    torch.empty_like(module.position_embeddings.weight),
-                ),
-            )
+        if isinstance(module, Embeddings):
+            if self.config.sinusoidal_pos_embds:
+                init.copy_(
+                    module.position_embeddings.weight,
+                    create_sinusoidal_embeddings(
+                        self.config.max_position_embeddings,
+                        self.config.dim,
+                        torch.empty_like(module.position_embeddings.weight),
+                    ),
+                )
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring
 class DistilBertModel(DistilBertPreTrainedModel):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__(config)
 
         self.embeddings = Embeddings(config)  # Embeddings
@@ -381,16 +377,17 @@ class DistilBertModel(DistilBertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.embeddings.word_embeddings = new_embeddings
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[BaseModelOutput, tuple[torch.Tensor, ...]]:
+    ) -> BaseModelOutput | tuple[torch.Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -399,7 +396,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -411,7 +408,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=embeddings,
+            inputs_embeds=embeddings,
             attention_mask=attention_mask,
         )
 
@@ -430,7 +427,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     _tied_weights_keys = {"vocab_projector.weight": "distilbert.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__(config)
 
         self.activation = get_activation(config.activation)
@@ -475,13 +472,13 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[MaskedLMOutput, tuple[torch.Tensor, ...]]:
+    ) -> MaskedLMOutput | tuple[torch.Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -490,14 +487,10 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
@@ -532,7 +525,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     """
 )
 class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -569,19 +562,13 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[SequenceClassifierOutput, tuple[torch.Tensor, ...]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+    ) -> SequenceClassifierOutput | tuple[torch.Tensor, ...]:
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -630,7 +617,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__(config)
 
         self.distilbert = DistilBertModel(config)
@@ -667,14 +654,14 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[QuestionAnsweringModelOutput, tuple[torch.Tensor, ...]]:
+    ) -> QuestionAnsweringModelOutput | tuple[torch.Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -683,7 +670,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -732,7 +719,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForTokenClassification(DistilBertPreTrainedModel):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -767,17 +754,13 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[TokenClassifierOutput, tuple[torch.Tensor, ...]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
+    ) -> TokenClassifierOutput | tuple[torch.Tensor, ...]:
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
@@ -807,7 +790,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
 @auto_docstring
 class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
-    def __init__(self, config: PreTrainedConfig):
+    def __init__(self, config: DistilBertConfig):
         super().__init__(config)
 
         self.distilbert = DistilBertModel(config)
@@ -842,13 +825,13 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[MultipleChoiceModelOutput, tuple[torch.Tensor, ...]]:
+    ) -> MultipleChoiceModelOutput | tuple[torch.Tensor, ...]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -857,14 +840,10 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
 
         Examples:
 

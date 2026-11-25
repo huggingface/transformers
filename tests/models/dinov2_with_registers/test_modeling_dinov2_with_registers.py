@@ -16,6 +16,8 @@
 import unittest
 from functools import cached_property
 
+import pytest
+
 from transformers import Dinov2WithRegistersConfig
 from transformers.testing_utils import (
     require_torch,
@@ -25,6 +27,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -48,54 +51,44 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class Dinov2WithRegistersModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        num_register_tokens=2,
-        mask_ratio=0.5,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_register_tokens = num_register_tokens
-        self.scope = scope
+class Dinov2WithRegistersModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "num_register_tokens": 2,
+        "mask_ratio": 0.5,
+        "scope": None,
+        "use_swiglu_ffn": False,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in DINOv2 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1 + self.num_register_tokens
-        self.mask_ratio = mask_ratio
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.mask_length = num_patches
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1 + values["num_register_tokens"]
+        values["num_masks"] = int(values["mask_ratio"] * values["seq_length"])
+        values["mask_length"] = num_patches
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -123,6 +116,7 @@ class Dinov2WithRegistersModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             num_register_tokens=self.num_register_tokens,
+            use_swiglu_ffn=self.use_swiglu_ffn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -215,6 +209,8 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     attention_mask and seq_length.
     """
 
+    model_tester_class = Dinov2WithRegistersModelTester
+
     all_model_classes = (
         (
             Dinov2WithRegistersModel,
@@ -234,12 +230,17 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
+
+    def test_reverse_loading_mapping(self):
+        # Force the SwiGLU MLP: weights_in/weights_out -> gate/up/down is the only MLP path with a converter rule.
+        # Plain fc1/fc2 needs no rule and round-trips via test_save_load on the default config.
+        self.model_tester.use_swiglu_ffn = True
+        super().test_reverse_loading_mapping()
 
     def setUp(self):
         self.model_tester = Dinov2WithRegistersModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Dinov2WithRegistersConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Dinov2WithRegistersConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -249,23 +250,17 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -336,7 +331,11 @@ class Dinov2WithRegistersModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.4636, -1.4582, -0.0274], [-1.4738, -0.8858, 0.3002], [0.0714, -0.2407, -1.5940]],
+            [
+                [-0.4638, -1.4563, -0.0289],
+                [-1.4736, -0.8866, 0.3005],
+                [0.0720, -0.2406, -1.5943],
+            ],
             device=torch_device,
         )
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
@@ -344,6 +343,8 @@ class Dinov2WithRegistersModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class Dinov2WithRegistersBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = Dinov2WithRegistersModelTester
+
     all_model_classes = (Dinov2WithRegistersBackbone,) if is_torch_available() else ()
     config_class = Dinov2WithRegistersConfig
 

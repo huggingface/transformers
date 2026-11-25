@@ -5,12 +5,12 @@
 #                          modular_add_function.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # Note that zamba does not have the `apply_rotary_pos_emb` function!
-from typing import Optional
 
 import torch
 from torch import nn
 
-from ...integrations import use_kernel_func_from_hub
+from ...integrations import use_kernel_forward_from_hub
+from ...utils.deprecation import deprecate_kwarg
 
 
 def rotate_half(x):
@@ -20,8 +20,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -29,8 +29,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -65,5 +63,6 @@ class TestAttention(nn.Module):
     def __init__(self):
         pass
 
-    def forward(self) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def forward(self) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         _ = apply_rotary_pos_emb(1, 1, 1, 1)

@@ -17,12 +17,22 @@ import unittest
 
 import numpy as np
 
-from transformers import MODEL_FOR_MULTIMODAL_LM_MAPPING, is_vision_available
+from transformers import (
+    MODEL_FOR_MULTIMODAL_LM_MAPPING,
+    AutoProcessor,
+    Qwen2_5OmniForConditionalGeneration,
+    is_torch_available,
+    is_vision_available,
+    logging,
+)
 from transformers.pipelines import AnyToAnyPipeline, pipeline
 from transformers.testing_utils import (
+    CaptureLogger,
+    Expectations,
     is_pipeline_test,
-    require_librosa,
+    require_audio,
     require_torch,
+    require_torchvision,
     require_vision,
     slow,
 )
@@ -37,13 +47,122 @@ from utils.fetch_hub_objects_for_ci import url_to_local_path
 if is_vision_available():
     import PIL
 
+if is_torch_available():
+    from transformers import Qwen2_5OmniForConditionalGeneration
+
 
 @is_pipeline_test
 @require_vision
-@require_librosa
+@require_audio
 @require_torch
 class AnyToAnyPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MULTIMODAL_LM_MAPPING
+
+    def test_media_only_blip_image_text_output(self):
+        import torch
+        from PIL import Image
+
+        from transformers import AutoModelForMultimodalLM
+
+        model_id = "hf-internal-testing/tiny-random-BlipForConditionalGeneration"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForMultimodalLM.from_pretrained(model_id, dtype=torch.float32).eval()
+        pipe = AnyToAnyPipeline(model=model, processor=processor, task="any-to-any", device=-1)
+        image = Image.new("RGB", (64, 64), "white")
+
+        for return_full_text in (False, True):
+            with self.subTest(return_full_text=return_full_text):
+                result = pipe(
+                    images=image,
+                    max_new_tokens=1,
+                    return_full_text=return_full_text,
+                )
+                self.assertEqual(len(result), 1)
+                self.assertIsNone(result[0]["input_text"])
+                self.assertIsInstance(result[0]["generated_text"], str)
+
+    def test_return_tensors_with_chat_input(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 2}
+
+        outputs = pipe(text=messages, return_tensors=True, generate_kwargs=kwargs)
+
+        self.assertEqual(outputs[0]["input_text"], messages)
+
+    def test_string_assistant_prefill_full_text(self):
+        import copy
+
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        messages = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "My answer is"},
+        ]
+        original = copy.deepcopy(messages)
+
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_max_new_tokens": 2,
+        }
+
+        new_text = pipe(
+            text=messages,
+            return_full_text=False,
+            continue_final_message=True,
+            generate_kwargs=kwargs.copy(),
+        )[0]["generated_text"]
+
+        full_text = pipe(
+            text=messages,
+            return_full_text=True,
+            continue_final_message=True,
+            generate_kwargs=kwargs.copy(),
+        )[0]["generated_text"]
+
+        self.assertEqual(full_text[-1]["role"], "assistant")
+        self.assertEqual(full_text[-1]["content"], "My answer is" + new_text)
+        self.assertEqual(messages, original)
+
+    def test_multiple_candidates_tiny_model(self):
+        pipe = pipeline(
+            "any-to-any",
+            model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration",
+        )
+        kwargs = {
+            "generation_mode": "text",
+            "thinker_do_sample": False,
+            "thinker_num_beams": 2,
+            "thinker_num_return_sequences": 2,
+            "thinker_max_new_tokens": 2,
+        }
+
+        single = pipe(text="Hello", return_full_text=False, generate_kwargs=kwargs)
+        batched = pipe(text=["Hello", "World"], return_full_text=False, generate_kwargs=kwargs)
+
+        self.assertEqual(len(single), 2)
+        self.assertEqual(len(batched), 4)
+
+        # Test real audio generation through the full pipeline.
+        audio_outputs = pipe(
+            text="Hello",
+            generation_mode="audio",
+            generate_kwargs={
+                "thinker_do_sample": False,
+                "thinker_max_new_tokens": 4,
+                "talker_do_sample": False,
+                "talker_max_new_tokens": 10,
+            },
+        )
+        self.assertEqual(len(audio_outputs), 1)
+        self.assertIsInstance(audio_outputs[0]["generated_audio"], np.ndarray)
 
     # We only need `processor` but the Mixin will pass all possible preprocessing classes for a model.
     # So we add them all in signature
@@ -72,13 +191,13 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         videos_examples = [
             {
                 "videos": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4"
                 ),
                 "text": f"{video_token}This video shows a ",
             },
             {
-                "video": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4"
+                "videos": url_to_local_path(
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
                 ),
                 "text": f"{video_token}In the video I see a ",
             },
@@ -87,13 +206,13 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         audio_examples = [
             {
                 "audio": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
                 ),
                 "text": f"{audio_token}This is sound of a ",
             },
             {
                 "audio": url_to_local_path(
-                    "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
                 ),
                 "text": f"{audio_token}Here I hear a ",
             },
@@ -110,6 +229,33 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         pipe = AnyToAnyPipeline(model=model, processor=processor, dtype=dtype, max_new_tokens=10)
 
         return pipe, examples
+
+    def test_pipeline_forwards_direct_videos_keyword(self):
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        )
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+            "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        )
+        pipe = AnyToAnyPipeline(model=model, processor=processor, max_new_tokens=1)
+        video = np.zeros((2, 16, 16, 3), dtype=np.uint8)
+        logger = logging.get_logger("transformers.processing_utils")
+
+        with CaptureLogger(logger) as captured:
+            outputs = pipe(
+                text=f"{processor.video_token} describe",
+                videos=video,
+                return_full_text=False,
+                processor_kwargs={"num_frames": 2},
+                generate_kwargs={
+                    "generation_mode": "text",
+                    "thinker_do_sample": False,
+                    "thinker_max_new_tokens": 1,
+                },
+            )
+
+        self.assertEqual(outputs, [{"input_text": ANY(str), "generated_text": ANY(str)}])
+        self.assertNotIn("Keyword argument `video` is not a valid argument", captured.out)
 
     def run_pipeline_test(self, pipe, examples):
         # Single
@@ -134,6 +280,16 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 ],
             ],
         )
+
+        video_example = next((example for example in examples if "videos" in example), None)
+        if video_example is not None:
+            outputs = pipe(text=video_example["text"], videos=video_example["videos"])
+            self.assertEqual(
+                outputs,
+                [
+                    {"input_text": ANY(str), "generated_text": ANY(str)},
+                ],
+            )
 
         # `generation_mode` raises errors when dosn't match with other params
         with self.assertRaises(ValueError):
@@ -173,21 +329,78 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                 ],
             )
 
+    def test_qwen_omni_batched_text_only_outputs_all_rows(self):
+        model_id = "hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration"
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(model_id).eval()
+        pipe = pipeline("any-to-any", model=model, processor=processor)
+
+        outputs = pipe(
+            text=["hello", "world"],
+            return_full_text=False,
+            generate_kwargs={
+                "generation_mode": "text",
+                "thinker_do_sample": False,
+                "thinker_max_new_tokens": 1,
+            },
+        )
+
+        self.assertEqual(len(outputs), 2)
+        self.assertEqual([output["input_text"] for output in outputs], ["hello", "world"])
+        self.assertTrue(all("generated_text" in output for output in outputs))
+
+    @require_torchvision
+    def test_batched_generation_left_pads_decoder_only_model(self):
+        # The Qwen2.5-VL tokenizer pads on the right by default, which breaks batched decoder-only generation
+        pipe = pipeline("any-to-any", model="trl-internal-testing/tiny-Qwen2_5_VLForConditionalGeneration")
+        image = PIL.Image.new("RGB", (64, 64), color=(120, 30, 200))
+        messages = [
+            [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
+            for text in ("Describe.", "Describe the colors, the shapes and the overall layout of this picture.")
+        ]
+        kwargs = {"max_new_tokens": 6, "do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
+    @require_torchvision
+    def test_batched_text_generation_with_right_padding_feature_extractor(self):
+        # Qwen2.5-Omni pads its text and audio features on the right, only the text has to move to the left
+        pipe = pipeline("any-to-any", model="hf-internal-testing/tiny-random-Qwen2_5OmniForConditionalGeneration")
+        messages = [
+            [{"role": "user", "content": [{"type": "text", "text": text}]}]
+            for text in ("Hello!", "Hello, how are you doing on this fine spring morning?")
+        ]
+        kwargs = {"generation_mode": "text", "thinker_max_new_tokens": 5, "thinker_do_sample": False}
+
+        single = [pipe(text=chat, generate_kwargs=kwargs, return_full_text=False) for chat in messages]
+        batched = pipe(text=messages, batch_size=2, generate_kwargs=kwargs, return_full_text=False)
+        self.assertEqual(batched, single)
+
     @slow
     def test_small_model_pt_token_text_only(self):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
         text = "What is the capital of France? Assistant:"
 
         outputs = pipe(text=text, generate_kwargs={"do_sample": False})
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "input_text": "What is the capital of France? Assistant:",
-                    "generated_None": "What is the capital of France? Assistant: The capital of France is Paris.\n",
-                }
-            ],
-        )
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): [
+                    {
+                        "input_text": "What is the capital of France? Assistant:",
+                        "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.",
+                    }
+                ],
+                ("rocm", (9, 4)): [
+                    {
+                        "input_text": "What is the capital of France? Assistant:",
+                        "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.\n",
+                    }
+                ],
+            }
+        ).get_expectation()
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
 
         messages = [
             [
@@ -208,49 +421,141 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             ],
         ]
         outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
-        self.assertEqual(
-            outputs,
-            [
-                [
-                    {
-                        "input_text": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            }
-                        ],
-                        "generated_None": [
-                            {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
-                            },
-                            {
-                                "role": "assistant",
-                                "content": "A digital embrace, a friendly face,\nHugging Face rises, setting the pace.\nFor AI's heart, a vibrant core,\nOpen source models, and so much more.\n\nFrom transformers deep, a powerful might,\nNLP's future, shining so bright.\nDatasets curated, a treasure trove found,\nFor researchers and builders, on fertile ground.\n\nA community thriving, a collaborative art,\nSharing knowledge, playing a vital part.\nSpaces to showcase, creations unfold,\nStories in code, bravely told.\n\nWith libraries sleek, and tools so refined,\nDemocratizing AI, for all humankind.\nFrom sentiment analysis to text generation's grace,\nHugging Face empowers, at a rapid pace.\n\nA platform of learning, a place to explore,\nUnlocking potential, and asking for more.\nSo let's give a cheer, for this innovative team,\nHugging Face's vision, a beautiful dream. \n",
-                            },
-                        ],
-                    }
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): [
+                    [
+                        {
+                            "input_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                                }
+                            ],
+                            "generated_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                                },
+                                {
+                                    "role": "assistant",
+                                    "content": "A digital embrace, a friendly face,Hugging Face, a vibrant space.Where models bloom and knowledge flows,And AI's potential brightly glows.From transformers deep, a powerful core,To datasets vast, and so much more.A community thrives, a helping hand,Sharing insights across the land.Pipelines built with elegant ease,For NLP tasks, designed to please.Fine-tuning models, a joyful art,To tailor AI to play its part.Spaces open wide, for demos bright,Showcasing wonders, day and night.From text to image, code to sound,Innovation's fertile ground.A platform built on open grace,Democratizing AI's embrace.For researchers, builders, and all who seek,To unlock the future, bold and sleek.So raise a glass to the Face so kind,Hugging Face, expanding the mind.Connecting minds, with code and care,A future of AI, beyond compare.",
+                                },
+                            ],
+                        }
+                    ],
+                    [
+                        {
+                            "input_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "What is the capital of France?"}],
+                                }
+                            ],
+                            "generated_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "What is the capital of France?"}],
+                                },
+                                {"role": "assistant", "content": "The capital of France is **Paris**. "},
+                            ],
+                        }
+                    ],
                 ],
-                [
-                    {
-                        "input_text": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
-                        ],
-                        "generated_None": [
-                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
-                            {"role": "assistant", "content": "The capital of France is **Paris**. \n"},
-                        ],
-                    }
+                ("rocm", (9, 4)): [
+                    [
+                        {
+                            "input_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                                }
+                            ],
+                            "generated_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                                },
+                                {
+                                    "role": "assistant",
+                                    "content": "A digital embrace, a friendly face,\nHugging Face, a vibrant space.\nWhere models bloom and knowledge flows,\nAnd AI's potential brightly glows.\n\nFrom transformers deep, a powerful core,\nTo datasets vast, and so much more.\nA community thrives, a helping hand,\nSharing insights across the land.\n\nPipelines built with elegant ease,\nFor NLP tasks, designed to please.\nFine-tuning models, a joyful art,\nTo tailor AI to play its part.\n\nSpaces open wide, for demos bright,\nShowcasing wonders, day and night.\nFrom text to image, code to sound,\nInnovation's fertile ground.\n\nA platform built on open grace,\nDemocratizing AI's embrace.\nFor researchers, builders, and all who seek,\nTo unlock the future, bold and sleek.\n\nSo raise a glass to the Face so kind,\nHugging Face, expanding the mind.\nConnecting minds, with code and care,\nA future of AI, beyond compare.\n\n\n\n",
+                                },
+                            ],
+                        }
+                    ],
+                    [
+                        {
+                            "input_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "What is the capital of France?"}],
+                                }
+                            ],
+                            "generated_text": [
+                                {
+                                    "role": "user",
+                                    "content": [{"type": "text", "text": "What is the capital of France?"}],
+                                },
+                                {"role": "assistant", "content": "The capital of France is **Paris**. \n"},
+                            ],
+                        }
+                    ],
                 ],
-            ],
+            }
+        ).get_expectation()
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
+
+    @slow
+    @require_torch
+    def test_small_model_pt_chat_with_response_template_prefix(self):
+        # When the chat template pre-writes the start of the assistant message (here, an
+        # opening <think> block), the pipeline must pass the prompt to `parse_response` as
+        # `prefix=` so that generated text is correctly routed into the prefilled region.
+        pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
+        pipe.processor.chat_template = (
+            "{% for message in messages %}"
+            "{{ '<start_of_turn>' + message['role'] + '\n' }}"
+            "{% for item in message['content'] %}"
+            "{% if item['type'] == 'text' %}{{ item['text'] }}{% endif %}"
+            "{% endfor %}"
+            "{{ '<end_of_turn>' + '\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}{{ '<start_of_turn>model\n<think>\n' }}{% endif %}"
         )
+        pipe.tokenizer.response_template = {
+            "defaults": {"role": "assistant"},
+            "start_anchor": "<start_of_turn>model\n",
+            "fields": {
+                "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
+                "content": {"close": "<end_of_turn>", "content": "text"},
+            },
+        }
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is the capital of France?"},
+                ],
+            },
+        ]
+        outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
+        parsed_message = outputs[0]["generated_text"][-1]
+        # The model never emits </think> here, so everything it generates stays inside the
+        # `reasoning_content` region opened by the chat template in the prompt. Without `prefix=`,
+        # the parser would never see the opening <think> and would mis-route the generated
+        # text into `content` instead.
+        self.assertEqual(parsed_message["role"], "assistant")
+        self.assertIn("reasoning_content", parsed_message)
+        self.assertNotIn("content", parsed_message)
+        self.assertIsInstance(parsed_message["reasoning_content"], str)
+        self.assertGreater(len(parsed_message["reasoning_content"]), 0)
 
     @slow
     def test_small_model_pt_token_audio_input(self):
         pipe = pipeline("any-to-any", model="google/gemma-3n-E4B-it")
 
         audio_path = url_to_local_path(
-            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
         )
         messages = [
             {
@@ -273,7 +578,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What do you hear in this audio?"},
                                 {
                                     "type": "audio",
-                                    "url": "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
+                                    "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav",
                                 },
                             ],
                         }
@@ -288,7 +593,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         pipe = pipeline("any-to-any", model="Qwen/Qwen2.5-Omni-3B", dtype="bfloat16")
 
         video_path = url_to_local_path(
-            "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4"
         )
         messages = [
             {
@@ -306,6 +611,18 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             load_audio_from_video=True,
             generate_kwargs={"use_audio_in_video": True, "talker_do_sample": False, "do_sample": False},
         )
+        EXPECTED_CONTENT = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "system\nYou are a helpful assistant.\nuser\nDescribe this video.\nassistant\nThe video begins with a man standing in a kitchen, wearing a black shirt. He is holding a large glass bowl filled with flour and a spoon. The man starts to mix the flour in the bowl, creating a dough. As he mixes, he continues to talk to the camera, explaining the process. The kitchen has wooden cabinets and a white refrigerator in the background. The man's movements are deliberate and focused as he works with the dough. The video ends with the man still mixing the dough in the bowl. Overall, the video provides a clear and detailed demonstration of how to make dough using flour and a spoon.",
+                (
+                    "rocm",
+                    (9, 4),
+                ): "The video begins with a man standing in a kitchen, wearing a black shirt. He is positioned in front of a refrigerator and wooden cabinets. The man is speaking and gesturing with his hands, possibly explaining something or giving instructions. The kitchen appears to be well-lit and has a clean, organized appearance.\n\nAs the video progresses, the man continues to speak and gesture, maintaining his position in the kitchen. The camera remains focused on him, capturing his upper body and face. The background remains consistent, showing the refrigerator and wooden cabinets. The lighting in the kitchen stays bright, and the overall atmosphere remains calm and focused.\n\nThroughout the video, the man's movements and expressions suggest that he is engaged in a conversation or presentation. His gestures and facial expressions indicate that he is actively communicating and possibly demonstrating something related to cooking or food preparation. The kitchen setting provides a practical and relatable backdrop for his actions and words.\n\nOverall, the video depicts a man in a kitchen, speaking and gesturing while possibly explaining or demonstrating something related to cooking or food preparation. The kitchen setting, with its well-lit and organized appearance, serves as a suitable environment for his actions and words.",
+            }
+        ).get_expectation()
         self.assertEqual(
             outputs,
             [
@@ -317,25 +634,25 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "Describe this video."},
                                 {
                                     "type": "video",
-                                    "video": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4",
+                                    "video": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4",
                                 },
                             ],
                         }
                     ],
-                    "generated_None": [
+                    "generated_text": [
                         {
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": "Describe this video."},
                                 {
                                     "type": "video",
-                                    "video": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Cooking_cake.mp4",
+                                    "video": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/Cooking_cake.mp4",
                                 },
                             ],
                         },
                         {
                             "role": "assistant",
-                            "content": "system\nYou are a helpful assistant.\nuser\nDescribe this video.\nassistant\nThe video begins with a man standing in a kitchen, wearing a black shirt. He is holding a large glass bowl filled with flour and a spoon. The man starts to mix the flour in the bowl, creating a dough. As he mixes, he continues to talk to the camera, explaining the process. The kitchen has wooden cabinets and a white refrigerator in the background. The man's movements are deliberate and focused as he works with the dough. The video ends with the man still mixing the dough in the bowl. Overall, the video provides a clear and detailed demonstration of how to make dough using flour and a spoon.",
+                            "content": EXPECTED_CONTENT,
                         },
                     ],
                 }

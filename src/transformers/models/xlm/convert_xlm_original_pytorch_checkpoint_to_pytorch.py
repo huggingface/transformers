@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +41,7 @@ def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_p
             two_levels_state_dict["transformer." + k] = v
 
     config = chkpt["params"]
-    config = {n: v for n, v in config.items() if not isinstance(v, (torch.FloatTensor, numpy.ndarray))}
+    config = {n: v for n, v in config.items() if not isinstance(v, (torch.Tensor, numpy.ndarray))}
 
     vocab = chkpt["dico_word2id"]
     vocab = {s + "</w>" if s.find("@@") == -1 and i > 13 else s.replace("@@", ""): i for s, i in vocab.items()}

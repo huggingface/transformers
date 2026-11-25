@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from parameterized import parameterized
 from pytest import mark
 
@@ -26,8 +27,10 @@ from transformers.testing_utils import (
     Expectations,
     is_flaky,
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -94,11 +97,22 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
+        self._flash_attn_padded_inference_equivalence("flash_attention_2")
+
+    # The common test compares padded patches too, which differ between eager and Flash Attention
+    @require_kernels
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_kernels_inference_equivalence(self):
+        self._flash_attn_padded_inference_equivalence("kernels-community/flash-attn3")
+
+    def _flash_attn_padded_inference_equivalence(self, attn_implementation):
         dtype = torch.float16
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention")
 
             # Prepare inputs
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -120,7 +134,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 model.save_pretrained(tmp_dir)
 
                 model = model_class.from_pretrained(tmp_dir, dtype=dtype)
-                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation="flash_attention_2")
+                model_fa = model_class.from_pretrained(tmp_dir, dtype=dtype, attn_implementation=attn_implementation)
 
             model_fa.to(torch_device)
             model.to(torch_device)
@@ -279,7 +293,7 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Siglip2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Siglip2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -313,22 +327,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -437,29 +435,30 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Siglip2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Siglip2TextConfig, hidden_size=32)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Siglip2TextModel does not support standalone training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Siglip2TextModel does not support standalone training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Siglip2TextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip2TextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Siglip2 does not use inputs_embeds")
@@ -555,7 +554,8 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         self.config_tester = ConfigTester(self, config_class=Siglip2Config, has_text_modality=False)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -591,6 +591,26 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
             config.save_pretrained(tmp_dir_name)
             text_config = Siglip2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_attentions.")
+    def test_get_text_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_hidden_states.")
+    def test_get_text_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_attentions.")
+    def test_get_image_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The SigLIP2 family currently does not work with output_hidden_states.")
+    def test_get_image_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -657,17 +677,17 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 # Draw a circle on an images with different aspect ratios

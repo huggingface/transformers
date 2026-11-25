@@ -24,10 +24,11 @@ from transformers.testing_utils import (
     require_gptqmodel,
     require_optimum,
     require_torch_gpu,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
     slow,
+    torch_device,
 )
-from transformers.utils import is_gptqmodel_available, is_ipex_available
+from transformers.utils import is_gptqmodel_available
 
 
 if is_torch_available():
@@ -70,6 +71,7 @@ class GPTQConfigTest(unittest.TestCase):
         self.assertEqual(dict["bits"], quantization_config.bits)
 
     @require_optimum
+    @require_gptqmodel
     def test_optimum_config(self):
         from optimum.gptq import GPTQQuantizer
 
@@ -104,6 +106,7 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a very friendly and caring")
     EXPECTED_OUTPUTS.add("Hello my name is Nils, I am a student in the field")
     EXPECTED_OUTPUTS.add("Hello my name is Michael, I am a professional photographer and I")
+    EXPECTED_OUTPUTS.add("Hello my name is Nils and I am a professional photographer.")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
@@ -167,20 +170,12 @@ class GPTQTest(unittest.TestCase):
         Checks also if other models are casted correctly.
         """
         # This should work
-        if self.device_map in (None, "cpu"):
+        if self.device_map is None:
             _ = self.quantized_model.to(0)
 
         with self.assertRaises(ValueError):
             # Tries with a `dtype``
             self.quantized_model.to(torch.float16)
-
-    def test_original_dtype(self):
-        r"""
-        A simple test to check if the model successfully stores the original dtype
-        """
-        self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertEqual(self.quantized_model.config._pre_quantization_dtype, torch.float16)
 
     def test_quantized_layers_class(self):
         """
@@ -244,12 +239,14 @@ class GPTQTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.tokenizer.save_pretrained(tmpdirname)
             self.quantized_model.save_pretrained(tmpdirname)
-            if self.device_map == "cpu":
-                quant_type = "ipex" if is_ipex_available() else "torch_fused"
-            else:
-                quant_type = "exllamav2"
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
 
+            if self.device_map == "cpu" or torch_device == "cpu":
+                quant_type = "torch_aten_kernel"
+            elif torch_device == "xpu":
+                quant_type = "torch_fused"
+            else:
+                quant_type = "exllamav2"
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
             self.check_inference_correctness(quantized_model_from_saved)
 
@@ -265,9 +262,8 @@ class GPTQTest(unittest.TestCase):
             self.check_inference_correctness(quantized_model_from_saved)
 
 
-@require_torch_gpu
-class GPTQTestCUDA(GPTQTest):
-    device_map = {"": 0}
+class GPTQTestAccelerator(GPTQTest):
+    device_map = {"": 0} if torch_device != "cpu" else "cpu"
 
     def test_change_loading_attributes(self):
         """
@@ -281,14 +277,19 @@ class GPTQTestCUDA(GPTQTest):
                 device_map=self.device_map,
             )
             self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
-            quant_type = "exllamav2" if self.device_map != "cpu" else ("ipex" if is_ipex_available() else "torch")
+            if self.device_map == "cpu":
+                quant_type = "torch_aten_kernel"
+            elif torch_device == "xpu":
+                quant_type = "torch_fused"
+            else:
+                quant_type = "exllamav2"
             self.check_quantized_layers_type(quantized_model_from_saved, quant_type)
             self.check_inference_correctness(quantized_model_from_saved)
 
 
 @require_accelerate
-@require_torch_multi_gpu
-class GPTQTestDeviceMap(GPTQTestCUDA):
+@require_torch_multi_accelerator
+class GPTQTestDeviceMap(GPTQTestAccelerator):
     device_map = "auto"
 
 
@@ -426,7 +427,7 @@ class GPTQTestExllamaV2(unittest.TestCase):
 # fail when run all together
 @pytest.mark.skip
 @require_accelerate
-@require_torch_multi_gpu
+@require_torch_multi_accelerator
 class GPTQTestDeviceMapCPUOffload(GPTQTest):
     device_map = {
         "transformer.word_embeddings": 0,

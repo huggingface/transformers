@@ -18,6 +18,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import EetqConfig
 
 from ..utils import is_accelerate_available, is_kernels_available, is_torch_available, logging
 from .quantizers_utils import get_module_from_name
@@ -36,9 +37,7 @@ class EetqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    quantization_config: "EetqConfig"
 
     def validate_environment(self, *args, **kwargs):
         if not is_kernels_available():
@@ -64,16 +63,7 @@ class EetqHfQuantizer(HfQuantizer):
                 )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            dtype = torch.float16
-            logger.info(
-                "Overriding dtype=%s with `dtype=torch.float16` due to "
-                "requirements of `eetq` to enable model loading in 8-bit. "
-                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
-                " dtype=torch.float16 to remove this warning.",
-                dtype,
-            )
-        elif dtype != torch.float16:
+        if dtype != torch.float16:
             logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with EETQ.")
         return dtype
 
@@ -92,13 +82,12 @@ class EetqHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_eetq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_eetq_linear(

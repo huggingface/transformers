@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Sesame and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,12 @@
 
 import math
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
-from ...utils import is_soundfile_available, is_torch_available
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available
+from ...utils.import_utils import requires, requires_backends
 
 
 if is_torch_available():
@@ -35,65 +35,42 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class CsmAudioKwargs(AudioKwargs, total=False):
-    encoded_length_kwargs: Optional[dict[str, Any]]
+    """
+    encoded_length_kwargs (`dict[str, Any]`, *optional*):
+        Dictionary of keyword arguments used to compute the encoded audio sequence length. This includes parameters
+        such as `kernel_sizes`, `strides`, `dilations`, and `use_causal_conv` that define the convolutional layers
+        used in audio encoding. The encoded length is used to determine how many audio tokens to generate for each
+        audio input in the text sequence.
+    """
+
+    encoded_length_kwargs: dict[str, Any] | None
 
 
 class CsmProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: CsmAudioKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-        },
-        "audio_kwargs": {
-            "encoded_length_kwargs": {
-                "kernel_sizes": [7, 3, 1, 8, 3, 1, 10, 3, 1, 12, 3, 1, 16, 3, 4],
-                "strides": [1, 1, 1, 4, 1, 1, 5, 1, 1, 6, 1, 1, 8, 1, 2],
-                "dilations": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                "use_causal_conv": True,
-            },
-            "sampling_rate": 24000,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
 
 
+@requires(backends=("torch",))
+@auto_docstring
 class CsmProcessor(ProcessorMixin):
-    r"""
-    Constructs a Csm processor which wraps [`EncodecFeatureExtractor`] and
-    [`PretrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities. See the [`~CsmProcessor.__call__`] for more
-    information.
-    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
-        ```python
-        from transformers import CsmProcessor
-        from datasets import load_dataset
+    valid_processor_kwargs = CsmProcessorKwargs
 
-        ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
-        audio = ds[0]["audio"]["array"]
-
-        processor = CsmProcessor.from_pretrained("sesame/csm-1b")
-
-        processor(
-            text=["<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"],
-            audio=audio,
-            text_kwargs = {"padding": False},
-            audio_kwargs = {"sampling_rate": 16000},
-            common_kwargs = {"return_tensors": "pt"},
-        )
-        # this should error out because EncodecFeatureExtractor expects a 24kHz audio :)
-        ```
-
-    Args:
-        feature_extractor ([`EncodecFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-
-    """
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "encoded_length_kwargs": {
+            "kernel_sizes": [7, 3, 1, 8, 3, 1, 10, 3, 1, 12, 3, 1, 16, 3, 4],
+            "strides": [1, 1, 1, 4, 1, 1, 5, 1, 1, 6, 1, 1, 8, 1, 2],
+            "dilations": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "use_causal_conv": True,
+        },
+        "sampling_rate": 24000,
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -158,12 +135,11 @@ class CsmProcessor(ProcessorMixin):
     def save_audio(
         self,
         audio: AudioInput,
-        saving_path: Union[str, Path, list[Union[str, Path]]],
+        saving_path: str | Path | list[str | Path],
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
-        if not is_soundfile_available():
-            raise ImportError("Please install `soundfile` to save audio files.")
+        requires_backends(self, ["soundfile"])
 
         # ensure correct audio input
         audio = make_list_of_audio(audio)
@@ -178,7 +154,6 @@ class CsmProcessor(ProcessorMixin):
             raise ValueError("The number of audio and saving paths must be the same")
 
         output_kwargs = self._merge_kwargs(
-            CsmProcessorKwargs,
             **kwargs,
         )
         audio_kwargs = output_kwargs["audio_kwargs"]
@@ -189,40 +164,25 @@ class CsmProcessor(ProcessorMixin):
                 audio_value = audio_value.cpu().float().numpy()
             sf.write(p, audio_value, sampling_rate)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
-        audio: Optional[AudioInput] = None,
-        output_labels: Optional[bool] = False,
-        depth_decoder_labels_ratio: Optional[float] = 1.0,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
+        audio: AudioInput | None = None,
+        # Should be processor kwargs but need to stay for BC.
+        output_labels: bool | None = False,
+        depth_decoder_labels_ratio: float | None = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
         r"""
-        Main method to prepare text(s) and audio to be fed as input to the model. This method forwards the `text`
-        arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode
-        the text. To prepare the audio, this method forwards the `audio` arguments to
-        EncodecFeatureExtractor's [`~EncodecFeatureExtractor.__call__`]. Please refer
-        to the docstring of the above two methods for more information.
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training. Indices will be in `[config.audio_token_id, -100, -101]`.
+            - `config.audio_token_id` indicates an audio frame (considering sequence length elements as frames)
+            - `-100` will be ignored in the loss computation
+            - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
+        depth_decoder_labels_ratio (float, *optional*, default=1.0):
+            The ratio of audio frames to keep for the depth decoder labels.
 
-        Args:
-            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
-                tensor.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            output_labels (bool, *optional*, default=False):
-                Whether to return labels for training. Indices will be in `[config.audio_token_id, -100, -101]`.
-                - `config.audio_token_id` indicates an audio frame (considering sequence length elements as frames)
-                - `-100` will be ignored in the loss computation
-                - `-101` indicates the audio frame will be used only for the backbone model (using the first codebook token as labels)
-            depth_decoder_labels_ratio (float, *optional*, default=1.0):
-                The ratio of audio frames to keep for the depth decoder labels.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -235,7 +195,6 @@ class CsmProcessor(ProcessorMixin):
         """
 
         output_kwargs = self._merge_kwargs(
-            CsmProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +18,6 @@ import tempfile
 import unittest
 from functools import reduce
 
-import numpy as np
-import pytest
 import requests
 
 from transformers import (
@@ -37,12 +34,14 @@ from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -56,14 +55,15 @@ if is_vision_available():
     from PIL import Image
 
 
-class JanusVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_index=0,
-        seq_length=25,
-        initializer_range=0.02,
-        text_config={
+class JanusVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
+        "image_token_index": 0,
+        "seq_length": 25,
+        "initializer_range": 0.02,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -86,8 +86,8 @@ class JanusVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 1,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "use_labels": True,
             "image_size": 20,
             "patch_size": 5,
@@ -106,36 +106,32 @@ class JanusVisionText2TextModelTester:
             "vision_feature_select_strategy": "default",
             "vision_feature_layer": -1,
         },
-        use_cache=False,
-        vq_num_embeds=12,
-        vq_embed_dim=12,
-        vq_channel_multiplier=[1, 1],
-    ):
-        self.parent = parent
-        self.initializer_range = initializer_range
-        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.image_token_index = image_token_index
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.num_image_tokens = vision_config["num_image_tokens"]
-        self.use_cache = use_cache
-
+        "use_cache": False,
         # vq model params
-        self.vq_num_embeds = vq_num_embeds
-        self.vq_embed_dim = vq_embed_dim
-        self.vq_channel_multiplier = vq_channel_multiplier
+        "vq_num_embeds": 12,
+        "vq_embed_dim": 12,
+        "vq_channel_multiplier": [1, 1],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["batch_size"] = 3
+        values["num_channels"] = vision_config["num_channels"]
+        values["image_size"] = vision_config["image_size"]
+        values["num_image_tokens"] = vision_config["num_image_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_vq_config(self):
         return {
@@ -192,6 +188,8 @@ class JanusVisionText2TextModelTester:
 
 @require_torch
 class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = JanusVisionText2TextModelTester
+
     all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -200,6 +198,20 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
         else {}
     )
     _is_composite = True
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        """
+        Override to ensure vision_config.projection_dim stays in sync with text_config.hidden_size.
+        The aligner projects vision features to text embedding dimension, so they must match.
+        """
+        from tests.test_modeling_common import ModelTesterMixin
+
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # Sync projection_dim with text hidden_size since aligner output must match text embeddings
+        if hasattr(config, "vision_config") and hasattr(config, "text_config"):
+            config.vision_config.projection_dim = config.text_config.hidden_size
+        return config
 
     def setUp(self):
         self.model_tester = JanusVisionText2TextModelTester(self)
@@ -276,7 +288,7 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                 model = model_class(config)
 
                 model.to(torch_device)
-                model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
                 model.train()
 
                 # unfreeze additional layers
@@ -297,37 +309,32 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pip
                         else:
                             pass
 
-    @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
-    @pytest.mark.torch_compile_test
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
 
+class JanusVQModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-class JanusVQModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=5,
-        is_training=False,
-        initializer_range=0.02,
-        image_size=30,
-        num_embeds=12,
-        base_channels=32,  # we have a GroupNorm of 32 groups, so can't do less
-        embed_dim=12,
-        channel_multiplier=[1, 2],
-        patch_size=2,
-        scope=None,
-    ):
+    small_config_overrides = {
+        "batch_size": 5,
+        "is_training": False,
+        "initializer_range": 0.02,
+        "image_size": 30,
+        "num_embeds": 12,
+        "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
+        "embed_dim": 12,
+        "channel_multiplier": [1, 2],
+        "patch_size": 2,  # only used to derive num_patches
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_patches"] = values["image_size"] // values.pop("patch_size")
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.initializer_range = initializer_range
-        self.image_size = image_size
-        self.base_channels = base_channels
-        self.num_embeds = num_embeds
-        self.embed_dim = embed_dim
-        self.channel_multiplier = channel_multiplier
-        self.num_patches = image_size // patch_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
@@ -356,6 +363,8 @@ class JanusVQModelTester:
 
 @require_torch
 class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = JanusVQModelTester
+
     all_model_classes = (JanusVQVAE,) if is_torch_available() else ()
 
     has_attentions = False
@@ -407,22 +416,33 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class JanusIntegrationTest(unittest.TestCase):
+    maxDiff = None
+
     def setUp(self):
         self.model_id = "deepseek-community/Janus-Pro-1B"
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
         image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?"
         inputs = processor(images=image, text=prompt, generation_mode="text", return_tensors="pt").to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
-        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"'  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                ("cuda", (8, 6)): "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees in",
+            }
+        ).get_expectation()  # fmt: skip
         text = processor.decode(output[0], skip_special_tokens=True)
         self.assertEqual(
             text,
@@ -430,15 +450,22 @@ class JanusIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation_batched(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompts = [
             "<image_placeholder>\nDescribe what do you see here and tell me about the history behind it?",
@@ -449,24 +476,40 @@ class JanusIntegrationTest(unittest.TestCase):
             images=[image_1, image_2], text=prompts, generation_mode="text", padding=True, return_tensors="pt"
         ).to(model.device, torch.float16)
 
-        EXPECTED_TEXT_COMPLETION = [
-            'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is often referred to as the "Lion"',
-            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a constellation that is shaped like a stylized figure with a long tail. This",
-        ]
+        EXPECTED_TEXT_COMPLETION = Expectations(
+            {
+                (None, None): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars, and it appears to depict a constellation. The",
+                ],
+                ("cuda", (8, 6)): [
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at",
+                    "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat constellation is this image showing?\n\nThe image shows a night sky filled with stars. There are several bright stars visible, and a",
+                ],
+            }
+        )
         generated_ids = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        expected_text = EXPECTED_TEXT_COMPLETION.get_expectation()
+        self.assertEqual(expected_text, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_text_generation_with_multi_image(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
 
         image_1 = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg",
+                stream=True,
+            ).raw
         )
         image_2 = Image.open(
-            requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
+            requests.get(
+                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg",
+                stream=True,
+            ).raw
         )
         prompt = "What do these two images <image_placeholder> and <image_placeholder> have in common?"
 
@@ -474,12 +517,13 @@ class JanusIntegrationTest(unittest.TestCase):
             model.device, torch.float16
         )
 
-        EXPECTED_TEXT_COMPLETION = ['You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part of']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ["You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe image you provided shows a night sky with stars and a constellation, while the second image shows a night sky with stars and a different constellation. Both images feature stars and a dark sky,"]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
+    @require_deterministic_for_xpu
     def test_model_generate_images(self):
         model = JanusForConditionalGeneration.from_pretrained(self.model_id, device_map="auto")
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -518,28 +562,28 @@ class JanusIntegrationTest(unittest.TestCase):
                     897, 4044, 1762, 4676
                 ],
                 ("cuda", None): [
-                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
-                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
-                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
-                    897, 4044, 1762, 4676
+                    2567,  6155,  6155,   250,   250, 15797,  8221, 12190,   900, 12131,
+                    13146,  4475,  6910,  2250, 13615,  1665,  8932,  7101,  1151, 13915,
+                    250,  7311,  4015,  2016, 15628,  4462, 14906, 10046, 10046, 10395,
+                    9145,  8760, 14030,  1284,  2039,  7372,  3298, 12529,   138, 12590,
+                    1037,  4580,  7523, 12611,  8631,  6099, 13139,  8548,  4930,  8310
                 ],
                 ("xpu", None): [
-                    4484, 4015, 15750, 506, 3758, 11651, 8597, 5739, 4861, 971, 14985, 14834, 15438, 7548, 1820, 1465,
-                    13529, 12761, 10503, 12761, 14303, 6155, 4015, 11766, 705, 15736, 14146, 10417, 1951, 7713, 14305,
-                    15617, 6169, 2706, 8006, 14893, 3855, 10188, 15652, 6297, 1097, 12108, 15038, 311, 14998, 15165,
-                    897, 4044, 1762, 4676
+                    4484, 4015, 15750, 376, 2300, 13791, 3609, 2509, 2418, 6347, 7372, 1006, 14519, 6126, 11908, 14968,
+                    9642, 9490, 14427, 196, 15131, 6155, 4015, 2047, 15628, 4656, 14055, 13908, 3077, 4377, 11641, 4835,
+                    8854, 10351, 7339, 2815, 13634, 8134, 257, 3621, 7739, 9954, 5989, 11578, 8763, 12788, 7571, 13595,
+                    1762, 12683
                 ],
             }
         )
-        expected_tokens = torch.tensor(expected_tokens.get_expectation()).to(model.device)
         # fmt: on
-
+        expected_tokens = torch.tensor(expected_tokens.get_expectation()).to(model.device)
         # Compare the first 50 generated tokens.
         self.assertTrue(torch.allclose(expected_tokens, out[0][:50]))
 
         # Decode generated tokens to pixel values and postprocess them.
         decoded_pixel_values = model.decode_image_tokens(out)
-        images = processor.postprocess(list(decoded_pixel_values.float()), return_tensors="np")
+        images = processor.postprocess(list(decoded_pixel_values.float()), return_tensors="pt")
 
-        self.assertTrue(images["pixel_values"].shape == (1, 384, 384, 3))
-        self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
+        self.assertTrue(images["pixel_values"].shape == (1, 3, 384, 384))
+        self.assertTrue(isinstance(images["pixel_values"], torch.Tensor))

@@ -101,7 +101,8 @@ class PeAudioEncoderTester:
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_channels, self.audio_seq_length])
-        valid_lengths = ids_tensor([self.batch_size], self.audio_seq_length)
+        # Generate valid_lengths in range [1, self.audio_seq_length] to ensure at least one valid frame
+        valid_lengths = ids_tensor([self.batch_size], self.audio_seq_length - 1) + 1
         padding_mask = torch.arange(self.audio_seq_length, device=torch_device)[None, :] < valid_lengths[:, None]
         padding_mask = padding_mask.int()
         config = self.get_config()
@@ -131,9 +132,7 @@ class PeAudioEncoderTester:
 @require_torch
 class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeAudioEncoder,)
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -155,6 +154,10 @@ class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("PeAudioEncoder does not support feed forward chunking")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="SDPA can't dispatch on flash with not None `attention_mask`")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
 
@@ -278,9 +281,7 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
     all_model_classes = (PeAudioModel,)
     additional_model_inputs = ["input_values", "padding_mask"]
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     _is_composite = True
 
@@ -337,7 +338,7 @@ class PeAudioIntegrationTest(unittest.TestCase):
     def test_inference(self):
         checkpoint_name = "/raid/eustache/sam-audio/pe-av-small"
         descriptions = ["glass breaking", "somebody speaking"]
-        audio_file = "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/glass_breaking.mp3"
+        audio_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
 
         # processor = PeAudioProcessor.from_pretrained(checkpoint_name)
         model = PeAudioModel.from_pretrained(checkpoint_name, dtype=self.dtype, device_map=torch_device)
@@ -356,7 +357,7 @@ class PeAudioIntegrationTest(unittest.TestCase):
     def test_inference_frame_level(self):
         checkpoint_name = "/raid/eustache/sam-audio/pe-a-frame-small"
         descriptions = ["glass breaking", "somebody speaking"]
-        audio_file = "https://huggingface.co/datasets/eustlb/dummy-audio-samples-higgs/resolve/main/glass_breaking.mp3"
+        audio_file = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
 
         # processor = PeAudioProcessor.from_pretrained(checkpoint_name)
         model = PeAudioFrameLevelModel.from_pretrained(checkpoint_name, dtype=self.dtype, device_map=torch_device)

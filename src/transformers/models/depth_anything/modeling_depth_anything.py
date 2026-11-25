@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 TikTok and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,15 @@
 # limitations under the License.
 """PyTorch Depth Anything model."""
 
-from typing import Optional, Union
-
 import torch
 from torch import nn
 
+from ...backbone_utils import filter_output_hidden_states, load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from .configuration_depth_anything import DepthAnythingConfig
 
 
@@ -79,7 +78,7 @@ class DepthAnythingReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         out = []
@@ -245,7 +244,7 @@ class DepthAnythingNeck(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -317,9 +316,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     """
 )
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
-    _no_split_modules = ["DPTViTEmbeddings"]
-
-    def __init__(self, config):
+    def __init__(self, config: DepthAnythingConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -329,30 +326,28 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
+        pixel_values: torch.Tensor,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
         >>> model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf")
@@ -379,15 +374,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-        )
+        outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         hidden_states = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
@@ -399,17 +386,10 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
 
-        if not return_dict:
-            if output_hidden_states:
-                output = (predicted_depth,) + outputs[1:]
-            else:
-                output = (predicted_depth,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

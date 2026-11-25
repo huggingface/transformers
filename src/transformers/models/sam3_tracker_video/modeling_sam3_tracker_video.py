@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam3_tracker_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,29 +18,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, nn
 from tqdm import tqdm
 
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring
-from ...utils.generic import OutputRecorder, TransformersKwargs
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import is_flash_attention_requested
+from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from .configuration_sam3_tracker_video import (
     Sam3TrackerVideoConfig,
@@ -50,13 +50,16 @@ from .configuration_sam3_tracker_video import (
 )
 
 
+logger = logging.get_logger(__name__)
+
+
 class Sam3TrackerVideoInferenceCache:
     """Cache for vision features and model constants."""
 
     def __init__(
         self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
         max_vision_features_cache_size: int = 1,
     ):
         self.inference_device = inference_device
@@ -81,7 +84,7 @@ class Sam3TrackerVideoInferenceCache:
                 cached[key] = value
         self._vision_features[frame_idx] = cached
 
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
+    def get_vision_features(self, frame_idx: int) -> dict | None:
         """Get cached vision features, automatically moved to inference device."""
         if frame_idx not in self._vision_features:
             return None
@@ -107,7 +110,7 @@ class Sam3TrackerVideoInferenceSession:
     Manages video inference session parameters, state and cache.
 
     Args:
-        video (`torch.FloatTensor`, *optional*):
+        video (`torch.Tensor`, *optional*):
             The video to process. No need to provide when streaming.
         video_height (`int`, *optional*):
             The height of the video.
@@ -127,13 +130,13 @@ class Sam3TrackerVideoInferenceSession:
 
     def __init__(
         self,
-        video: Optional[torch.FloatTensor] = None,
-        video_height: Optional[int] = None,
-        video_width: Optional[int] = None,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        video_storage_device: Union[torch.device, str] = "cpu",
-        dtype: Union[torch.dtype, str] = "float32",
+        video: torch.Tensor | None = None,
+        video_height: int | None = None,
+        video_width: int | None = None,
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
+        video_storage_device: torch.device | str = "cpu",
+        dtype: torch.dtype | str = "float32",
         max_vision_features_cache_size: int = 1,
     ):
         # store as a dictionary to avoid double memory allocation with torch.cat when adding new frames
@@ -173,7 +176,7 @@ class Sam3TrackerVideoInferenceSession:
         self.obj_with_new_inputs = []
 
     @property
-    def num_frames(self) -> Optional[int]:
+    def num_frames(self) -> int | None:
         return len(self.processed_frames) if self.processed_frames is not None else None
 
     # Object management
@@ -213,7 +216,7 @@ class Sam3TrackerVideoInferenceSession:
         device_inputs = {}
         for key, value in inputs.items():
             if isinstance(value, torch.Tensor):
-                device_inputs[key] = value.to(self.inference_device, non_blocking=True)
+                device_inputs[key] = value.to(self.inference_device, non_blocking=False)
             else:
                 device_inputs[key] = value
         self.point_inputs_per_obj[obj_idx][frame_idx] = device_inputs
@@ -237,8 +240,8 @@ class Sam3TrackerVideoInferenceSession:
         self,
         obj_idx: int,
         frame_idx: int,
-        output_key: Optional[str] = None,
-        output_value: Optional[Union[torch.Tensor, dict]] = None,
+        output_key: str | None = None,
+        output_value: torch.Tensor | dict | None = None,
         is_conditioning_frame: bool = True,
     ):
         """
@@ -297,7 +300,7 @@ class Sam3TrackerVideoInferenceSession:
         return value
 
     # Video frame management
-    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: Optional[int] = None) -> int:
+    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: int | None = None) -> int:
         """Add new frame with automatic device placement."""
         pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
@@ -368,7 +371,6 @@ class Sam3TrackerVideoLayerNorm(nn.LayerNorm):
         return features
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
 class Sam3TrackerVideoPositionEmbeddingSine(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -376,36 +378,56 @@ class Sam3TrackerVideoPositionEmbeddingSine(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
-        device: Union[torch.device, str],
+        device: torch.device | str,
         dtype: torch.dtype,
-        mask: Optional[Tensor] = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -414,13 +436,24 @@ class Sam3TrackerVideoPositionEmbeddingSine(nn.Module):
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
 
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
+
 
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -464,7 +497,7 @@ class Sam3TrackerVideoAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attention_similarity: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
@@ -475,9 +508,18 @@ class Sam3TrackerVideoAttention(nn.Module):
         key = self.k_proj(key).view(*new_shape).transpose(1, 2)
         value = self.v_proj(value).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        if is_flash_attention_requested(self.config) and attention_similarity is not None:
+            # Target guided masks are represented as float masks and are incompatible with Flash Attention
+            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
+            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
+            logger.warning_once(
+                "Falling back to SDPA for target-guided attention because "
+                "Flash Attention does not support additive bias masks."
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -499,7 +541,7 @@ class Sam3TrackerVideoAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Sam3TrackerVideoTwoWayAttentionBlock(nn.Module):
+class Sam3TrackerVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
     def __init__(self, config: Sam3TrackerVideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
         """
         A transformer block with four layers:
@@ -509,7 +551,7 @@ class Sam3TrackerVideoTwoWayAttentionBlock(nn.Module):
         Arguments:
             config (`Sam3TrackerVideoMaskDecoderConfig`):
                 The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
+            attention_downsample_rate (*optional*, int, defaults to 2):
                 The downsample ratio of the block used to reduce the inner dim of the attention.
             skip_first_layer_pe (*optional*, bool, defaults to `False`):
                 Whether or not to skip the addition of the query_point_embedding on the first layer.
@@ -606,78 +648,77 @@ class Sam3TrackerVideoFeedForward(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam3TrackerVideo model's output.")
+@dataclass
 class Sam3TrackerVideoImageSegmentationOutput(ModelOutput):
     r"""
-    iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
+    iou_scores (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks)`):
         The Intersection over Union (IoU) scores of the predicted masks.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks, height, width)`):
         The predicted low-resolution masks. This is an alias for `low_res_masks`. These masks need to be post-processed
         by the processor to be brought to the original image size.
-    object_score_logits (`torch.FloatTensor` of shape `(batch_size, point_batch_size, 1)`):
+    object_score_logits (`torch.Tensor` of shape `(batch_size, point_batch_size, 1)`):
         Logits for the object score, indicating if an object is present.
-    image_embeddings (`tuple(torch.FloatTensor)`):
-        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.FloatTensor` where each
+    image_embeddings (`tuple(torch.Tensor)`):
+        The features from the FPN, which are used by the mask decoder. This is a tuple of `torch.Tensor` where each
         tensor has shape `(batch_size, channels, height, width)`.
-    vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
+    vision_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`.
         Hidden-states of the vision model at the output of each stage.
-    vision_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+    vision_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
         Attentions weights of the vision model.
-    mask_decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+    mask_decoder_attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True`):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
         Attentions weights of the mask decoder.
-    high_res_masks (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks, image_size, image_size)`, *optional*):
+    high_res_masks (`torch.Tensor` of shape `(batch_size, point_batch_size, num_masks, image_size, image_size)`, *optional*):
         The predicted masks, upscaled to the original image size. Only used for Sam3TrackerVideoModel.
-    object_pointer (`torch.FloatTensor` of shape `(batch_size, point_batch_size, hidden_size)`, *optional*):
+    object_pointer (`torch.Tensor` of shape `(batch_size, point_batch_size, hidden_size)`, *optional*):
         A tensor representing the object pointer, used for tracking in videos. Only used for Sam3TrackerVideoModel.
     """
 
-    iou_scores: Optional[torch.FloatTensor] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    object_score_logits: Optional[torch.FloatTensor] = None
-    image_embeddings: tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    iou_scores: torch.Tensor | None = None
+    pred_masks: torch.Tensor | None = None
+    object_score_logits: torch.Tensor | None = None
+    image_embeddings: tuple[torch.Tensor, ...] = None
+    vision_hidden_states: tuple[torch.Tensor, ...] | None = None
+    vision_attentions: tuple[torch.Tensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.Tensor, ...] | None = None
 
-    high_res_masks: Optional[torch.FloatTensor] = None
-    object_pointer: Optional[torch.FloatTensor] = None
+    high_res_masks: torch.Tensor | None = None
+    object_pointer: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class Sam3TrackerVideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):
         List of object IDs being tracked in the current frame.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_masks, height, width)`):
         The predicted masks stored at the model's resolution.
-    object_score_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+    object_score_logits (`torch.Tensor` of shape `(batch_size,)`, *optional*):
         Logits for the object scores, indicating if objects are present.
     frame_idx (`int`):
         The frame index of the video.
     """
 
-    object_ids: Optional[list[int]] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    object_score_logits: Optional[torch.FloatTensor] = None
-    frame_idx: Optional[int] = None
+    object_ids: list[int] | None = None
+    pred_masks: torch.Tensor | None = None
+    object_score_logits: torch.Tensor | None = None
+    frame_idx: int | None = None
 
 
 @auto_docstring
 class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
-    config_class = Sam3TrackerVideoConfig
-    base_model_prefix = "sam3_tracker_video"
+    config: Sam3TrackerVideoConfig
+    base_model_prefix = "tracker_model"
     main_input_name = "pixel_values"
     input_modalities = "video"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_attention_backend = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Sam3TrackerVideoModel):
@@ -692,46 +733,80 @@ class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
         if isinstance(module, Sam3TrackerVideoMemoryFuserCXBlock):
             if module.scale is not None:
                 init.zeros_(module.scale)
+        elif isinstance(module, Sam3TrackerVideoPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, Sam3TrackerVideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
 
 
 class Sam3TrackerVideoVisionRotaryEmbedding(nn.Module):
     """
-    Vision Rotary Position Embedding for SAM2, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Sam3TrackerVideoConfig):
+    def __init__(self, config: Sam3TrackerVideoConfig, device=None):
         super().__init__()
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_axial_rope_parameters(
+        config: Sam3TrackerVideoConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
         dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
-        # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        end_x, end_y = config.memory_attention_rope_feat_sizes
-        freqs = 1.0 / (config.memory_attention_rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        spatial_dim = dim // 2
 
-        # Generate 2D position indices for axial rotary embedding
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = flattened_indices % end_x
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor")
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
-    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # As the feature map size is fixed, we can just return the pre-computed embeddings.
-        return self.rope_embeddings_cos, self.rope_embeddings_sin
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    # Ignore copy
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
+        return freq_hw.repeat_interleave(2, dim=-1)
 
 
 def rotate_pairwise(x):
     """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+    pairwise rotation of the hidden dims of the input. Different from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python
@@ -801,7 +876,7 @@ class Sam3TrackerVideoRoPEAttention(nn.Module):
     def __init__(
         self,
         config: Sam3TrackerVideoConfig,
-        kv_in_dim: Optional[int] = None,
+        kv_in_dim: int | None = None,
         rope_k_repeat=False,
     ):
         super().__init__()
@@ -846,9 +921,9 @@ class Sam3TrackerVideoRoPEAttention(nn.Module):
             query, key, cos, sin, repeat_freqs_k=self.rope_k_repeat, num_k_exclude_rope=num_k_exclude_rope
         )
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -922,29 +997,43 @@ class Sam3TrackerVideoMemoryAttentionLayer(nn.Module):
 class Sam3TrackerVideoMemoryAttention(nn.Module):
     def __init__(self, config: Sam3TrackerVideoConfig):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList(
             [Sam3TrackerVideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
         self.rotary_emb = Sam3TrackerVideoVisionRotaryEmbedding(config=config)
 
+        position_ids = self.precompute_positions(config)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: Sam3TrackerVideoConfig):
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(config.memory_attention_rope_feat_sizes[1]),
+            torch.arange(config.memory_attention_rope_feat_sizes[0]),
+            indexing="ij",
+        )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
+
     def forward(
         self,
         current_vision_features: torch.Tensor,
         memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
+        current_vision_position_embeddings: Tensor | None = None,
+        memory_posision_embeddings: Tensor | None = None,
         num_object_pointer_tokens: int = 0,
     ):
         """
         Args:
-            current_vision_features (`torch.FloatTensor`):
+            current_vision_features (`torch.Tensor`):
                 The current vision features used for self-attention.
-            memory (`torch.FloatTensor`):
+            memory (`torch.Tensor`):
                 The memory features used for cross-attention.
-            current_vision_position_embeddings (`torch.FloatTensor`, *optional*):
+            current_vision_position_embeddings (`torch.Tensor`, *optional*):
                 The position embeddings for the current vision features.
-            memory_posision_embeddings (`torch.FloatTensor`, *optional*):
+            memory_posision_embeddings (`torch.Tensor`, *optional*):
                 The position embeddings for the memory features.
             num_object_pointer_tokens (`int`, *optional*, defaults to 0):
                 The number of object pointer tokens.
@@ -957,7 +1046,7 @@ class Sam3TrackerVideoMemoryAttention(nn.Module):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-        rope_position_embeddings = self.rotary_emb()
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,
@@ -1086,7 +1175,7 @@ class Sam3TrackerVideoMemoryEncoder(nn.Module):
         self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
         self.memory_fuser = Sam3TrackerVideoMemoryFuser(config)
         self.position_encoding = Sam3TrackerVideoPositionEmbeddingSine(
-            num_pos_feats=output_channels // 2, normalize=True
+            num_position_features=output_channels // 2, normalize=True
         )
         self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
 
@@ -1109,33 +1198,22 @@ class Sam3TrackerVideoMemoryEncoder(nn.Module):
         return vision_features, vision_pos_enc
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
-class Sam3TrackerVideoVisionEncoderOutput(ModelOutput):
+@dataclass
+class Sam3TrackerVideoVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    fpn_hidden_states (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+    fpn_hidden_states (`tuple(torch.Tensor)`):
+        Tuple of `torch.Tensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
-        Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
+    fpn_position_encoding (`tuple(torch.Tensor)`):
+        Tuple of `torch.Tensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, height, width, hidden_size)`. Hidden-states of the
-        model at the output of each stage.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-        the self-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    fpn_hidden_states: Optional[torch.FloatTensor] = None
-    fpn_position_encoding: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    fpn_hidden_states: torch.Tensor | None = None
+    fpn_position_encoding: torch.Tensor | None = None
 
 
 class Sam3TrackerVideoPositionalEmbedding(nn.Module):
@@ -1143,7 +1221,7 @@ class Sam3TrackerVideoPositionalEmbedding(nn.Module):
         super().__init__()
         self.scale = config.scale
         positional_embedding = self.scale * torch.randn((2, config.hidden_size // 2))
-        self.register_buffer("positional_embedding", positional_embedding)
+        self.positional_embedding = nn.Buffer(positional_embedding)
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -1244,10 +1322,10 @@ class Sam3TrackerVideoPromptEncoder(nn.Module):
 
     def forward(
         self,
-        input_points: Optional[tuple[torch.Tensor, torch.Tensor]],
-        input_labels: Optional[torch.Tensor],
-        input_boxes: Optional[torch.Tensor],
-        input_masks: Optional[torch.Tensor],
+        input_points: tuple[torch.Tensor, torch.Tensor] | None,
+        input_labels: torch.Tensor | None,
+        input_boxes: torch.Tensor | None,
+        input_masks: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
@@ -1307,12 +1385,12 @@ class Sam3TrackerVideoTwoWayTransformer(nn.Module):
         attention_similarity: Tensor,
         target_embedding=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
-        image_embeddings = image_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
-        image_positional_embeddings = image_positional_embeddings.flatten(2).permute(0, 2, 1).unsqueeze(1)
+        image_embeddings = image_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
+        image_positional_embeddings = image_positional_embeddings.flatten(2).transpose(1, 2).unsqueeze(1)
 
         # Prepare queries
         queries = point_embeddings
@@ -1392,8 +1470,8 @@ class Sam3TrackerVideoMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         high_resolution_features: list[torch.Tensor],
-        attention_similarity: Optional[torch.Tensor] = None,
-        target_embedding: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -1566,14 +1644,8 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
-    _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
     _tied_weights_keys = {}
-    _keys_to_ignore_on_load_missing = []
-    _checkpoint_conversion_mapping = {
-        r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode
-        "detector_model.vision_encoder.backbone.": "vision_encoder.backbone.",
-        "tracker_neck.": "vision_encoder.neck.",
-    }
+    _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
 
     def __init__(self, config: Sam3TrackerVideoConfig, remove_vision_encoder: bool = False):
         r"""
@@ -1653,18 +1725,19 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     @torch.no_grad()
     def get_image_embeddings(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> list[torch.Tensor]:
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
                 Input pixel values
         """
         batch_size = pixel_values.shape[0]
-        feature_maps, _, _, _ = self.get_image_features(pixel_values, **kwargs)
+        image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+        feature_maps = image_outputs.fpn_hidden_states
 
         # add no memory embedding to the last feature map
         feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -1680,23 +1753,23 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     @torch.no_grad()
     def get_prompt_embeddings(
         self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
+        input_points: torch.Tensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.Tensor | None = None,
+        input_masks: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
 
         Args:
-            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
+            input_points (`torch.Tensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
                 Optional input points for the prompt encoder. The padding of the point is automatically done by the
                 processor. `point_batch_size` refers to the number of masks that we want the model to predict per
                 point. The model will output `point_batch_size` times 3 masks in total.
             input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
                 Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
                 processor, or can be fed by the user.
-            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
+            input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes_per_image, 4)`):
                 Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
                 processor. users can also pass manually the input boxes.
             input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
@@ -1715,8 +1788,8 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     def forward(
         self,
         inference_session: Sam3TrackerVideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
+        frame_idx: int | None = None,
+        frame: torch.Tensor | None = None,
         reverse: bool = False,
         run_mem_encoder: bool = True,
         **kwargs,
@@ -1835,33 +1908,19 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             frame_idx=frame_idx,
         )
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        Optional[tuple[torch.FloatTensor, ...]],
-        Optional[tuple[torch.FloatTensor, ...]],
-    ]:
+    ) -> tuple | Sam3TrackerVideoVisionEncoderOutput:
         r"""
-        Extract and preprocess image features using the vision encoder.
-
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Input pixel values of shape `(batch_size, num_channels, height, width)`.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
-                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
-                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
-                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        pixel_values (`torch.Tensor`):
+            Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
         vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
+            pixel_values, return_dict=True, **kwargs
         )
 
         feature_maps = vision_outputs.fpn_hidden_states
@@ -1879,8 +1938,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        return vision_outputs
 
     def _prepare_vision_features(
         self,
@@ -1897,7 +1958,9 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         else:
             # Compute features using image encoder
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
-            vision_feats, vision_pos_embeds, _, _ = self.get_image_features(image_batch)
+            image_outputs = self.get_image_features(image_batch, return_dict=True)
+            vision_feats = image_outputs.fpn_hidden_states
+            vision_pos_embeds = image_outputs.fpn_position_encoding
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
@@ -1912,19 +1975,19 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
 
     def _single_frame_forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        input_points: torch.Tensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.Tensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.Tensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3TrackerVideoImageSegmentationOutput:
         """
-        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+        input_points (`torch.Tensor` of shape `(batch_size, num_points, 2)`):
             Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
             better results. The points can be obtained by passing a list of list of list to the processor that will
             create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
@@ -1947,7 +2010,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
 
             The padding labels should be automatically done by the processor.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+        input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
             Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
             much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
             that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
@@ -1958,11 +2021,11 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             - `y1`: the y coordinate of the top left point of the input box
             - `x2`: the x coordinate of the bottom right point of the input box
             - `y2`: the y coordinate of the bottom right point of the input box
-        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+        input_masks (`torch.Tensor` of shape `(batch_size, image_size, image_size)`):
             SAM model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
             generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
             manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
-        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+        image_embeddings (`torch.Tensor` of shape `(batch_size, output_channels, window_size, window_size)`):
             Image embeddings, this is used by the mask decoder to generate masks and iou scores. For more memory
             efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
             method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
@@ -1970,10 +2033,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
             bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
             "best" mask, by specifying `multimask_output=False`.
-        attention_similarity (`torch.FloatTensor`, *optional*):
+        attention_similarity (`torch.Tensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
             model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
-        target_embedding (`torch.FloatTensor`, *optional*):
+        target_embedding (`torch.Tensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
             the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         """
@@ -2002,10 +2065,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
-            )
+            image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
@@ -2495,7 +2558,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
                 num_object_pointer_tokens = object_pointers.shape[0]
 
         # Step 4: Concatenate all retrieved memories and their positional embeddings
-        combined_memory = torch.cat(memories_to_concatenate, dim=0)
+        combined_memory = torch.cat(memories_to_concatenate, dim=0).to(dtype=inference_session.dtype)
         combined_memory_positional_embeddings = torch.cat(memory_positional_embeddings_to_concatenate, dim=0)
 
         # Step 5: Forward through the memory attention mechanism
@@ -2509,11 +2572,11 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
 
         # Reshape from (Batch, H*W, Channels) to (Batch, Channels, Height, Width)
         conditioned_feature_map = (
-            conditioned_feature_map_flat.squeeze(1).permute(0, 2, 1).view(batch_size, num_channels, height, width)
+            conditioned_feature_map_flat.squeeze(1).transpose(1, 2).view(batch_size, num_channels, height, width)
         )
         return conditioned_feature_map
 
-    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: Optional[dict]) -> bool:
+    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: dict | None) -> bool:
         """Whether to use multimask output in the SAM head."""
         num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(2)
         multimask_output = (
@@ -2530,10 +2593,10 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         obj_idx: int,
         batch_size: int,
         is_init_cond_frame: bool,
-        point_inputs: Optional[torch.Tensor],
-        mask_inputs: Optional[torch.Tensor],
+        point_inputs: torch.Tensor | None,
+        mask_inputs: torch.Tensor | None,
         reverse: bool,
-        prev_sam_mask_logits: Optional[torch.Tensor] = None,
+        prev_sam_mask_logits: torch.Tensor | None = None,
         streaming: bool = False,
     ) -> dict[str, Any]:
         """
@@ -2680,6 +2743,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             ].expand(*maskmem_features.shape)
 
         # convert to bfloat16 to save memory, and for consistency with the original implementation
+        # flatten from BxCxHxW to HWxBxC
         maskmem_features = maskmem_features.to(torch.bfloat16).flatten(2).permute(2, 0, 1)
         maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).flatten(2).permute(2, 0, 1)
 
@@ -2752,8 +2816,8 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     def propagate_in_video_iterator(
         self,
         inference_session: Sam3TrackerVideoInferenceSession,
-        start_frame_idx: Optional[int] = None,
-        max_frame_num_to_track: Optional[int] = None,
+        start_frame_idx: int | None = None,
+        max_frame_num_to_track: int | None = None,
         reverse: bool = False,
         show_progress_bar: bool = False,
     ) -> Iterator[Sam3TrackerVideoSegmentationOutput]:

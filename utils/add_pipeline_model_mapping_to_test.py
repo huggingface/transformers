@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -53,6 +52,11 @@ def get_mapping_for_task(task):
     if PIPELINE_TEST_MAPPING[task] is not None:
         return PIPELINE_TEST_MAPPING[task]
 
+    # TODO: after PR #50158, pipeline_test_mapping[task]["test"] is now a dotted-path string instead
+    # of a class, so the getattr() below silently returns None and this function is broken. Since
+    # this script is called very infrequently and the pipeline tests have other more pressing issues
+    # to handle, we can fix this the next time someone actually runs this script (the fix is simple:
+    # resolve the string to a class with importlib.import_module before calling getattr).
     pipeline_test_class = pipeline_test_mapping[task]["test"]
     mapping = getattr(pipeline_test_class, "model_mapping", None)
 

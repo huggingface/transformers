@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,12 @@
 import argparse
 import json
 import re
+from io import BytesIO
 from pathlib import Path
-from typing import Optional
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 from torchvision import transforms
 
@@ -39,7 +38,7 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
     config.num_labels = 80
     repo_id = "huggingface/label-files"
     filename = "object365-id2label.json" if "obj365" in model_name else "coco-detection-mmdet-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -320,7 +319,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     # Use the mapping to rename keys
     for original_key, converted_key in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
         for key in list(state_dict_keys.keys()):
@@ -380,9 +379,10 @@ def read_in_q_k_v(state_dict, config, model_name):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
-    return im
+    return image
 
 
 @torch.no_grad()
@@ -396,7 +396,6 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     state_dict = load_original_state_dict(repo_id, model_name)
     state_dict.pop("decoder.valid_mask", None)
     state_dict.pop("decoder.anchors", None)
-    model = DFineForObjectDetection(config)
     logger.info(f"Converting model {model_name}...")
 
     state_dict = convert_old_keys_to_new_keys(state_dict)
@@ -414,7 +413,7 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
 
     # finally, create HuggingFace model and load state dict
-    model.load_state_dict(state_dict)
+    model = DFineForObjectDetection.from_pretrained(None, config=config, state_dict=state_dict)
     model.eval()
 
     # load image processor

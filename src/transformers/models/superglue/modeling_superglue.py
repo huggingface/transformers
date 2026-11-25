@@ -15,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -24,6 +23,7 @@ from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
 from ... import initialization as init
+from ...masking_utils import create_bidirectional_mask
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 
@@ -49,7 +49,7 @@ def concat_pairs(tensor_tuple0: tuple[torch.Tensor], tensor_tuple1: tuple[torch.
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
     """
-    Normalize keypoints locations based on image image_shape
+    Normalize keypoints locations based on image_shape
 
     Args:
         keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
@@ -146,7 +146,6 @@ def arange_like(x, dim: int) -> torch.Tensor:
     return x.new_ones(x.shape[dim]).cumsum(0) - 1
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of SuperGlue keypoint matching models. Due to the nature of keypoint detection and matching, the number
@@ -156,34 +155,35 @@ def arange_like(x, dim: int) -> torch.Tensor:
     information.
     """
 )
+@dataclass
 class SuperGlueKeypointMatchingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Loss computed during training.
-    matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matches (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Index of keypoint matched in the other image.
-    matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Scores of predicted matches.
-    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+    keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
         Absolute (x, y) coordinates of predicted keypoints in a given image.
     mask (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
         Mask indicating which values in matches and matching_scores are keypoint matching information.
-    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
+    hidden_states (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
         num_keypoints)`, returned when `output_hidden_states=True` is passed or when
         `config.output_hidden_states=True`)
-    attentions (`tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
+    attentions (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
         num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    matches: Optional[torch.FloatTensor] = None
-    matching_scores: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.FloatTensor] = None
-    mask: Optional[torch.IntTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.Tensor | None = None
+    matches: torch.Tensor | None = None
+    matching_scores: torch.Tensor | None = None
+    keypoints: torch.Tensor | None = None
+    mask: torch.IntTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
@@ -221,8 +221,8 @@ class SuperGlueKeypointEncoder(nn.Module):
         self,
         keypoints: torch.Tensor,
         scores: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
+        output_hidden_states: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None]:
         scores = scores.unsqueeze(2)
         hidden_state = torch.cat([keypoints, scores], dim=2)
         all_hidden_states = () if output_hidden_states else None
@@ -257,10 +257,10 @@ class SuperGlueSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -338,10 +338,10 @@ class SuperGlueAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -371,12 +371,12 @@ class SuperGlueAttentionalPropagation(nn.Module):
     def forward(
         self,
         descriptors: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None, tuple[torch.Tensor] | None]:
         attention_outputs = self.attention(
             descriptors,
             attention_mask=attention_mask,
@@ -408,10 +408,10 @@ class SuperGlueAttentionalGNN(nn.Module):
     def forward(
         self,
         descriptors: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        output_hidden_states: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple], Optional[tuple]]:
+        output_hidden_states: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple | None, tuple | None]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -470,7 +470,6 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         super()._init_weights(module)
@@ -522,9 +521,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         scores: torch.Tensor,
         height: int,
         width: int,
-        mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, tuple, tuple]:
         """
         Perform keypoint matching between two images.
@@ -552,11 +551,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 with. And for each keypoint in image1, the index of the keypoint in image0 that was matched with.
             matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
                 Scores of predicted matches for each image pair
-            all_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-                Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(1, 2, num_keypoints,
+            all_hidden_states (`tuple(torch.Tensor)`, *optional*):
+                Tuple of `torch.Tensor` (one for the output of each stage) of shape `(1, 2, num_keypoints,
                 num_channels)`.
-            all_attentions (`tuple(torch.FloatTensor)`, *optional*):
-                Tuple of `torch.FloatTensor` (one for each layer) of shape `(1, 2, num_heads, num_keypoints,
+            all_attentions (`tuple(torch.Tensor)`, *optional*):
+                Tuple of `torch.Tensor` (one for each layer) of shape `(1, 2, num_heads, num_keypoints,
                 num_keypoints)`.
         """
         all_hidden_states = () if output_hidden_states else None
@@ -588,11 +587,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         # Keypoint MLP encoder.
         descriptors = descriptors + last_hidden_state
 
-        if mask is not None:
-            input_shape = descriptors.size()
-            extended_attention_mask = self.get_extended_attention_mask(mask, input_shape)
-        else:
-            extended_attention_mask = torch.ones((batch_size, num_keypoints), device=keypoints.device)
+        extended_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=descriptors[:, 0:1, :],  # force q_len == 1
+            attention_mask=mask,
+        )
 
         # Multi-layer Transformer network.
         gnn_outputs = self.gnn(
@@ -665,13 +664,13 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SuperGlueKeypointMatchingOutput]:
+    ) -> tuple | SuperGlueKeypointMatchingOutput:
         r"""
         Examples:
 
@@ -679,13 +678,18 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image_1 = Image.open(BytesIO(response.read()))
+
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-        >>> image2 = Image.open(requests.get(url, stream=True).raw)
-        >>> images = [image1, image2]
+        >>> with httpx.stream("GET", url) as response:
+        ...     image_2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image_1, image_2]
 
         >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
         >>> model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
@@ -702,7 +706,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
             raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")

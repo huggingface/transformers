@@ -1,0 +1,4 @@
+distributed_type: FSDP
+fsdp_config:
+  fsdp_version: 2
+num_processes: 2

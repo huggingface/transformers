@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Tokenization classes for Bert."""
 
 import collections
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -50,7 +48,7 @@ class BertTokenizer(TokenizersBackend):
     Args:
         vocab (`str` or `dict[str, int]`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
-        do_lower_case (`bool`, *optional*, defaults to `False`):
+        do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -80,15 +78,15 @@ class BertTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        do_lower_case: bool = False,
+        vocab: str | dict[str, int] | None = None,
+        do_lower_case: bool = True,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
         pad_token: str = "[PAD]",
         cls_token: str = "[CLS]",
         mask_token: str = "[MASK]",
         tokenize_chinese_chars: bool = True,
-        strip_accents: Optional[bool] = None,
+        strip_accents: bool | None = None,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case

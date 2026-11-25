@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,56 +15,25 @@
 Speech processor class for Wav2Vec2-BERT
 """
 
-from typing import Optional, Union
-
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
+from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 
 
-class Wav2Vec2BertProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
+@auto_docstring
 class Wav2Vec2BertProcessor(ProcessorMixin):
-    r"""
-    Constructs a Wav2Vec2-BERT processor which wraps a Wav2Vec2-BERT feature extractor and a Wav2Vec2 CTC tokenizer into a single
-    processor.
-
-    [`Wav2Vec2Processor`] offers all the functionalities of [`SeamlessM4TFeatureExtractor`] and [`PreTrainedTokenizer`].
-    See the docstring of [`~Wav2Vec2Processor.__call__`] and [`~Wav2Vec2Processor.decode`] for more information.
-
-    Args:
-        feature_extractor (`SeamlessM4TFeatureExtractor`):
-            An instance of [`SeamlessM4TFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer ([`PreTrainedTokenizer`]):
-            An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
-    """
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        audio: Optional[AudioInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        **kwargs: Unpack[Wav2Vec2BertProcessorKwargs],
+        audio: AudioInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ):
-        """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
-        and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audio` is not
-        `None` to pre-process the audio. To prepare the target sequences(s), this method forwards the `text` and `kwargs` arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the docstring of the above two methods for more information.
-
-        Args:
-            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
-                of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
-                and T the sample length of the audio.
-
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+        r"""
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
             - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
@@ -78,7 +46,6 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
         output_kwargs = self._merge_kwargs(
-            Wav2Vec2BertProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -124,5 +91,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Wav2Vec2BertProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Wav2Vec2BertProcessor"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,14 +16,22 @@
 import importlib
 import os
 from collections import OrderedDict
-from typing import Optional, Union
 
 # Build the list of all feature extractors
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging, safe_load_json_file
+from ...utils import (
+    CONFIG_NAME,
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    cached_file,
+    logging,
+    resolve_revision,
+    safe_load_json_file,
+)
 from .auto_factory import _LazyAutoMapping
+from .auto_mappings import FEATURE_EXTRACTOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -35,57 +42,58 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
+MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
-        ("audio-spectrogram-transformer", "ASTFeatureExtractor"),
+        ("apertus1p5", "WavTokenizerFeatureExtractor"),
         ("audioflamingo3", "WhisperFeatureExtractor"),
-        ("clap", "ClapFeatureExtractor"),
-        ("clvp", "ClvpFeatureExtractor"),
+        ("canary", "ParakeetFeatureExtractor"),
         ("csm", "EncodecFeatureExtractor"),
-        ("dac", "DacFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
-        ("dia", "DiaFeatureExtractor"),
-        ("encodec", "EncodecFeatureExtractor"),
-        ("gemma3n", "Gemma3nAudioFeatureExtractor"),
-        ("granite_speech", "GraniteSpeechFeatureExtractor"),
+        ("embedding_gemma2", "Gemma4AudioFeatureExtractor"),
+        ("glmasr", "WhisperFeatureExtractor"),
+        ("gradium_phonon_tts", "PocketTTSFeatureExtractor"),
+        ("granite_speech5_ctc", "GraniteSpeech5FeatureExtractor"),
+        ("granite_speech5_encoder", "GraniteSpeech5FeatureExtractor"),
+        ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),
+        ("higgs_audio_v2_tokenizer", "DacFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
-        ("kyutai_speech_to_text", "KyutaiSpeechToTextFeatureExtractor"),
+        ("inkling_mm_model", "InklingFeatureExtractor"),
         ("lasr_ctc", "LasrFeatureExtractor"),
         ("lasr_encoder", "LasrFeatureExtractor"),
-        ("markuplm", "MarkupLMFeatureExtractor"),
         ("mimi", "EncodecFeatureExtractor"),
         ("moonshine", "Wav2Vec2FeatureExtractor"),
         ("moshi", "EncodecFeatureExtractor"),
         ("musicgen", "EncodecFeatureExtractor"),
-        ("musicgen_melody", "MusicgenMelodyFeatureExtractor"),
+        ("nemo_speechlm", "NemotronAsrStreamingFeatureExtractor"),
+        ("nemotron3_5_asr", "NemotronAsrStreamingFeatureExtractor"),
+        ("nemotron3_diarization", "NemotronAsrStreamingFeatureExtractor"),
+        ("nemotron_asr_streaming_encoder", "NemotronAsrStreamingFeatureExtractor"),
+        ("omniasr_ctc", "OmniASRFeatureExtractor"),
         ("parakeet_ctc", "ParakeetFeatureExtractor"),
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
-        ("pe_audio", "PeAudioFeatureExtractor"),
+        ("parakeet_rnnt", "ParakeetFeatureExtractor"),
+        ("parakeet_tdt", "ParakeetFeatureExtractor"),
         ("pe_audio_video", "PeAudioFeatureExtractor"),
-        ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
-        ("pop2piano", "Pop2PianoFeatureExtractor"),
+        ("pocket_tts_audio_tokenizer", "EncodecFeatureExtractor"),
         ("qwen2_5_omni", "WhisperFeatureExtractor"),
         ("qwen2_audio", "WhisperFeatureExtractor"),
         ("qwen3_omni_moe", "WhisperFeatureExtractor"),
-        ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("seamless_m4t_v2", "SeamlessM4TFeatureExtractor"),
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
-        ("speech_to_text", "Speech2TextFeatureExtractor"),
-        ("speecht5", "SpeechT5FeatureExtractor"),
         ("unispeech", "Wav2Vec2FeatureExtractor"),
         ("unispeech-sat", "Wav2Vec2FeatureExtractor"),
-        ("univnet", "UnivNetFeatureExtractor"),
+        ("vibevoice", "VibeVoiceAcousticTokenizerFeatureExtractor"),
+        ("vibevoice_asr", "VibeVoiceAcousticTokenizerFeatureExtractor"),
         ("voxtral", "WhisperFeatureExtractor"),
-        ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
         ("wavlm", "Wav2Vec2FeatureExtractor"),
-        ("whisper", "WhisperFeatureExtractor"),
         ("xcodec", "DacFeatureExtractor"),
     ]
 )
 
+FEATURE_EXTRACTOR_MAPPING_NAMES.update(MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES)
 FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES)
 
 
@@ -114,12 +122,12 @@ def feature_extractor_class_from_name(class_name: str):
 
 
 def get_feature_extractor_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    pretrained_model_name_or_path: str | os.PathLike,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     **kwargs,
 ):
@@ -212,7 +220,7 @@ def get_feature_extractor_config(
     # Load feature_extractor dict. Priority goes as (nested config if found -> feature extractor config)
     # We are downloading both configs because almost all models have a `processor_config.json` but
     # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
-    feature_extractor_dict = {}
+    feature_extractor_dict = None
     if resolved_processor_file is not None:
         processor_dict = safe_load_json_file(resolved_processor_file)
         if "feature_extractor" in processor_dict:
@@ -220,7 +228,7 @@ def get_feature_extractor_config(
 
     if resolved_feature_extractor_file is not None and feature_extractor_dict is None:
         feature_extractor_dict = safe_load_json_file(resolved_feature_extractor_file)
-    return feature_extractor_dict
+    return feature_extractor_dict or {}
 
 
 class AutoFeatureExtractor:
@@ -258,7 +266,7 @@ class AutoFeatureExtractor:
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved feature extractor JSON *file*, e.g.,
+                - a path to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
@@ -311,6 +319,15 @@ class AutoFeatureExtractor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
+
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
         feature_extractor_class = config_dict.get("feature_extractor_type", None)
         feature_extractor_auto_map = None
@@ -333,6 +350,9 @@ class AutoFeatureExtractor:
 
         has_remote_code = feature_extractor_auto_map is not None
         has_local_code = feature_extractor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
+        explicit_local_code = has_local_code and not (
+            feature_extractor_class or FEATURE_EXTRACTOR_MAPPING[type(config)]
+        ).__module__.startswith("transformers.")
         if has_remote_code:
             if "--" in feature_extractor_auto_map:
                 upstream_repo = feature_extractor_auto_map.split("--")[0]
@@ -342,19 +362,19 @@ class AutoFeatureExtractor:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             feature_extractor_class = get_class_from_dynamic_module(
                 feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
             feature_extractor_class.register_for_auto_class()
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif feature_extractor_class is not None:
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         # Last try: we use the FEATURE_EXTRACTOR_MAPPING.
         elif type(config) in FEATURE_EXTRACTOR_MAPPING:
             feature_extractor_class = FEATURE_EXTRACTOR_MAPPING[type(config)]
-            return feature_extractor_class.from_dict(config_dict, **kwargs)
+            return feature_extractor_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         raise ValueError(
             f"Unrecognized feature extractor in {pretrained_model_name_or_path}. Should have a "

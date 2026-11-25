@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Trax Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization class for model Reformer."""
-
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
@@ -72,11 +69,12 @@ class ReformerTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         eos_token: str = "</s>",
         unk_token: str = "<unk>",
-        additional_special_tokens: Optional[list] = None,
+        _spm_precompiled_charsmap: str | None = None,
+        additional_special_tokens: list | None = None,
         **kwargs,
     ):
         self._vocab = vocab or {}
@@ -93,13 +91,13 @@ class ReformerTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
-                normalizers.NFC(),
-                normalizers.Strip(left=False, right=True),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [
+                    normalizers.Precompiled(_spm_precompiled_charsmap),
+                    normalizers.Replace(pattern=Regex(" {2,}"), content=" "),
+                ]
+            )
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always")
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")

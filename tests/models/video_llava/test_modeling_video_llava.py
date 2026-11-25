@@ -17,7 +17,7 @@ import copy
 import unittest
 
 import numpy as np
-import requests
+import pytest
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
@@ -28,7 +28,6 @@ from transformers import (
     VideoLlavaModel,
     VideoLlavaProcessor,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -40,30 +39,28 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    from PIL import Image
 
-
-class VideoLlavaVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        video_token_index=1,
-        projector_hidden_act="gelu",
-        seq_length=3,
-        num_frames=2,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        text_config={
+class VideoLlavaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "ignore_index": -100,
+        "image_token_index": 0,
+        "video_token_index": 1,
+        "projector_hidden_act": "gelu",
+        "seq_length": 3,
+        "num_frames": 2,
+        "vision_feature_select_strategy": "default",
+        "vision_feature_layer": -1,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 13,
             "is_training": True,
@@ -86,8 +83,8 @@ class VideoLlavaVisionText2TextModelTester:
             "num_choices": 4,
             "pad_token_id": 3,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "model_type": "clip_vision_model",
             "batch_size": 12,
             "image_size": 8,
@@ -103,32 +100,29 @@ class VideoLlavaVisionText2TextModelTester:
             "attention_dropout": 0.1,
             "initializer_range": 0.02,
         },
-    ):
+        "batch_size": 5,
+        "num_channels": 3,
+        "image_size": 224,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["num_image_tokens"] = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
+        values["num_video_tokens"] = (values["num_image_tokens"] + 1) * values["num_frames"]
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"] + values["num_video_tokens"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.video_token_index = video_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.num_frames = num_frames
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-
-        self.batch_size = 5
-        self.num_channels = 3
-        self.image_size = 224
-
-        self.num_image_tokens = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
-        self.num_video_tokens = (self.num_image_tokens + 1) * self.num_frames
-        self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -193,6 +187,8 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     Model tester for `VideoLlavaForConditionalGeneration`.
     """
 
+    model_tester_class = VideoLlavaVisionText2TextModelTester
+
     all_model_classes = (
         (
             VideoLlavaModel,
@@ -201,7 +197,8 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         if is_torch_available()
         else ()
     )
-
+    # VideoLlava merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
     test_resize_embeddings = True
     _is_composite = True
 
@@ -215,29 +212,40 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
+
+    def test_nonlegacy_input_name(self):
+        """
+        Tests that we support legacy `pixel_values_images` and the recommended `pixel_values` as input.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        nonlegacy_input_dict = input_dict.copy()
+        nonlegacy_input_dict["pixel_values"] = nonlegacy_input_dict["pixel_values_images"]
+        del nonlegacy_input_dict["pixel_values_images"]
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                out1 = model(**input_dict)
+                out2 = model(**nonlegacy_input_dict)
+
+            torch.testing.assert_close(out1[0], out2[0])
 
     @run_test_using_subprocess
     def test_mixed_input(self):
@@ -358,7 +366,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values_images"] = curr_input_dict["pixel_values_images"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -367,7 +375,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values_images=pixel_values)
 
             # two images and two image tokens don't raise an error
@@ -452,8 +460,8 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        image = load_test_image(url)
 
         inputs = self.processor(
             text=prompts, images=[image], videos=[video_file], padding=True, return_tensors="pt"

@@ -26,9 +26,12 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -40,66 +43,46 @@ if is_torch_available():
     )
 
 
-class OlmoeModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        hidden_act="silu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        scope=None,
-        num_experts_per_tok=2,
-        num_experts=8,
-        norm_topk_prob=False,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
-        intermediate_size=12,
-    ):
+class OlmoeModelTester(ModelTesterConfigMixin):
+    if is_torch_available():
+        causal_lm_class = OlmoeForCausalLM
+
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "hidden_act": "silu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "pad_token_id": 0,
+        "scope": None,
+        "num_experts_per_tok": 2,
+        "num_experts": 8,
+        "norm_topk_prob": False,
+        "output_router_logits": False,
+        "router_aux_loss_coef": 0.001,
+        "intermediate_size": 16,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_experts = num_experts
-        self.norm_topk_prob = norm_topk_prob
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -172,7 +155,16 @@ class OlmoeModelTester:
 
 
 @require_torch
-class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OlmoeModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
+    model_tester_class = OlmoeModelTester
+
     all_model_classes = (OlmoeModel, OlmoeForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -189,7 +181,7 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = OlmoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OlmoeConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=OlmoeConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -205,12 +197,13 @@ class OlmoeIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
-        out = model(torch.tensor(input_ids, device=model.device)).logits.float()
+        with torch.no_grad():
+            out = model(torch.tensor(input_ids, device=model.device)).logits.float()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-1.3814, -3.4450, -2.2990, -1.9542, -2.4387, -2.7941, -2.9312, -2.8309]])
+        EXPECTED_MEAN = torch.tensor([[-0.9152, -3.3876, -2.3275, -1.9469, -2.4548, -2.7755, -3.0125, -2.8587]])
         torch.testing.assert_close(out.mean(-1).cpu(), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-2.3874, -2.4076, -2.4995, 4.2278, 1.4004, -0.0252, 0.4189, -2.7560, 0.3531, 1.6678, -0.7941, -1.1818, -0.2920, 0.7131, -1.4173, 1.6723, 0.5406, 0.1345, -0.1800, 0.2304, 1.2791, 0.7489, 0.6341, -0.0151, -1.3693, -1.2532, -2.3921, 0.7376, 1.6876, 0.5483])  # fmt: skip
+        EXPECTED_SLICE = torch.tensor([-0.9844, -1.0469, -3.4531, 3.2812, 0.7422, -0.3926, -0.4160, -2.6562, -1.4531, 0.3867, -1.5234, -1.8359, 0.1426, -0.9375, -2.1875, 0.0742, 0.8281, -2.5156, -2.4531, -1.1953, 0.1875, -0.3438, -0.6992, -0.7539, -2.7812, -3.7344, -3.5625, -0.2910, 0.3008, -0.0957])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30].cpu(), EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     @slow

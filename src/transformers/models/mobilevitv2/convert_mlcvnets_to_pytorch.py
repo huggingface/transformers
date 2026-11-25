@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,12 +16,13 @@
 import argparse
 import collections
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 import yaml
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -52,7 +52,7 @@ def load_orig_config_file(orig_cfg_file):
         return dict(items)
 
     config = argparse.Namespace()
-    with open(orig_cfg_file, "r") as yaml_file:
+    with open(orig_cfg_file, "r", encoding="utf-8") as yaml_file:
         try:
             cfg = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
@@ -114,7 +114,7 @@ def get_mobilevitv2_config(task_name, orig_cfg_file):
 
     # id2label
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -227,8 +227,9 @@ def remove_unused_keys(state_dict):
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     # url = "https://cdn.britannica.com/86/141086-050-9D7C75EE/Gulfstream-G450-business-jet-passengers.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()

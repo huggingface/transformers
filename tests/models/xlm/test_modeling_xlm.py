@@ -18,6 +18,7 @@ from transformers import XLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -38,66 +39,42 @@ if is_torch_available():
     from transformers.models.xlm.modeling_xlm import create_sinusoidal_embeddings
 
 
-class XLMModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_lengths=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        gelu_activation=True,
-        sinusoidal_embeddings=False,
-        causal=False,
-        asm=False,
-        n_langs=2,
-        vocab_size=99,
-        n_special=0,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=2,
-        num_choices=4,
-        summary_type="last",
-        use_proj=True,
-        scope=None,
-        bos_token_id=0,
-    ):
+class XLMModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_lengths": True,
+        "use_token_type_ids": True,
+        "use_labels": True,
+        "gelu_activation": True,
+        "sinusoidal_embeddings": False,
+        "causal": False,
+        "asm": False,
+        "n_langs": 2,
+        "vocab_size": 99,
+        "n_special": 0,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 2,
+        "num_choices": 4,
+        "summary_type": "last",
+        "use_proj": True,
+        "scope": None,
+        "bos_token_id": 0,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_lengths = use_input_lengths
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.gelu_activation = gelu_activation
-        self.sinusoidal_embeddings = sinusoidal_embeddings
-        self.causal = causal
-        self.asm = asm
-        self.n_langs = n_langs
-        self.vocab_size = vocab_size
-        self.n_special = n_special
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.summary_type = summary_type
-        self.use_proj = use_proj
-        self.scope = scope
-        self.bos_token_id = bos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -360,6 +337,8 @@ class XLMModelTester:
 
 @require_torch
 class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = XLMModelTester
+
     all_model_classes = (
         (
             XLMModel,
@@ -377,7 +356,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         {
             "feature-extraction": XLMModel,
             "fill-mask": XLMWithLMHeadModel,
-            "question-answering": XLMForQuestionAnsweringSimple,
             "text-classification": XLMForSequenceClassification,
             "text-generation": XLMWithLMHeadModel,
             "token-classification": XLMForTokenClassification,
@@ -386,6 +364,22 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else {}
     )
+
+    def _greedy_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._greedy_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._sample_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_search_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._beam_search_generate(*args, use_cache=use_cache, **kwargs)
+
+    def _beam_sample_generate(self, *args, use_cache=False, **kwargs):
+        """Same as the general one, with `use_cache=False` explicitly as xlm cannot use a cache correctly."""
+        return super()._beam_sample_generate(*args, use_cache=use_cache, **kwargs)
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -469,13 +463,13 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester.create_and_check_xlm_for_multiple_choice(*config_and_inputs)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_cache
     ):
         # adds PAD dummy token, expected shape is off by 1
         prompt_length += 1
         output_length += 1
         super()._check_attentions_for_generate(
-            batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+            batch_size, attentions, prompt_length, output_length, config, decoder_cache
         )
 
     def _check_hidden_states_for_generate(
@@ -493,6 +487,14 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         model_name = "FacebookAI/xlm-mlm-en-2048"
         model = XLMModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @unittest.skip("xlm cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_methods_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip("xlm cannot use a cache correctly and this test sets it to True explicitly")
+    def test_generate_with_and_without_position_ids(self):
+        pass
 
 
 @require_torch
@@ -525,5 +527,6 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
             447,
         ]  # the president the president the president the president the president the president the president the president the president the president
         # TODO(PVP): this and other input_ids I tried for generation give pretty bad results. Not sure why. Model might just not be made for auto-regressive inference
-        output_ids = model.generate(input_ids, do_sample=False)
+        # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20, use_cache=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

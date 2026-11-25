@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,14 @@
 # limitations under the License.
 
 import os
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...utils import TensorType, logging, requires_backends
+from ...utils import TensorType, logging
 from ...utils.import_utils import is_timm_available, is_torch_available, requires
 
 
@@ -53,16 +52,15 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         pretrained_cfg: dict[str, Any],
-        architecture: Optional[str] = None,
+        architecture: str | None = None,
         **kwargs,
     ):
-        requires_backends(self, "timm")
         super().__init__(architecture=architecture)
 
         self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
         self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
 
-        # useful for training, see examples/pytorch/image-classification/run_image_classification.py
+        # useful for training
         self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True)
 
         # If `ToTensor` is in the transforms, then the input should be numpy array or PIL image.
@@ -84,7 +82,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
 
     @classmethod
     def get_image_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         Get the image processor dict for the model.
@@ -97,7 +95,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
+        return_tensors: str | TensorType | None = "pt",
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.

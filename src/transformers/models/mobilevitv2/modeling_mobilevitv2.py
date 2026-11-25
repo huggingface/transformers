@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Apple Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
 """PyTorch MobileViTV2 model."""
-
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -40,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`.
     """
@@ -70,7 +67,7 @@ class MobileViTV2ConvLayer(nn.Module):
         bias: bool = False,
         dilation: int = 1,
         use_normalization: bool = True,
-        use_activation: Union[bool, str] = True,
+        use_activation: bool | str = True,
     ) -> None:
         super().__init__()
         padding = int((kernel_size - 1) / 2) * dilation
@@ -551,7 +548,7 @@ class MobileViTV2Encoder(nn.Module):
         hidden_states: torch.Tensor,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+    ) -> tuple | BaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
@@ -575,16 +572,17 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MobileViTV2Layer"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        super()._init_weights(module)
+        if isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.GroupNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
 
 @auto_docstring
@@ -620,15 +618,15 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -688,19 +686,13 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.Tensor | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | ImageClassifierOutputWithNoAttention:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mobilevitv2(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
@@ -856,27 +848,25 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SemanticSegmenterOutput]:
+    ) -> tuple | SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor, MobileViTV2ForSemanticSegmentation
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
         >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
@@ -892,7 +882,7 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")

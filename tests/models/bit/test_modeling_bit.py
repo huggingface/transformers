@@ -29,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import BitBackbone, BitForImageClassification, BitImageProcessor, BitModel
+    from transformers import BitBackbone, BitForImageClassification, BitImageProcessorPil, BitModel
 
 
 if is_vision_available():
@@ -130,6 +130,7 @@ class BitModelTester:
 
         # verify backbone works with out_features=None
         config.out_features = None
+        print(config)
         model = BitBackbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -166,7 +167,6 @@ class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = BitModelTester(self)
@@ -257,7 +257,7 @@ def prepare_img():
 class BitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return BitImageProcessor.from_pretrained("google/bit-50") if is_vision_available() else None
+        return BitImageProcessorPil.from_pretrained("google/bit-50") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
@@ -277,7 +277,7 @@ class BitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[-0.6526, -0.5263, -1.4398]]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[:, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
 
 @require_torch

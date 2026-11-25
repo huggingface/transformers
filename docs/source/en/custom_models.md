@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -21,7 +21,7 @@ Transformers models are designed to be customizable. A models code is fully cont
 > [!TIP]
 > It may be easier to start from scratch if you're creating an entirely new model. But for models that are very similar to an existing one in Transformers, it is faster to reuse or subclass the same configuration and model class.
 
-This guide will show you how to customize a ResNet model, enable [AutoClass](./models#autoclass) support, and share it on the Hub.
+This guide will show you how to customize a ResNet model, enable [AutoClass](#autoclass) support, and share it on the Hub.
 
 ## Configuration
 
@@ -35,14 +35,14 @@ The main rules for customizing a configuration are:
 > [!TIP]
 > It is useful to check the validity of some of the parameters. In the example below, a check is implemented to ensure `block_type` and `stem_type` belong to one of the predefined values.
 >
-> Add `model_type` to the configuration class to enable [AutoClass](./models#autoclass) support.
+> Add `model_type` to the configuration class to enable [AutoClass](#autoclass) support.
 
 ```py
 from transformers import PreTrainedConfig
 from typing import List
 
 class ResnetConfig(PreTrainedConfig):
-    model_type = "resnet"
+    model_type = "custom-resnet"
 
     def __init__(
         self,
@@ -91,13 +91,15 @@ Writing models this way produces simpler code with a clear source of truth for a
 
 You'll create two ResNet models, a barebones ResNet model that outputs the hidden states and a ResNet model with an image classification head.
 
+Call [`~PreTrainedModel.post_init`] at the end of `__init__`. It initializes the weights and records the tied weights that [`~PreTrainedModel.from_pretrained`] needs to load the model.
+
 <hfoptions id="resnet">
 <hfoption id="ResnetModel">
 
 Define a mapping between the block types and classes. Everything else is created by passing the configuration class to the ResNet model class.
 
 > [!TIP]
-> Add `config_class` to the model class to enable [AutoClass](#autoclass-support) support.
+> Add `config_class` to the model class to enable [AutoClass](#autoclass) support.
 
 ```py
 from transformers import PreTrainedModel
@@ -123,6 +125,7 @@ class ResnetModel(PreTrainedModel):
             stem_type=config.stem_type,
             avg_down=config.avg_down,
         )
+        self.post_init()
 
     def forward(self, tensor):
         return self.model.forward_features(tensor)
@@ -134,7 +137,7 @@ class ResnetModel(PreTrainedModel):
 The `forward` method needs to be rewritten to calculate the loss for each logit if labels are available. Otherwise, the ResNet model class is the same.
 
 > [!TIP]
-> Add `config_class` to the model class to enable [AutoClass](#autoclass-support) support.
+> Add `config_class` to the model class to enable [AutoClass](#autoclass) support.
 
 ```py
 import torch
@@ -156,6 +159,7 @@ class ResnetModelForImageClassification(PreTrainedModel):
             stem_type=config.stem_type,
             avg_down=config.avg_down,
         )
+        self.post_init()
 
     def forward(self, tensor, labels=None):
         logits = self.model(tensor)
@@ -199,12 +203,12 @@ Make sure you have the `model_type` attribute (must be different from existing m
 ```py
 from transformers import AutoConfig, AutoModel, AutoModelForImageClassification
 
-AutoConfig.register("resnet", ResnetConfig)
+AutoConfig.register("custom-resnet", ResnetConfig)
 AutoModel.register(ResnetConfig, ResnetModel)
 AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassification)
 ```
 
-Your custom model code is now compatible with the [AutoClass](./models#autoclass) API. Users can load the model with the [AutoModel](./model_doc/auto#automodel) or [`AutoModelForImageClassification`] classes.
+Your custom model code is now compatible with the [AutoClass](#autoclass) API. Users can load the model with the [AutoModel](./model_doc/auto) or [`AutoModelForImageClassification`] classes.
 
 ## Upload
 
@@ -294,4 +298,4 @@ resnet50d.push_to_hub("custom-resnet50d")
 
 The pretrained weights, configuration, `modeling.py` and `configuration.py` files should all be uploaded to the Hub now in a [repository](https://hf.co/sgugger/custom-resnet50d) under your namespace.
 
-Because a custom model doesn't use the same modeling code as a Transformers' model, you need to add `trust_remode_code=True` in [`~PreTrainedModel.from_pretrained`] to load it. Refer to the load [custom models](./models#custom-models) section for more information.
+Because a custom model doesn't use the same modeling code as a Transformers' model, you need to add `trust_remote_code=True` in [`~PreTrainedModel.from_pretrained`] to load it. Refer to the load [custom models](./models#custom-models) section for more information.

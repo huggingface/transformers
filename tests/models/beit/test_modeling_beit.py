@@ -22,7 +22,6 @@ from datasets import load_dataset
 from transformers import BeitConfig
 from transformers.testing_utils import (
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -32,6 +31,7 @@ from transformers.utils import (
     is_vision_available,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -55,64 +55,56 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BeitImageProcessor
+    from transformers import BeitImageProcessorPil
 
 
-class BeitModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=100,
-        batch_size=13,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=4,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        num_labels=3,
-        scope=None,
-        out_indices=[1, 2, 3, 4],
-        out_features=["stage1", "stage2", "stage3", "stage4"],
-        attn_implementation="eager",
-        mask_ratio=0.5,
-    ):
-        self.parent = parent
-        self.vocab_size = vocab_size
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.out_indices = out_indices
-        self.out_features = out_features
-        self.num_labels = num_labels
+class BeitModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "vocab_size": 100,
+        "batch_size": 13,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 4,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "scope": None,
+        "out_indices": [1, 2, 3, 4],
+        "out_features": ["stage1", "stage2", "stage3", "stage4"],
+        "attn_implementation": "eager",
+        "mask_ratio": 0.5,
+        "use_relative_position_bias": False,
+        "use_shared_relative_position_bias": False,
+        "add_fpn": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-        self.mask_length = self.seq_length - 1
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.attn_implementation = attn_implementation
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        values["mask_length"] = values["seq_length"] - 1
+        values["num_masks"] = int(values["mask_ratio"] * values["seq_length"])
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        values = self.get_small_config_defaults(**kwargs)
+        values.pop("mask_ratio")  # only used to derive num_masks
+        for key, value in values.items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -145,6 +137,9 @@ class BeitModelTester:
             out_indices=self.out_indices,
             out_features=self.out_features,
             attn_implementation=self.attn_implementation,
+            use_relative_position_bias=self.use_relative_position_bias,
+            use_shared_relative_position_bias=self.use_shared_relative_position_bias,
+            add_fpn=self.add_fpn,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -155,6 +150,7 @@ class BeitModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_backbone(self, config, pixel_values, labels, pixel_labels):
+        config.add_fpn = False
         model = BeitBackbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -239,6 +235,8 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = BeitModelTester
+
     all_model_classes = (
         (
             BeitModel,
@@ -261,22 +259,16 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = BeitModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BeitConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BeitConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="BEiT does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(reason="BEiT has some layers using `add_module` which doesn't work well with `nn.DataParallel`")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @unittest.skip(reason="BEiT does not support feedforward chunking yet")
@@ -340,7 +332,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
             self.skipTest(reason="model_tester.is_training is set to False")
@@ -362,24 +354,23 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 continue
 
             model = model_class(config)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+    def test_reverse_loading_mapping(self):
+        # Enable both per-layer and shared relative position bias so that every
+        # mapping rule has at least one matching key in the model state dict.
+        self.model_tester.use_relative_position_bias = True
+        self.model_tester.use_shared_relative_position_bias = True
+        try:
+            super().test_reverse_loading_mapping()
+        finally:
+            self.model_tester.use_relative_position_bias = False
+            self.model_tester.use_shared_relative_position_bias = False
 
     @slow
     def test_model_from_pretrained(self):
@@ -399,7 +390,9 @@ def prepare_img():
 class BeitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
+        return (
+            BeitImageProcessorPil.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
+        )
 
     @slow
     def test_inference_masked_image_modeling_head(self):
@@ -482,7 +475,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         model = model.to(torch_device)
 
-        image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
+        image_processor = BeitImageProcessorPil(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = ds[0]["image"].convert("RGB")
@@ -512,7 +505,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         model = model.to(torch_device)
 
-        image_processor = BeitImageProcessor(do_resize=True, size=640, do_center_crop=False)
+        image_processor = BeitImageProcessorPil(do_resize=True, size=640, do_center_crop=False)
 
         ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         image = ds[0]["image"].convert("RGB")
@@ -538,7 +531,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         model = BeitModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        processor = BeitImageProcessor.from_pretrained(model_name)
+        processor = BeitImageProcessorPil.from_pretrained(model_name)
         inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 
@@ -559,4 +552,4 @@ class BeitBackboneTest(unittest.TestCase, BackboneTesterMixin):
     config_class = BeitConfig
 
     def setUp(self):
-        self.model_tester = BeitModelTester(self)
+        self.model_tester = BeitModelTester(self, add_fpn=False)

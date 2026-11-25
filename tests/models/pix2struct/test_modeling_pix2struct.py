@@ -19,14 +19,16 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
+import pytest
 
 from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -48,51 +50,38 @@ if is_torch_available():
     )
 
 
-if is_vision_available():
-    from PIL import Image
+class Pix2StructVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 12,
+        "patch_embed_hidden_size": 12,
+        "projection_dim": 32,
+        "max_patches": 64,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 1e-10,
+        "scope": None,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = values["max_patches"]
+        values["patch_proj_dim"] = ((values["patch_size"] ** 2) * values["num_channels"]) + 2
+        return values
 
-class Pix2StructVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=12,
-        patch_embed_hidden_size=12,
-        projection_dim=32,
-        max_patches=64,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=1e-10,
-        scope=None,
-    ):
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_embed_hidden_size = patch_embed_hidden_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.max_patches = max_patches
-        self.seq_length = self.max_patches
-        self.patch_proj_dim = ((patch_size**2) * num_channels) + 2
-
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         flattened_patches = floats_tensor([self.batch_size, self.max_patches, self.patch_proj_dim])
@@ -141,6 +130,8 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = Pix2StructVisionModelTester
+
     all_model_classes = (Pix2StructVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -148,7 +139,7 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -183,24 +174,20 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
@@ -214,47 +201,38 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class Pix2StructTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=12,
-        projection_dim=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        bos_token_id=0,
-        scope=None,
-    ):
+class Pix2StructTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 12,
+        "projection_dim": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "bos_token_id": 0,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["d_kv"] = values["hidden_size"] // values["num_attention_heads"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.d_kv = hidden_size // num_attention_heads
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
-        self.bos_token_id = bos_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -308,11 +286,26 @@ class Pix2StructTextModelTester:
 
 @require_torch
 class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Pix2StructTextModelTester
     all_model_classes = (Pix2StructTextModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = Pix2StructTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Pix2StructTextConfig, hidden_size=32)
+
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        # Pix2Struct stores its head dim in `d_kv` and ties the q/k/v projections to `hidden_size`
+        config.d_kv = max(requested_dim, config.d_kv)
+        config.hidden_size = config.num_heads * config.d_kv
+        return config
+
+    @unittest.skip(
+        reason="Pix2Struct always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -321,24 +314,20 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Pix2Struct does not use inputs_embeds")
@@ -352,8 +341,24 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class Pix2StructModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class Pix2StructModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_values = Pix2StructTextModelTester.get_small_config_defaults(**(text_kwargs or {}))
+        values["batch_size"] = text_values["batch_size"]  # need bs for batching_equivalence test
+        values["seq_length"] = text_values["seq_length"]  # need seq_length for common tests
+        values["max_patches"] = Pix2StructVisionModelTester.get_small_config_defaults(**(vision_kwargs or {}))[
+            "max_patches"
+        ]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -362,10 +367,8 @@ class Pix2StructModelTester:
         self.parent = parent
         self.text_model_tester = Pix2StructTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Pix2StructVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
-        self.is_training = is_training
-        self.max_patches = self.vision_model_tester.max_patches
+        for key, value in self.get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -401,17 +404,38 @@ class Pix2StructModelTester:
 @require_torch
 class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pix2StructForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {"image-to-text": Pix2StructForConditionalGeneration, "image-text-to-text": Pix2StructForConditionalGeneration}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-text-to-text": Pix2StructForConditionalGeneration} if is_torch_available() else {}
 
     test_resize_embeddings = True
     test_attention_outputs = False
+    model_tester_class = Pix2StructModelTester
 
     def setUp(self):
         self.model_tester = Pix2StructModelTester(self)
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # override - old testers that is composed of separate classes for vision/text
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.text_model_tester.batch_size = batch_size
+            self.model_tester.vision_model_tester.batch_size = batch_size
+            config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        finally:
+            self.model_tester.text_model_tester.batch_size = original_batch_size
+            self.model_tester.vision_model_tester.batch_size = original_batch_size
+        return config, inputs_dict
+
+    @unittest.skip(
+        reason="Pix2Struct always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(
+        reason="Composite model: the vision and text towers cannot both be scaled to triton's minimum flex head dim (16) while keeping the cross-attention hidden sizes equal, so the flex grad-test harness can't build a valid config (same limitation t5gemma skips for composite models)."
+    )
+    def test_flex_attention_with_grads(self):
+        pass
 
     def test_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -454,6 +478,11 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_model_get_set_embeddings(self):
         pass
 
+    @pytest.mark.generate
+    @unittest.skip(reason="`Pix2Struct` cannot generate with no inputs provided")
+    def test_generate_without_input_ids(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -469,7 +498,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                 "decoder_input_ids",
                 "decoder_attention_mask",
                 "encoder_outputs",
-                "past_key_values",
+                "cache",
                 "labels",
                 "decoder_inputs_embeds",
                 "use_cache",
@@ -496,7 +525,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             self.skipTest(reason="model_tester.is_training is set to False")
 
@@ -507,7 +536,7 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
@@ -655,8 +684,8 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 # We will verify our results on an image of a stop sign
 def prepare_img():
-    url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+    im = load_test_image(url)
     return im
 
 
@@ -683,10 +712,8 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = (
-            "https://www.connollycove.com/wp-content/uploads/2019/06/temple-bar-dublin-world-famous-irish-pub.jpg"
-        )
-        image_2 = Image.open(requests.get(second_url, stream=True).raw)
+        second_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/temple-bar-dublin-world-famous-irish-pub.jpg"
+        image_2 = load_test_image(second_url)
 
         # image only
         inputs = processor(images=[image_1, image_2], return_tensors="pt").to(torch_device)
@@ -707,8 +734,8 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
-        image_2 = Image.open(requests.get(second_url, stream=True).raw)
+        second_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/temple-bar-dublin-world-famous-irish-pub.jpg"
+        image_2 = load_test_image(second_url)
         texts = ["A picture of", "An photography of"]
 
         # image only
@@ -731,8 +758,10 @@ class Pix2StructIntegrationTest(unittest.TestCase):
     def test_vqa_model(self):
         model_id = "google/pix2struct-ai2d-base"
 
-        image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
-        image = Image.open(requests.get(image_url, stream=True).raw)
+        image_url = (
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo.jpg"
+        )
+        image = load_test_image(image_url)
 
         model = Pix2StructForConditionalGeneration.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
         processor = Pix2StructProcessor.from_pretrained(model_id)
@@ -749,11 +778,11 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         model_id = "google/pix2struct-ai2d-base"
 
         image_urls = [
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg",
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo-2.png",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo.jpg",
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/ai2d-demo-2.png",
         ]
 
-        images = [Image.open(requests.get(image_url, stream=True).raw) for image_url in image_urls]
+        images = [load_test_image(image_url) for image_url in image_urls]
 
         texts = [
             "What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud",

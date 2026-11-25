@@ -103,10 +103,9 @@ class PeVideoEncoderTester:
                 self.config_kwargs["vision_config"]["model_args"]["img_size"][1],
             ]
         )
-        valid_lengths = ids_tensor([self.batch_size], self.num_frames)
-        padding_mask_videos = (
-            torch.ones([self.batch_size, self.num_frames], device=torch_device) < valid_lengths[:, None]
-        )
+        # Generate valid_lengths in range [1, num_frames] to ensure at least one valid frame
+        valid_lengths = ids_tensor([self.batch_size], self.num_frames - 1) + 1
+        padding_mask_videos = torch.arange(self.num_frames, device=torch_device).unsqueeze(0) < valid_lengths[:, None]
         padding_mask_videos = padding_mask_videos.int()
         config = self.get_config()
 
@@ -133,9 +132,7 @@ class PeVideoEncoderTester:
 @require_torch
 class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeVideoEncoder,)
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -150,6 +147,17 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(
+        "TimmWrapper sets _supports_sdpa=True (timm uses F.scaled_dot_product_attention internally) but does not "
+        "support flash-only dispatch via sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False)."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
 
     @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
     def test_can_init_all_missing_weights(self):
@@ -173,10 +181,6 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("Cannot set `output_attentions` for timm models.")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="PeVideoEncoder does not support feedforward chunking yet")
@@ -312,9 +316,7 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
     all_model_classes = (PeVideoModel,)
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     _is_composite = True
 
@@ -331,8 +333,18 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @unittest.skip(reason="PeVideoModel does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(
+        "TimmWrapperForImageClassification does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+    )
+    def test_can_set_attention_dynamically_composite_model(self):
         pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")

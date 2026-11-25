@@ -12,12 +12,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-12-01 and added to Hugging Face Transformers on 2025-12-01.*
-
+*This model was contributed to Hugging Face Transformers on 2025-12-01.*
 
 # Ministral3
 
@@ -30,6 +28,7 @@ This model is the instruct post-trained version, fine-tuned for instruction task
 The Ministral 3 family is designed for edge deployment, capable of running on a wide range of hardware.
 
 Key features:
+
 - Vision: Enables the model to analyze images and provide insights based on visual content, in addition to text.
 - Multilingual: Supports dozens of languages, including English, French, Spanish, German, Italian, Portuguese, Dutch, Chinese, Japanese, Korean, Arabic.
 - System Prompt: Maintains strong adherence and support for system prompts.
@@ -40,8 +39,9 @@ Key features:
 
 ## Usage examples
 
-```py
+```python
 import torch
+
 from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
 
 
@@ -67,10 +67,10 @@ messages = [
     },
 ]
 
-tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True)
+tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True).to(model.device)
 
-tokenized["input_ids"] = tokenized["input_ids"].to(device="cuda")
-tokenized["pixel_values"] = tokenized["pixel_values"].to(dtype=torch.bfloat16, device="cuda")
+tokenized["input_ids"] = tokenized["input_ids"].to(device=model.device)
+tokenized["pixel_values"] = tokenized["pixel_values"].to(dtype=torch.bfloat16, device=model.device)
 image_sizes = [tokenized["pixel_values"].shape[-2:]]
 
 output = model.generate(
@@ -82,7 +82,6 @@ output = model.generate(
 decoded_output = tokenizer.decode(output[len(tokenized["input_ids"][0]):])
 print(decoded_output)
 ```
-
 
 ## Ministral3Config
 

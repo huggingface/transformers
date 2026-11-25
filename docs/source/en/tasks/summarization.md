@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -27,7 +27,7 @@ Summarization creates a shorter version of a document or an article that capture
 
 This guide will show you how to:
 
-1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the California state bill subset of the [BillSum](https://huggingface.co/datasets/billsum) dataset for abstractive summarization.
+1. Finetune [T5](https://huggingface.co/google-t5/t5-small) on the California state bill subset of the [BillSum](https://huggingface.co/datasets/FiscalNote/billsum) dataset for abstractive summarization.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -57,7 +57,7 @@ Start by loading the smaller California state bill subset of the BillSum dataset
 ```py
 >>> from datasets import load_dataset
 
->>> billsum = load_dataset("billsum", split="ca_test")
+>>> billsum = load_dataset("FiscalNote/billsum", split="ca_test")
 ```
 
 Split the dataset into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
@@ -161,7 +161,7 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 
@@ -229,18 +229,6 @@ Come up with some text you'd like to summarize. For T5, you need to prefix your 
 ```py
 >>> text = "summarize: The Inflation Reduction Act lowers prescription drug costs, health care costs, and energy costs. It's the most aggressive action on tackling the climate crisis in American history, which will lift up American workers and create good-paying, union jobs across the country. It'll lower the deficit and ask the ultra-wealthy and corporations to pay their fair share. And no one making under $400,000 per year will pay a penny more in taxes."
 ```
-
-The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for summarization with your model, and pass your text to it:
-
-```py
->>> from transformers import pipeline
-
->>> summarizer = pipeline("summarization", model="username/my_awesome_billsum_model")
->>> summarizer(text)
-[{"summary_text": "The Inflation Reduction Act lowers prescription drug costs, health care costs, and energy costs. It's the most aggressive action on tackling the climate crisis in American history, which will lift up American workers and create good-paying, union jobs across the country."}]
-```
-
-You can also manually replicate the results of the `pipeline` if you'd like:
 
 Tokenize the text and return the `input_ids` as PyTorch tensors:
 

@@ -149,7 +149,8 @@ class PeAudioVideoEncoderTester:
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_audio_channels, self.audio_seq_length])
-        valid_audio_lengths = ids_tensor([self.batch_size], self.audio_seq_length)
+        # Generate valid_lengths in range [1, self.audio_seq_length] to ensure at least one valid frame
+        valid_audio_lengths = ids_tensor([self.batch_size], self.audio_seq_length - 1) + 1
         padding_mask = torch.arange(self.audio_seq_length, device=torch_device)[None, :] < valid_audio_lengths[:, None]
         padding_mask = padding_mask.int()
 
@@ -162,7 +163,8 @@ class PeAudioVideoEncoderTester:
                 self.config_kwargs["video_config"]["vision_config"]["model_args"]["img_size"][1],
             ]
         )
-        valid_video_lengths = ids_tensor([self.batch_size], self.num_frames)
+        # Generate valid_lengths in range [1, self.num_frames] to ensure at least one valid frame
+        valid_video_lengths = ids_tensor([self.batch_size], self.num_frames - 1) + 1
         padding_mask_videos = (
             torch.arange(self.num_frames, device=torch_device)[None, :] < valid_video_lengths[:, None]
         )
@@ -206,10 +208,9 @@ class PeAudioVideoEncoderTester:
 class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeAudioVideoEncoder,)
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     _is_composite = True
+    test_torch_exportable = False  # data-dependent audio-video alignment
 
     def setUp(self):
         self.model_tester = PeAudioVideoEncoderTester(self)
@@ -224,12 +225,19 @@ class PeAudioVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @unittest.skip(reason="PeAudioVideoEncoder does not have usual input embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_initialization(self):
+    @unittest.skip(
+        "TimmWrapper sets _supports_sdpa=True (timm uses F.scaled_dot_product_attention internally) but does not "
+        "support flash-only dispatch via sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False)."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @unittest.skip("PeAudioVideoEncoder does not have language_model, vision_tower, multi_modal_projector.")
@@ -281,10 +289,10 @@ class PeAudioVideoModelIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="TODO when released")
     def test(self):
         video_path = hf_hub_download(
-            repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_videos", filename="audiobox.mp4", repo_type="dataset"
         )
         audio_path = hf_hub_download(
-            repo_id="eustlb/dummy-video-dataset", filename="audiobox.mp4", repo_type="dataset"
+            repo_id="hf-internal-testing/fixtures_videos", filename="audiobox.mp4", repo_type="dataset"
         )
 
         inputs = self.processor(

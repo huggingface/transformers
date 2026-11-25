@@ -22,7 +22,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from pytest import mark
 
-from transformers import VideoMAEConfig
+from transformers import VideoMAEConfig, set_seed
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     Expectations,
@@ -36,6 +36,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import check_torch_load_is_safe, is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -54,62 +55,48 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from transformers import VideoMAEImageProcessor
+    from transformers import VideoMAEImageProcessorPil
 
 
-class VideoMAEModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=10,
-        num_channels=3,
-        patch_size=2,
-        tubelet_size=2,
-        num_frames=2,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
-        initializer_range=0.02,
-        mask_ratio=0.9,
-        scope=None,
-        attn_implementation="eager",
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.tubelet_size = tubelet_size
-        self.num_frames = num_frames
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.mask_ratio = mask_ratio
-        self.scope = scope
-        self.attn_implementation = attn_implementation
+class VideoMAEModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 10,
+        "num_channels": 3,
+        "patch_size": 2,
+        "tubelet_size": 2,
+        "num_frames": 2,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "type_sequence_label_size": 10,
+        "initializer_range": 0.02,
+        "mask_ratio": 0.9,
+        "scope": None,
+        "attn_implementation": "eager",
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in VideoMAE, the number of tokens equals num_frames/tubelet_size * num_patches per frame
-        self.num_patches_per_frame = (image_size // patch_size) ** 2
-        self.seq_length = (num_frames // tubelet_size) * self.num_patches_per_frame
-
+        values["num_patches_per_frame"] = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = values["num_frames"] // values["tubelet_size"] * values["num_patches_per_frame"]
         # use this variable to define bool_masked_pos
-        self.num_masks = int(mask_ratio * self.seq_length)
+        values["num_masks"] = int(values["mask_ratio"] * values["seq_length"])
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -184,6 +171,8 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     attention_mask and seq_length.
     """
 
+    model_tester_class = VideoMAEModelTester
+
     all_model_classes = (
         (VideoMAEModel, VideoMAEForPreTraining, VideoMAEForVideoClassification) if is_torch_available() else ()
     )
@@ -196,11 +185,10 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     additional_model_inputs = ["bool_masked_pos"]
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VideoMAEModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VideoMAEConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VideoMAEConfig, has_text_modality=False, hidden_size=32)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -361,6 +349,8 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
+            # Set seed for deterministic test - ensures reproducible model initialization and inputs
+            set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(torch.bfloat16)
@@ -419,7 +409,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
-            VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            VideoMAEImageProcessorPil(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
             if is_vision_available()
             else None
         )
@@ -477,7 +467,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `True`)
-        expected_loss = torch.tensor([0.5142], device=torch_device)
+        expected_loss = torch.tensor(0.5142, device=torch_device)
         torch.testing.assert_close(outputs.loss, expected_loss, rtol=1e-4, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `False`)
@@ -488,5 +478,5 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
+        expected_loss = torch.tensor(0.6469, device=torch_device)
         torch.testing.assert_close(outputs.loss, expected_loss, rtol=1e-4, atol=1e-4)

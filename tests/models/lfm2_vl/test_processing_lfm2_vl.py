@@ -35,9 +35,14 @@ if is_vision_available():
 @require_vision
 class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Lfm2VlProcessor
+    # Tiny processor created with make_tiny_processor.py from "LiquidAI/LFM2-VL-1.6B"
+    tiny_model_id = "hf-internal-testing/tiny-processor-lfm2_vl"
+    model_id = "LiquidAI/LFM2-VL-1.6B"
 
     @classmethod
     def _setup_image_processor(cls):
+        # Small tile_size and token limits keep tensor allocations minimal.
+        # do_image_splitting=False prevents splitting images into many tiles.
         image_processor_class = cls._get_component_class_from_processor("image_processor")
         return image_processor_class(
             tile_size=14,
@@ -46,12 +51,6 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             encoder_patch_size=2,
             do_image_splitting=False,
         )
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        processor_kwargs = cls.prepare_processor_dict()
-        return tokenizer_class.from_pretrained("LiquidAI/LFM2-VL-1.6B", **processor_kwargs)
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -93,14 +92,10 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         return {"chat_template": chat_template}
 
-    @unittest.skip("Lfm2VlProcessor adds special tokens to the text")
-    def test_tokenizer_defaults(self):
-        pass
-
     # Override as Lfm2VL needs images/video to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size=None):
+    def prepare_images_inputs(self, batch_size=None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -429,30 +424,166 @@ class Lfm2VlProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
             self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
 
-    def test_missing_images_error(self):
-        """Test that appropriate error is raised when images are referenced but not provided."""
-        processor = self.get_processor()
+    def test_single_tile_image_with_thumbnail_disabled(self):
+        """Test that single-tile images work correctly when use_thumbnail=False."""
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
+        processor_components["image_processor"] = self.get_component("image_processor", do_image_splitting=False)
+        processor_kwargs = self.prepare_processor_dict()
 
-        # Test single text with image token but no image
-        text = "Let me show you this image: <image> What do you think?"
-        with self.assertRaises(ValueError) as context:
-            processor(text=text)
-        self.assertTrue("We detected 1 tokens in the text but no images were passed" in str(context.exception))
+        processor = self.processor_class(**processor_components, **processor_kwargs)
 
-        # Test batch with image tokens but no images
-        texts = [
-            "First text with <image> token.",
-            "Second text <image> with token.",
+        image_str = "<image>"
+        text_str = "Describe this image."
+        text = image_str + text_str
+
+        # Test with use_thumbnail=False - this should still generate correct tokens
+        inputs = processor(text=text, images=self.small_image, use_thumbnail=False)
+
+        # Count image tokens in input_ids
+        num_image_tokens = sum(1 for token_id in inputs["input_ids"][0] if token_id == self.image_token_id)
+
+        # Verify we have image tokens (the bug caused 0 tokens)
+        self.assertGreater(num_image_tokens, 0, "Single-tile image with use_thumbnail=False should have image tokens")
+
+        # Verify the number of image tokens matches expected based on spatial_shapes
+        spatial_shape = inputs["spatial_shapes"][0].tolist()
+        expected_tokens = math.ceil(spatial_shape[0] / processor.image_processor.downsample_factor) * math.ceil(
+            spatial_shape[1] / processor.image_processor.downsample_factor
+        )
+        self.assertEqual(
+            num_image_tokens,
+            expected_tokens,
+            f"Image tokens ({num_image_tokens}) should match expected ({expected_tokens}) based on spatial shapes",
+        )
+
+        # Verify pixel_values shape is correct
+        encoder_feature_dims = (
+            3 * processor.image_processor.encoder_patch_size * processor.image_processor.encoder_patch_size
+        )
+        self.assertEqual(
+            np.array(inputs["pixel_values"]).shape,
+            (1, processor.image_processor.max_num_patches, encoder_feature_dims),
+        )
+
+    def test_multi_image(self):
+        """Test that text is correctly processed when multiple images are present."""
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
+        processor_components["image_processor"] = self.get_component("image_processor", do_image_splitting=False)
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+
+        # Text with multiple images and text segments between them
+        text_1 = "First: "
+        text_2 = " Middle: "
+        text_3 = " End."
+        text = text_1 + "<image>" + text_2 + "<image>" + text_3
+        images = [[self.small_image, self.small_image]]
+
+        inputs = processor(text=text, images=images)
+
+        # Construct expected input_ids
+        tokenized_1 = processor.tokenizer(text_1, add_special_tokens=False)["input_ids"]
+        tokenized_2 = processor.tokenizer(text_2, add_special_tokens=False)["input_ids"]
+        tokenized_3 = processor.tokenizer(text_3, add_special_tokens=False)["input_ids"]
+        image_tokens = [self.image_start_token_id] + [self.image_token_id] * 9 + [self.image_end_token_id]
+
+        expected_input_ids = tokenized_1 + image_tokens + tokenized_2 + image_tokens + tokenized_3
+        self.assertEqual(inputs["input_ids"], [expected_input_ids])
+        self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids)])
+
+    def test_multi_turn_multi_image(self):
+        """Test that text is correctly processed when multiple images are present in a multi-turn conversation."""
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
+        processor_components["image_processor"] = self.get_component("image_processor", do_image_splitting=False)
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+
+        # Simulate a multi-turn conversation with images
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is in image A?"},
+                    {"type": "image"},
+                    {"type": "text", "text": "And image B?"},
+                    {"type": "image"},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "Image A shows X. Image B shows Y."}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "Tell me more about image A."}],
+            },
         ]
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts)
-        self.assertTrue("We detected 2 tokens in the text but no images were passed" in str(context.exception))
 
-        # Test with None as Images
-        with self.assertRaises(ValueError) as context:
-            processor(text=text, images=None)
-        self.assertTrue("We detected 1 tokens in the text but no images were passed" in str(context.exception))
+        text = processor.apply_chat_template(messages, add_generation_prompt=True)
+        images = [[self.small_image, self.small_image]]
 
-        with self.assertRaises(ValueError) as context:
-            processor(text=texts, images=None)
-        self.assertTrue("We detected 2 tokens in the text but no images were passed" in str(context.exception))
+        inputs = processor(text=text, images=images, do_image_splitting=False)
+
+        # Construct expected input_ids based on the chat template structure
+        image_tokens = [self.image_start_token_id] + [self.image_token_id] * 9 + [self.image_end_token_id]
+
+        # Build expected sequence from chat template parts
+        bos = processor.tokenizer(self.bos_token, add_special_tokens=False)["input_ids"]
+        user_start = processor.tokenizer("<|im_start|>user\n", add_special_tokens=False)["input_ids"]
+        assistant_start = processor.tokenizer("<|im_start|>assistant\n", add_special_tokens=False)["input_ids"]
+        im_end = processor.tokenizer("<|im_end|>\n", add_special_tokens=False)["input_ids"]
+
+        text_a = processor.tokenizer("What is in image A?", add_special_tokens=False)["input_ids"]
+        text_b = processor.tokenizer("And image B?", add_special_tokens=False)["input_ids"]
+        assistant_response = processor.tokenizer("Image A shows X. Image B shows Y.", add_special_tokens=False)[
+            "input_ids"
+        ]
+        followup = processor.tokenizer("Tell me more about image A.", add_special_tokens=False)["input_ids"]
+
+        expected_input_ids = (
+            bos
+            + user_start
+            + text_a
+            + image_tokens
+            + text_b
+            + image_tokens
+            + im_end
+            + assistant_start
+            + assistant_response
+            + im_end
+            + user_start
+            + followup
+            + im_end
+            + assistant_start
+        )
+
+        self.assertEqual(inputs["input_ids"], [expected_input_ids])
+        self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids)])
+
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+
+        num_mm_tokens = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+
+        # Overwritten to process one image per call, because the tiny `max_image_tokens` makes extreme aspect
+        # ratios exceed the padded patch count, so such images can't be batched with the others
+        for (h, w), num_image_tokens, num_image_patches in zip(
+            image_sizes, num_mm_tokens["num_image_tokens"], num_mm_tokens["num_image_patches"]
+        ):
+            image = np.random.randint(255, size=(h, w, 3), dtype=np.uint8)
+            inputs = processor(
+                text=f"This is an image {self.image_token}",
+                images=[image],
+                return_text_replacement_offsets=True,
+                return_tensors="pt",
+            )
+            self.assertListEqual(self._count_embed_tokens(processor, inputs, "image"), [num_image_tokens])
+            self.assertEqual(len(inputs.pixel_values), num_image_patches)

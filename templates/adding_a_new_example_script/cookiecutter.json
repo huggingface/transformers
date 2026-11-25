@@ -1,9 +1,0 @@
-{
-  "example_name": "text classification",
-  "directory_name": "{{cookiecutter.example_name|lower|replace(' ', '-')}}",
-  "example_shortcut": "{{cookiecutter.directory_name}}",
-  "model_class": "AutoModel",
-  "authors": "The HuggingFace Team",
-  "can_train_from_scratch": ["True", "False"],
-  "with_trainer": ["True", "False"]
-}

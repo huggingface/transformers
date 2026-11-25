@@ -18,6 +18,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import BitsAndBytesConfig
 
 from ..utils import (
     ACCELERATE_MIN_VERSION,
@@ -36,7 +37,6 @@ from .quantizers_utils import get_module_from_name
 if is_torch_available():
     import torch
 
-    from ..core_model_loading import WeightConverter
 
 logger = logging.get_logger(__name__)
 
@@ -47,9 +47,11 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "BitsAndBytesConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    @property
+    def quantized_element_size(self) -> float:
+        return 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -83,26 +85,13 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
-            logger.info(
-                "Overriding dtype=%s with `dtype=torch.float16` due to "
-                "requirements of `bitsandbytes` to enable model loading in 8-bit or 4-bit. "
-                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
-                " dtype=torch.float16 to remove this warning.",
-                dtype,
-            )
-            dtype = torch.float16
-        return dtype
-
     def update_device_map(self, device_map):
         if device_map is None:
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(torch, "npu"):
                 device_map = {"": f"npu:{torch.npu.current_device()}"}
-            elif is_torch_hpu_available():
+            elif is_torch_hpu_available() and hasattr(torch, "hpu"):
                 device_map = {"": f"hpu:{torch.hpu.current_device()}"}
             elif is_torch_xpu_available():
                 device_map = {"": torch.xpu.current_device()}
@@ -115,9 +104,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             )
         return device_map
 
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        return torch.int8
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         import bitsandbytes as bnb
 
@@ -125,21 +111,19 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         return isinstance(module, bnb.nn.Linear8bitLt) and name != "bias"
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.is_loaded_in_8bit = True
-        model.is_8bit_serializable = self.is_serializable()
+        setattr(model, "is_loaded_in_8bit", True)
         return model
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bnb_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.llm_int8_skip_modules, keep_in_fp32_modules
+            model, self.quantization_config.llm_int8_skip_modules, model._keep_in_fp32_modules
         )
 
         if self.quantization_config.llm_int8_enable_fp32_cpu_offload:
@@ -161,10 +145,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return True
 
-    def _dequantize(self, model):
+    def _dequantize(self, model, dtype=None):
         from ..integrations import dequantize_and_replace
 
-        model = dequantize_and_replace(model, quantization_config=self.quantization_config)
+        model = dequantize_and_replace(model, quantization_config=self.quantization_config, dtype=dtype)
         return model
 
     def get_quantize_ops(self):
@@ -172,15 +156,9 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
         return Bnb8bitQuantize(self)
 
-    def get_weight_conversions(self):
+    serialized_names = {"weight": ["weight", "SCB", "weight_format"]}
+
+    def get_load_operations(self):
         from ..integrations.bitsandbytes import Bnb8bitDeserialize
 
-        if self.pre_quantized:
-            return [
-                WeightConverter(
-                    source_patterns=["SCB", "weight_format", "weight"],
-                    target_patterns="weight",
-                    operations=[Bnb8bitDeserialize(self)],
-                )
-            ]
-        return []
+        return {"deserialize": Bnb8bitDeserialize}

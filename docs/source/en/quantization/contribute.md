@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -93,7 +93,7 @@ These two methods handle different scenarios for loading weights. Understanding 
 
 Use this when loading a **non-quantized checkpoint** (e.g., float16/bfloat16 weights) and quantizing during load.
 
-```
+```text
 Checkpoint: model.safetensors (float16 weights for example)
      ↓
 get_quantize_ops → YourQuantize.convert()
@@ -119,7 +119,7 @@ class YourQuantize(ConversionOps):
 
 Use this when loading a **pre-quantized checkpoint** where the quantized weights are saved as several separate components (such as data, scale, and zero point), and these need to be combined into one tensor during loading. Not all quantization methods require this reconstruction step: for example, some methods like FP8 simply load weights and scales as-is, without combining them. Others, such as torchao, do require reassembling the quantized tensor from its multiple saved components.
 
-```
+```text
 Checkpoint: model.safetensors (quantized components)
   - layer._weight_qdata
   - layer._weight_scale

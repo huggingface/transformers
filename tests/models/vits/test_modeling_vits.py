@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch VITS model."""
 
 import copy
+import math
 import os
 import tempfile
 import unittest
@@ -27,12 +28,12 @@ from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     require_torch_fp16,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
 from transformers.trainer_utils import set_seed
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -65,48 +66,33 @@ def _config_zero_init(config):
 
 
 @require_torch
-class VitsModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=7,
-        is_training=False,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=64,
-        flow_size=16,
-        vocab_size=38,
-        spectrogram_bins=8,
-        duration_predictor_num_flows=2,
-        duration_predictor_filter_channels=16,
-        prior_encoder_num_flows=2,
-        upsample_initial_channel=16,
-        upsample_rates=[8, 2],
-        upsample_kernel_sizes=[16, 4],
-        resblock_kernel_sizes=[3, 7],
-        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5]],
-    ):
+class VitsModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "seq_length": 7,
+        "is_training": False,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 64,
+        "flow_size": 16,
+        "vocab_size": 38,
+        "spectrogram_bins": 8,
+        "duration_predictor_num_flows": 2,
+        "duration_predictor_filter_channels": 16,
+        "prior_encoder_num_flows": 2,
+        "upsample_initial_channel": 16,
+        "upsample_rates": [8, 2],
+        "upsample_kernel_sizes": [16, 4],
+        "resblock_kernel_sizes": [3, 7],
+        "resblock_dilation_sizes": [[1, 3, 5], [1, 3, 5]],
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.flow_size = flow_size
-        self.vocab_size = vocab_size
-        self.spectrogram_bins = spectrogram_bins
-        self.duration_predictor_num_flows = duration_predictor_num_flows
-        self.duration_predictor_filter_channels = duration_predictor_filter_channels
-        self.prior_encoder_num_flows = prior_encoder_num_flows
-        self.upsample_initial_channel = upsample_initial_channel
-        self.upsample_rates = upsample_rates
-        self.upsample_kernel_sizes = upsample_kernel_sizes
-        self.resblock_kernel_sizes = resblock_kernel_sizes
-        self.resblock_dilation_sizes = resblock_dilation_sizes
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
@@ -150,11 +136,14 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual((self.batch_size, 624), result.waveform.shape)
+        expected_length = result.spectrogram.shape[-1] * math.prod(config.upsample_rates)
+        self.parent.assertEqual((self.batch_size, expected_length), result.waveform.shape)
 
 
 @require_torch
 class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = VitsModelTester
+
     all_model_classes = (VitsModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": VitsModel, "text-to-audio": VitsModel} if is_torch_available() else {}
@@ -162,11 +151,12 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
 
     test_resize_embeddings = False
+    test_torch_exportable = False  # data-dependent guard in duration predictor
     has_attentions = False
 
     def setUp(self):
         self.model_tester = VitsModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VitsConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -180,36 +170,11 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_pipeline_feature_extraction_fp16(self):
         super().test_pipeline_feature_extraction_fp16()
 
-    @unittest.skip(reason="Need to fix this after #26538")
     def test_model_forward(self):
         set_seed(12345)
         global_rng.seed(12345)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
-
-    @require_torch_multi_gpu
-    # override to force all elements of the batch to have the same sequence length across GPUs
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_stochastic_duration_prediction = False
-
-        # move input tensors to cuda:O
-        for key, value in inputs_dict.items():
-            if torch.is_tensor(value):
-                # make all elements of the batch the same -> ensures the output seq lengths are the same for DP
-                value[1:] = value[0]
-                inputs_dict[key] = value.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = torch.nn.DataParallel(model)
-            set_seed(555)
-            with torch.no_grad():
-                _ = model(**self._prepare_for_class(inputs_dict, model_class)).waveform
 
     @unittest.skip(reason="VITS is not deterministic")
     def test_determinism(self):
@@ -237,9 +202,9 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                set_seed(0)
+                set_seed(42)
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                set_seed(0)
+                set_seed(42)
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
@@ -323,7 +288,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                set_seed(0)
+                set_seed(42)
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -338,7 +303,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
                 with torch.no_grad():
-                    set_seed(0)
+                    set_seed(42)
                     second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
             if isinstance(first, tuple) and isinstance(second, tuple):

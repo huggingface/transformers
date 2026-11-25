@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,13 +18,14 @@ URL: https://github.com/keras-team/keras/blob/v2.11.0/keras/applications/efficie
 import argparse
 import json
 import os
+from io import BytesIO
 
 import numpy as np
 import PIL
-import requests
 import tensorflow.keras.applications.efficientnet as efficientnet
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 from tensorflow.keras.preprocessing import image
 
@@ -131,7 +131,7 @@ def get_efficientnet_config(model_name):
     repo_id = "huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
     config.num_labels = 1000
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     config.id2label = id2label
@@ -142,8 +142,9 @@ def get_efficientnet_config(model_name):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 def convert_image_processor(model_name):

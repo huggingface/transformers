@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Visual Question Answering
+# Visual question answering
 
 [[open-in-colab]]
 
@@ -31,7 +31,7 @@ Some noteworthy use case examples for VQA include:
 
 In this guide you'll learn how to:
 
-- Fine-tune a classification VQA model, specifically [ViLT](../model_doc/vilt), on the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa).
+- Fine-tune a classification VQA model, specifically [ViLT](../model_doc/vilt), on the Graphcore/vqa dataset.
 - Use your fine-tuned ViLT for inference.
 - Run zero-shot VQA inference with a generative model, like BLIP-2.
 
@@ -69,9 +69,8 @@ Let's define the model checkpoint as a global variable.
 ## Load the data
 
 For illustration purposes, in this guide we use a very small sample of the annotated visual question answering `Graphcore/vqa` dataset.
-You can find the full dataset on [🤗 Hub](https://huggingface.co/datasets/Graphcore/vqa).
 
-As an alternative to the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa), you can download the
+As an alternative to the Graphcore/vqa dataset, you can download the
 same data manually from the official [VQA dataset page](https://visualqa.org/download.html). If you prefer to follow the
 tutorial with your custom data, check out how to [Create an image dataset](https://huggingface.co/docs/datasets/image_dataset#loading-script)
 guide in the 🤗 Datasets documentation.
@@ -302,31 +301,7 @@ Once training is completed, share your model to the Hub with the [`~Trainer.push
 
 ## Inference
 
-Now that you have fine-tuned a ViLT model, and uploaded it to the 🤗 Hub, you can use it for inference. The simplest
-way to try out your fine-tuned model for inference is to use it in a [`Pipeline`].
-
-```py
->>> from transformers import pipeline
-
->>> pipe = pipeline("visual-question-answering", model="MariaK/vilt_finetuned_200")
-```
-
-The model in this guide has only been trained on 200 examples, so don't expect a lot from it. Let's see if it at least
-learned something from the data and take the first example from the dataset to illustrate inference:
-
-```py
->>> example = dataset[0]
->>> image = Image.open(example['image_id'])
->>> question = example['question']
->>> print(question)
->>> pipe(image, question, top_k=1)
-"Where is he looking?"
-[{'score': 0.5498199462890625, 'answer': 'down'}]
-```
-
-Even though not very confident, the model indeed has learned something. With more examples and longer training, you'll get far better results!
-
-You can also manually replicate the results of the pipeline if you'd like:
+Now that you have fine-tuned a ViLT model, and uploaded it to the 🤗 Hub, you can use it for inference.
 
 1. Take an image and a question, prepare them for the model using the processor from your model.
 2. Forward the result or preprocessing through the model.

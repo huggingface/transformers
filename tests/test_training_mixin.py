@@ -17,7 +17,6 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import torch
 
@@ -106,7 +105,7 @@ class TrainingTesterMixin(ABC):
         self,
         batch_size: int,
         audio_length: int,
-        feature_size: Optional[int] = None,
+        feature_size: int | None = None,
     ) -> dict[str, torch.Tensor]:
         """Create fixed batch for audio models using a deterministic waveform."""
         pass

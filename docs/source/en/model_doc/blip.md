@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-01-28 and added to Hugging Face Transformers on 2022-12-21.*
+*This model was published in HF papers on 2022-01-28 and contributed to Hugging Face Transformers on 2022-12-21.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # BLIP
 
@@ -32,23 +27,22 @@ You can find all the original BLIP checkpoints under the [BLIP](https://huggingf
 >
 > Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different vision language tasks.
 
-The example below demonstrates how to visual question answering with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to caption an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
+
 pipeline = pipeline(
-    task="visual-question-answering",
-    model="Salesforce/blip-vqa-base",
-    dtype=torch.float16,
+    task="image-text-to-text",
+    model="Salesforce/blip-image-captioning-base",
     device=0
 )
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-pipeline(question="What is the weather in this image?", image=url)
+pipeline(images=url, text="A photo of")
 ```
 
 </hfoption>
@@ -56,22 +50,21 @@ pipeline(question="What is the weather in this image?", image=url)
 
 ```python
 import requests
-import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForVisualQuestionAnswering
 
-processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
-model = AutoModelForVisualQuestionAnswering.from_pretrained(
-    "Salesforce/blip-vqa-base",
-    dtype=torch.float16,
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
+
+processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+model = AutoModelForImageTextToText.from_pretrained(
+    "Salesforce/blip-image-captioning-base",
     device_map="auto"
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-question = "What is the weather in this image?"
-inputs = processor(images=image, text=question, return_tensors="pt").to(model.device, torch.float16)
+inputs = processor(images=image, text="A photo of", return_tensors="pt").to(model.device)
 
 output = model.generate(**inputs)
 processor.batch_decode(output, skip_special_tokens=True)[0]
@@ -99,15 +92,16 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 ## BlipProcessor
 
 [[autodoc]] BlipProcessor
+    - __call__
 
 ## BlipImageProcessor
 
 [[autodoc]] BlipImageProcessor
     - preprocess
 
-## BlipImageProcessorFast
+## BlipImageProcessorPil
 
-[[autodoc]] BlipImageProcessorFast
+[[autodoc]] BlipImageProcessorPil
     - preprocess
 
 ## BlipModel

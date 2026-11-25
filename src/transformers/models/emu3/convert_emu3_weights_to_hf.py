@@ -15,11 +15,10 @@ import argparse
 import json
 import os
 import re
-from typing import Optional
+from io import BytesIO
 
-import requests
 import torch
-from accelerate import init_empty_weights
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -66,7 +65,7 @@ def token_bytes_to_string(b):
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
+def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: int | None = None):
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None
@@ -278,7 +277,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         trust_remote_code=True,
     )
     model_vqgan = AutoModel.from_pretrained(vq_model_id, trust_remote_code=True)
-    with open(f"{output_dir}/tokenizer.json", "r") as file:
+    with open(f"{output_dir}/tokenizer.json", "r", encoding="utf-8") as file:
         tokenizer_config = json.load(file)
     vocabulary_map = tokenizer_config["model"]["vocab"]
 
@@ -288,7 +287,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     )
     config = Emu3Config(text_config=text_config, vocabulary_map=vocabulary_map)
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = Emu3ForConditionalGeneration(config=config)
         model.generation_config = GenerationConfig(
             do_sample=True,
@@ -333,11 +332,9 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         ]
         prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
 
-        image = Image.open(
-            requests.get(
-                "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
-            ).raw
-        )
+        url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
+        with httpx.stream("GET", url) as response:
+            image = Image.open(BytesIO(response.read()))
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
         length = inputs.input_ids.shape[1]
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,12 @@
 
 import argparse
 import json
+from io import BytesIO
 
-import requests
 import timm
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import AutoImageProcessor, Swinv2Config, Swinv2ForImageClassification
@@ -64,7 +64,7 @@ def get_swinv2_config(swinv2_name):
         num_classes = 21841
         repo_id = "huggingface/label-files"
         filename = "imagenet-22k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -73,7 +73,7 @@ def get_swinv2_config(swinv2_name):
         num_classes = 1000
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -179,8 +179,9 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swinv2_name.replace("_", "-")))
-    image = Image.open(requests.get(url, stream=True).raw)
+    image_processor = AutoImageProcessor.from_pretrained(f"microsoft/{swinv2_name.replace('_', '-')}")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     inputs = image_processor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])

@@ -15,7 +15,6 @@
 import argparse
 import gc
 import os
-from typing import Optional
 
 import regex as re
 import torch
@@ -24,7 +23,7 @@ from huggingface_hub import hf_hub_download
 from transformers import (
     DepthProConfig,
     DepthProForDepthEstimation,
-    DepthProImageProcessorFast,
+    DepthProImageProcessor,
 )
 
 
@@ -94,7 +93,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     output_dict = {}
     if state_dict_keys is not None:
         old_text = "\n".join(state_dict_keys)
@@ -202,7 +201,7 @@ def write_model(
 
 
 def write_image_processor(output_dir: str):
-    image_processor = DepthProImageProcessorFast()
+    image_processor = DepthProImageProcessor()
     image_processor.save_pretrained(output_dir)
     return image_processor
 

@@ -25,4 +25,9 @@ from ...test_processing_common import ProcessorTesterMixin
 class ParakeetProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ParakeetProcessor
     text_input_name = "labels"
-    model_id = "nvidia/parakeet-ctc-1.1b"
+    # Tiny processor created with make_tiny_processor.py from "nvidia/parakeet-ctc-1.1b"
+    tiny_model_id = "hf-internal-testing/tiny-processor-parakeet"
+
+    @unittest.skip(reason="Cannot remove sampling_rate argument from __call__ without breaking BC.")
+    def test_call_arguments_not_in_processor_kwargs(self):
+        pass

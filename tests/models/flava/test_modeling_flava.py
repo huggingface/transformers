@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
+import pytest
 
 from transformers import (
     FlavaConfig,
@@ -28,10 +28,12 @@ from transformers import (
     FlavaMultimodalConfig,
     FlavaTextConfig,
 )
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -60,49 +62,35 @@ else:
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import FlavaProcessor
 
 
-class FlavaImageModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        qkv_bias=True,
-        mask_token=True,
-        vocab_size=99,
-    ):
+class FlavaImageModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "qkv_bias": True,
+        "mask_token": True,
+        "vocab_size": 99,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.mask_token = mask_token
-        self.vocab_size = vocab_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -159,13 +147,15 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = FlavaImageModelTester
+
     all_model_classes = (FlavaImageModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = FlavaImageModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -295,24 +285,20 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -322,50 +308,35 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class FlavaTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        vocab_size=102,
-        type_vocab_size=2,
-        max_position_embeddings=512,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        pad_token_id=0,
-        qkv_bias=True,
-    ):
+class FlavaTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_token_type_ids": True,
+        "seq_length": 7,
+        "vocab_size": 102,
+        "type_vocab_size": 2,
+        "max_position_embeddings": 512,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-12,
+        "qkv_bias": True,
+        "pad_token_id": 0,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.seq_length = seq_length
-        self.vocab_size = vocab_size
-        self.type_vocab_size = type_vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.pad_token_id = pad_token_id
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -427,11 +398,13 @@ class FlavaTextModelTester:
 
 @require_torch
 class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = FlavaTextModelTester
+
     all_model_classes = (FlavaTextModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = FlavaTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -440,27 +413,23 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="FLAVA does not use input_embeds")
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+    @unittest.skip(reason="FLAVA does not use inputs_embeds")
     def test_inputs_embeds(self):
         # FLAVA does not use inputs_embeds
         pass
@@ -472,42 +441,31 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class FlavaMultimodalModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=44,
-        use_input_mask=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        qkv_bias=True,
-        ce_ignore_index=-100,
-        use_cls_token=True,
-    ):
+class FlavaMultimodalModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 44,
+        "use_input_mask": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-12,
+        "qkv_bias": True,
+        "ce_ignore_index": -100,
+        "use_cls_token": True,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.use_input_mask = use_input_mask
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.qkv_bias = qkv_bias
-        self.ce_ignore_index = ce_ignore_index
-        self.use_cls_token = use_cls_token
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         hidden_states = floats_tensor([self.batch_size, self.seq_length - 1, self.hidden_size])
@@ -562,6 +520,8 @@ class FlavaMultimodalModelTester:
 
 @require_torch
 class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = FlavaMultimodalModelTester
+
     all_model_classes = (FlavaMultimodalModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -569,7 +529,7 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FlavaMultimodalModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=37
+            self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -595,27 +555,23 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="FLAVA does not use input_embeds")
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+    @unittest.skip(reason="FLAVA does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -626,24 +582,22 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class FlavaImageCodebookTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=112,
-        num_channels=3,
-        hidden_size=32,
-        num_groups=2,
-        vocab_size=99,
-    ):
+class FlavaImageCodebookTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 112,
+        "num_channels": 3,
+        "hidden_size": 32,
+        "num_groups": 2,
+        "vocab_size": 99,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.hidden_size = hidden_size
-        self.num_groups = num_groups
-        self.vocab_size = vocab_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -675,6 +629,8 @@ class FlavaImageCodebookTester:
 
 @require_torch
 class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = FlavaImageCodebookTester
+
     all_model_classes = (FlavaImageCodebook,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -708,8 +664,20 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip
@@ -720,23 +688,7 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="FLAVA does not use input_embeds")
+    @unittest.skip(reason="FLAVA does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -751,8 +703,27 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class FlavaModelTester:
+class FlavaModelTester(ModelTesterConfigMixin):
     model_class = FlavaModel
+
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+        "hidden_size": 32,
+        "projection_dim": 32,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-12,
+    }
+
+    @classmethod
+    def get_small_config_defaults(
+        cls, text_kwargs=None, image_kwargs=None, multimodal_kwargs=None, image_codebook_kwargs=None, **kwargs
+    ):
+        values = super().get_small_config_defaults(**kwargs)
+        # need bs for batching_equivalence test
+        values["batch_size"] = FlavaTextModelTester.get_small_config_defaults(**(text_kwargs or {}))["batch_size"]
+        return values
 
     def __init__(
         self,
@@ -761,11 +732,7 @@ class FlavaModelTester:
         image_kwargs=None,
         multimodal_kwargs=None,
         image_codebook_kwargs=None,
-        is_training=True,
-        hidden_size=32,
-        projection_dim=32,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        **kwargs,
     ):
         if text_kwargs is None:
             text_kwargs = {}
@@ -777,23 +744,19 @@ class FlavaModelTester:
             image_codebook_kwargs = {}
 
         self.parent = parent
-        self.image_model_tester = FlavaImageModelTester(parent, **image_kwargs)
+        self.vision_model_tester = FlavaImageModelTester(parent, **image_kwargs)
         self.text_model_tester = FlavaTextModelTester(parent, **text_kwargs)
         self.multimodal_model_tester = FlavaMultimodalModelTester(parent, **multimodal_kwargs)
         self.image_codebook_tester = FlavaImageCodebookTester(parent, **image_codebook_kwargs)
-        self.is_training = is_training
-        self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=37)
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=32)
+        for key, value in self.get_small_config_defaults(text_kwargs=text_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def prepare_config_and_inputs_for_common(self):
-        _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
+        _, pixel_values, bool_masked_pos = self.vision_model_tester.prepare_config_and_inputs()
         _, input_ids, token_type_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
@@ -808,7 +771,7 @@ class FlavaModelTester:
 
     def get_config(self):
         return FlavaConfig(
-            image_config=self.image_model_tester.get_config(),
+            image_config=self.vision_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
             multimodal_config=self.multimodal_model_tester.get_config(),
             image_codebook_config=self.image_codebook_tester.get_config(),
@@ -833,14 +796,14 @@ class FlavaModelTester:
                 pixel_values=inputs["pixel_values"] if test_image else None,
                 bool_masked_pos=inputs["bool_masked_pos"] if test_image else None,
             )
-        image_size = (self.image_model_tester.image_size, self.image_model_tester.image_size)
-        patch_size = (self.image_model_tester.patch_size, self.image_model_tester.patch_size)
+        image_size = (self.vision_model_tester.image_size, self.vision_model_tester.image_size)
+        patch_size = (self.vision_model_tester.patch_size, self.vision_model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
         if test_image:
             self.parent.assertEqual(
                 result.image_embeddings.shape,
-                (self.image_model_tester.batch_size, num_patches + 1, self.image_model_tester.hidden_size),
+                (self.vision_model_tester.batch_size, num_patches + 1, self.vision_model_tester.hidden_size),
             )
         else:
             self.parent.assertIsNone(result.image_embeddings)
@@ -872,6 +835,8 @@ class FlavaModelTester:
 
 @require_torch
 class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = FlavaModelTester
+
     all_model_classes = (FlavaModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": FlavaModel} if is_torch_available() else {}
     class_for_tester = FlavaModelTester
@@ -942,7 +907,7 @@ class FlavaForPreTrainingTester(FlavaModelTester):
     model_class = FlavaForPreTraining
 
     def prepare_config_and_inputs_for_common(self):
-        _, pixel_values, bool_masked_pos = self.image_model_tester.prepare_config_and_inputs()
+        _, pixel_values, bool_masked_pos = self.vision_model_tester.prepare_config_and_inputs()
         _, input_ids, token_type_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         config = self.get_config()
 
@@ -952,7 +917,7 @@ class FlavaForPreTrainingTester(FlavaModelTester):
         mlm_labels[:, :] = config.ce_ignore_index
         mlm_labels[:, 1:3] = input_ids[:, 1:3]
         mim_labels = torch.randint(
-            0, self.image_model_tester.vocab_size, bool_masked_pos.size(), device=bool_masked_pos.device
+            0, self.vision_model_tester.vocab_size, bool_masked_pos.size(), device=bool_masked_pos.device
         ).long()
         mim_labels[bool_masked_pos.ne(True)] = config.ce_ignore_index
         itm_labels = torch.ones(mlm_labels.size(0), device=bool_masked_pos.device).long()
@@ -985,14 +950,14 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 itm_labels=inputs["itm_labels"],
                 return_loss=inputs["return_loss"],
             )
-        image_size = (self.image_model_tester.image_size, self.image_model_tester.image_size)
-        patch_size = (self.image_model_tester.patch_size, self.image_model_tester.patch_size)
+        image_size = (self.vision_model_tester.image_size, self.vision_model_tester.image_size)
+        patch_size = (self.vision_model_tester.patch_size, self.vision_model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
         if test_image:
             self.parent.assertEqual(
                 result.image_embeddings.shape,
-                (self.image_model_tester.batch_size, num_patches + 1, self.image_model_tester.hidden_size),
+                (self.vision_model_tester.batch_size, num_patches + 1, self.vision_model_tester.hidden_size),
             )
             if not test_text:
                 self.parent.assertEqual(
@@ -1001,7 +966,7 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 )
                 self.parent.assertEqual(
                     result.mim_logits.shape,
-                    (inputs["bool_masked_pos"].sum().item(), self.image_model_tester.vocab_size),
+                    (inputs["bool_masked_pos"].sum().item(), self.vision_model_tester.vocab_size),
                 )
 
         else:
@@ -1050,15 +1015,15 @@ class FlavaForPreTrainingTester(FlavaModelTester):
             )
             self.parent.assertEqual(
                 result.mmm_image_logits.shape,
-                (inputs["bool_masked_pos"].sum().item(), self.image_model_tester.vocab_size),
+                (inputs["bool_masked_pos"].sum().item(), self.vision_model_tester.vocab_size),
             )
             self.parent.assertEqual(
                 result.contrastive_logits_per_image.shape,
-                (self.image_model_tester.batch_size, self.text_model_tester.batch_size),
+                (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
             )
             self.parent.assertEqual(
                 result.contrastive_logits_per_text.shape,
-                (self.text_model_tester.batch_size, self.image_model_tester.batch_size),
+                (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
             )
 
             for item in [
@@ -1087,32 +1052,28 @@ class FlavaForPreTrainingTester(FlavaModelTester):
 
 @require_torch
 class FlavaForPreTrainingTest(FlavaModelTest):
+    model_tester_class = FlavaForPreTrainingTester
+
     all_model_classes = (FlavaForPreTraining,) if is_torch_available() else ()
     class_for_tester = FlavaForPreTrainingTester
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 
@@ -1139,9 +1100,23 @@ class FlavaModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, return_dict=True)
 
         # verify the embeddings
-        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
+        expected_image_embeddings_sum = Expectations(
+            {
+                (None, None): -1352.4686,
+                ("cuda", (8, 6)): -1352.4685,
+            }
+        ).get_expectation()
+        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), expected_image_embeddings_sum, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4)
+        expected_multimodal_embeddings_sum = Expectations(
+            {
+                (None, None): -4030.4229,
+                ("cuda", (8, 6)): -4030.4231,
+            }
+        ).get_expectation()
+        self.assertAlmostEqual(
+            outputs.multimodal_embeddings.sum().item(), expected_multimodal_embeddings_sum, places=4
+        )
 
 
 @require_vision
@@ -1191,9 +1166,9 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
         torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
-        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0282096, places=4)
-        self.assertAlmostEqual(outputs.loss.item(), 11.3792324, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0732639, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0149107, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 11.3664246, places=4)
 
     @slow
     def test_inference_with_itm_labels(self):
@@ -1240,8 +1215,8 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
             torch.Size((torch.count_nonzero(inputs["itm_labels"]).item(), inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
+        expected_logits = torch.tensor([[16.1291, 8.4033]], device=torch_device)
         torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
-        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8965902, places=4)
-        self.assertAlmostEqual(outputs.loss.item(), 9.6084213, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0732639, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8857641, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 9.5979137, places=4)

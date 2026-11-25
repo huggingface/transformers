@@ -15,9 +15,12 @@
 
 import unittest
 
+import pytest
+
 from transformers import LukeConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -40,82 +43,57 @@ if is_torch_available():
     )
 
 
-class LukeModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        entity_length=3,
-        mention_length=5,
-        use_attention_mask=True,
-        use_token_type_ids=True,
-        use_entity_ids=True,
-        use_entity_attention_mask=True,
-        use_entity_token_type_ids=True,
-        use_entity_position_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        entity_vocab_size=10,
-        entity_emb_size=6,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        num_entity_classification_labels=9,
-        num_entity_pair_classification_labels=6,
-        num_entity_span_classification_labels=4,
-        use_entity_aware_attention=True,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.entity_length = entity_length
-        self.mention_length = mention_length
-        self.use_attention_mask = use_attention_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_entity_ids = use_entity_ids
-        self.use_entity_attention_mask = use_entity_attention_mask
-        self.use_entity_token_type_ids = use_entity_token_type_ids
-        self.use_entity_position_ids = use_entity_position_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.entity_vocab_size = entity_vocab_size
-        self.entity_emb_size = entity_emb_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.num_entity_classification_labels = num_entity_classification_labels
-        self.num_entity_pair_classification_labels = num_entity_pair_classification_labels
-        self.num_entity_span_classification_labels = num_entity_span_classification_labels
-        self.scope = scope
-        self.use_entity_aware_attention = use_entity_aware_attention
+class LukeModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-        self.encoder_seq_length = seq_length
-        self.key_length = seq_length
-        self.num_hidden_states_types = 2  # hidden_states and entity_hidden_states
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "entity_length": 3,
+        "mention_length": 5,
+        "use_attention_mask": True,
+        "use_token_type_ids": True,
+        "use_entity_ids": True,
+        "use_entity_attention_mask": True,
+        "use_entity_token_type_ids": True,
+        "use_entity_position_ids": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "entity_vocab_size": 10,
+        "entity_emb_size": 6,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "num_entity_classification_labels": 9,
+        "num_entity_pair_classification_labels": 6,
+        "num_entity_span_classification_labels": 4,
+        "use_entity_aware_attention": True,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["encoder_seq_length"] = values["seq_length"]
+        values["key_length"] = values["seq_length"]
+        values["num_hidden_states_types"] = 2  # hidden_states and entity_hidden_states
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         # prepare words
@@ -586,6 +564,8 @@ class LukeModelTester:
 
 @require_torch
 class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = LukeModelTester
+
     all_model_classes = (
         (
             LukeModel,
@@ -605,7 +585,6 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": LukeModel,
             "fill-mask": LukeForMaskedLM,
-            "question-answering": LukeForQuestionAnswering,
             "text-classification": LukeForSequenceClassification,
             "token-classification": LukeForTokenClassification,
             "zero-shot": LukeForSequenceClassification,
@@ -692,7 +671,7 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = LukeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LukeConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LukeConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -700,6 +679,11 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
 
     @slow
     def test_model_from_pretrained(self):
@@ -860,23 +844,17 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(entity_hidden_states.grad)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 @require_torch

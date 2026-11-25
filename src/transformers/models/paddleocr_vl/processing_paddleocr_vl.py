@@ -23,20 +23,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Union
-
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
-
-
-class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-    }
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
+from ...utils.deprecation import deprecate_attr
 
 
 class PaddleOCRVLProcessor(ProcessorMixin):
@@ -55,81 +43,46 @@ class PaddleOCRVLProcessor(ProcessorMixin):
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
+    return_mm_token_type_ids = True
+
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        **kwargs: Unpack[PaddleOCRVLProcessorKwargs],
-    ) -> BatchFeature:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        merge_size = self.image_processor.merge_size
+        num_tokens = int(image_inputs["image_grid_thw"][image_idx].prod()) // (merge_size * merge_size)
+        return self.image_token * num_tokens
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
 
         Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        output_kwargs = self._merge_kwargs(
-            PaddleOCRVLProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
 
-        if images is not None:
-            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-            image_grid_thw = image_inputs["image_grid_thw"]
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
-        else:
-            image_inputs = {}
-            image_grid_thw = None
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-        if not isinstance(text, list):
-            text = [text]
+        return MultiModalData(**vision_data)
 
-        text = text.copy()
 
-        if image_grid_thw is not None:
-            index = 0
-            for i in range(len(text)):
-                while self.image_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.image_token,
-                        "<|placeholder|>"
-                        * (
-                            image_grid_thw[index].prod()
-                            // self.image_processor.merge_size
-                            // self.image_processor.merge_size
-                        ),
-                        1,
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
-
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        return BatchFeature(data={**text_inputs, **image_inputs})
-
+__getattr__ = deprecate_attr(__name__, rename={"PaddleOCRVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["PaddleOCRVLProcessor"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for CLIP."""
-
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -58,8 +55,8 @@ class CLIPTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         unk_token: str = "<|endoftext|>",
         bos_token: str = "<|startoftext|>",
         eos_token: str = "<|endoftext|>",
@@ -118,10 +115,10 @@ class CLIPTokenizer(TokenizersBackend):
         )
 
         self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(eos_token), self.eos_token_id),
-            cls=(str(bos_token), self.bos_token_id),
-            add_prefix_space=False,
-            trim_offsets=False,
+            (str(eos_token), self.eos_token_id),
+            (str(bos_token), self.bos_token_id),
+            False,  # trim_offsets
+            False,  # add_prefix_space
         )
 
         # Very ugly hack to enable padding to have a correct decoding see https://github.com/huggingface/tokenizers/issues/872

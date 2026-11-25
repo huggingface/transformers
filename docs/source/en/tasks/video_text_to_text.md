@@ -18,13 +18,13 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Video-text-to-text, also known as video language models are models that can process video and output text. These models can tackle various tasks, from video question answering to video captioning. 
+Video-text-to-text, also known as video language models are models that can process video and output text. These models can tackle various tasks, from video question answering to video captioning.
 
-These models have nearly the same architecture as [image-text-to-text](../image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. 
+These models have nearly the same architecture as [image-text-to-text](./image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos.
 
 Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`".
 
-Note that these models process videos with no audio. [Any-to-any](../any-to-any) models on the other hand can process videos with audio in them.
+Note that these models process videos with no audio. [Any-to-any](./any_to_any) models on the other hand can process videos with audio in them.
 
 In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
 
@@ -45,11 +45,12 @@ pip install -q transformers accelerate flash_attn torchcodec
 Let's initialize the model and the processor.
 
 ```python
-from transformers import AutoProcessor, LlavaForConditionalGeneration
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 import torch
 model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
-processor = AutoProcessor.from_pretrained(model_id, device="cuda")
+device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+processor = AutoProcessor.from_pretrained(model_id, device=device)
 
 model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
 ```
@@ -70,9 +71,7 @@ We will infer with two videos, both have cats.
   </div>
 </div>
 
-
-Videos are series of image frames. Depending on the hardware limitations, downsampling is required. If the number of downsampled frames are too little, predictions will be low quality. 
-
+Videos are series of image frames. Depending on the hardware limitations, downsampling is required. If the number of downsampled frames are too little, predictions will be low quality.
 
 Video-text-to-text models have processors with video processor abstracted in them. You can pass video inference related arguments to [`~ProcessorMixin.apply_chat_template`] function.
 
@@ -80,6 +79,7 @@ Video-text-to-text models have processors with video processor abstracted in th
 > You can learn more about video processors [here](../main_classes/video_processor).
 
 We can define our chat history, passing in video with a URL like below.
+
 ```python
 messages = [
     {
@@ -92,7 +92,7 @@ messages = [
 ]
 ```
 
-You can preprocess the videos by passing in messages, setting `do_sample_frames` to True and passing in `num_frames`. Here we sample 10 frames. 
+You can preprocess the videos by passing in messages, setting `do_sample_frames` to True and passing in `num_frames`. Here we sample 10 frames.
 
 ```python
 inputs = processor.apply_chat_template(
@@ -106,7 +106,8 @@ inputs = processor.apply_chat_template(
 )
 inputs.to(model.device)
 ```
-The inputs contain `input_ids` for tokenized text, `pixel_values_videos` for 10 frames and `attention_mask` for which tokens . 
+
+The inputs contain `input_ids` for tokenized text, `pixel_values_videos` for 10 frames and `attention_mask` for which tokens .
 
 We can now infer with our preprocessed inputs and decode them.
 

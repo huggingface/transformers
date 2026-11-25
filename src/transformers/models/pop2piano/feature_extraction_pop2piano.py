@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Feature extractor class for Pop2Piano"""
 
 import warnings
-from typing import Optional, Union
 
 import numpy
 import numpy as np
@@ -35,7 +33,6 @@ from ...utils.import_utils import requires
 
 
 if is_essentia_available():
-    import essentia
     import essentia.standard
 
 if is_librosa_available():
@@ -282,7 +279,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         inputs: BatchFeature,
         is_batched: bool,
         return_attention_mask: bool,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: str | TensorType | None = None,
     ):
         """
         Pads the inputs to same length and returns attention_mask.
@@ -343,12 +340,12 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        sampling_rate: Union[int, list[int]],
+        audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        sampling_rate: int | list[int],
         steps_per_beat: int = 2,
-        resample: Optional[bool] = True,
-        return_attention_mask: Optional[bool] = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        resample: bool | None = True,
+        return_attention_mask: bool | None = False,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

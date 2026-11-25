@@ -21,12 +21,12 @@ Transformers provides many pretrained models that are ready to use with a single
 Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
 
 > [!TIP]
-> The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be unsecure. Safetensor files are more secure and faster to load.
+> The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be insecure. Safetensor files are more secure and faster to load.
 
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto")
 ```
 
 This guide explains how models are loaded, the different ways you can load a model, how to overcome memory issues for really big models, and how to load custom models.
@@ -112,64 +112,36 @@ Transformers reduces some of these memory-related challenges with fast initializ
 
 ### Sharded checkpoints
 
-The [`~PreTrainedModel.save_pretrained`] method automatically shards checkpoints larger than 10GB.
+[`~PreTrainedModel.save_pretrained`] automatically shards checkpoints larger than 50GB. This keeps shard counts low for large models and simplifies file management.
 
-Each shard is loaded sequentially after the previous shard is loaded, limiting memory usage to only the model size and the largest shard size.
+Parameters load in parallel and peak memory only depends on model size. Use `max_shard_size` in [`~PreTrainedModel.save_pretrained`] to set the maximum checkpoint size before sharding.
 
-The `max_shard_size` parameter defaults to 5GB for each shard because it is easier to run on free-tier GPU instances without running out of memory.
+> [!NOTE]
+> Memory usage for models requiring dynamic weight conversion depends on the model size and the size of the largest parameters in a single conversion. This typically applies to mixture-of-experts (MoE) models where the memory usage is the model size plus the number of experts on one layer. Refer to the [dynamic weight loader](./weightconverter#fast-and-efficient-model-loading) guide to learn more about how models are loaded.
 
-For example, create some shards checkpoints for [BioMistral/BioMistral-7B](https://hf.co/BioMistral/BioMistral-7B) in [`~PreTrainedModel.save_pretrained`].
-
-```py
-from transformers import AutoModel
-import tempfile
-import os
-
-model = AutoModel.from_pretrained("biomistral/biomistral-7b")
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
-    print(sorted(os.listdir(tmp_dir)))
-```
-
-Reload the sharded checkpoint with [`~PreTrainedModel.from_pretrained`].
-
-```py
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir)
-    new_model = AutoModel.from_pretrained(tmp_dir)
-```
-
-Sharded checkpoints can also be directly loaded with [`~transformers.trainer_utils.load_sharded_checkpoint`].
-
-```py
-from transformers.trainer_utils import load_sharded_checkpoint
-
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
-    load_sharded_checkpoint(model, tmp_dir)
-```
-
-The [`~PreTrainedModel.save_pretrained`] method creates an index file that maps parameter names to the files they're stored in. The index file has two keys, `metadata` and `weight_map`.
+[`~PreTrainedModel.save_pretrained`] also creates an index file mapping parameter names to their shard files. The index contains two keys, `metadata` and `weight_map`.
 
 ```py
 import json
+import os
+import tempfile
 
 with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
+    model.save_pretrained(tmp_dir, max_shard_size="50GB")
     with open(os.path.join(tmp_dir, "model.safetensors.index.json"), "r") as f:
         index = json.load(f)
 
 print(index.keys())
 ```
 
-The `metadata` key provides the total model size.
+`metadata` stores the total model size.
 
 ```py
 index["metadata"]
 {'total_size': 28966928384}
 ```
 
-The `weight_map` key maps each parameter to the shard it's stored in.
+`weight_map` maps each parameter to its shard file.
 
 ```py
 index["weight_map"]
@@ -218,35 +190,61 @@ device_map = {"model.layers.1": 0, "model.layers.14": 1, "model.layers.31": "cpu
 model.hf_device_map
 ```
 
+### Disk offloading
+
+When a model is too large for your GPUs and CPU RAM combined, Big Model Inference offloads the remaining weights to disk. Set `offload_folder` to a directory whenever any weight maps to `"disk"`, because that's where Transformers stores the offloaded weights.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-7b",
+    device_map="auto",
+    offload_folder="./offload",
+)
+```
+
+Use `max_memory` to cap how much each device holds. Transformers fills devices in order of speed and sends whatever doesn't fit to disk. The example below limits the GPU to 10GB and the CPU to 30GB, so any leftover weights are held in `offload_folder`.
+
+```py
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-7b",
+    device_map="auto",
+    max_memory={0: "10GB", "cpu": "30GB"},
+    offload_folder="./offload",
+)
+```
+
+Set `max_memory={}` to specify that no gpu or cpu memory is available and to force offloading the entire model to disk.
+
+```py
+model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-7b",
+    device_map="auto",
+    max_memory={},
+    offload_folder="./offload",
+)
+```
+
+> [!NOTE]
+> Disk offloading trades memory for speed. Reading weights from disk on every forward pass is slower than reading from CPU or GPU memory.
+> Fully disk offloading requires `accelerate>1.14.0`
+
 ### Model data type
 
-PyTorch model weights are initialized in `torch.float32` by default. Loading a model in a different data type, like `torch.float16`, requires additional memory because the model is loaded again in the desired data type.
+The `dtype` argument controls the PyTorch [dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) used to instantiate model weights. By default, Transformers loads weights with the `dtype` or legacy `torch_dtype` value from `config.json`. If `config.json` doesn't include either value, Transformers uses the dtype of the first floating-point weight in the checkpoint.
 
-Explicitly set the [dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) parameter to directly initialize the model in the desired data type instead of loading the weights twice (`torch.float32` then `torch.float16`). You could also set `dtype="auto"` to automatically load the weights in the data type they are stored in.
-
-<hfoptions id="dtype">
-<hfoption id="specific dtype">
+Override the default by passing a specific dtype.
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM
 
-gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", dtype=torch.float16)
+# specific dtype
+model = AutoModelForCausalLM.from_pretrained("google/gemma-3-1b-it", dtype=torch.float16)
 ```
 
-</hfoption>
-<hfoption id="auto dtype">
-
-```py
-from transformers import AutoModelForCausalLM
-
-gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", dtype="auto")
-```
-
-</hfoption>
-</hfoptions>
-
-The `dtype` parameter can also be configured in [`AutoConfig`] for models instantiated from scratch.
+[`AutoConfig`] also accepts `dtype` for models instantiated from scratch.
 
 ```py
 import torch
@@ -258,7 +256,7 @@ model = AutoModel.from_config(my_config)
 
 ## Custom models
 
-Custom models builds on Transformers' configuration and modeling classes, supports the [AutoClass](#autoclass) API, and are loaded with [`~PreTrainedModel.from_pretrained`]. The difference is that the modeling code is *not* from Transformers.
+Custom models builds on Transformers' configuration and modeling classes, supports the [`AutoClass`] API, and are loaded with [`~PreTrainedModel.from_pretrained`]. The difference is that the modeling code is *not* from Transformers.
 
 Take extra precaution when loading a custom model. While the Hub includes [malware scanning](https://hf.co/docs/hub/security-malware#malware-scanning) for every repository, you should still be careful to avoid inadvertently executing malicious code.
 

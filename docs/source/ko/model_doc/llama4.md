@@ -413,31 +413,31 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Llama4Processor
 
-## Llama4ImageProcessorFast
+## Llama4ImageProcessorPil
 
-[[autodoc]] Llama4ImageProcessorFast
+[[autodoc]] Llama4ImageProcessorPil
 
 ## Llama4ForConditionalGeneration
 
 [[autodoc]] Llama4ForConditionalGeneration
-- forward
+    - forward
 
 ## Llama4ForCausalLM
 
 [[autodoc]] Llama4ForCausalLM
-- forward
+    - forward
 
 ## Llama4TextModel
 
 [[autodoc]] Llama4TextModel
-- forward
+    - forward
 
 ## Llama4ForCausalLM
 
 [[autodoc]] Llama4ForCausalLM
-- forward
+    - forward
 
 ## Llama4VisionModel
 
 [[autodoc]] Llama4VisionModel
-- forward
+    - forward

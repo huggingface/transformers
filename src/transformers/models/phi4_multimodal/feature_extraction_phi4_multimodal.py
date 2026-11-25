@@ -16,8 +16,6 @@
 Processor class for Phi4Multimodal
 """
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...audio_utils import AudioInput, mel_filter_bank
@@ -76,14 +74,14 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_speech: AudioInput,
-        sampling_rate: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        padding: Optional[str] = "longest",
-        max_length: Optional[int] = None,
+        sampling_rate: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        padding: str | None = "longest",
+        max_length: int | None = None,
         truncation: bool = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = True,
-        device: Optional[str] = "cpu",
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = True,
+        device: str | None = "cpu",
         **kwargs,
     ) -> BatchFeature:
         """
@@ -203,13 +201,13 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
 
     # TODO; @eustlb, move this to audio_utils in a general spectogram_batch function that handles torch and numpy
     def _torch_extract_fbank_features(
-        self, waveform: "torch.FloatTensor", audio_lengths: "torch.Tensor", device: str = "cpu"
-    ) -> "torch.FloatTensor":
+        self, waveform: "torch.Tensor", audio_lengths: "torch.Tensor", device: str = "cpu"
+    ) -> "torch.Tensor":
         """
         Compute the log mel-scaled spectrogram of batched waveforms using PyTorch's FFT implementation.
 
         Args:
-            waveform (torch.FloatTensor` of shape `(batch_size, max_audio_length)`):
+            waveform (torch.Tensor` of shape `(batch_size, max_audio_length)`):
                 The batched waveforms.
             audio_lengths (`torch.Tensor` of shape `(batch_size,)`):
                 The lengths of the waveforms along the max_audio_length dimension.
@@ -217,7 +215,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
                 The device to run the computation on. (e.g., "cpu", "cuda")
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, max_feature_length, feature_size)`:
+            `torch.Tensor` of shape `(batch_size, max_feature_length, feature_size)`:
                 The log mel-scaled spectrogram of the batched waveforms.
         """
         fft_window = torch.hamming_window(self.win_length, periodic=False, device=device, dtype=torch.float64)

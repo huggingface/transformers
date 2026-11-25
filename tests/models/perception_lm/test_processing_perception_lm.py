@@ -17,7 +17,7 @@ import unittest
 from transformers import (
     PerceptionLMProcessor,
 )
-from transformers.testing_utils import require_read_token, require_vision
+from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -31,7 +31,6 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
 
 @require_vision
-@require_read_token
 @unittest.skip("Requires read token and we didn't requests access yet. FIXME @ydshieh when you are back :)")
 class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = PerceptionLMProcessor
@@ -46,11 +45,6 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         tokenizer = tokenizer_class.from_pretrained(TEST_MODEL_PATH)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<|image|>", "<|video|>"]})
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token_id = processor.image_token_id
-        cls.video_token_id = processor.video_token_id
 
     @staticmethod
     def prepare_processor_dict():

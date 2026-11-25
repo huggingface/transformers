@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,75 +16,97 @@
 import copy
 import math
 import re
-from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_python import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
+from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
-BboxInput = Union[
-    list[tuple[int, int]],
-    list[tuple[float, float, float, float]],
-    list[list[tuple[int, int]]],
-    list[list[tuple[float, float, float]]],
-]
-
-NestedList = list[Union[Optional[int], "NestedList"]]
+logger = logging.get_logger(__name__)
 
 
-class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[NestedList]  # NOTE: hub validators can't accept `Sequence`
+BboxInput = (
+    list[tuple[int, int]]
+    | list[tuple[float, float, float, float]]
+    | list[list[tuple[int, int]]]
+    | list[list[tuple[float, float, float]]]
+)
+
+
+NestedList = list[tuple | None | list[tuple | None | list[tuple | None | list[tuple | None]]]]
+
+
+class DeprecatedKosmos2ImagesKwargs(ImagesKwargs, total=False):
+    """
+    bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
+        Deprecated, pass directly as `bboxes` to [`Kosmos2Processor.__call__`] instead.
+        The bounding bboxes associated to `texts`.
+    num_image_tokens (`int`, *optional*):
+        Deprecated, use [`Kosmos2ProcessorKwargs.num_image_tokens`] instead.
+        The number of (consecutive) places that are used to mark the placeholders to store image information.
+        This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
+    first_image_token_id (`int`, *optional*):
+        Deprecated, use [`Kosmos2ProcessorKwargs.first_image_token_id`] instead.
+        The token id that will be used for the first place of the subsequence that is reserved to store image
+        information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
+    """
+
+    bboxes: NestedList | None  # NOTE: hub validators can't accept `Sequence`
     num_image_tokens: int
-    first_image_token_id: Optional[int]
+    first_image_token_id: int | None
 
 
-class Kosmos2TextKwargs(TextKwargs, total=False):
+class DeprecatedKosmos2TextKwargs(TextKwargs, total=False):
+    """
+    add_eos_token (`bool`, *optional*):
+        Deprecated, use [`Kosmos2ProcessorKwargs.add_eos_token`] instead.
+        Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
+    """
+
     add_eos_token: bool
 
 
 class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: Kosmos2TextKwargs
-    images_kwargs: Kosmos2ImagesKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "verbose": True,
-            "add_eos_token": False,
-        },
-        "images_kwargs": {
-            "num_image_tokens": 64,
-        },
-    }
-
-
-class Kosmos2Processor(ProcessorMixin):
-    r"""
-    Constructs an KOSMOS-2 processor which wraps a KOSMOS-2 image processor and a KOSMOS-2 tokenizer into a single
-    processor.
-
-    [`Kosmos2Processor`] offers all the functionalities of [`CLIPImageProcessor`] and some functionalities of
-    [`XLMRobertaTokenizerFast`]. See the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`]
-    for more information.
-
-    Args:
-        image_processor (`CLIPImageProcessor`):
-            An instance of [`CLIPImageProcessor`]. The image processor is a required input.
-        tokenizer (`XLMRobertaTokenizerFast`):
-            An instance of ['XLMRobertaTokenizerFast`]. The tokenizer is a required input.
-        num_patch_index_tokens (`int`, *optional*, defaults to 1024):
-            The number of tokens that represent patch indices.
+    """
+    num_image_tokens (`int`, *optional*, defaults to 64):
+        The number of (consecutive) places that are used to mark the placeholders to store image information.
+        This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
+    first_image_token_id (`int`, *optional*):
+        The token id that will be used for the first place of the subsequence that is reserved to store image
+        information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
+    add_eos_token (`bool`, *optional*, defaults to `False`):
+        Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
     """
 
+    text_kwargs: DeprecatedKosmos2TextKwargs
+    images_kwargs: DeprecatedKosmos2ImagesKwargs
+
+    num_image_tokens: int
+    first_image_token_id: int | None
+    add_eos_token: bool
+
+
+@auto_docstring
+class Kosmos2Processor(ProcessorMixin):
+    valid_processor_kwargs = Kosmos2ProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": True,
+        "return_token_type_ids": False,
+    }
+    num_image_tokens = 64
+    first_image_token_id = None
+    add_eos_token = False
+
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
+        r"""
+        num_patch_index_tokens (`int`, *optional*, defaults to 1024):
+            The number of tokens that represent patch indices.
+        """
         tokenizer.return_token_type_ids = False
 
         self.eod_token = "</doc>"
@@ -130,48 +151,50 @@ class Kosmos2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, list[TextInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | list[TextInput] = None,
+        bboxes: NestedList | None = None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`XLMRobertaTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-
-        The rest of this documentation shows the arguments specific to `Kosmos2Processor`.
-
-        Args:
-            bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
-                The bounding bboxes associated to `texts`.
-            num_image_tokens (`int`, *optional* defaults to 64):
-                The number of (consecutive) places that are used to mark the placeholders to store image information.
-                This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
-            first_image_token_id (`int`, *optional*):
-                The token id that will be used for the first place of the subsequence that is reserved to store image
-                information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
-            add_eos_token (`bool`, defaults to `False`):
-                Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
+        r"""
+        bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
+            The bounding bboxes associated to `texts`.
         """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
         output_kwargs = self._merge_kwargs(
-            Kosmos2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        bboxes = output_kwargs["images_kwargs"].pop("bboxes", None)
-        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", 64)
-        first_image_token_id = output_kwargs["images_kwargs"].pop("first_image_token_id", None)
-        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
+        for key in ("bboxes", "num_image_tokens", "first_image_token_id"):
+            if key in output_kwargs["images_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `images_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+        if "add_eos_token" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `add_eos_token` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. "
+                "Pass it directly to the processor instead."
+            )
+
+        # "images_kwargs" has priority for backwards compatibility
+        bboxes = output_kwargs["images_kwargs"].pop("bboxes", bboxes)
+        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", output_kwargs["num_image_tokens"])
+        first_image_token_id = output_kwargs["images_kwargs"].pop(
+            "first_image_token_id", output_kwargs["first_image_token_id"]
+        )
+        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", output_kwargs["add_eos_token"])
 
         add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
-        padding = output_kwargs["text_kwargs"]["padding"]
+        padding = output_kwargs["text_kwargs"].get("padding", False)
         return_tensors = output_kwargs["text_kwargs"].setdefault("return_tensors", None)
 
         encoding = BatchFeature()
@@ -337,11 +360,11 @@ class Kosmos2Processor(ProcessorMixin):
 
     def preprocess_examples(
         self,
-        texts: Union[TextInput, list[TextInput]],
-        images: Optional[ImageInput] = None,
+        texts: TextInput | list[TextInput],
+        images: ImageInput | None = None,
         bboxes: BboxInput = None,
-        num_image_tokens: Optional[int] = 64,
-    ) -> Union[str, list[str]]:
+        num_image_tokens: int | None = 64,
+    ) -> str | list[str]:
         """Add image and bounding box information to `texts` as image and patch index tokens.
 
         Args:
@@ -432,7 +455,7 @@ class Kosmos2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return tokenizer_input_names + image_processor_input_names + ["image_embeds_position_mask"]
 
-    def _insert_patch_index_tokens(self, text: str, bboxes: Union[list[tuple[int]], list[tuple[float]]]) -> str:
+    def _insert_patch_index_tokens(self, text: str, bboxes: list[tuple[int]] | list[tuple[float]]) -> str:
         if bboxes is None or len(bboxes) == 0:
             return text
 
@@ -478,7 +501,7 @@ class Kosmos2Processor(ProcessorMixin):
         return text
 
     def _convert_bbox_to_patch_index_tokens(
-        self, bbox: Union[tuple[int, int], tuple[float, float, float, float]]
+        self, bbox: tuple[int, int] | tuple[float, float, float, float]
     ) -> tuple[str, str]:
         # already computed patch indices
         if len(bbox) == 2:
@@ -689,4 +712,11 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
     return _cleanup_spaces(processed_text, entities)
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "Kosmos2TextKwargs": (DeprecatedKosmos2TextKwargs, "5.29.0"),
+        "Kosmos2ImagesKwargs": (DeprecatedKosmos2ImagesKwargs, "5.29.0"),
+    },
+)
 __all__ = ["Kosmos2Processor"]

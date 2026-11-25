@@ -18,11 +18,10 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.0.0.dev0"
+__version__ = "5.25.0.dev0"
 
-import importlib
+import re
 import sys
-import types
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -36,6 +35,7 @@ from .utils import (
     is_librosa_available,
     is_mistral_common_available,
     is_mlx_available,
+    is_numba_available,
     is_pretty_midi_available,
 )
 
@@ -53,7 +53,7 @@ from .utils import is_torchaudio_available as is_torchaudio_available
 from .utils import is_torchvision_available as is_torchvision_available
 from .utils import is_vision_available as is_vision_available
 from .utils import logging as logging
-from .utils.import_utils import define_import_structure
+from .utils.import_utils import _LegacyModuleAliasFinder, define_import_structure
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -64,59 +64,42 @@ _import_structure = {
     "cli": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
-    "data": [
-        "DataProcessor",
-        "InputExample",
-        "InputFeatures",
-        "SingleSentenceClassificationProcessor",
-        "SquadExample",
-        "SquadFeatures",
-        "SquadV1Processor",
-        "SquadV2Processor",
-        "glue_compute_metrics",
-        "glue_convert_examples_to_features",
-        "glue_output_modes",
-        "glue_processors",
-        "glue_tasks_num_labels",
-        "squad_convert_examples_to_features",
-        "xnli_compute_metrics",
-        "xnli_output_modes",
-        "xnli_processors",
-        "xnli_tasks_num_labels",
-    ],
+    "data": [],
     "data.data_collator": [
         "DataCollator",
         "DataCollatorForLanguageModeling",
         "DataCollatorForMultipleChoice",
         "DataCollatorForPermutationLanguageModeling",
         "DataCollatorForSeq2Seq",
-        "DataCollatorForSOP",
         "DataCollatorForTokenClassification",
-        "DataCollatorForWholeWordMask",
         "DataCollatorWithFlattening",
         "DataCollatorWithPadding",
         "DefaultDataCollator",
         "default_data_collator",
     ],
-    "data.metrics": [],
-    "data.processors": [],
     "debug_utils": [],
+    "decision": ["DecisionConfig"],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
+    "distributed": ["DistributedConfig"],
     "dynamic_module_utils": [],
+    "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
     "generation": [
         "AsyncTextIteratorStreamer",
         "CompileConfig",
+        "ContinuousBatchingConfig",
         "GenerationConfig",
+        "TextDiffusionStreamer",
         "TextIteratorStreamer",
         "TextStreamer",
         "WatermarkingConfig",
     ],
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],
+    "image_processing_utils_fast": [],
     "image_transforms": [],
     "integrations": [
         "is_clearml_available",
@@ -132,12 +115,12 @@ _import_structure = {
         "is_wandb_available",
     ],
     "loss": [],
-    "modelcard": ["ModelCard"],
     "pipelines": [
         "AnyToAnyPipeline",
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
+        "DecisionPipeline",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
         "FeatureExtractionPipeline",
@@ -146,8 +129,6 @@ _import_structure = {
         "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
-        "ImageToImagePipeline",
-        "ImageToTextPipeline",
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
@@ -156,30 +137,30 @@ _import_structure = {
         "PipedPipelineDataFormat",
         "Pipeline",
         "PipelineDataFormat",
-        "QuestionAnsweringPipeline",
-        "SummarizationPipeline",
         "TableQuestionAnsweringPipeline",
-        "Text2TextGenerationPipeline",
         "TextClassificationPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
-        "TranslationPipeline",
         "VideoClassificationPipeline",
-        "VisualQuestionAnsweringPipeline",
         "ZeroShotAudioClassificationPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
         "ZeroShotObjectDetectionPipeline",
         "pipeline",
     ],
-    "processing_utils": ["ProcessorMixin"],
+    "processing_utils": [
+        "AudioKwargs",
+        "ImagesKwargs",
+        "ProcessingKwargs",
+        "ProcessorMixin",
+        "TextKwargs",
+        "VideosKwargs",
+    ],
     "quantizers": [],
     "testing_utils": [],
     "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
     "tokenization_utils": [],
-    "tokenization_utils_fast": [],
-    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
@@ -187,6 +168,8 @@ _import_structure = {
         "PreTrainedTokenizerBase",
         "TokenSpan",
     ],
+    "tokenization_utils_fast": [],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -237,12 +220,15 @@ _import_structure = {
         "is_torch_musa_available",
         "is_torch_neuroncore_available",
         "is_torch_npu_available",
+        "is_torch_supa_available",
         "is_torchvision_available",
         "is_torch_xla_available",
         "is_torch_xpu_available",
         "is_vision_available",
         "logging",
     ],
+    "utils.import_utils": ["requires_backends"],
+    "utils.kernel_config": ["KernelConfig"],
     "utils.quantization_config": [
         "AqlmConfig",
         "AutoRoundConfig",
@@ -253,20 +239,24 @@ _import_structure = {
         "EetqConfig",
         "FbgemmFp8Config",
         "FineGrainedFP8Config",
+        "FourOverSixConfig",
+        "FPQuantConfig",
+        "GemmaQuantizationConfig",
+        "GgufConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
+        "MetalConfig",
         "Mxfp4Config",
+        "NVFP4Config",
         "QuantoConfig",
         "QuarkConfig",
-        "FPQuantConfig",
+        "SinqConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
     ],
     "video_utils": [],
-    "utils.kernel_config": ["KernelConfig"],
-    "utils.import_utils": ["requires_backends"],
 }
 
 # tokenizers-backed objects
@@ -282,8 +272,8 @@ except OptionalDependencyNotAvailable:
 else:
     # Fast tokenizers structure
     _import_structure["tokenization_utils_tokenizers"] = [
-        "TokenizersBackend",
         "PreTrainedTokenizerFast",
+        "TokenizersBackend",
     ]
 
 
@@ -325,6 +315,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["image_processing_backends"] = ["PilBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
@@ -339,8 +330,9 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
-    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
+    _import_structure.setdefault("image_processing_backends", [])
+    _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
+    _import_structure["video_processing_utils"] = ["BaseVideoProcessor", "VideoProcessorMixin"]
 
 # PyTorch-backed objects
 try:
@@ -351,37 +343,35 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
-    _import_structure["model_debugging_utils"] = [
-        "model_addition_debugger_context",
-    ]
     _import_structure["activations"] = []
+    _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
     _import_structure["cache_utils"] = [
+        "Cache",
         "CacheLayerMixin",
+        "DynamicCache",
+        "DynamicIndexedLayer",
         "DynamicLayer",
+        "EncoderDecoderCache",
+        "Fp8QuantizedLayer",
+        "HQQQuantizedLayer",
+        "QuantizedCache",
+        "QuantoQuantizedLayer",
+        "StaticCache",
+        "StaticIndexedLayer",
         "StaticLayer",
         "StaticSlidingWindowLayer",
-        "QuantoQuantizedLayer",
-        "HQQQuantizedLayer",
-        "SlidingWindowLayer",
-        "ChunkedSlidingLayer",
-        "HQQQuantizedCache",
-        "HybridCache",
-        "HybridChunkedCache",
-        "OffloadedCache",
-        "OffloadedStaticCache",
-        "QuantoQuantizedCache",
-        "SlidingWindowCache",
-        "Cache",
-        "DynamicCache",
-        "EncoderDecoderCache",
-        "QuantizedCache",
-        "StaticCache",
     ]
-    _import_structure["data.datasets"] = [
-        "GlueDataset",
-        "GlueDataTrainingArguments",
-        "SquadDataset",
-        "SquadDataTrainingArguments",
+    _import_structure["core_model_loading"] = [
+        "Chunk",
+        "Concatenate",
+        "ConversionOps",
+        "GroupWeightRename",
+        "MergeModulelist",
+        "PermuteForRope",
+        "SplitModulelist",
+        "VisionFuseAndPermuteForRope",
+        "VisionUnfuseAndPermuteForRope",
+        "WeightConverter",
     ]
     _import_structure["generation"].extend(
         [
@@ -440,26 +430,30 @@ else:
         "convert_and_export_with_cache",
     ]
 
+    _import_structure["integrations.hub_kernels"] = ["kernelize"]
+    _import_structure["masking_utils"] = ["AttentionMaskInterface"]
+    _import_structure["model_debugging_utils"] = ["model_addition_debugger_context"]
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
-    _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
-    _import_structure["masking_utils"] = ["AttentionMaskInterface"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "RopeParameters", "dynamic_rope_update"]
+    _import_structure["modeling_utils"] = ["AttentionInterface", "PreTrainedModel"]
     _import_structure["optimization"] = [
         "Adafactor",
+        "GreedyLR",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
         "get_cosine_with_min_lr_schedule_with_warmup",
         "get_cosine_with_min_lr_schedule_with_warmup_lr_rate",
+        "get_greedy_schedule",
         "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
+        "get_reduce_on_plateau_schedule",
         "get_scheduler",
         "get_wsd_schedule",
-        "get_reduce_on_plateau_schedule",
     ]
     _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
@@ -471,48 +465,37 @@ else:
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
+    # Models
+    from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
-    from .cache_utils import ChunkedSlidingLayer as ChunkedSlidingLayer
     from .cache_utils import DynamicCache as DynamicCache
+    from .cache_utils import DynamicIndexedLayer as DynamicIndexedLayer
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
-    from .cache_utils import HQQQuantizedCache as HQQQuantizedCache
+    from .cache_utils import Fp8QuantizedLayer as Fp8QuantizedLayer
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
-    from .cache_utils import HybridCache as HybridCache
-    from .cache_utils import OffloadedCache as OffloadedCache
-    from .cache_utils import OffloadedStaticCache as OffloadedStaticCache
     from .cache_utils import QuantizedCache as QuantizedCache
-    from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
-    from .cache_utils import SlidingWindowCache as SlidingWindowCache
-    from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
+    from .cache_utils import StaticIndexedLayer as StaticIndexedLayer
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PreTrainedConfig as PreTrainedConfig
     from .configuration_utils import PretrainedConfig as PretrainedConfig
     from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS as SLOW_TO_FAST_CONVERTERS
     from .convert_slow_tokenizer import convert_slow_tokenizer as convert_slow_tokenizer
+    from .core_model_loading import Chunk as Chunk
+    from .core_model_loading import Concatenate as Concatenate
+    from .core_model_loading import ConversionOps as ConversionOps
+    from .core_model_loading import GroupWeightRename as GroupWeightRename
+    from .core_model_loading import MergeModulelist as MergeModulelist
+    from .core_model_loading import PermuteForRope as PermuteForRope
+    from .core_model_loading import SplitModulelist as SplitModulelist
+    from .core_model_loading import VisionFuseAndPermuteForRope as VisionFuseAndPermuteForRope
+    from .core_model_loading import VisionUnfuseAndPermuteForRope as VisionUnfuseAndPermuteForRope
+    from .core_model_loading import WeightConverter as WeightConverter
 
     # Data
-    from .data import DataProcessor as DataProcessor
-    from .data import InputExample as InputExample
-    from .data import InputFeatures as InputFeatures
-    from .data import SingleSentenceClassificationProcessor as SingleSentenceClassificationProcessor
-    from .data import SquadExample as SquadExample
-    from .data import SquadFeatures as SquadFeatures
-    from .data import SquadV1Processor as SquadV1Processor
-    from .data import SquadV2Processor as SquadV2Processor
-    from .data import glue_compute_metrics as glue_compute_metrics
-    from .data import glue_convert_examples_to_features as glue_convert_examples_to_features
-    from .data import glue_output_modes as glue_output_modes
-    from .data import glue_processors as glue_processors
-    from .data import glue_tasks_num_labels as glue_tasks_num_labels
-    from .data import squad_convert_examples_to_features as squad_convert_examples_to_features
-    from .data import xnli_compute_metrics as xnli_compute_metrics
-    from .data import xnli_output_modes as xnli_output_modes
-    from .data import xnli_processors as xnli_processors
-    from .data import xnli_tasks_num_labels as xnli_tasks_num_labels
     from .data.data_collator import DataCollator as DataCollator
     from .data.data_collator import DataCollatorForLanguageModeling as DataCollatorForLanguageModeling
     from .data.data_collator import DataCollatorForMultipleChoice as DataCollatorForMultipleChoice
@@ -520,17 +503,13 @@ if TYPE_CHECKING:
         DataCollatorForPermutationLanguageModeling as DataCollatorForPermutationLanguageModeling,
     )
     from .data.data_collator import DataCollatorForSeq2Seq as DataCollatorForSeq2Seq
-    from .data.data_collator import DataCollatorForSOP as DataCollatorForSOP
     from .data.data_collator import DataCollatorForTokenClassification as DataCollatorForTokenClassification
-    from .data.data_collator import DataCollatorForWholeWordMask as DataCollatorForWholeWordMask
     from .data.data_collator import DataCollatorWithFlattening as DataCollatorWithFlattening
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
     from .data.data_collator import default_data_collator as default_data_collator
-    from .data.datasets import GlueDataset as GlueDataset
-    from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
-    from .data.datasets import SquadDataset as SquadDataset
-    from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
+    from .decision import DecisionConfig as DecisionConfig
+    from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
@@ -544,6 +523,7 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
+    from .generation import ContinuousBatchingConfig as ContinuousBatchingConfig
     from .generation import ContinuousBatchingManager as ContinuousBatchingManager
     from .generation import ContinuousMixin as ContinuousMixin
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
@@ -579,6 +559,7 @@ if TYPE_CHECKING:
     from .generation import SynthIDTextWatermarkingConfig as SynthIDTextWatermarkingConfig
     from .generation import SynthIDTextWatermarkLogitsProcessor as SynthIDTextWatermarkLogitsProcessor
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
+    from .generation import TextDiffusionStreamer as TextDiffusionStreamer
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
     from .generation import TopHLogitsWarper as TopHLogitsWarper
@@ -593,9 +574,10 @@ if TYPE_CHECKING:
     from .generation import WatermarkLogitsProcessor as WatermarkLogitsProcessor
     from .generation import WhisperTimeStampLogitsProcessor as WhisperTimeStampLogitsProcessor
     from .hf_argparser import HfArgumentParser as HfArgumentParser
+    from .image_processing_backends import PilBackend as PilBackend
+    from .image_processing_backends import TorchvisionBackend as TorchvisionBackend
     from .image_processing_base import ImageProcessingMixin as ImageProcessingMixin
     from .image_processing_utils import BaseImageProcessor as BaseImageProcessor
-    from .image_processing_utils_fast import BaseImageProcessorFast as BaseImageProcessorFast
     from .image_utils import ImageFeatureExtractionMixin as ImageFeatureExtractionMixin
 
     # Integrations
@@ -612,11 +594,9 @@ if TYPE_CHECKING:
     from .integrations import is_wandb_available as is_wandb_available
     from .integrations.executorch import TorchExportableModuleWithStaticCache as TorchExportableModuleWithStaticCache
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
+    from .integrations.hub_kernels import kernelize as kernelize
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
-
-    # Model Cards
-    from .modelcard import ModelCard as ModelCard
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import RopeParameters as RopeParameters
@@ -624,11 +604,11 @@ if TYPE_CHECKING:
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
-    from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
     # Optimization
     from .optimization import Adafactor as Adafactor
+    from .optimization import GreedyLR as GreedyLR
     from .optimization import get_constant_schedule as get_constant_schedule
     from .optimization import get_constant_schedule_with_warmup as get_constant_schedule_with_warmup
     from .optimization import get_cosine_schedule_with_warmup as get_cosine_schedule_with_warmup
@@ -641,6 +621,7 @@ if TYPE_CHECKING:
     from .optimization import (
         get_cosine_with_min_lr_schedule_with_warmup_lr_rate as get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
     )
+    from .optimization import get_greedy_schedule as get_greedy_schedule
     from .optimization import get_inverse_sqrt_schedule as get_inverse_sqrt_schedule
     from .optimization import get_linear_schedule_with_warmup as get_linear_schedule_with_warmup
     from .optimization import get_polynomial_decay_schedule_with_warmup as get_polynomial_decay_schedule_with_warmup
@@ -652,6 +633,7 @@ if TYPE_CHECKING:
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
+    from .pipelines import DecisionPipeline as DecisionPipeline
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
     from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline
@@ -660,8 +642,6 @@ if TYPE_CHECKING:
     from .pipelines import ImageFeatureExtractionPipeline as ImageFeatureExtractionPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
-    from .pipelines import ImageToImagePipeline as ImageToImagePipeline
-    from .pipelines import ImageToTextPipeline as ImageToTextPipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
@@ -670,23 +650,23 @@ if TYPE_CHECKING:
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
-    from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
-    from .pipelines import SummarizationPipeline as SummarizationPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
-    from .pipelines import Text2TextGenerationPipeline as Text2TextGenerationPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
-    from .pipelines import TranslationPipeline as TranslationPipeline
     from .pipelines import VideoClassificationPipeline as VideoClassificationPipeline
-    from .pipelines import VisualQuestionAnsweringPipeline as VisualQuestionAnsweringPipeline
     from .pipelines import ZeroShotAudioClassificationPipeline as ZeroShotAudioClassificationPipeline
     from .pipelines import ZeroShotClassificationPipeline as ZeroShotClassificationPipeline
     from .pipelines import ZeroShotImageClassificationPipeline as ZeroShotImageClassificationPipeline
     from .pipelines import ZeroShotObjectDetectionPipeline as ZeroShotObjectDetectionPipeline
     from .pipelines import pipeline as pipeline
+    from .processing_utils import AudioKwargs as AudioKwargs
+    from .processing_utils import ImagesKwargs as ImagesKwargs
+    from .processing_utils import ProcessingKwargs as ProcessingKwargs
     from .processing_utils import ProcessorMixin as ProcessorMixin
+    from .processing_utils import TextKwargs as TextKwargs
+    from .processing_utils import VideosKwargs as VideosKwargs
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
@@ -749,6 +729,7 @@ if TYPE_CHECKING:
     from .utils import is_torch_musa_available as is_torch_musa_available
     from .utils import is_torch_neuroncore_available as is_torch_neuroncore_available
     from .utils import is_torch_npu_available as is_torch_npu_available
+    from .utils import is_torch_supa_available as is_torch_supa_available
     from .utils import is_torch_xla_available as is_torch_xla_available
     from .utils import is_torch_xpu_available as is_torch_xpu_available
     from .utils.import_utils import requires_backends
@@ -764,18 +745,34 @@ if TYPE_CHECKING:
     from .utils.quantization_config import EetqConfig as EetqConfig
     from .utils.quantization_config import FbgemmFp8Config as FbgemmFp8Config
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
+    from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
+    from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig
+    from .utils.quantization_config import GgufConfig as GgufConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
+    from .utils.quantization_config import MetalConfig as MetalConfig
+    from .utils.quantization_config import NVFP4Config as NVFP4Config
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
+    from .utils.quantization_config import SinqConfig as SinqConfig
     from .utils.quantization_config import SpQRConfig as SpQRConfig
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
+    from .video_processing_utils import VideoProcessorMixin as VideoProcessorMixin
 else:
+    # Deprecated top-level module paths -> replacements. Declared here so the legacy names are also part of the lazy
+    # import structure, keeping `transformers.tokenization_utils_fast` attribute access working.
+    _LEGACY_MODULE_ALIASES = {
+        "tokenization_utils_fast": "tokenization_utils_tokenizers",
+        "tokenization_utils": "tokenization_utils_sentencepiece",
+        "image_processing_utils_fast": "image_processing_backends",
+    }
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
+    for _alias in _LEGACY_MODULE_ALIASES:
+        _import_structure.setdefault(_alias, set())
 
     import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
     import_structure[frozenset({})].update(_import_structure)
@@ -788,26 +785,22 @@ else:
         extra_objects={"__version__": __version__},
     )
 
-    def _create_tokenization_alias(alias: str, target: str) -> None:
-        """
-        Lazily redirect legacy tokenization module paths to their replacements without importing heavy deps.
-        """
+    # Deprecated module paths, served on demand by `_LegacyModuleAliasFinder`. `models/x/image_processing_x_fast.py`
+    # became `models/x/image_processing_x.py` when torchvision became the default backend (PIL: `image_processing_pil_x.py`).
+    _LEGACY_FAST_IMAGE_PROCESSOR_MODULE = re.compile(
+        rf"{re.escape(__name__)}\.models\.(\w+)\.image_processing_(?!pil_)(\w+)_fast"
+    )
 
-        module = types.ModuleType(alias)
-        module.__doc__ = f"Alias module for backward compatibility with `{target}`."
+    def _resolve_legacy_module_alias(fullname: str) -> str | None:
+        if (match := _LEGACY_FAST_IMAGE_PROCESSOR_MODULE.fullmatch(fullname)) is not None:
+            return f"{__name__}.models.{match[1]}.image_processing_{match[2]}"
+        package, _, name = fullname.rpartition(".")
+        if package == __name__ and name in _LEGACY_MODULE_ALIASES:
+            return f"{__name__}.{_LEGACY_MODULE_ALIASES[name]}"
+        return None
 
-        def _get_target():
-            return importlib.import_module(target, __name__)
-
-        module.__getattr__ = lambda name: getattr(_get_target(), name)
-        module.__dir__ = lambda: dir(_get_target())
-
-        sys.modules[alias] = module
-        setattr(sys.modules[__name__], alias.rsplit(".", 1)[-1], module)
-
-    _create_tokenization_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
-    _create_tokenization_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
-
+    if not any(isinstance(finder, _LegacyModuleAliasFinder) for finder in sys.meta_path):  # this init can run twice
+        sys.meta_path.append(_LegacyModuleAliasFinder(_resolve_legacy_module_alias))
 
 if not is_torch_available():
     logger.warning_advice(

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -36,6 +34,7 @@ from transformers.testing_utils import (
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -50,15 +49,15 @@ if is_torch_available():
     import torch
 
 
-class CsmModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        batch_size=3,
-        seq_length=7,
-        is_training=True,
-        depth_decoder_config={
+class CsmModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "ignore_index": -100,
+        "batch_size": 3,
+        "seq_length": 7,
+        "is_training": True,
+        "depth_decoder_config": {
             "num_codebooks": 10,
             "backbone_hidden_size": 64,
             "vocab_size": 6,
@@ -70,7 +69,7 @@ class CsmModelTester:
             "hidden_act": "silu",
             "max_position_embeddings": 10,
         },
-        codec_config={
+        "codec_config": {
             "model_type": "mimi",
             "audio_channels": 1,
             "chunk_in_sec": None,
@@ -88,7 +87,7 @@ class CsmModelTester:
             "codebook_dim": 64,
             "use_cache": False,
         },
-        config={
+        "config": {
             "num_codebooks": 10,
             "vocab_size": 6,
             "text_vocab_size": 99,
@@ -105,21 +104,23 @@ class CsmModelTester:
             "codebook_pad_token_id": 2,
             "codebook_eos_token_id": 3,
         },
-    ):
-        self.parent = parent
-        self.is_training = is_training
-        self.ignore_index = ignore_index
-        self.depth_decoder_config = depth_decoder_config
-        self.codec_config = codec_config
-        self.config = config
-        self.seq_length = seq_length
-        self.batch_size = batch_size
+    }
 
-        self.num_hidden_layers = config["num_hidden_layers"]
-        self.vocab_size = config["vocab_size"]
-        self.hidden_size = config["hidden_size"]
-        self.num_attention_heads = config["num_attention_heads"]
-        self.pad_token_id = config["pad_token_id"]
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        config = values["config"]
+        values["num_hidden_layers"] = config["num_hidden_layers"]
+        values["vocab_size"] = config["vocab_size"]
+        values["hidden_size"] = config["hidden_size"]
+        values["num_attention_heads"] = config["num_attention_heads"]
+        values["pad_token_id"] = config["pad_token_id"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return CsmConfig(
@@ -141,10 +142,11 @@ class CsmModelTester:
 
 
 class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    model_tester_class = CsmModelTester
+
     all_model_classes = (CsmForConditionalGeneration,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_resize_embeddings_untied = False
 
     def setUp(self):
         self.model_tester = CsmModelTester(self)
@@ -275,12 +277,45 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_parallel_beam_search(self):
         pass
 
-    @unittest.skip(reason="CSM has special embeddings that can never be tied")
-    def test_tied_weights_keys(self):
-        pass
+    def test_tie_codebooks_embeddings_controls_tying(self):
+        """Test that weight tying is controlled by `tie_codebooks_embeddings` instead of the usual `tie_word_embeddings`."""
+        config, _, _ = self.model_tester.prepare_config_and_inputs()
+        config_dict = config.to_dict()
+
+        for tie_codebooks_embeddings in (True, False):
+            for tie_word_embeddings in (True, False):
+                config = CsmConfig.from_dict(
+                    {
+                        **config_dict,
+                        "tie_codebooks_embeddings": tie_codebooks_embeddings,
+                        "tie_word_embeddings": tie_word_embeddings,
+                    }
+                )
+                model = CsmForConditionalGeneration(config).eval()
+
+                # Independently of `tie_word_embeddings`, tying should be decided by `tie_codebooks_embeddings` only
+                if tie_codebooks_embeddings:
+                    self.assertEqual(model.all_tied_weights_keys, model._tied_weights_keys)
+                    self.assertIs(
+                        model.backbone_model.embed_tokens.embed_audio_tokens.weight,
+                        model.depth_decoder.model.embed_tokens.weight,
+                    )
+                else:
+                    self.assertEqual(model.all_tied_weights_keys, {})
+                    self.assertIsNot(
+                        model.backbone_model.embed_tokens.embed_audio_tokens.weight,
+                        model.depth_decoder.model.embed_tokens.weight,
+                    )
+                # Should never be tied
+                self.assertIsNot(model.embed_text_tokens.weight, model.lm_head.weight)
 
     @unittest.skip(reason="CSM has no separate base model without a head.")
     def test_model_base_model_prefix(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(reason="CSM doesn't return last hidden states")
+    def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
     def _get_custom_4d_mask_test_data(self):
@@ -321,7 +356,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
 
-@require_read_token
 class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         # TODO: @eustlb, update with correct sesame's repo

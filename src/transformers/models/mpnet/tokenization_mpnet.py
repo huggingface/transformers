@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team, Microsoft Corporation.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -14,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for MPNet."""
-
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -91,7 +88,7 @@ class MPNetTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
+        vocab: str | dict[str, int] | None = None,
         do_lower_case=True,
         bos_token="<s>",
         eos_token="</s>",
@@ -158,13 +155,11 @@ class MPNetTokenizer(TokenizersBackend):
         cls_token_id = self.cls_token_id if self.cls_token_id is not None else 0
         sep_token_id = self.sep_token_id if self.sep_token_id is not None else 2
 
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{cls_str}:0 $A:0 {sep_str}:0",
-            pair=f"{cls_str}:0 $A:0 {sep_str}:0 {sep_str}:0 $B:1 {sep_str}:1",  # MPNet uses two [SEP] tokens
-            special_tokens=[
-                (cls_str, cls_token_id),
-                (sep_str, sep_token_id),
-            ],
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            (sep_str, sep_token_id),
+            (cls_str, cls_token_id),
+            True,  # trim_offsets
+            False,  # add_prefix_space
         )
 
     @property

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,29 +14,24 @@
 
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 
 
-class KyutaiSpeechToTextProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 24000,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
+@auto_docstring
 class KyutaiSpeechToTextProcessor(ProcessorMixin):
-    r"""
-    Constructs a Moshi ASR processor which wraps [`EncodecFeatureExtractor`] and
-    [`PreTrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities. See the [`~KyutaiSpeechToTextProcessor.__call__`] for more
-    information.
-    """
-
-    valid_processor_kwargs = KyutaiSpeechToTextProcessorKwargs
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 24000,
+        "return_tensors": "pt",
+    }
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"KyutaiSpeechToTextProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["KyutaiSpeechToTextProcessor"]

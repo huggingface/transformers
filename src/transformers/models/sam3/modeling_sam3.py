@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,20 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 from torch import Tensor
-
-from transformers import CLIPTextModelWithProjection
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -34,14 +28,22 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPooling,
     ModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils import auto_docstring, can_return_tuple, is_torchvision_available, logging
+from ...utils.generic import (
+    TransformersKwargs,
+    is_flash_attention_requested,
+    merge_with_config_defaults,
+)
+from ...utils.import_utils import requires
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
+from ..clip import CLIPTextModelWithProjection  # trf-ignore: TRF009
 from .configuration_sam3 import (
     Sam3Config,
     Sam3DETRDecoderConfig,
@@ -53,158 +55,154 @@ from .configuration_sam3 import (
 )
 
 
+if is_torchvision_available():
+    import torchvision
+
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
-class Sam3VisionEncoderOutput(ModelOutput):
+@dataclass
+class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
-    fpn_hidden_states (`tuple[torch.FloatTensor]`):
+    fpn_hidden_states (`tuple[torch.Tensor]`):
         Tuple of multi-level FPN feature maps.
-    fpn_position_encoding (`tuple[torch.FloatTensor]`):
+    fpn_position_encoding (`tuple[torch.Tensor]`):
         Tuple of position encodings for each FPN level.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
-        Tuple of hidden states from all ViT layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
-        Tuple of attention weights from all ViT layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    fpn_hidden_states: tuple[torch.FloatTensor, ...] = None
-    fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    fpn_hidden_states: tuple[torch.Tensor, ...] = None
+    fpn_position_encoding: tuple[torch.Tensor, ...] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3GeometryEncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_prompts, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_prompts, hidden_size)`):
         Encoded geometry prompt features (boxes).
     attention_mask (`torch.BoolTensor` of shape `(batch_size, num_prompts)`, *optional*):
         Attention mask for geometry prompts where True indicates valid positions and False indicates padding.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    attention_mask: Optional[torch.BoolTensor] = None
+    last_hidden_state: torch.Tensor = None
+    attention_mask: torch.BoolTensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3DETREncoderOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Encoded vision features (flattened from multi-level features).
-    pos_embeds_flattened (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+    pos_embeds_flattened (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Flattened position embeddings for the vision features.
-    text_features (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`, *optional*):
+    text_features (`torch.Tensor` of shape `(batch_size, text_seq_len, hidden_size)`, *optional*):
         Text features (may be pooled after encoder processing).
     spatial_shapes (`torch.LongTensor` of shape `(num_levels, 2)`, *optional*):
         Spatial shapes (height, width) for each feature pyramid level.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all encoder layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from all encoder layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pos_embeds_flattened: Optional[torch.FloatTensor] = None
-    text_features: Optional[torch.FloatTensor] = None
-    spatial_shapes: Optional[torch.LongTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.Tensor = None
+    pos_embeds_flattened: torch.Tensor | None = None
+    text_features: torch.Tensor | None = None
+    spatial_shapes: torch.LongTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3DETRDecoderOutput(ModelOutput):
     r"""
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
+    intermediate_hidden_states (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, hidden_size)`):
         Decoder hidden states from all layers.
-    reference_boxes (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, 4)`):
+    reference_boxes (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, 4)`):
         Predicted reference boxes from all decoder layers in (cx, cy, w, h) format.
-    presence_logits (`torch.FloatTensor` of shape `(num_layers, batch_size, 1)`):
+    presence_logits (`torch.Tensor` of shape `(num_layers, batch_size, 1)`):
         Presence logits from all decoder layers indicating object presence confidence.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all decoder layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from all decoder layers (self-attention and cross-attention).
     """
 
-    intermediate_hidden_states: torch.FloatTensor = None
-    reference_boxes: torch.FloatTensor = None
-    presence_logits: torch.FloatTensor = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    intermediate_hidden_states: torch.Tensor = None
+    reference_boxes: torch.Tensor = None
+    presence_logits: torch.Tensor = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3MaskDecoderOutput(ModelOutput):
     r"""
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_queries, height, width)`):
         Predicted segmentation masks for each query.
-    semantic_seg (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+    semantic_seg (`torch.Tensor` of shape `(batch_size, 1, height, width)`, *optional*):
         Semantic segmentation output.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
+    attentions (`tuple[torch.Tensor]`, *optional*):
         Tuple of attention weights from mask decoder cross-attention layers.
     """
 
-    pred_masks: torch.FloatTensor = None
-    semantic_seg: Optional[torch.FloatTensor] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    pred_masks: torch.Tensor = None
+    semantic_seg: torch.Tensor | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Sam3ImageSegmentationOutput(ModelOutput):
     r"""
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
+    pred_masks (`torch.Tensor` of shape `(batch_size, num_queries, height, width)`):
         Predicted segmentation masks for each query.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+    pred_boxes (`torch.Tensor` of shape `(batch_size, num_queries, 4)`):
         Predicted bounding boxes in (x1, y1, x2, y2) format.
-    pred_logits (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
+    pred_logits (`torch.Tensor` of shape `(batch_size, num_queries)`, *optional*):
         Classification confidence scores for each query, computed via dot product between
         decoder query features and text features.
-    presence_logits (`torch.FloatTensor` of shape `(batch_size, 1)`, *optional*):
+    presence_logits (`torch.Tensor` of shape `(batch_size, 1)`, *optional*):
         Presence logits from the DETR decoder presence token (last layer only). These indicate whether objects
         are present in the scene. Can be used to compute final scores by multiplying with pred_logits:
         `final_scores = pred_logits.sigmoid() * presence_logits.sigmoid()`.
-    semantic_seg (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+    semantic_seg (`torch.Tensor` of shape `(batch_size, 1, height, width)`, *optional*):
         Semantic segmentation output.
-    decoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    decoder_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all DETR decoder layers. Each tensor has shape `(batch_size, num_queries, hidden_size)`.
-    decoder_reference_boxes (`torch.FloatTensor` of shape `(num_layers, batch_size, num_queries, 4)`, *optional*):
+    decoder_reference_boxes (`torch.Tensor` of shape `(num_layers, batch_size, num_queries, 4)`, *optional*):
         Reference boxes from all DETR decoder layers.
-    encoder_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    encoder_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all DETR encoder layers.
-    vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*):
+    vision_hidden_states (`tuple[torch.Tensor]`, *optional*):
         Tuple of hidden states from all vision encoder (ViT) layers.
-    vision_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    vision_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from vision encoder (ViT) layers.
-    detr_encoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    detr_encoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from DETR encoder layers.
-    detr_decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    detr_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from DETR decoder layers (self-attention and cross-attention).
-    mask_decoder_attentions (`tuple[torch.FloatTensor]`, *optional*):
+    mask_decoder_attentions (`tuple[torch.Tensor]`, *optional*):
         Attention weights from mask decoder layers.
     """
 
-    pred_masks: torch.FloatTensor = None
-    pred_boxes: torch.FloatTensor = None
-    pred_logits: Optional[torch.FloatTensor] = None
-    presence_logits: Optional[torch.FloatTensor] = None
-    semantic_seg: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_reference_boxes: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor]] = None
-    detr_encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    detr_decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    pred_masks: torch.Tensor = None
+    pred_boxes: torch.Tensor = None
+    pred_logits: torch.Tensor | None = None
+    presence_logits: torch.Tensor | None = None
+    semantic_seg: torch.Tensor | None = None
+    decoder_hidden_states: tuple[torch.Tensor] | None = None
+    decoder_reference_boxes: torch.Tensor | None = None
+    encoder_hidden_states: tuple[torch.Tensor] | None = None
+    vision_hidden_states: tuple[torch.Tensor] | None = None
+    vision_attentions: tuple[torch.Tensor] | None = None
+    detr_encoder_attentions: tuple[torch.Tensor] | None = None
+    detr_decoder_attentions: tuple[torch.Tensor] | None = None
+    mask_decoder_attentions: tuple[torch.Tensor] | None = None
 
 
 def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
@@ -277,7 +275,7 @@ def box_cxcywh_to_xyxy(x):
 
 
 class Sam3MLP(nn.Module):
-    def __init__(self, config: Union[Sam3ViTConfig]):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
@@ -298,8 +296,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -310,7 +308,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -347,7 +344,7 @@ class Sam3Attention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -370,12 +367,12 @@ class Sam3Attention(nn.Module):
         key = self.k_proj(key).view(batch_size, key_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
         value = self.v_proj(value).view(batch_size, key_len, self.num_attention_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         if (
-            "flash" in self.config._attn_implementation
+            is_flash_attention_requested(self.config)
             and attention_mask is not None
             and attention_mask.dtype != torch.bool
         ):
@@ -405,40 +402,70 @@ class Sam3Attention(nn.Module):
         return attn_output, attn_weights
 
 
+# Copied from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionRotaryEmbedding with Qwen2_5_VLVision->Sam3ViT
 class Sam3ViTRotaryEmbedding(nn.Module):
     """
-    Vision Rotary Position Embedding for SAM3, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Sam3ViTConfig, end_x: int, end_y: int, scale: float = 1.0):
+    def __init__(self, config: Sam3ViTConfig):
         super().__init__()
-        dim = config.hidden_size // config.num_attention_heads
-        # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        freqs = 1.0 / (config.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        self.config = config
 
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = (flattened_indices % end_x) * scale
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * scale
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-    @torch.no_grad()
-    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # As the feature map size is fixed for each stage, we can just return the pre-computed embeddings.
-        return self.rope_embeddings_cos, self.rope_embeddings_sin
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_axial_rope_parameters(config: Sam3ViTConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    # Ignore copy
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
+        return freq_hw.repeat_interleave(2, dim=-1)
 
 
 def rotate_pairwise(x):
     """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+    pairwise rotation of the hidden dims of the input. Different from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python
@@ -514,9 +541,9 @@ class Sam3ViTRoPEAttention(nn.Module):
         cos, sin = position_embeddings
         query, key = apply_rotary_pos_emb_2d(query, key, cos=cos, sin=sin)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -644,7 +671,7 @@ def window_partition(hidden_state, window_size):
             Window size.
 
     Returns:
-        `tuple(torch.FloatTensor)` comprising various elements:
+        `tuple(torch.Tensor)` comprising various elements:
         - windows: windows after partition with [batch_size * num_windows, window_size, window_size, num_channels].
         - (padded_height, padded_width): padded height and width before partition
     """
@@ -710,26 +737,41 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
     def __init__(self, config: Sam3ViTConfig, window_size: int = 0) -> None:
         super().__init__()
 
+        self.config = config
         hidden_size = config.hidden_size
-        image_size = config.image_size
-        image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
-
-        patch_size = config.patch_size
-        patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
-
-        input_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.layer_norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        rotary_input_size = input_size if window_size == 0 else (window_size, window_size)
-        rotary_scale = config.window_size / rotary_input_size[0]
-        self.rotary_emb = Sam3ViTRotaryEmbedding(
-            config, end_x=rotary_input_size[0], end_y=rotary_input_size[1], scale=rotary_scale
-        )
+        self.rotary_emb = Sam3ViTRotaryEmbedding(config)
         self.attention = Sam3ViTRoPEAttention(config)
         self.layer_norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.mlp = Sam3MLP(config)
         self.dropout = nn.Dropout(config.hidden_dropout)
-
         self.window_size = window_size
+
+        position_ids = self.precompute_positions(config, window_size)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: Sam3ViTConfig, window_size: int):
+        if window_size > 0:
+            hw_grid = (window_size, window_size)
+        else:
+            image_size = config.image_size
+            image_size = image_size if isinstance(image_size, (list, tuple)) else (image_size, image_size)
+
+            patch_size = config.patch_size
+            patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
+
+            hw_grid = (image_size[1] // patch_size[1], image_size[0] // patch_size[0])
+
+        # fp32 like `inv_freq`: the global layers scale the positions by a fraction bf16 can't represent
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(hw_grid[0], dtype=torch.float),
+            torch.arange(hw_grid[1], dtype=torch.float),
+            indexing="ij",
+        )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        position_ids = position_ids * (config.window_size / hw_grid[1])
+        return position_ids
 
     def forward(
         self,
@@ -745,7 +787,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
             # Partition into non-overlapping windows for efficient attention
             hidden_states, pad_height_width = window_partition(hidden_states, self.window_size)
 
-        position_embeddings = self.rotary_emb()
+        position_embeddings = self.rotary_emb(hidden_states, self.position_ids)
         hidden_states, _ = self.attention(hidden_states, position_embeddings, **kwargs)
 
         if self.window_size > 0:
@@ -762,8 +804,9 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
+@requires(backends=("torch", "torchvision"))
 class Sam3PreTrainedModel(PreTrainedModel):
-    config_class = Sam3Config
+    config: Sam3Config
     base_model_prefix = "sam3"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
@@ -776,10 +819,19 @@ class Sam3PreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, Sam3ViTEmbeddings):
             init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Sam3ViTLayer):
+            position_ids = module.precompute_positions(module.config, module.window_size)
+            init.copy_(module.position_ids, position_ids)
 
 
 @auto_docstring
 class Sam3ViTModel(Sam3PreTrainedModel):
+    config: Sam3ViTConfig
+    _can_record_outputs = {
+        "hidden_states": Sam3ViTLayer,
+        "attentions": Sam3ViTRoPEAttention,
+    }
+
     def __init__(self, config: Sam3ViTConfig):
         super().__init__(config)
         self.config = config
@@ -796,7 +848,8 @@ class Sam3ViTModel(Sam3PreTrainedModel):
     def get_input_embeddings(self) -> Sam3ViTPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -830,12 +883,16 @@ class Sam3SinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
@@ -854,8 +911,8 @@ class Sam3SinePositionEmbedding(nn.Module):
         x_embed = x * self.scale
         y_embed = y * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).to(x.dtype)
-        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=x.device).to(x.dtype)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_position_features)
 
         pos_x = x_embed[:, None] / dim_t
         pos_y = y_embed[:, None] / dim_t
@@ -871,11 +928,11 @@ class Sam3SinePositionEmbedding(nn.Module):
             boxes: Box coordinates [batch_size, num_queries, 4] in (x, y, w, h) format
 
         Returns:
-            Position embeddings [batch_size, num_queries, num_pos_feats*4]
+            Position embeddings [batch_size, num_queries, num_position_features*4]
         """
         assert boxes.size(-1) == 4, f"Expected 4D box coordinates (x, y, w, h), got shape {boxes.shape}"
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=boxes.device).to(boxes.dtype)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
 
         x_embed = boxes[:, :, 0] * self.scale
         y_embed = boxes[:, :, 1] * self.scale
@@ -896,26 +953,42 @@ class Sam3SinePositionEmbedding(nn.Module):
 
         return pos
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=4)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
-        device: Union[torch.device, str],
+        device: torch.device | str,
         dtype: torch.dtype,
-        mask: Optional[Tensor] = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -923,6 +996,17 @@ class Sam3SinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 class Sam3FPNLayer(nn.Module):
@@ -968,7 +1052,9 @@ class Sam3VisionNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=config.fpn_hidden_size // 2, normalize=True)
+        self.position_encoding = Sam3SinePositionEmbedding(
+            num_position_features=config.fpn_hidden_size // 2, normalize=True
+        )
 
         # Create one FPN layer per scale factor
         self.fpn_layers = nn.ModuleList(
@@ -1000,12 +1086,8 @@ class Sam3VisionNeck(nn.Module):
     """
 )
 class Sam3VisionModel(Sam3PreTrainedModel):
-    config_class = Sam3VisionConfig
+    config: Sam3VisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {
-        "hidden_states": Sam3ViTLayer,
-        "attentions": Sam3ViTRoPEAttention,
-    }
 
     def __init__(self, config: Sam3VisionConfig):
         super().__init__(config)
@@ -1018,12 +1100,12 @@ class Sam3VisionModel(Sam3PreTrainedModel):
     def get_input_embeddings(self):
         return self.backbone.get_input_embeddings()
 
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Sam3VisionEncoderOutput]:
+    ) -> tuple | Sam3VisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -1041,6 +1123,8 @@ class Sam3VisionModel(Sam3PreTrainedModel):
             last_hidden_state=hidden_states,
             fpn_hidden_states=fpn_hidden_states,
             fpn_position_encoding=fpn_position_encoding,
+            hidden_states=backbone_output.hidden_states,
+            attentions=backbone_output.attentions,
         )
 
 
@@ -1102,7 +1186,9 @@ class Sam3GeometryEncoder(nn.Module):
         self.hidden_size = config.hidden_size
         self.roi_size = config.roi_size
 
-        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=config.hidden_size // 2, normalize=True)
+        self.position_encoding = Sam3SinePositionEmbedding(
+            num_position_features=config.hidden_size // 2, normalize=True
+        )
         self.label_embed = nn.Embedding(2, self.hidden_size)
         self.cls_embed = nn.Embedding(1, self.hidden_size)
 
@@ -1183,7 +1269,7 @@ class Sam3GeometryEncoder(nn.Module):
         box_mask: torch.Tensor,
         box_labels: torch.Tensor,
         img_feats: tuple[torch.Tensor, ...],
-        img_pos_embeds: Optional[tuple[torch.Tensor, ...]] = None,
+        img_pos_embeds: tuple[torch.Tensor, ...] | None = None,
     ):
         """
         Forward pass for encoding geometric prompts.
@@ -1226,7 +1312,7 @@ class Sam3GeometryEncoder(nn.Module):
         if prompt_mask is not None:
             prompt_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=prompt_embeds,
+                inputs_embeds=prompt_embeds,
                 attention_mask=prompt_mask,
             )
 
@@ -1269,7 +1355,7 @@ class Sam3DetrEncoderLayer(nn.Module):
         vision_feats: Tensor,
         prompt_feats: Tensor,
         vision_pos_encoding: Tensor,
-        prompt_cross_attn_mask: Optional[Tensor] = None,
+        prompt_cross_attn_mask: Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         """
@@ -1326,6 +1412,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
     resolutions) and fuses them with text prompts through a stack of transformer encoder layers.
     """
 
+    config: Sam3DETREncoderConfig
     _can_record_outputs = {
         "hidden_states": Sam3DetrEncoderLayer,
         "attentions": Sam3Attention,
@@ -1382,16 +1469,17 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
             spatial_shapes,
         )
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         vision_features: list[torch.Tensor],
         text_features: torch.Tensor,
-        vision_pos_embeds: Optional[list[torch.Tensor]] = None,
-        text_mask: Optional[torch.Tensor] = None,
-        spatial_sizes: Optional[list[tuple[int, int]]] = None,
+        vision_pos_embeds: list[torch.Tensor] | None = None,
+        text_mask: torch.Tensor | None = None,
+        spatial_sizes: list[tuple[int, int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple | Sam3DETREncoderOutput:
         """
         Forward pass for the DETR encoder.
 
@@ -1425,7 +1513,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
         if text_mask is not None:
             prompt_cross_attn_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=features_flattened,
+                inputs_embeds=features_flattened,
                 attention_mask=text_mask,
                 encoder_hidden_states=text_features,
             )
@@ -1502,8 +1590,8 @@ class Sam3DetrDecoderLayer(nn.Module):
         text_features: torch.Tensor,
         vision_features: torch.Tensor,
         vision_pos_encoding: torch.Tensor,
-        text_cross_attn_mask: Optional[torch.Tensor] = None,
-        vision_cross_attn_mask: Optional[torch.Tensor] = None,
+        text_cross_attn_mask: torch.Tensor | None = None,
+        vision_cross_attn_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
@@ -1585,6 +1673,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
     - Presence token is used
     """
 
+    config: Sam3DETRDecoderConfig
     _can_record_outputs = {
         "hidden_states": Sam3DetrDecoderLayer,
         "attentions": Sam3Attention,
@@ -1617,7 +1706,9 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         self.box_rpb_embed_x = Sam3DecoderMLP(2, config.hidden_size, config.num_attention_heads, 2)
         self.box_rpb_embed_y = Sam3DecoderMLP(2, config.hidden_size, config.num_attention_heads, 2)
 
-        self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=config.hidden_size // 2, normalize=False)
+        self.position_encoding = Sam3SinePositionEmbedding(
+            num_position_features=config.hidden_size // 2, normalize=False
+        )
 
         self.post_init()
 
@@ -1677,16 +1768,17 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         rpb_matrix = rpb_matrix.permute(0, 3, 1, 2).contiguous()  # [batch_size, num_heads, num_queries, height*width]
         return rpb_matrix
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         vision_features: torch.Tensor,
         text_features: torch.Tensor,
         vision_pos_encoding: torch.Tensor,
-        text_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
+        text_mask: torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple | Sam3DETRDecoderOutput:
         """
         Forward pass for the DETR decoder.
 
@@ -1714,7 +1806,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         if text_mask is not None:
             text_cross_attn_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=text_mask,
                 encoder_hidden_states=text_features,
             )
@@ -1812,7 +1904,7 @@ class Sam3DotProductScoring(nn.Module):
         self.clamp_logits = True
         self.clamp_max_val = 12.0
 
-    def _pool_text_features(self, text_features: torch.Tensor, text_mask: Optional[torch.Tensor]) -> torch.Tensor:
+    def _pool_text_features(self, text_features: torch.Tensor, text_mask: torch.Tensor | None) -> torch.Tensor:
         """
         Mean pool text features, accounting for padding.
 
@@ -1841,7 +1933,7 @@ class Sam3DotProductScoring(nn.Module):
         self,
         decoder_hidden_states: torch.Tensor,
         text_features: torch.Tensor,
-        text_mask: Optional[torch.Tensor] = None,
+        text_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Compute classification scores via dot product.
@@ -1966,6 +2058,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
     Also produces a semantic segmentation output and supports cross-attention to prompts.
     """
 
+    config: Sam3MaskDecoderConfig
     _can_record_outputs = {
         "attentions": Sam3Attention,
     }
@@ -1993,16 +2086,17 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(
         self,
         decoder_queries: torch.Tensor,
         backbone_features: list[torch.Tensor],
         encoder_hidden_states: torch.Tensor,
-        prompt_features: Optional[torch.Tensor] = None,
-        prompt_mask: Optional[torch.Tensor] = None,
+        prompt_features: torch.Tensor | None = None,
+        prompt_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> dict[str, torch.Tensor]:
+    ) -> tuple | Sam3MaskDecoderOutput:
         """
         Args:
             decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]
@@ -2023,7 +2117,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
             if prompt_mask is not None:
                 cross_attn_mask = create_bidirectional_mask(
                     config=self.config,
-                    input_embeds=normed_hidden_states,
+                    inputs_embeds=normed_hidden_states,
                     encoder_hidden_states=prompt_features,
                     attention_mask=prompt_mask,
                 )
@@ -2092,9 +2186,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
 class Sam3Model(Sam3PreTrainedModel):
     input_modalities = ["image", "text"]
-    _checkpoint_conversion_mapping = {
-        r"detector_model.(.+)": r"\1"  # the regex allows to remove the prefix, and add it back in revert mode
-    }
+    base_model_prefix = "detector_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^tracker_model.",
         r"^tracker_neck.",
@@ -2132,69 +2224,68 @@ class Sam3Model(Sam3PreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Text embeddings that can be passed as `text_embeds` to the forward method.
-
         Example:
 
         ```python
         >>> from transformers import Sam3Model, Sam3Processor
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> model = Sam3Model.from_pretrained("facebook/sam3")
         >>> processor = Sam3Processor.from_pretrained("facebook/sam3")
 
         >>> # Pre-compute text embeddings
         >>> text_inputs = processor(text="cat", return_tensors="pt")
-        >>> text_embeds = model.get_text_features(**text_inputs)
+        >>> text_embeds = model.get_text_features(**text_inputs).pooler_output
 
         >>> # Reuse text embeddings for multiple images
-        >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-        >>> image = Image.open(requests.get(img_url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> img_inputs = processor(images=image, return_tensors="pt")
         >>> outputs = model(pixel_values=img_inputs.pixel_values, text_embeds=text_embeds)
         ```
         """
-        text_features = self.text_encoder(
-            input_ids=input_ids, attention_mask=attention_mask, **kwargs
-        ).last_hidden_state
-        text_features = self.text_projection(text_features)
-        return text_features
+        text_outputs = self.text_encoder(
+            input_ids=input_ids, attention_mask=attention_mask, return_dict=True, **kwargs
+        )
+        last_hidden_state = text_outputs.last_hidden_state
+        text_outputs.pooler_output = self.text_projection(last_hidden_state)
+
+        return text_outputs
 
     @auto_docstring
     def get_vision_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3VisionEncoderOutput:
         r"""
-        Returns:
-            vision_embeds (`Sam3VisionEncoderOutput`):
-                Vision embeddings that can be passed as `vision_embeds` to the forward method.
-
         Example:
 
         ```python
         >>> from transformers import Sam3Model, Sam3Processor
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> model = Sam3Model.from_pretrained("facebook/sam3")
         >>> processor = Sam3Processor.from_pretrained("facebook/sam3")
 
         >>> # Pre-compute vision embeddings
-        >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-        >>> image = Image.open(requests.get(img_url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> img_inputs = processor(images=image, return_tensors="pt")
         >>> vision_embeds = model.get_vision_features(pixel_values=img_inputs.pixel_values)
 
@@ -2206,27 +2297,27 @@ class Sam3Model(Sam3PreTrainedModel):
         vision_outputs = self.vision_encoder(pixel_values, **kwargs)
         return vision_outputs
 
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        vision_embeds: Optional[Sam3VisionEncoderOutput] = None,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        text_embeds: Optional[torch.FloatTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_boxes_labels: Optional[torch.LongTensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        vision_embeds: Sam3VisionEncoderOutput | None = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        text_embeds: torch.Tensor | None = None,
+        input_boxes: torch.Tensor | None = None,
+        input_boxes_labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3ImageSegmentationOutput:
         r"""
         vision_embeds (`Sam3VisionEncoderOutput`, *optional*):
             Pre-computed vision embeddings. Can be used to easily reuse vision embeddings. If provided, `pixel_values`
             should not be passed. Mutually exclusive with `pixel_values`.
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        text_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Pre-computed text embeddings. Can be used to easily reuse text embeddings. If provided, `input_ids`
             should not be passed. Mutually exclusive with `input_ids`.
-        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`, *optional*):
+        input_boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`, *optional*):
             Normalized box coordinates in [0, 1] range, in (cx, cy, w, h) format.
         input_boxes_labels (`torch.LongTensor` of shape `(batch_size, num_boxes)`, *optional*):
             Labels for boxes: 1 (positive), 0 (negative).
@@ -2235,16 +2326,18 @@ class Sam3Model(Sam3PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("facebook/sam3")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam3")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> text = "car"
-        >>> inputs = processor(images=raw_image, text=text, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
         >>> # Get segmentation output
         >>> outputs = model(**inputs)
@@ -2274,10 +2367,9 @@ class Sam3Model(Sam3PreTrainedModel):
         fpn_position_encoding = vision_outputs.fpn_position_encoding[:-1]
 
         if text_embeds is None:
-            text_features = self.get_text_features(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
-        else:
-            text_features = text_embeds
+            text_embeds = self.get_text_features(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
 
+        text_features = text_embeds.pooler_output
         text_mask = attention_mask.bool() if attention_mask is not None else None
         has_geometry_prompts = input_boxes is not None and input_boxes.numel() > 0
 

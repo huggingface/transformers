@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch MM Grounding DINO model."""
 
 import collections
+import copy
 import inspect
 import math
 import re
@@ -47,6 +48,9 @@ if is_torch_available():
     import torch
 
     from transformers import MMGroundingDinoConfig, MMGroundingDinoForObjectDetection, MMGroundingDinoModel
+    from transformers.models.mm_grounding_dino.modeling_mm_grounding_dino import (
+        generate_masks_with_special_tokens_and_transfer_map,
+    )
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -95,7 +99,7 @@ class MMGroundingDinoModelTester:
     def __init__(
         self,
         parent,
-        batch_size=4,
+        batch_size=2,
         is_training=True,
         use_labels=True,
         hidden_size=32,
@@ -107,7 +111,7 @@ class MMGroundingDinoModelTester:
         attention_probs_dropout_prob=0.1,
         num_queries=2,
         num_channels=3,
-        image_size=98,
+        image_size=128,
         n_targets=8,
         num_labels=2,
         num_feature_levels=4,
@@ -323,6 +327,11 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_feed_forward_chunking(self):
         pass
 
+    # Ignore copy
+    def test_tie_weights_is_not_modified(self):
+        # this model doesn't need a test
+        pass
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -519,59 +528,47 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
             expected_arg_names = ["pixel_values", "input_ids"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    def test_different_timm_backbone(self):
+    def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-        config.use_timm_backbone = True
-        config.backbone_config = None
-        config.backbone_kwargs = {"in_chans": 3, "out_indices": (2, 3, 4)}
+        def _validate_backbone_init(config):
+            for model_class in self.all_model_classes:
+                model = model_class(copy.deepcopy(config))
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                if model_class.__name__ == "MMGroundingDinoForObjectDetection":
+                    expected_shape = (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_queries,
+                        config.max_text_len,
+                    )
+                    self.assertEqual(outputs.logits.shape, expected_shape)
 
-            if model_class.__name__ == "MMGroundingDinoForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    config.max_text_len,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
+                self.assertTrue(outputs)
 
-            self.assertTrue(outputs)
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
+        # let's test a random timm backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "tf_mobilenetv3_small_075"
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"in_chans": 3, "out_indices": (2, 3, 4)}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
-    @require_timm
-    def test_hf_backbone(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Load a pretrained HF checkpoint as backbone
-        config.backbone = "microsoft/resnet-18"
-        config.backbone_config = None
-        config.use_timm_backbone = False
-        config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if model_class.__name__ == "MMGroundingDinoForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    config.max_text_len,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-
-            self.assertTrue(outputs)
+        # Test a pretrained HF checkpoint as backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = False
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
     # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_two_stage_training with DeformableDetr->MMGroundingDino
     def test_two_stage_training(self):
@@ -588,6 +585,32 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
         loss = model(**inputs).loss
         loss.backward()
+
+    def test_text_masks_and_position_ids(self):
+        # "[CLS] a cat . a remote . [SEP]": each phrase attends to itself and restarts its position ids,
+        # the closing delimiter belongs to the phrase it closes
+        input_ids = torch.tensor([[101, 1037, 4937, 1012, 1037, 6556, 1012, 102]], device=torch_device)
+        special_tokens = torch.tensor([101, 102, 1012, 1029], device=torch_device)
+        attention_mask, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids, special_tokens)
+
+        self.assertListEqual(position_ids.tolist(), [[0, 0, 1, 2, 0, 1, 2, 0]])
+        expected_mask = torch.eye(8, dtype=torch.bool, device=torch_device)
+        expected_mask[1:4, 1:4] = True
+        expected_mask[4:7, 4:7] = True
+        self.assertTrue(torch.equal(attention_mask[0], expected_mask))
+
+    def test_text_position_embeddings_from_position_ids(self):
+        # integer position ids must be encoded as floats, not truncated to integer sinusoids
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        layer = MMGroundingDinoModel(config).to(torch_device).encoder.layers[0]
+        text_features = torch.randn(2, 5, config.d_model, device=torch_device)
+        position_ids = torch.arange(5, device=torch_device).expand(2, -1)
+
+        from_ids = layer.get_text_position_embeddings(text_features, None, position_ids)
+        from_arange = layer.get_text_position_embeddings(text_features, None, None)
+
+        self.assertEqual(from_ids.dtype, text_features.dtype)
+        torch.testing.assert_close(from_ids, from_arange)
 
     def test_tied_weights_keys(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -668,7 +691,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
             [[0.7666, 0.4142, 0.4590], [0.2557, 0.5480, 0.4812], [0.5049, 0.5133, 0.9767]]
         ).to(torch_device)
         expected_logits = torch.tensor(
-            [[-5.1160, -0.2143, -0.2089], [-5.0592, -0.4269, -0.4169], [-4.9087, -1.7608, -1.7372]]
+            [[-5.1177, -0.2134, -0.2080], [-5.0578, -0.4295, -0.4196], [-4.9100, -1.7619, -1.7384]]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
@@ -681,7 +704,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
         results = processor.image_processor.post_process_object_detection(
             outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
-        expected_scores = torch.tensor([0.4480, 0.3973]).to(torch_device)
+        expected_scores = torch.tensor([0.4482, 0.3966]).to(torch_device)
         expected_slice_boxes = torch.tensor([343.7321, 23.8182, 637.5044, 373.8593]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 2)
@@ -735,7 +758,7 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
             torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
 
         expected_logits = torch.tensor(
-            [[-5.0188, -1.0069, -1.0005], [-5.1177, -1.0537, -1.0444], [-5.3986, -2.4935, -2.4716]]
+            [[-5.0169, -1.0088, -1.0024], [-5.1171, -1.0561, -1.0469], [-5.4001, -2.5026, -2.4806]]
         )
         torch.testing.assert_close(cpu_outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
 
@@ -810,30 +833,30 @@ class MMGroundingDinoModelIntegrationTests(unittest.TestCase):
 
         # Loss differs by CPU and GPU, also this can be changed in future.
         expected_loss_dict = {
-            "loss_ce": torch.tensor(1.1799),
-            "loss_bbox": torch.tensor(0.2348),
-            "loss_giou": torch.tensor(0.5834),
-            "loss_ce_0": torch.tensor(1.1199),
-            "loss_bbox_0": torch.tensor(0.3083),
-            "loss_giou_0": torch.tensor(0.6555),
-            "loss_ce_1": torch.tensor(1.2075),
-            "loss_bbox_1": torch.tensor(0.2641),
-            "loss_giou_1": torch.tensor(0.6073),
-            "loss_ce_2": torch.tensor(1.2915),
-            "loss_bbox_2": torch.tensor(0.2616),
-            "loss_giou_2": torch.tensor(0.5730),
-            "loss_ce_3": torch.tensor(1.0243),
-            "loss_bbox_3": torch.tensor(0.2799),
-            "loss_giou_3": torch.tensor(0.6326),
-            "loss_ce_4": torch.tensor(1.2019),
-            "loss_bbox_4": torch.tensor(0.2430),
-            "loss_giou_4": torch.tensor(0.5679),
-            "loss_ce_enc": torch.tensor(10.2381),
-            "loss_bbox_enc": torch.tensor(0.2886),
-            "loss_giou_enc": torch.tensor(0.6335),
+            "loss_ce": torch.tensor(1.2019),
+            "loss_bbox": torch.tensor(0.2259),
+            "loss_giou": torch.tensor(0.5644),
+            "loss_ce_0": torch.tensor(1.1258),
+            "loss_bbox_0": torch.tensor(0.3075),
+            "loss_giou_0": torch.tensor(0.6526),
+            "loss_ce_1": torch.tensor(1.2258),
+            "loss_bbox_1": torch.tensor(0.2650),
+            "loss_giou_1": torch.tensor(0.6079),
+            "loss_ce_2": torch.tensor(1.3710),
+            "loss_bbox_2": torch.tensor(0.2298),
+            "loss_giou_2": torch.tensor(0.5836),
+            "loss_ce_3": torch.tensor(1.1709),
+            "loss_bbox_3": torch.tensor(0.2343),
+            "loss_giou_3": torch.tensor(0.5750),
+            "loss_ce_4": torch.tensor(1.2305),
+            "loss_bbox_4": torch.tensor(0.2247),
+            "loss_giou_4": torch.tensor(0.5623),
+            "loss_ce_enc": torch.tensor(10.2855),
+            "loss_bbox_enc": torch.tensor(0.2865),
+            "loss_giou_enc": torch.tensor(0.6313),
         }
 
-        expected_loss = torch.tensor(52.4340)
+        expected_loss = torch.tensor(52.4458)
 
         for key in expected_loss_dict:
             self.assertTrue(torch.allclose(outputs.loss_dict[key], expected_loss_dict[key], atol=1e-3))

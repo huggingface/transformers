@@ -17,7 +17,6 @@ import gc
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 import regex as re
 import tiktoken
@@ -57,7 +56,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -146,16 +145,19 @@ def convert_moe_packed_tensors(
 def write_model(
     model_path,
     input_base_path,
-    instruct=False,
     mxfp4=False,
 ):
     os.makedirs(model_path, exist_ok=True)
-    eos_token_id = 199999 if not instruct else 200002
+    eos_token_id = 200002
     pad_token_id = 199999
 
     original_config = json.loads((Path(input_base_path) / "config.json").read_text())
 
-    num_local_experts = original_config.pop("num_experts")
+    # GPT OSS Models are distributed with either num_experts or num_local_experts depending whether the original subfolder
+    # or the root folder is used.
+    num_local_experts = original_config.get("num_experts") or original_config.get("num_local_experts")
+    if num_local_experts is None:
+        raise ValueError("num_local_experts or num_experts must be specified in the config.")
 
     # Handle both old and new config formats for rope_parameters
     if "rope_parameters" in original_config:
@@ -280,17 +282,16 @@ def write_model(
     print("Model reloaded successfully.")
 
     # generation config
-    if instruct:
-        print("Saving generation config...")
-        generation_config = GenerationConfig(
-            bos_token_id=199998,  # <|startoftext|>
-            do_sample=True,
-            eos_token_id=[200002, 199999],  # <|return|>, <|endoftext|>
-            pad_token_id=199999,  # <|endoftext|>
-            temperature=1.0,
-            top_p=1.0,
-        )
-        generation_config.save_pretrained(model_path)
+    print("Saving generation config...")
+    generation_config = GenerationConfig(
+        bos_token_id=199998,  # <|startoftext|>
+        do_sample=True,
+        eos_token_id=[200002, 199999],  # <|return|>, <|endoftext|>
+        pad_token_id=199999,  # <|endoftext|>
+        temperature=1.0,
+        top_p=1.0,
+    )
+    generation_config.save_pretrained(model_path)
 
 
 def save_sharded_model(state_dict, model_path):
@@ -327,7 +328,7 @@ def create_safetensors_index(safetensors_index, num_shards, model_path):
     for key in safetensors_index["weight_map"].keys():
         shard_id = safetensors_index["weight_map"][key]
         safetensors_index["weight_map"][key] = f"model-{shard_id:05d}-of-{num_shards:05d}.safetensors"
-    with open(os.path.join(model_path, "model.safetensors.index.json"), "w") as f:
+    with open(os.path.join(model_path, "model.safetensors.index.json"), "w", encoding="utf-8") as f:
         json.dump(safetensors_index, f)
 
 
@@ -386,7 +387,7 @@ class GptOssConverter(TikTokenConverter):
         self,
         vocab_file,
         model_max_length: int,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=None)
@@ -431,7 +432,7 @@ class GptOssConverter(TikTokenConverter):
         )
 
 
-def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
+def write_tokenizer(tokenizer_path: str, save_dir: str):
     # Updated Harmony chat template
     chat_template = """{#-
   In addition to the normal inputs of `messages` and `tools`, this template also accepts the
@@ -694,15 +695,23 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
 {%- for message in loop_messages -%}
     {#- At this point only assistant/user/tool messages should remain #}
     {%- if message.role == 'assistant' -%}
+        {#- Reasoning is read from `reasoning_content`, falling back to the older `thinking` field #}
+        {%- if message.reasoning_content is defined and message.reasoning_content is not none %}
+            {%- set reasoning = message.reasoning_content %}
+        {%- elif message.thinking is defined and message.thinking is not none %}
+            {%- set reasoning = message.thinking %}
+        {%- else %}
+            {%- set reasoning = none %}
+        {%- endif %}
         {#- Checks to ensure the messages are being passed in the format we expect #}
         {%- if "content" in message %}
             {%- if "<|channel|>analysis<|message|>" in message.content or "<|channel|>final<|message|>" in message.content %}
-                {{- raise_exception("You have passed a message containing <|channel|> tags in the content field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'thinking' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
+                {{- raise_exception("You have passed a message containing <|channel|> tags in the content field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'reasoning_content' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
             {%- endif %}
         {%- endif %}
-        {%- if "thinking" in message %}
-            {%- if "<|channel|>analysis<|message|>" in message.thinking or "<|channel|>final<|message|>" in message.thinking %}
-                {{- raise_exception("You have passed a message containing <|channel|> tags in the thinking field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'thinking' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
+        {%- if reasoning is not none %}
+            {%- if "<|channel|>analysis<|message|>" in reasoning or "<|channel|>final<|message|>" in reasoning %}
+                {{- raise_exception("You have passed a message containing <|channel|> tags in the reasoning_content field. Instead of doing this, you should pass analysis messages (the string between '<|message|>' and '<|end|>') in the 'reasoning_content' field, and final messages (the string between '<|message|>' and '<|end|>') in the 'content' field.") }}
             {%- endif %}
         {%- endif %}
         {%- if "tool_calls" in message %}
@@ -721,12 +730,12 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             {%- if tool_call.function %}
                 {%- set tool_call = tool_call.function %}
             {%- endif %}
-            {%- if message.content and message.thinking %}
-                {{- raise_exception("Cannot pass both content and thinking in an assistant message with tool calls! Put the analysis message in one or the other, but not both.") }}
+            {%- if message.content and reasoning %}
+                {{- raise_exception("Cannot pass both content and reasoning_content in an assistant message with tool calls! Put the analysis message in one or the other, but not both.") }}
             {%- elif message.content and not future_final_message.found %}
                 {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.content + "<|end|>" }}
-            {%- elif message.thinking and not future_final_message.found %}
-                {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
+            {%- elif reasoning and not future_final_message.found %}
+                {{- "<|start|>assistant<|channel|>analysis<|message|>" + reasoning + "<|end|>" }}
             {%- endif %}
             {{- "<|start|>assistant to=" }}
             {{- "functions." + tool_call.name + "<|channel|>commentary " }}
@@ -737,8 +746,8 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         {%- elif loop.last and not add_generation_prompt %}
             {#- Only render the CoT if the final turn is an assistant turn and add_generation_prompt is false #}
             {#- This is a situation that should only occur in training, never in inference. #}
-            {%- if "thinking" in message %}
-                {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
+            {%- if reasoning is not none %}
+                {{- "<|start|>assistant<|channel|>analysis<|message|>" + reasoning + "<|end|>" }}
             {%- endif %}
             {#- <|return|> indicates the end of generation, but <|end|> does not #}
             {#- <|return|> should never be an input to the model, but we include it as the final token #}
@@ -768,41 +777,26 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     converter = GptOssConverter(
         vocab_file=tokenizer_path,
         model_max_length=None,
-        chat_template=chat_template if instruct else None,
+        chat_template=chat_template,
     )
     tokenizer = converter.tokenizer
     tokenizer.save_pretrained(save_dir)
 
-    if instruct:
-        print("Saving chat template...")
-        chat_template_path = os.path.join(save_dir, "chat_template.json")
-        with open(chat_template_path, "w") as f:
-            json.dump({"chat_template": chat_template}, f, indent=2)
+    print("Saving chat template...")
+    chat_template_path = os.path.join(save_dir, "chat_template.jinja")
+    with open(chat_template_path, "w", encoding="utf-8") as f:
+        f.write(chat_template)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/fsx/mohamed/oai-hf/tests/120b",
-        help="Location of LLaMA weights, which contains tokenizer.model and model folders",
+        help="Location of `./original` subfolder of the GPT OSS model repo.",
     )
     parser.add_argument(
         "--output_dir",
-        default="/fsx/mohamed/oai-hf/tests/120b_converted_packed",
-        help="Location to write HF model and tokenizer",
-    )
-    parser.add_argument(
-        "--special_tokens",
-        default=None,
-        type=list[str],
-        help="The list of special tokens that should be added to the ",
-    )
-
-    parser.add_argument(
-        "--instruct",
-        action="store_true",
-        help="Whether the model is an instruct model",
+        help="Location to write the converted HF model and tokenizer",
     )
 
     # Only specify this if you want to use the model with mxfp4 quantization
@@ -820,14 +814,12 @@ def main():
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
-        instruct=args.instruct,
         mxfp4=args.mxfp4,
     )
 
     write_tokenizer(
         tokenizer_path="o200k_base",
         save_dir=args.output_dir,
-        instruct=args.instruct,
     )
 
 

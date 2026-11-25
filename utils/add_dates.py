@@ -8,6 +8,21 @@ from urllib.request import Request, urlopen
 
 from huggingface_hub import paper_info
 
+from transformers import logging
+
+
+CHECKER_CONFIG = {
+    "name": "add_dates",
+    "label": "Model dates",
+    # Approximate: also reads docs/source/en/model_doc/*.md and uses git log + network
+    # calls to GitHub/HuggingFace for commit dates and paper metadata.
+    "cache_globs": ["src/transformers/models/**/__init__.py", "docs/source/en/model_doc/**/*.md"],
+    "check_args": ["--check-only"],
+    "fix_args": [],
+}
+
+logger = logging.get_logger(__name__)
+
 
 ROOT = os.getcwd().split("utils")[0]
 DOCS_PATH = os.path.join(ROOT, "docs/source/en/model_doc")
@@ -68,35 +83,34 @@ def check_file_exists_on_github(file_path: str) -> bool:
         if e.code == 404:
             # File doesn't exist on GitHub
             return False
-        # Fall through to generic exception handler for other HTTP errors
-        print(
-            f"Warning: Could not verify file existence on GitHub (HTTP {e.code}): {url}\n"
-            f"Assuming file exists and continuing with local git history."
-        )
+        # HTTP error (non-404): assume file exists and continue with local git history
         return True
-    except Exception as e:
-        # Handle all other errors (network issues, timeouts, etc.)
-        print(
-            f"Warning: Could not verify file existence on GitHub: {url}\n"
-            f"Error: {e}\n"
-            f"Assuming file exists and continuing with local git history."
-        )
+    except Exception:
+        # Network/timeout error: assume file exists and continue with local git history
         return True
 
 
 def get_modified_cards() -> list[str]:
     """Get the list of model names from modified files in docs/source/en/model_doc/"""
 
-    result = subprocess.check_output(["git", "diff", "--name-only", "upstream/main"], text=True)
+    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    if current_branch == "main":
+        # On main branch, only uncommitted changes detected
+        result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)
+    else:
+        fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+        result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")
 
     model_names = []
     for line in result.strip().split("\n"):
         if line:
             # Check if the file is in the model_doc directory
             if line.startswith("docs/source/en/model_doc/") and line.endswith(".md"):
-                model_name = os.path.splitext(os.path.basename(line))[0]
-                if model_name not in ["auto", "timm_wrapper"]:
-                    model_names.append(model_name)
+                file_path = os.path.join(ROOT, line)
+                if os.path.exists(file_path):
+                    model_name = os.path.splitext(os.path.basename(line))[0]
+                    if model_name not in ["auto", "timm_wrapper"]:
+                        model_names.append(model_name)
 
     return model_names
 
@@ -116,26 +130,7 @@ def get_paper_link(model_card: str | None, path: str | None) -> str:
     paper_ids += re.findall(r"https://arxiv\.org/abs/\d+\.\d+", content)
     paper_ids += re.findall(r"https://arxiv\.org/pdf/\d+\.\d+", content)
 
-    # If no known paper links are found, look for other potential paper links
     if len(paper_ids) == 0:
-        # Find all https links
-        all_https_links = re.findall(r"https://[^\s\)]+", content)
-
-        # Filter out huggingface.co and github links
-        other_paper_links = []
-        for link in all_https_links:
-            link = link.rstrip(".,;!?)")
-            if "huggingface.co" not in link and "github.com" not in link:
-                other_paper_links.append(link)
-
-        # Remove duplicates while preserving order
-        other_paper_links = list(dict.fromkeys(other_paper_links))
-
-        if other_paper_links:
-            print(f"No Hugging Face or Arxiv papers found. The possible paper links found in {model_card}:")
-            for link in other_paper_links:
-                print(f"  - {link}")
-
         return "No_paper"
 
     return paper_ids[0]
@@ -161,7 +156,6 @@ def get_first_commit_date(model_name: str | None) -> str:
 
     if not file_exists_on_github:
         # File does not exist on GitHub main branch (new model), use today's date
-        print(f"Model {model_name} not found on GitHub main branch, using today's date")
         final_date = date.today().isoformat()
     else:
         # File exists on GitHub main branch, get the first commit date from local git history
@@ -179,10 +173,10 @@ def get_release_date(link: str) -> str:
             info = paper_info(link)
             return info.published_at.date().isoformat()
         except Exception as e:
-            print(f"Error fetching release date for the paper https://huggingface.co/papers/{link}: {e}")
+            # Error fetching release date, function returns None (will use placeholder)
+            logger.debug(f"Could not fetch paper info for {link}: {e}")
 
     elif link.startswith("https://arxiv.org/abs/") or link.startswith("https://arxiv.org/pdf/"):
-        print(f"This paper {link} is not yet available in Hugging Face papers, skipping the release date attachment.")
         return r"{release_date}"
 
 
@@ -192,7 +186,6 @@ def replace_paper_links(file_path: str) -> bool:
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    model_card = os.path.basename(file_path)
     original_content = content
 
     # Replace hf.co with huggingface.co
@@ -212,11 +205,9 @@ def replace_paper_links(file_path: str) -> bool:
                 old_link = f"https://arxiv.org/pdf/{paper_id}"
             new_link = f"https://huggingface.co/papers/{paper_id}"
             content = content.replace(old_link, new_link)
-            print(f"Replaced {old_link} with {new_link}")
 
         except Exception:
             # Paper not available on huggingface, keep arxiv link
-            print(f"Paper {paper_id} for {model_card} is not available on huggingface, keeping the arxiv link")
             continue
 
     # Write back only if content changed
@@ -246,7 +237,7 @@ def _read_model_card_content(model_card: str) -> str:
 
 def _get_dates_pattern_match(content: str):
     """Search for the dates pattern in content and return match object"""
-    pattern = r"\n\*This model was released on (.*) and added to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
+    pattern = r"\n\*This model was (?:published in HF papers on (.*) and )?contributed to Hugging Face Transformers on (\d{4}-\d{2}-\d{2})\.\*"
     return re.search(pattern, content)
 
 
@@ -277,7 +268,7 @@ def check_missing_dates(model_card_list: list[str]) -> list[str]:
 
 
 def check_incorrect_dates(model_card_list: list[str]) -> list[str]:
-    """Check which model cards have incorrect HF commit dates and return their names"""
+    """Check which model cards have incorrect model release/addition dates and return their names"""
     incorrect_dates = []
 
     for model_card in model_card_list:
@@ -288,11 +279,24 @@ def check_incorrect_dates(model_card_list: list[str]) -> list[str]:
         content = _read_model_card_content(model_card)
         match = _get_dates_pattern_match(content)
 
+        file_path = os.path.join(DOCS_PATH, model_card)
+        paper_link = get_paper_link(model_card=model_card, path=file_path)
+
+        if paper_link in ("No_paper", "blog"):
+            release_date = r"{release_date}"
+        else:
+            release_date = get_release_date(paper_link)
+
         if match:
+            # Preserve existing release date unless it's a placeholder
+            existing_release_date = match.group(1)
+            if existing_release_date not in (r"{release_date}", "None"):
+                release_date = existing_release_date
+
             existing_hf_date = match.group(2)
             actual_hf_date = get_first_commit_date(model_name=model_card)
 
-            if _dates_differ_significantly(existing_hf_date, actual_hf_date):
+            if _dates_differ_significantly(existing_hf_date, actual_hf_date) or existing_release_date != release_date:
                 incorrect_dates.append(model_card)
 
     return incorrect_dates
@@ -308,16 +312,14 @@ def insert_dates(model_card_list: list[str]):
         file_path = os.path.join(DOCS_PATH, model_card)
 
         # First replace arxiv paper links with hf paper link if possible
-        links_replaced = replace_paper_links(file_path)
-        if links_replaced:
-            print(f"Updated paper links in {model_card}")
+        replace_paper_links(file_path)
 
         # Read content and ensure copyright disclaimer exists
         content = _read_model_card_content(model_card)
         markers = list(re.finditer(r"-->", content))
 
         if len(markers) == 0:
-            print(f"No marker found in {model_card}. Adding copyright disclaimer to the top.")
+            # No copyright marker found, adding disclaimer to the top
             content = COPYRIGHT_DISCLAIMER + "\n\n" + content
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -345,18 +347,23 @@ def insert_dates(model_card_list: list[str]):
 
             if _dates_differ_significantly(existing_hf_date, hf_commit_date) or existing_release_date != release_date:
                 old_line = match.group(0)
-                new_line = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}.*"
+                if release_date not in [r"{release_date}", None]:
+                    new_line = f"\n*This model was published in HF papers on {release_date} and contributed to Hugging Face Transformers on {hf_commit_date}.*"
+                else:
+                    new_line = f"\n*This model was contributed to Hugging Face Transformers on {hf_commit_date}.*"
                 content = content.replace(old_line, new_line)
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(content)
         else:
             # Insert new dates line after copyright marker
             insert_index = markers[0].end()
-            date_info = f"\n*This model was released on {release_date} and added to Hugging Face Transformers on {hf_commit_date}.*"
+            if release_date not in [r"{release_date}", None]:
+                date_info = f"\n*This model was published in HF papers on {release_date} and contributed to Hugging Face Transformers on {hf_commit_date}.*"
+            else:
+                date_info = f"\n*This model was contributed to Hugging Face Transformers on {hf_commit_date}.*"
             content = content[:insert_index] + date_info + content[insert_index:]
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            print(f"Added {model_card} release and commit dates.")
 
 
 def get_all_model_cards():
@@ -376,12 +383,10 @@ def main(all=False, models=None, check_only=False):
     if check_only:
         # Check all model cards for missing dates
         all_model_cards = get_all_model_cards()
-        print(f"Checking all {len(all_model_cards)} model cards for missing dates...")
         missing_dates = check_missing_dates(all_model_cards)
 
         # Check modified model cards for incorrect dates
         modified_cards = get_modified_cards()
-        print(f"Checking {len(modified_cards)} modified model cards for incorrect dates...")
         incorrect_dates = check_incorrect_dates(modified_cards)
 
         if missing_dates or incorrect_dates:
@@ -391,22 +396,17 @@ def main(all=False, models=None, check_only=False):
                 f"Missing or incorrect dates in the following model cards: {' '.join(problematic_cards)}\n"
                 f"Run `python utils/add_dates.py --models {' '.join(model_names)}` to fix them."
             )
-        print("All dates are present and correct!")
         return
 
     # Determine which model cards to process
     if all:
         model_cards = get_all_model_cards()
-        print(f"Processing all {len(model_cards)} model cards from docs directory")
     elif models:
         model_cards = models
-        print(f"Processing specified model cards: {model_cards}")
     else:
         model_cards = get_modified_cards()
         if not model_cards:
-            print("No modified model cards found.")
             return
-        print(f"Processing modified model cards: {model_cards}")
 
     insert_dates(model_cards)
 

@@ -18,10 +18,10 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import SpQRConfig
 
 from ..integrations import replace_with_spqr_linear
 from ..utils import is_accelerate_available, is_spqr_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
@@ -36,9 +36,7 @@ class SpQRHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
-
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    quantization_config: "SpQRConfig"
 
     def validate_environment(self, *args, **kwargs):
         if not torch.cuda.is_available():
@@ -51,24 +49,19 @@ class SpQRHfQuantizer(HfQuantizer):
             raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`")
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            dtype = torch.float16
-            logger.info("Assuming SpQR inference on GPU and loading the model in `torch.float16`.")
-        elif dtype != torch.float16:
+        if dtype != torch.float16:
             raise ValueError(
-                "You cannot use any type other than torch.float16 for SpQR. Please either leave it None or set it to"
-                "torch.float16 explicitly."
+                "You cannot use any type other than torch.float16 for SpQR. Please set it totorch.float16 explicitly."
             )
         return dtype
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         replace_with_spqr_linear(
             model,

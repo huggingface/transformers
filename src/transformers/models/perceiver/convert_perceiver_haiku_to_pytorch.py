@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,13 +17,14 @@ import argparse
 import json
 import os
 import pickle
+from io import BytesIO
 from pathlib import Path
 
 import haiku as hk
 import numpy as np
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -49,9 +49,10 @@ logger = logging.get_logger(__name__)
 
 def prepare_img():
     # We will verify our results on an image of a dog
-    url = "https://storage.googleapis.com/perceiver_io/dalmation.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    url = "https://storage.googleapis.com/perceiver_io/dalmatian.jpg"
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 def rename_keys(state_dict, architecture):
@@ -327,7 +328,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         # set labels
         config.num_labels = 1000
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -376,7 +377,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         model = PerceiverForMultimodalAutoencoding(config)
         # set labels
         filename = "kinetics700-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

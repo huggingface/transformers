@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,13 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 
-from ... import initialization as init
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_timm_available, requires_backends
+from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 from .configuration_timm_wrapper import TimmWrapperConfig
 
 
@@ -30,30 +27,33 @@ if is_timm_available():
     import timm
 
 
-@dataclass
+logger = logging.get_logger(__name__)
+
+
 @auto_docstring(
     custom_intro="""
     Output class for models TimmWrapperModel, containing the last hidden states, an optional pooled output,
     and optional hidden states.
     """
 )
+@dataclass
 class TimmWrapperModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor`):
+    last_hidden_state (`torch.Tensor`):
         The last hidden state of the model, output before applying the classification head.
-    pooler_output (`torch.FloatTensor`, *optional*):
+    pooler_output (`torch.Tensor`, *optional*):
         The pooled output derived from the last hidden state, if applicable.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`):
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`):
         A tuple containing the intermediate hidden states of the model at the output of each layer or specified layers.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned if `output_attentions=True` is set or if `config.output_attentions=True`.):
+    attentions (`tuple(torch.Tensor)`, *optional*, returned if `output_attentions=True` is set or if `config.output_attentions=True`.):
         A tuple containing the intermediate attention weights of the model at the output of each layer.
         Note: Currently, Timm models do not support attentions output.
     """
 
-    last_hidden_state: torch.FloatTensor
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.Tensor
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_kwargs):
@@ -84,14 +84,24 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     config: TimmWrapperConfig
-    _no_split_modules = []
+    # add WA here as `timm` does not support model parallelism
+    _no_split_modules = ["TimmWrapperModel"]
     model_tags = ["timm"]
+    # `timm` attention layers already dispatch to `F.scaled_dot_product_attention` by default
+    _supports_sdpa = True
 
     # used in Trainer to avoid passing `loss_kwargs` to model forward
     accepts_loss_kwargs = False
 
     def post_init(self):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
+        # trf-ignore: TRF051 (warning only, `timm` owns its own attention dispatch)
+        if self.config._attn_implementation == "eager":
+            # `timm` resolves the attention implementation on its own, there is no model level API to change it yet
+            logger.warning_once(
+                "`attn_implementation='eager'` is not propagated to the wrapped `timm` model, which keeps using "
+                "`F.scaled_dot_product_attention` whenever it is available."
+            )
         super().post_init()
 
     def load_state_dict(self, state_dict, *args, **kwargs):
@@ -102,17 +112,26 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         state_dict = {f"timm_model.{k}" if "timm_model." not in k else k: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize weights function to properly initialize Linear layer weights.
         Since model architectures may vary, we assume only the classifier requires
         initialization, while all other weights should be loaded from the checkpoint.
         """
-        if isinstance(module, (nn.Linear)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
+        super()._init_weights(module)
+        # Also, reinit all non-persistent buffers if any!
+        if hasattr(module, "init_non_persistent_buffers"):
+            module.init_non_persistent_buffers()
+        elif (
+            hasattr(module, "_get_pos_embed_values")
+            and hasattr(module, "feat_shape")
+            and module.feat_shape is not None
+        ):
+            module.pos_embed = module._get_pos_embed_values(
+                feat_shape=module.feat_shape,
+                device=module.pos_embed.device if module.pos_embed is not None else None,
+                dtype=module.pos_embed.dtype if module.pos_embed is not None else torch.float32,
+            )
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
@@ -132,6 +151,13 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
         self.timm_model.set_grad_checkpointing(enable)
 
+    def get_input_embeddings(self):
+        # TIMM backbones operate directly on images and do not expose token embeddings.
+        return None
+
+    def set_input_embeddings(self, value):
+        raise NotImplementedError("TimmWrapper models do not own token embeddings and cannot set them.")
+
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
@@ -147,23 +173,17 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
 
-    def get_input_embeddings(self):
-        # Vision backbones from timm do not expose token embeddings, so there is nothing to return.
-        return None
-
-    def set_input_embeddings(self, value):
-        raise NotImplementedError("TimmWrapperModel does not own token embeddings and cannot set them.")
-
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, list[int]]] = None,
-        return_dict: Optional[bool] = None,
-        do_pooling: Optional[bool] = None,
+        pixel_values: torch.Tensor,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | list[int] | None = None,
+        return_dict: bool | None = None,
+        do_pooling: bool | None = None,
+        use_cache: bool | None = None,
         **kwargs,
-    ) -> Union[TimmWrapperModelOutput, tuple[Tensor, ...]]:
+    ) -> TimmWrapperModelOutput | tuple[Tensor, ...]:
         r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
@@ -204,7 +224,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -222,7 +242,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
                 "different architecture or updating the timm package to a compatible version."
             )
 
-        pixel_values = pixel_values.to(self.device)
+        pixel_values = pixel_values.to(self.device, self.dtype)
 
         if self.features_only:
             last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
@@ -282,18 +302,14 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, list[int]]] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | list[int] | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[ImageClassifierOutput, tuple[Tensor, ...]]:
+    ) -> ImageClassifierOutput | tuple[Tensor, ...]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
         output_hidden_states (`bool`, *optional*):
@@ -331,7 +347,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         >>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

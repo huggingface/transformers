@@ -25,6 +25,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -46,53 +47,43 @@ if is_torch_available():
 
 
 # Copied from test.models.t5.test_modeling_t5.T5ModelTester with T5->UMT5
-class UMT5ModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
-        decoder_seq_length=7,
+class UMT5ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
+        "decoder_seq_length": 7,
         # For common tests
-        is_training=True,
-        use_attention_mask=True,
-        use_labels=False,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        eos_token_id=1,
-        pad_token_id=0,
-        decoder_start_token_id=0,
-        scope=None,
-        decoder_layers=None,
-    ):
+        "is_training": True,
+        "use_attention_mask": True,
+        "use_labels": False,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "decoder_start_token_id": 0,
+        "scope": None,
+        "decoder_layers": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["seq_length"] = values["decoder_seq_length"]
+        values["scope"] = None
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.scope = None
-        self.decoder_layers = decoder_layers
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_inputs_dict(
         self,
@@ -193,7 +184,7 @@ class UMT5ModelTester:
         )
         result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
+        decoder_past = result.cache
         encoder_output = result.encoder_last_hidden_state
 
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
@@ -225,6 +216,8 @@ class UMT5ModelTester:
 
 @require_torch
 class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = UMT5ModelTester
+
     all_model_classes = (
         (UMT5Model, UMT5ForConditionalGeneration, UMT5ForSequenceClassification, UMT5ForQuestionAnswering)
         if is_torch_available()
@@ -233,11 +226,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "feature-extraction": UMT5Model,
-            "question-answering": UMT5ForQuestionAnswering,
-            "summarization": UMT5ForConditionalGeneration,
             "text-classification": UMT5ForSequenceClassification,
-            "text2text-generation": UMT5ForConditionalGeneration,
-            "translation": UMT5ForConditionalGeneration,
             "zero-shot": UMT5ForSequenceClassification,
         }
         if is_torch_available()
@@ -252,8 +241,13 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def setUp(self):
         self.model_tester = UMT5ModelTester(self)
 
-    # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-    # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+    @unittest.skip(
+        reason="UMT5 always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    # `QAPipelineTests` is not working well with slow tokenizers (for some models)
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -338,76 +332,90 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
 
+    def test_tie_word_embeddings(self):
+        # Force it to True, see https://github.com/huggingface/transformers/pull/43880
+        config_untied_checkpoint = UMT5Config(tie_word_embeddings=False)
+        self.assertTrue(config_untied_checkpoint.tie_word_embeddings)
+        self.assertFalse(config_untied_checkpoint.scale_decoder_outputs)
+
+        config_tied_checkpoint = UMT5Config(tie_word_embeddings=True)
+        self.assertTrue(config_tied_checkpoint.scale_decoder_outputs)
+
+        config_default = UMT5Config()
+        self.assertTrue(config_default.scale_decoder_outputs)
+
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="UMT5 has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
 
+    def test_decoder_causal_mask(self):
+        # Regression test for #49134
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # The common tester uses initializer_factor=0.002, which makes a causality violation
+        # measure ~8e-09 here, i.e. below the tolerance below. Use a realistic scale so the
+        # test can actually fail.
+        config = copy.deepcopy(config)
+        config.initializer_factor = 1.0
+
+        model = UMT5Model(config).to(torch_device).eval()
+
+        input_ids = inputs_dict["input_ids"]
+        decoder_input_ids = inputs_dict["decoder_input_ids"]
+        decoder_input_ids_modified = decoder_input_ids.clone()
+        decoder_input_ids_modified[:, -1] = (decoder_input_ids_modified[:, -1] + 1) % config.vocab_size
+
+        res_orig = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
+        res_mod = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids_modified).last_hidden_state
+
+        self.assertTrue(
+            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
+            "Decoder model attended to future tokens!",
+        )
+
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTester with T5->UMT5
-class UMT5EncoderOnlyModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        encoder_seq_length=7,
+class UMT5EncoderOnlyModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "vocab_size": 99,
+        "batch_size": 13,
+        "encoder_seq_length": 7,
         # For common tests
-        use_attention_mask=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        is_training=False,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        is_encoder_decoder=False,
-        eos_token_id=1,
-        pad_token_id=0,
-        scope=None,
-    ):
+        "use_attention_mask": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "d_ff": 37,
+        "relative_attention_num_buckets": 8,
+        "is_training": False,
+        "dropout_rate": 0.1,
+        "initializer_factor": 0.002,
+        "is_encoder_decoder": False,
+        "eos_token_id": 1,
+        "pad_token_id": 0,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # For common tests
-        self.seq_length = self.encoder_seq_length
-        self.use_attention_mask = use_attention_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scope = None
-        self.is_training = is_training
+        values["seq_length"] = values["encoder_seq_length"]
+        # `scope` was always reset to None, whatever the caller passed
+        values["scope"] = None
+        return values
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -499,6 +507,8 @@ class UMT5EncoderOnlyModelTester:
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTest with T5->UMT5
 class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = UMT5EncoderOnlyModelTester
+
     all_model_classes = (UMT5EncoderModel, UMT5ForTokenClassification) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -513,6 +523,12 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def setUp(self):
         self.model_tester = UMT5EncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UMT5Config, d_model=37)
+
+    @unittest.skip(
+        reason="UMT5 always adds the relative position bias as a float attention mask, so SDPA can't dispatch to the flash-attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -543,8 +559,7 @@ class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if tokenizer_name is None:
             return True
 
-        # `UMT5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models) and we don't want to touch the file
-        # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+        # `UMT5EncoderOnlyModelTest` is not working well with slow tokenizers (for some models)
         if pipeline_test_case_name == "TokenClassificationPipelineTests" and not tokenizer_name.endswith("Fast"):
             return True
 

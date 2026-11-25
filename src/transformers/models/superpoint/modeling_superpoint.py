@@ -14,7 +14,6 @@
 """PyTorch SuperPoint model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -71,7 +70,6 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     return torch.where(max_mask, scores, zeros)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of image point description models. Due to the nature of keypoint detection, the number of
@@ -81,31 +79,32 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     and which are padding.
     """
 )
+@dataclass
 class SuperPointKeypointDescriptionOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Loss computed during training.
-    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+    keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
         Relative (x, y) coordinates of predicted keypoints in a given image.
-    scores (`torch.FloatTensor` of shape `(batch_size, num_keypoints)`):
+    scores (`torch.Tensor` of shape `(batch_size, num_keypoints)`):
         Scores of predicted keypoints.
-    descriptors (`torch.FloatTensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
+    descriptors (`torch.Tensor` of shape `(batch_size, num_keypoints, descriptor_size)`):
         Descriptors of predicted keypoints.
     mask (`torch.BoolTensor` of shape `(batch_size, num_keypoints)`):
         Mask indicating which values in keypoints, scores and descriptors are keypoint information.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or
     when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.IntTensor] = None
-    scores: Optional[torch.FloatTensor] = None
-    descriptors: Optional[torch.FloatTensor] = None
-    mask: Optional[torch.BoolTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.Tensor | None = None
+    keypoints: torch.IntTensor | None = None
+    scores: torch.Tensor | None = None
+    descriptors: torch.Tensor | None = None
+    mask: torch.BoolTensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 class SuperPointConvBlock(nn.Module):
@@ -169,9 +168,9 @@ class SuperPointEncoder(nn.Module):
     def forward(
         self,
         input,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+    ) -> tuple | BaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
         for conv_block in self.conv_blocks:
@@ -328,7 +327,7 @@ class SuperPointPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = False
 
-    def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def extract_one_channel_pixel_values(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Assuming pixel_values has shape (batch_size, 3, height, width), and that all channels values are the same,
         extract the first channel value to get a tensor of shape (batch_size, 1, height, width) for SuperPoint. This is
@@ -336,10 +335,10 @@ class SuperPointPreTrainedModel(PreTrainedModel):
         https://github.com/huggingface/transformers/pull/25786#issuecomment-1730176446
 
         Args:
-            pixel_values: torch.FloatTensor of shape (batch_size, 3, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 3, height, width)
 
         Returns:
-            pixel_values: torch.FloatTensor of shape (batch_size, 1, height, width)
+            pixel_values: torch.Tensor of shape (batch_size, 1, height, width)
 
         """
         return pixel_values[:, 0, :, :][:, None, :, :]
@@ -374,12 +373,12 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SuperPointKeypointDescriptionOutput]:
+    ) -> tuple | SuperPointKeypointDescriptionOutput:
         r"""
         Examples:
 
@@ -387,10 +386,12 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SuperPointForKeypointDetection
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
         >>> model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
@@ -405,7 +406,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
@@ -420,15 +421,15 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
 
         list_keypoints_scores = [
-            self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in last_hidden_state
+            self.keypoint_decoder(image_hidden_state[None, ...]) for image_hidden_state in last_hidden_state
         ]
 
         list_keypoints = [keypoints_scores[0] for keypoints_scores in list_keypoints_scores]
         list_scores = [keypoints_scores[1] for keypoints_scores in list_keypoints_scores]
 
         list_descriptors = [
-            self.descriptor_decoder(last_hidden_state[None, ...], keypoints[None, ...])
-            for last_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
+            self.descriptor_decoder(image_hidden_state[None, ...], keypoints[None, ...])
+            for image_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
         ]
 
         maximum_num_keypoints = max(keypoints.shape[0] for keypoints in list_keypoints)

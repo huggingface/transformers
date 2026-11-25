@@ -28,13 +28,13 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
@@ -43,16 +43,14 @@ if is_torch_available():
     import torch
 
 
-class PerceptionLMVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_id=0,
-        video_token_id=2,
-        seq_length=7,
-        tie_word_embeddings=True,
-        projector_pooling_ratio=1,
-        text_config={
+class PerceptionLMVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 2,
+        "seq_length": 7,
+        "tie_word_embeddings": True,
+        "text_config": {
             "model_type": "llama",
             "seq_length": 7,
             "is_training": True,
@@ -73,10 +71,10 @@ class PerceptionLMVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 1,
+            "pad_token_id": 0,
         },
-        is_training=True,
-        vision_config={
+        "is_training": True,
+        "vision_config": {
             "architecture": "vit_pe_core_large_patch14_336",
             "model_args": {
                 "embed_dim": 64,
@@ -88,30 +86,32 @@ class PerceptionLMVisionText2TextModelTester:
                 "ref_feat_shape": (1, 1),
             },
         },
-    ):
+        "batch_size": 3,
+        "num_tiles": 1,
+        "num_frames": 1,
+        "num_channels": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_config, vision_config = values["text_config"], values["vision_config"]
+        values["pad_token_id"] = text_config["pad_token_id"]
+        values["num_hidden_layers"] = text_config["num_hidden_layers"]
+        values["vocab_size"] = text_config["vocab_size"]
+        values["hidden_size"] = text_config["hidden_size"]
+        values["num_attention_heads"] = text_config["num_attention_heads"]
+        values["image_size"] = vision_config["model_args"]["img_size"][0]
+        values["num_image_tokens"] = (vision_config["model_args"]["img_size"][0] // 14) ** 2
+        values["num_video_tokens"] = (vision_config["model_args"]["img_size"][0] // 14) ** 2
+        values["seq_length"] = values["seq_length"] + values["num_image_tokens"]
+        values["encoder_seq_length"] = values["seq_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
-        self.tie_word_embeddings = tie_word_embeddings
-
-        self.batch_size = 3
-        self.num_tiles = 1
-        self.num_frames = 1
-        self.num_channels = 3
-        self.image_size = self.vision_config["model_args"]["img_size"][0]
-        self.num_image_tokens = (self.vision_config["model_args"]["img_size"][0] // 14) ** 2
-        self.num_video_tokens = (self.vision_config["model_args"]["img_size"][0] // 14) ** 2
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return PerceptionLMConfig(
@@ -170,6 +170,8 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     Model tester for `PerceptionLMForConditionalGeneration`.
     """
 
+    model_tester_class = PerceptionLMVisionText2TextModelTester
+
     all_model_classes = (
         (
             PerceptionLMModel,
@@ -197,51 +199,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["pixel_values_videos"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-            del inputs["pixel_values_videos"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
@@ -258,7 +215,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
             # remove one image but leave the image token in text
             input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
@@ -267,7 +224,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
             # two images and two image tokens don't raise an error
@@ -282,16 +239,16 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing()
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
-        super().test_training_gradient_checkpointing_use_reentrant()
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing_use_reentrant_false()
 
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_can_init_all_missing_weights(self):
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
+        super().test_training_gradient_checkpointing_use_reentrant_true()
+
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
     @unittest.skip(
@@ -308,18 +265,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     @unittest.skip("ViT PE / TimmWrapperModel cannot be tested with meta device")
     def test_can_be_initialized_on_meta(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_0_greedy(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
-        pass
-
-    @unittest.skip("Specifying both inputs_embeds and pixel_values are not supported for PerceptionLM")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
     ## Skip flash attention releated tests below
@@ -371,6 +316,15 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_generate_compilation_all_outputs(self):
         pass
 
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
+        # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.
+        return 2
+
 
 TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
@@ -378,7 +332,6 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 @require_torch
 @require_bitsandbytes
 @slow
-@require_read_token
 class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)

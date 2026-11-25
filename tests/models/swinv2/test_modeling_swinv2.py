@@ -22,6 +22,7 @@ from transformers import Swinv2Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -40,62 +41,41 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class Swinv2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=32,
-        patch_size=2,
-        num_channels=3,
-        embed_dim=16,
-        depths=[1, 2, 1],
-        num_heads=[2, 2, 4],
-        window_size=2,
-        mlp_ratio=2.0,
-        qkv_bias=True,
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        drop_path_rate=0.1,
-        hidden_act="gelu",
-        use_absolute_embeddings=False,
-        patch_norm=True,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        is_training=True,
-        scope=None,
-        use_labels=True,
-        type_sequence_label_size=10,
-        encoder_stride=8,
-        out_features=["stage1", "stage2"],
-        out_indices=[1, 2],
-    ):
+class Swinv2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 32,
+        "patch_size": 2,
+        "num_channels": 3,
+        "embed_dim": 16,
+        "depths": [1, 2, 1],
+        "num_heads": [2, 2, 4],
+        "window_size": 2,
+        "mlp_ratio": 2.0,
+        "qkv_bias": True,
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "drop_path_rate": 0.1,
+        "hidden_act": "gelu",
+        "use_absolute_embeddings": False,
+        "patch_norm": True,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-5,
+        "is_training": True,
+        "scope": None,
+        "use_labels": True,
+        "type_sequence_label_size": 10,
+        "encoder_stride": 8,
+        "out_features": ["stage1", "stage2"],
+        "out_indices": [1, 2],
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.embed_dim = embed_dim
-        self.depths = depths
-        self.num_heads = num_heads
-        self.window_size = window_size
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.drop_path_rate = drop_path_rate
-        self.hidden_act = hidden_act
-        self.use_absolute_embeddings = use_absolute_embeddings
-        self.patch_norm = patch_norm
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.is_training = is_training
-        self.scope = scope
-        self.use_labels = use_labels
-        self.type_sequence_label_size = type_sequence_label_size
-        self.encoder_stride = encoder_stride
-        self.out_features = out_features
-        self.out_indices = out_indices
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -176,7 +156,7 @@ class Swinv2ModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
         # test greyscale images
@@ -187,7 +167,7 @@ class Swinv2ModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -206,6 +186,8 @@ class Swinv2ModelTester:
 
 @require_torch
 class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Swinv2ModelTester
+
     all_model_classes = (
         (
             Swinv2Model,
@@ -223,7 +205,6 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = Swinv2ModelTester(self)
@@ -245,11 +226,6 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
-
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip(reason="Swinv2 does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -469,7 +445,7 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.3947, -0.4306, 0.0026]).to(torch_device)
+        expected_slice = torch.tensor([-0.3951, -0.4292, 0.0025]).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
@@ -515,6 +491,8 @@ class Swinv2ModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class Swinv2BackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = Swinv2ModelTester
+
     all_model_classes = (Swinv2Backbone,) if is_torch_available() else ()
     config_class = Swinv2Config
 

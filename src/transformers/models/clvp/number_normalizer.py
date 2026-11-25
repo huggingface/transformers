@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,7 @@
 
 """English Normalizer class for CLVP."""
 
-import sys
-
-
-if sys.version_info >= (3, 11):
-    # Atomic grouping support was only added to the core RE in Python 3.11
-    import re
-else:
-    import regex as re
+import re
 
 
 class EnglishNormalizer:
@@ -175,7 +167,7 @@ class EnglishNormalizer:
         ordinal_suffixes = {1: "st", 2: "nd", 3: "rd"}
 
         num = int(num.group(0)[:-2])
-        if 10 <= num % 100 and num % 100 <= 20:
+        if num % 100 >= 10 and num % 100 <= 20:
             suffix = "th"
         else:
             suffix = ordinal_suffixes.get(num % 10, "th")

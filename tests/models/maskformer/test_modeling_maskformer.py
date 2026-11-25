@@ -27,12 +27,12 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -45,41 +45,33 @@ if is_torch_available():
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
 
     if is_vision_available():
-        from transformers import MaskFormerImageProcessor
+        from transformers import MaskFormerImageProcessorPil
 
 if is_vision_available():
     from PIL import Image
 
 
-class MaskFormerModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        is_training=True,
-        use_auxiliary_loss=False,
-        num_queries=10,
-        num_channels=3,
-        min_size=32 * 4,
-        max_size=32 * 6,
-        num_labels=4,
-        mask_feature_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_auxiliary_loss = use_auxiliary_loss
-        self.num_queries = num_queries
-        self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
-        self.num_labels = num_labels
-        self.mask_feature_size = mask_feature_size
+class MaskFormerModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "is_training": True,
+        "use_auxiliary_loss": False,
+        "num_queries": 10,
+        "num_channels": 3,
+        "min_size": 128,  # 32 * 4
+        "max_size": 192,  # 32 * 6
+        "num_labels": 4,
+        "mask_feature_size": 32,
         # This is passed to the decoder config. We add it to the model tester here for testing
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+    }
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -197,6 +189,8 @@ class MaskFormerModelTester:
 
 @require_torch
 class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = MaskFormerModelTester
+
     all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": MaskFormerModel, "image-segmentation": MaskFormerForInstanceSegmentation}
@@ -208,7 +202,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     test_missing_keys = False
     zero_init_hidden_state = True
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MaskFormerModelTester(self)
@@ -246,6 +239,12 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_maskformer_instance_segmentation_head_model(*config_and_inputs)
 
+    @unittest.skip(
+        reason="MaskFormer loads only the decoder from DETR and needs 2-3 conversion from the whole mapping"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
     @unittest.skip(reason="MaskFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -260,13 +259,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="MaskFormer does not use token embeddings")
     def test_resize_tokens_embeddings(self):
-        pass
-
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason="MaskFormer has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @slow
@@ -450,25 +442,32 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_backbone_selection(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [1, 2, 3]}
-        config.use_pretrained_backbone = True
+        config_dict = config.to_dict()
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [1, 2, 3]}
+        config_dict["use_pretrained_backbone"] = True
 
         # Load a timm backbone
         # We can't load transformer checkpoint with timm backbone, as we can't specify features_only and out_indices
-        config.backbone = "resnet18"
-        config.use_timm_backbone = True
+        config_dict["backbone"] = "resnet18"
+        config_dict["use_timm_backbone"] = True
+        config = config.__class__(**config_dict)
 
         for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
+            model = model_class(copy.deepcopy(config)).to(torch_device).eval()
             if model.__class__.__name__ == "MaskFormerModel":
                 self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
             elif model.__class__.__name__ == "MaskFormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
 
         # Load a HF backbone
-        config.backbone = "microsoft/resnet-18"
-        config.use_timm_backbone = False
+        config_dict = config.to_dict()
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [1, 2, 3]}
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["use_timm_backbone"] = False
+        config = config.__class__(**config_dict)
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device).eval()
@@ -476,6 +475,10 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 self.assertEqual(model.pixel_level_module.encoder.out_indices, [1, 2, 3])
             elif model.__class__.__name__ == "MaskFormerForUniversalSegmentation":
                 self.assertEqual(model.model.pixel_level_module.encoder.out_indices, [1, 2, 3])
+
+    @unittest.skip(reason="hidden states are concatenated weirdly inside the model")
+    def test_can_capture_specific_layers_hidden_states(self):
+        pass
 
 
 TOLERANCE = 2e-4
@@ -493,7 +496,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-small-coco")
+            MaskFormerImageProcessorPil.from_pretrained("facebook/maskformer-swin-small-coco")
             if is_vision_available()
             else None
         )

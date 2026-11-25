@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Grounding DINO model."""
 
 import collections
+import copy
 import inspect
 import math
 import re
@@ -30,7 +31,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    is_flaky,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -48,6 +48,9 @@ if is_torch_available():
     import torch
 
     from transformers import GroundingDinoConfig, GroundingDinoForObjectDetection, GroundingDinoModel
+    from transformers.models.grounding_dino.modeling_grounding_dino import (
+        generate_masks_with_special_tokens_and_transfer_map,
+    )
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -94,7 +97,7 @@ class GroundingDinoModelTester:
     def __init__(
         self,
         parent,
-        batch_size=4,
+        batch_size=2,
         is_training=True,
         use_labels=True,
         hidden_size=32,
@@ -106,7 +109,7 @@ class GroundingDinoModelTester:
         attention_probs_dropout_prob=0.1,
         num_queries=2,
         num_channels=3,
-        image_size=98,
+        image_size=128,
         n_targets=8,
         num_labels=2,
         num_feature_levels=4,
@@ -318,6 +321,19 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_feed_forward_chunking(self):
         pass
 
+    def test_tie_weights_is_not_modified(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.tie_word_embeddings = True
+
+        config.decoder_bbox_embed_share = False
+        model = GroundingDinoForObjectDetection(config)
+        self.assertFalse(r"bbox_embed.(?![0])\d+" in model._tied_weights_keys)
+
+        # if we update config attr, model's tied weights keys also change
+        config.decoder_bbox_embed_share = True
+        model = GroundingDinoForObjectDetection(config)
+        self.assertTrue(r"bbox_embed.(?![0])\d+" in model._tied_weights_keys)
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -514,59 +530,47 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             expected_arg_names = ["pixel_values", "input_ids"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    def test_different_timm_backbone(self):
+    def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-        config.use_timm_backbone = True
-        config.backbone_config = None
-        config.backbone_kwargs = {"in_chans": 3, "out_indices": (2, 3, 4)}
+        def _validate_backbone_init(config):
+            for model_class in self.all_model_classes:
+                model = model_class(copy.deepcopy(config))
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                if model_class.__name__ == "GroundingDinoForObjectDetection":
+                    expected_shape = (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_queries,
+                        config.max_text_len,
+                    )
+                    self.assertEqual(outputs.logits.shape, expected_shape)
 
-            if model_class.__name__ == "GroundingDinoForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    config.max_text_len,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
+                self.assertTrue(outputs)
 
-            self.assertTrue(outputs)
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
+        # let's test a random timm backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "tf_mobilenetv3_small_075"
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"in_chans": 3, "out_indices": (2, 3, 4)}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
-    @require_timm
-    def test_hf_backbone(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Load a pretrained HF checkpoint as backbone
-        config.backbone = "microsoft/resnet-18"
-        config.backbone_config = None
-        config.use_timm_backbone = False
-        config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if model_class.__name__ == "GroundingDinoForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    config.max_text_len,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-
-            self.assertTrue(outputs)
+        # Test a pretrained HF checkpoint as backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = False
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
     # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_two_stage_training with DeformableDetr->GroundingDino
     def test_two_stage_training(self):
@@ -583,6 +587,32 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
         loss = model(**inputs).loss
         loss.backward()
+
+    def test_text_masks_and_position_ids(self):
+        # "[CLS] a cat . a remote . [SEP]": each phrase attends to itself and restarts its position ids,
+        # the closing delimiter belongs to the phrase it closes
+        input_ids = torch.tensor([[101, 1037, 4937, 1012, 1037, 6556, 1012, 102]], device=torch_device)
+        special_tokens = torch.tensor([101, 102, 1012, 1029], device=torch_device)
+        attention_mask, position_ids = generate_masks_with_special_tokens_and_transfer_map(input_ids, special_tokens)
+
+        self.assertListEqual(position_ids.tolist(), [[0, 0, 1, 2, 0, 1, 2, 0]])
+        expected_mask = torch.eye(8, dtype=torch.bool, device=torch_device)
+        expected_mask[1:4, 1:4] = True
+        expected_mask[4:7, 4:7] = True
+        self.assertTrue(torch.equal(attention_mask[0], expected_mask))
+
+    def test_text_position_embeddings_from_position_ids(self):
+        # integer position ids must be encoded as floats, not truncated to integer sinusoids
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        layer = GroundingDinoModel(config).to(torch_device).encoder.layers[0]
+        text_features = torch.randn(2, 5, config.d_model, device=torch_device)
+        position_ids = torch.arange(5, device=torch_device).expand(2, -1)
+
+        from_ids = layer.get_text_position_embeddings(text_features, None, position_ids)
+        from_arange = layer.get_text_position_embeddings(text_features, None, None)
+
+        self.assertEqual(from_ids.dtype, text_features.dtype)
+        torch.testing.assert_close(from_ids, from_arange)
 
     def test_tied_weights_keys(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -663,8 +693,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]],
-                ("cuda", 8): [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]],
+                (None, None): [[-4.8936, -0.1946, -0.2204], [-4.9635, -0.3782, -0.4013], [-5.9522, -3.3881, -3.3221]],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -682,8 +711,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.4526, 0.4082],
-                ("cuda", 8): [0.4524, 0.4074],
+                (None, None): [0.4515, 0.4066],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -715,7 +743,6 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(results["text_labels"], expected_labels)
 
     @require_torch_accelerator
-    @is_flaky()
     def test_inference_object_detection_head_equivalence_cpu_accelerator(self):
         processor = self.default_processor
         image = prepare_img()
@@ -735,27 +762,51 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             gpu_outputs = model(**encoding)
 
         # 3. assert equivalence
-        for key in cpu_outputs:
-            torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
-
-        expected_logits = torch.tensor(
-            [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
+        # Pre-top-k encoder outputs are index-aligned and only affected by float noise.
+        torch.testing.assert_close(
+            cpu_outputs.encoder_last_hidden_state_vision,
+            gpu_outputs.encoder_last_hidden_state_vision.cpu(),
+            rtol=1e-2,
+            atol=1e-2,
         )
-        torch.testing.assert_close(cpu_outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            cpu_outputs.encoder_last_hidden_state_text,
+            gpu_outputs.encoder_last_hidden_state_text.cpu(),
+            rtol=1e-2,
+            atol=1e-2,
+        )
 
-        # assert postprocessing
-        results_cpu = processor.image_processor.post_process_object_detection(
-            cpu_outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
-        )[0]
+        # 4. Post-top-k outputs are indexed by query rank, so compare detections
+        # sorted by score instead of by query index.
+        target_sizes = [image.size[::-1]]
+        cpu_result, gpu_result = (
+            processor.post_process_grounded_object_detection(
+                outputs,
+                encoding.input_ids.cpu(),
+                threshold=0.4,
+                text_threshold=0.3,
+                target_sizes=target_sizes,
+            )[0]
+            for outputs in (cpu_outputs, gpu_outputs)
+        )
 
-        result_gpu = processor.image_processor.post_process_object_detection(
-            gpu_outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
-        )[0]
+        cpu_order = cpu_result["scores"].argsort(descending=True)
+        gpu_order = gpu_result["scores"].argsort(descending=True)
+        self.assertEqual(len(cpu_order), len(gpu_order))
 
-        torch.testing.assert_close(results_cpu["scores"], result_gpu["scores"].cpu(), rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(results_cpu["boxes"], result_gpu["boxes"].cpu(), rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            cpu_result["scores"][cpu_order],
+            gpu_result["scores"].cpu()[gpu_order.cpu()],
+            atol=1e-2,
+            rtol=1e-2,
+        )
+        torch.testing.assert_close(
+            cpu_result["boxes"][cpu_order],
+            gpu_result["boxes"].cpu()[gpu_order.cpu()],
+            atol=1.0,  # pixels
+            rtol=1e-2,
+        )
 
-    @is_flaky()
     def test_cross_attention_mask(self):
         model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
 
@@ -778,9 +829,44 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             outputs2 = model(**encoding2)
             outputs_batched = model(**encoding_batched)
 
-        torch.testing.assert_close(outputs1.logits, outputs_batched.logits[:1], rtol=1e-3, atol=1e-3)
-        # For some reason 12 elements are > 1e-3, but the rest are fine
-        self.assertTrue(torch.allclose(outputs2.logits, outputs_batched.logits[1:], atol=1.8e-3))
+        target_sizes = [image.size[::-1]]
+        post_process_kwargs = {"threshold": 0.3, "text_threshold": 0.3}
+
+        single_results = [
+            processor.post_process_grounded_object_detection(
+                outputs,
+                encoding.input_ids,
+                target_sizes=target_sizes,
+                **post_process_kwargs,
+            )[0]
+            for outputs, encoding in [(outputs1, encoding1), (outputs2, encoding2)]
+        ]
+        batched_results = processor.post_process_grounded_object_detection(
+            outputs_batched,
+            encoding_batched.input_ids,
+            target_sizes=target_sizes * len(text_batched),
+            **post_process_kwargs,
+        )
+
+        # Detections come out in query order, which can change when near-tied
+        # proposals swap rank under float noise, so compare sorted by score.
+        for single, batched in zip(single_results, batched_results):
+            single_order = single["scores"].argsort(descending=True)
+            batched_order = batched["scores"].argsort(descending=True)
+
+            self.assertEqual(len(single["scores"]), len(batched["scores"]))
+            torch.testing.assert_close(
+                single["scores"][single_order],
+                batched["scores"][batched_order],
+                atol=1e-2,
+                rtol=1e-2,
+            )
+            torch.testing.assert_close(
+                single["boxes"][single_order],
+                batched["boxes"][batched_order],
+                atol=1.0,  # boxes are in pixels
+                rtol=1e-2,
+            )
 
     def test_grounding_dino_loss(self):
         ds = load_dataset("EduardoPacheco/aquarium-sample", split="train")
@@ -808,56 +894,55 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         expected_loss_dicts = Expectations(
             {
                  ("xpu", 3): {
-                                    "loss_ce": torch.tensor(1.1147),
-                                    "loss_bbox": torch.tensor(0.2031),
-                                    "loss_giou": torch.tensor(0.5819),
-                                    "loss_ce_0": torch.tensor(1.1941),
-                                    "loss_bbox_0": torch.tensor(0.1978),
-                                    "loss_giou_0": torch.tensor(0.5524),
-                                    "loss_ce_1": torch.tensor(1.1621),
-                                    "loss_bbox_1": torch.tensor(0.1909),
-                                    "loss_giou_1": torch.tensor(0.5892),
-                                    "loss_ce_2": torch.tensor(1.1641),
-                                    "loss_bbox_2": torch.tensor(0.1892),
-                                    "loss_giou_2": torch.tensor(0.5626),
-                                    "loss_ce_3": torch.tensor(1.1943),
-                                    "loss_bbox_3": torch.tensor(0.1941),
-                                    "loss_giou_3": torch.tensor(0.5592),
-                                    "loss_ce_4": torch.tensor(1.0956),
-                                    "loss_bbox_4": torch.tensor(0.2037),
-                                    "loss_giou_4": torch.tensor(0.5813),
-                                    "loss_ce_enc": torch.tensor(16226.3164),
-                                    "loss_bbox_enc": torch.tensor(0.3063),
-                                    "loss_giou_enc": torch.tensor(0.7380),
+                    "loss_ce": torch.tensor(1.1147),
+                    "loss_bbox": torch.tensor(0.2031),
+                    "loss_giou": torch.tensor(0.5819),
+                    "loss_ce_0": torch.tensor(1.1941),
+                    "loss_bbox_0": torch.tensor(0.1978),
+                    "loss_giou_0": torch.tensor(0.5524),
+                    "loss_ce_1": torch.tensor(1.1621),
+                    "loss_bbox_1": torch.tensor(0.1909),
+                    "loss_giou_1": torch.tensor(0.5892),
+                    "loss_ce_2": torch.tensor(1.1641),
+                    "loss_bbox_2": torch.tensor(0.1892),
+                    "loss_giou_2": torch.tensor(0.5626),
+                    "loss_ce_3": torch.tensor(1.1943),
+                    "loss_bbox_3": torch.tensor(0.1941),
+                    "loss_giou_3": torch.tensor(0.5592),
+                    "loss_ce_4": torch.tensor(1.0956),
+                    "loss_bbox_4": torch.tensor(0.2037),
+                    "loss_giou_4": torch.tensor(0.5813),
+                    "loss_ce_enc": torch.tensor(16226.3164),
+                    "loss_bbox_enc": torch.tensor(0.3063),
+                    "loss_giou_enc": torch.tensor(0.7380),
                 },
                 ("cuda", None): {
-                                    "loss_ce": torch.tensor(1.1147),
-                                    "loss_bbox": torch.tensor(0.2031),
-                                    "loss_giou": torch.tensor(0.5819),
-                                    "loss_ce_0": torch.tensor(1.1941),
-                                    "loss_bbox_0": torch.tensor(0.1978),
-                                    "loss_giou_0": torch.tensor(0.5524),
-                                    "loss_ce_1": torch.tensor(1.1621),
-                                    "loss_bbox_1": torch.tensor(0.1909),
-                                    "loss_giou_1": torch.tensor(0.5892),
-                                    "loss_ce_2": torch.tensor(1.1641),
-                                    "loss_bbox_2": torch.tensor(0.1892),
-                                    "loss_giou_2": torch.tensor(0.5626),
-                                    "loss_ce_3": torch.tensor(1.1943),
-                                    "loss_bbox_3": torch.tensor(0.1941),
-                                    "loss_giou_3": torch.tensor(0.5607),
-                                    "loss_ce_4": torch.tensor(1.0956),
-                                    "loss_bbox_4": torch.tensor(0.2008),
-                                    "loss_giou_4": torch.tensor(0.5836),
-                                    "loss_ce_enc": torch.tensor(16226.3164),
-                                    "loss_bbox_enc": torch.tensor(0.3063),
-                                    "loss_giou_enc": torch.tensor(0.7380),
+                    "loss_ce": torch.tensor(1.1572),
+                    "loss_bbox": torch.tensor(0.1923),
+                    "loss_giou": torch.tensor(0.5801),
+                    "loss_ce_0": torch.tensor(1.2214),
+                    "loss_bbox_0": torch.tensor(0.2008),
+                    "loss_giou_0": torch.tensor(0.5482),
+                    "loss_ce_1": torch.tensor(1.1832),
+                    "loss_bbox_1": torch.tensor(0.1859),
+                    "loss_giou_1": torch.tensor(0.5743),
+                    "loss_ce_2": torch.tensor(1.2069),
+                    "loss_bbox_2": torch.tensor(0.1808),
+                    "loss_giou_2": torch.tensor(0.5559),
+                    "loss_ce_3": torch.tensor(1.2194),
+                    "loss_bbox_3": torch.tensor(0.1853),
+                    "loss_giou_3": torch.tensor(0.5565),
+                    "loss_ce_4": torch.tensor(1.0821),
+                    "loss_bbox_4": torch.tensor(0.1964),
+                    "loss_giou_4": torch.tensor(0.5825),
+                    "loss_ce_enc": torch.tensor(16224.2344),
+                    "loss_bbox_enc": torch.tensor(0.3273),
+                    "loss_giou_enc": torch.tensor(0.7411),
                 },
             }
         )  # fmt: skip
         expected_loss_dict = expected_loss_dicts.get_expectation()
-
-        expected_loss = torch.tensor(32482.2305)
+        expected_loss = torch.tensor(32478.2305)
 
         for key in expected_loss_dict:
             torch.testing.assert_close(outputs.loss_dict[key], expected_loss_dict[key], rtol=1e-5, atol=1e-3)

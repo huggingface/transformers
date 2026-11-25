@@ -21,12 +21,11 @@ Original repository: https://github.com/facebookresearch/segment-anything-3
 import argparse
 import gc
 import os
-from typing import Optional
 
 import regex as re
 import torch
 
-from transformers import CLIPTokenizerFast, Sam3Config, Sam3ImageProcessorFast, Sam3Model, Sam3Processor
+from transformers import CLIPTokenizerFast, Sam3Config, Sam3ImageProcessor, Sam3Model, Sam3Processor
 from transformers.utils import logging
 
 
@@ -266,8 +265,8 @@ def load_original_state_dict(checkpoint_path: str) -> dict[str, torch.Tensor]:
 
 
 def get_sam3_config(
-    vision_config: Optional[dict] = None,
-    text_config: Optional[dict] = None,
+    vision_config: dict | None = None,
+    text_config: dict | None = None,
 ) -> Sam3Config:
     """
     Create SAM3 configuration.
@@ -297,9 +296,9 @@ def get_sam3_config(
 def convert_sam3_checkpoint(
     checkpoint_path: str,
     output_path: str,
-    config: Optional[Sam3Config] = None,
+    config: Sam3Config | None = None,
     push_to_hub: bool = False,
-    repo_id: Optional[str] = None,
+    repo_id: str | None = None,
 ):
     """
     Convert SAM3 checkpoint from original format to HuggingFace format.
@@ -384,7 +383,7 @@ def convert_sam3_checkpoint(
 
     # Save processor
     print("Creating and saving processor...")
-    image_processor = Sam3ImageProcessorFast()
+    image_processor = Sam3ImageProcessor()
     tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32", max_length=32, model_max_length=32)
     processor = Sam3Processor(image_processor=image_processor, tokenizer=tokenizer)
     processor.save_pretrained(output_path)

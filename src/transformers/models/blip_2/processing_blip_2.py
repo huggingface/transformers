@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,51 +15,28 @@
 Processor class for BLIP-2.
 """
 
-from typing import Optional, Union
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Blip2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
+@auto_docstring
+class Blip2Processor(ProcessorMixin):
+    text_kwargs = {
+        "return_token_type_ids": False,
     }
 
-
-class Blip2Processor(ProcessorMixin):
-    r"""
-    Constructs a BLIP-2 processor which wraps a BLIP image processor and an OPT/T5 tokenizer into a single processor.
-
-    [`BlipProcessor`] offers all the functionalities of [`BlipImageProcessor`] and [`AutoTokenizer`]. See the docstring
-    of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`BlipImageProcessor`):
-            An instance of [`BlipImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
+    def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
+        r"""
         num_query_tokens (`int`, *optional*):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
-    """
-
-    def __init__(self, image_processor, tokenizer, num_query_tokens=None, **kwargs):
+        """
         tokenizer.return_token_type_ids = False
         if not hasattr(tokenizer, "image_token"):
             self.image_token = AddedToken("<image>", normalized=False, special=True)
@@ -71,34 +47,16 @@ class Blip2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
-        **kwargs: Unpack[Blip2ProcessorKwargs],
+        images: ImageInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchEncoding:
-        """
-        This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`BertTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-        Args:
-            images (`ImageInput`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
-        """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
         output_kwargs = self._merge_kwargs(
-            Blip2ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -113,7 +71,7 @@ class Blip2Processor(ProcessorMixin):
         if text is not None:
             if isinstance(text, str):
                 text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
+            elif not isinstance(text, list) or not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
@@ -140,5 +98,28 @@ class Blip2Processor(ProcessorMixin):
         encoding = BatchFeature(encoding, tensor_type=return_tensors)
         return encoding
 
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.num_query_tokens] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
+
+__getattr__ = deprecate_attr(__name__, rename={"Blip2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Blip2Processor"]

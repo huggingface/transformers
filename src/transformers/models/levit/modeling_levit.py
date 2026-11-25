@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,11 @@
 
 import itertools
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
@@ -35,28 +34,28 @@ from .configuration_levit import LevitConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LevitForImageClassificationWithTeacher`].
     """
 )
+@dataclass
 class LevitForImageClassificationWithTeacherOutput(ModelOutput):
     r"""
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores as the average of the `cls_logits` and `distillation_logits`.
-    cls_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    cls_logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
         class token).
-    distillation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    distillation_logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
         distillation token).
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    cls_logits: Optional[torch.FloatTensor] = None
-    distillation_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    logits: torch.Tensor | None = None
+    cls_logits: torch.Tensor | None = None
+    distillation_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
 
 
 class LevitConvEmbeddings(nn.Module):
@@ -165,6 +164,7 @@ class LevitAttention(nn.Module):
 
         points = list(itertools.product(range(resolution), range(resolution)))
         len_points = len(points)
+        self.len_points = len_points
         attention_offsets, indices = {}, []
         for p1 in points:
             for p2 in points:
@@ -172,12 +172,11 @@ class LevitAttention(nn.Module):
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 indices.append(attention_offsets[offset])
+        self.indices = indices
 
         self.attention_bias_cache = {}
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
-        self.register_buffer(
-            "attention_bias_idxs", torch.LongTensor(indices).view(len_points, len_points), persistent=False
-        )
+        self.attention_bias_idxs = nn.Buffer(torch.LongTensor(indices).view(len_points, len_points), persistent=False)
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -243,6 +242,8 @@ class LevitAttentionSubsample(nn.Module):
         points = list(itertools.product(range(resolution_in), range(resolution_in)))
         points_ = list(itertools.product(range(resolution_out), range(resolution_out)))
         len_points, len_points_ = len(points), len(points_)
+        self.len_points_ = len_points_
+        self.len_points = len_points
         attention_offsets, indices = {}, []
         for p1 in points_:
             for p2 in points:
@@ -251,11 +252,10 @@ class LevitAttentionSubsample(nn.Module):
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 indices.append(attention_offsets[offset])
+        self.indices = indices
 
         self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
-        self.register_buffer(
-            "attention_bias_idxs", torch.LongTensor(indices).view(len_points_, len_points), persistent=False
-        )
+        self.attention_bias_idxs = nn.Buffer(torch.LongTensor(indices).view(len_points_, len_points), persistent=False)
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -472,10 +472,22 @@ class LevitPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     _no_split_modules = ["LevitResidualLayer"]
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LevitAttention):
+            init.copy_(
+                module.attention_bias_idxs, torch.LongTensor(module.indices).view(module.len_points, module.len_points)
+            )
+        elif isinstance(module, LevitAttentionSubsample):
+            init.copy_(
+                module.attention_bias_idxs,
+                torch.LongTensor(module.indices).view(module.len_points_, module.len_points),
+            )
+
 
 @auto_docstring
 class LevitModel(LevitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LevitConfig):
         super().__init__(config)
         self.config = config
         self.patch_embeddings = LevitPatchEmbeddings(config)
@@ -486,15 +498,15 @@ class LevitModel(LevitPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -528,7 +540,7 @@ class LevitModel(LevitPreTrainedModel):
     """
 )
 class LevitForImageClassification(LevitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LevitConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
@@ -547,19 +559,13 @@ class LevitForImageClassification(LevitPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | ImageClassifierOutputWithNoAttention:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
@@ -591,7 +597,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
     """
 )
 class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LevitConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
@@ -615,12 +621,12 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, LevitForImageClassificationWithTeacherOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | LevitForImageClassificationWithTeacherOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 

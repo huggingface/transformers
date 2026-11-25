@@ -9,16 +9,15 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-06-20 and added to Hugging Face Transformers on 2021-02-02.*
+*This model was published in HF papers on 2020-06-20 and contributed to Hugging Face Transformers on 2021-02-02.*
 
 # Wav2Vec2
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -40,7 +39,10 @@ recognition with limited amounts of labeled data.*
 
 This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
 
-Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingface.co/docs/transformers/en/model_doc/wav2vec2-bert) - it's pretrained on 4.5M hours of audio. We especially recommend using it for fine-tuning tasks, e.g. as per [this guide](https://huggingface.co/blog/fine-tune-w2v2-bert).
+Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](./wav2vec2-bert) - it's pretrained on 4.5M hours of audio. We especially recommend using it for fine-tuning tasks, e.g. as per [this guide](https://huggingface.co/blog/fine-tune-w2v2-bert).
+
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 ## Usage tips
 
@@ -50,7 +52,7 @@ Note: Meta (FAIR) released a new version of [Wav2Vec2-BERT 2.0](https://huggingf
 
 ## Using Flash Attention 2
 
-Flash Attention 2 is an faster, optimized version of the model.
+Flash Attention 2 is a faster, optimized version of the model.
 
 ### Installation
 
@@ -64,18 +66,19 @@ pip install -U flash-attn --no-build-isolation
 
 ### Usage
 
-To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
+To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`~PreTrainedModel.from_pretrained`]. We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
->>> from transformers import Wav2Vec2Model
+from transformers import Wav2Vec2Model
 
-model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", dtype=torch.float16, attn_implementation="flash_attention_2").to(device)
+
+model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", attn_implementation="flash_attention_2", device_map="auto")
 ...
 ```
 
 ### Expected speedups
 
-Below is an expected speedup diagram comparing the pure inference time between the native implementation in transformers of the `facebook/wav2vec2-large-960h-lv60-self` model and the flash-attention-2 and sdpa (scale-dot-product-attention) versions. . We show the average speedup obtained on the `librispeech_asr` `clean` validation split:
+Below is an expected speedup diagram comparing the pure inference time between the native implementation in transformers of the `facebook/wav2vec2-large-960h-lv60-self` model and the flash-attention-2 and sdpa (scale-dot-product-attention) versions. We show the average speedup obtained on the `librispeech_asr` `clean` validation split:
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/kamilakesbi/transformers_image_doc/resolve/main/data/Wav2Vec2_speedup.png">
@@ -88,7 +91,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="audio-classification"/>
 
 - A notebook on how to [leverage a pretrained Wav2Vec2 model for emotion classification](https://colab.research.google.com/github/m3hrdadfi/soxan/blob/main/notebooks/Emotion_recognition_in_Greek_speech_using_Wav2Vec2.ipynb). 🌎
-- [`Wav2Vec2ForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
+- [`Wav2Vec2ForCTC`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
 - [Audio classification task guide](../tasks/audio_classification)
 
 <PipelineTag pipeline="automatic-speech-recognition"/>
@@ -134,6 +137,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 ## Wav2Vec2ProcessorWithLM
 
+> [!WARNING]
+> [`Wav2Vec2ProcessorWithLM`] and n-gram language model decoding with pyctcdecode + kenlm are deprecated and will be
+> removed in Transformers v6. They require pyctcdecode and kenlm, which are no longer installed with
+> `transformers[audio]`. To keep language model decoding, call pyctcdecode directly, see
+> [Migrating to pyctcdecode](#migrating-to-pyctcdecode).
+
 [[autodoc]] Wav2Vec2ProcessorWithLM
     - __call__
     - pad
@@ -144,60 +153,117 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 ### Decoding multiple audios
 
+> [!WARNING]
+> This example uses the deprecated [`Wav2Vec2ProcessorWithLM`]. For new code, pass a `multiprocessing.Pool` to
+> pyctcdecode's `decode_beams_batch` instead, see [Migrating to pyctcdecode](#migrating-to-pyctcdecode).
+
 If you are planning to decode multiple batches of audios, you should consider using [`~Wav2Vec2ProcessorWithLM.batch_decode`] and passing an instantiated `multiprocessing.Pool`.
 Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower than calling [`~Wav2Vec2ProcessorWithLM.decode`] for each audio individually, as it internally instantiates a new `Pool` for every call. See the example below:
 
 ```python
->>> # Let's see how to use a user-managed pool for batch decoding multiple audios
->>> from multiprocessing import get_context
->>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC
-from accelerate import Accelerator
->>> from datasets import load_dataset
->>> import datasets
->>> import torch
+# Let's see how to use a user-managed pool for batch decoding multiple audios
+from multiprocessing import get_context
 
->>> device = Accelerator().device
->>> # import model, feature extractor, tokenizer
->>> model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm").to(device)
->>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
+import datasets
+import torch
+from datasets import load_dataset
 
->>> # load example dataset
->>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
->>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+from transformers import AutoModelForCTC, AutoProcessor
 
 
->>> def map_to_array(example):
-...     example["speech"] = example["audio"]["array"]
-...     return example
+# import model, feature extractor, tokenizer
+model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm", device_map="auto")
+processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
+
+# load example dataset
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
 
->>> # prepare speech data for batch inference
->>> dataset = dataset.map(map_to_array, remove_columns=["audio"])
+def map_to_array(example):
+    example["speech"] = example["audio"]["array"]
+    return example
 
 
->>> def map_to_pred(batch, pool):
-...     device = Accelerator().device
-...     inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt")
-...     inputs = {k: v.to(device) for k, v in inputs.items()}
-
-...     with torch.no_grad():
-...         logits = model(**inputs).logits
-
-...     transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
-...     batch["transcription"] = transcription
-...     return batch
+# prepare speech data for batch inference
+dataset = dataset.map(map_to_array, remove_columns=["audio"])
 
 
->>> # note: pool should be instantiated *after* `Wav2Vec2ProcessorWithLM`.
->>> #       otherwise, the LM won't be available to the pool's sub-processes
->>> # select number of processes and batch_size based on number of CPU cores available and on dataset size
->>> with get_context("fork").Pool(processes=2) as pool:
-...     result = dataset.map(
-...         map_to_pred, batched=True, batch_size=2, fn_kwargs={"pool": pool}, remove_columns=["speech"]
-...     )
+def map_to_pred(batch, pool):
+    inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt").to(model.device)
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
->>> result["transcription"][:2]
+    with torch.no_grad():
+        logits = model(**inputs).logits
+
+    transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
+    batch["transcription"] = transcription
+    return batch
+
+
+# note: pool should be instantiated *after* `Wav2Vec2ProcessorWithLM`.
+#       otherwise, the LM won't be available to the pool's sub-processes
+# select number of processes and batch_size based on number of CPU cores available and on dataset size
+with get_context("fork").Pool(processes=2) as pool:
+    result = dataset.map(
+        map_to_pred, batched=True, batch_size=2, fn_kwargs={"pool": pool}, remove_columns=["speech"]
+    )
+
+result["transcription"][:2]
 ['MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL', "NOR IS MISTER COULTER'S MANNER LESS INTERESTING THAN HIS MATTER"]
+```
+
+### Migrating to pyctcdecode
+
+[`Wav2Vec2ProcessorWithLM`] is a thin wrapper around [pyctcdecode](https://github.com/kensho-technologies/pyctcdecode).
+Load the feature extractor and tokenizer with [`Wav2Vec2Processor`], load the language model with pyctcdecode, and call
+pyctcdecode on the logits. This gives the same transcriptions as [`~Wav2Vec2ProcessorWithLM.batch_decode`]. It
+requires [pyctcdecode](https://github.com/kensho-technologies/pyctcdecode) and [kenlm](https://github.com/kpu/kenlm),
+which are no longer installed with `transformers[audio]`.
+
+```python
+import torch
+from pyctcdecode import BeamSearchDecoderCTC
+
+from transformers import AutoModelForCTC, Wav2Vec2Processor
+
+
+repo = "patrickvonplaten/wav2vec2-base-100h-with-lm"
+model = AutoModelForCTC.from_pretrained(repo)
+processor = Wav2Vec2Processor.from_pretrained(repo)  # feature extractor + tokenizer
+# only download the language model and the alphabet, not the model weights
+decoder = BeamSearchDecoderCTC.load_from_hf_hub(repo, allow_patterns=["language_model/*", "alphabet.json"])
+
+inputs = processor(audio, sampling_rate=16_000, padding=True, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits.cpu().numpy()
+
+# was: processor_with_lm.batch_decode(logits, alpha=0.5, beta=1.0, beam_width=50).text
+
+# `alpha`, `beta`, `unk_score_offset` and `lm_score_boundary` are set on the decoder (values that are not passed are kept)
+decoder.reset_params(alpha=0.5, beta=1.0)
+
+# drop the frames padded with -100, as `batch_decode` does
+logits_list = [sample[(sample != -100.0).all(axis=-1)] for sample in logits]
+
+# `beam_width`, `beam_prune_logp`, `token_min_logp`, `hotwords` and `hotword_weight` are decoding arguments
+beams = decoder.decode_beams_batch(None, logits_list, beam_width=50)
+transcription = [sample_beams[0][0] for sample_beams in beams]
+```
+
+- **Single sample**: `processor_with_lm.decode(logits[0]).text` becomes `decoder.decode_beams(logits[0])[0][0]`.
+- **Use `decode_beams` / `decode_beams_batch`**, not `decode` / `decode_batch`: the latter prune the beam history and
+  can give different transcriptions.
+- **Parallel decoding**: pass a `multiprocessing.Pool` created with a `fork` context as the first argument of
+  `decode_beams_batch`.
+- **Beams** are sorted best first and also carry the scores and word offsets:
+  - `decode_beams_batch`: `(text, word_offsets, logit_score, lm_score)`;
+  - `decode_beams`: `(text, last_lm_state, word_offsets, logit_score, lm_score)`.
+
+To decode without the language model, take the most likely token at each frame:
+
+```python
+transcription = processor.batch_decode(logits.argmax(-1))
 ```
 
 ## Wav2Vec2 specific outputs

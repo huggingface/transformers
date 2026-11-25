@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...generation.test_utils import assert_similar_generate_outputs
 from ...test_modeling_common import ids_tensor
 
 
@@ -53,7 +54,7 @@ class BloomModelTester(CausalLMModelTester):
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        past = outputs["past_key_values"]
+        past = outputs["cache"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -62,7 +63,7 @@ class BloomModelTester(CausalLMModelTester):
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -103,7 +104,7 @@ class BloomModelTester(CausalLMModelTester):
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=past, attention_mask=attn_mask)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -133,9 +134,7 @@ class BloomModelTester(CausalLMModelTester):
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=past)["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -194,6 +193,23 @@ class BloomModelTest(CausalLMModelTest, unittest.TestCase):
     def test_custom_4d_attention_mask(self):
         pass
 
+    def test_generate_static_cache_without_attention_mask(self):
+        # Regression test: `attention_mask=None` with a static cache used to pass a 4D mask to `build_alibi_tensor`
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = BloomForCausalLM(config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "pad_token_id": None,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
+
+        dynamic_output = model.generate(input_ids, **generation_kwargs)
+        static_output = model.generate(input_ids, cache_implementation="static", **generation_kwargs)
+        assert_similar_generate_outputs(dynamic_output, static_output)
+
 
 @require_torch
 class BloomIntegrationTest(unittest.TestCase):
@@ -224,7 +240,7 @@ class BloomIntegrationTest(unittest.TestCase):
         # TODO change the script (or just add skip) when building the env with tokenizers 0.12.0
         """
         # The config in this checkpoint has `bfloat16` as `dtype` -> model in `bfloat16`
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, dtype="auto")
+        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_safetensors=False, dtype="auto")
         model.eval()
 
         EMBEDDINGS_DS_BEFORE_LN_BF_16_MEAN = {
@@ -452,7 +468,9 @@ class BloomIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_hidden_states_transformers(self):
-        model = BloomModel.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(torch_device)
+        model = BloomModel.from_pretrained(
+            self.path_bigscience_model, use_safetensors=False, use_cache=False, dtype="auto"
+        ).to(torch_device)
         model.eval()
 
         EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
@@ -477,9 +495,9 @@ class BloomIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_logits(self):
-        model = BloomForCausalLM.from_pretrained(self.path_bigscience_model, use_cache=False, dtype="auto").to(
-            torch_device
-        )  # load in bf16
+        model = BloomForCausalLM.from_pretrained(
+            self.path_bigscience_model, use_safetensors=False, use_cache=False, dtype="auto"
+        ).to(torch_device)  # load in bf16
         model.eval()
 
         EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
@@ -518,7 +536,10 @@ class BloomIntegrationTest(unittest.TestCase):
         # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        # fp16 (config dtype) gives inf/nan with padding, bf16 degrades outputs -> use fp32
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750", dtype=torch.float32
+        ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m)
 
@@ -538,13 +559,16 @@ class BloomIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_batch_generation(self):
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        # fp16 (config dtype) gives inf/nan with padding, bf16 degrades outputs -> use fp32
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750", dtype=torch.float32
+        ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
 
-        inputs = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        inputs = tokenizer(input_sentence, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
         attention_mask = inputs["attention_mask"]
         greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
@@ -558,14 +582,17 @@ class BloomIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_batch_generation_padding(self):
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        # fp16 (config dtype) gives inf/nan with padding, bf16 degrades outputs -> use fp32
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750", dtype=torch.float32
+        ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
         input_sentence_without_pad = "Hello my name is"
 
-        input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
+        input_ids = tokenizer(input_sentence, return_tensors="pt", padding=True)
         input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
 
         input_ids, attention_mask = input_ids["input_ids"].to(torch_device), input_ids["attention_mask"]
@@ -588,7 +615,10 @@ class BloomIntegrationTest(unittest.TestCase):
     def test_batch_generated_text(self):
         path_560m = "bigscience/bloom-560m"
 
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
+        # fp16 (config dtype) gives inf/nan with padding, bf16 degrades outputs -> use fp32
+        model = BloomForCausalLM.from_pretrained(
+            path_560m, use_safetensors=False, use_cache=True, revision="gs555750", dtype=torch.float32
+        ).to(torch_device)
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained(path_560m, padding_side="left")
 

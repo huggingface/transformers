@@ -16,11 +16,8 @@
 from math import sqrt
 
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_accelerate_available, is_flute_available, is_hadamard_available, is_torch_available, logging
+from ..utils import is_flute_available, is_hadamard_available, is_torch_available, logging
 
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 if is_torch_available():
     import torch
@@ -569,7 +566,7 @@ def replace_with_higgs_linear(model, modules_to_not_convert: list[str] | None = 
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
-        with init_empty_weights():
+        with torch.device("meta"):
             if isinstance(module, nn.Linear):
                 new_module = HiggsLinear(
                     module.in_features,

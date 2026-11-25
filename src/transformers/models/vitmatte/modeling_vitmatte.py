@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HUST-VL and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,40 +14,39 @@
 """PyTorch ViTMatte model."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torch import nn
 
 from ... import initialization as init
+from ...backbone_utils import load_backbone
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring
-from ...utils.backbone_utils import load_backbone
 from .configuration_vitmatte import VitMatteConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of image matting models.
     """
 )
+@dataclass
 class ImageMattingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Loss.
-    alphas (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    alphas (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
         Estimated alpha values.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    alphas: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.Tensor | None = None
+    alphas: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
@@ -59,12 +57,16 @@ class VitMattePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
-        if isinstance(module, (nn.Conv2d, nn.BatchNorm2d)):
+        super()._init_weights(module)
+        if isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
 
 
 class VitMatteBasicConv3x3(nn.Module):
@@ -107,7 +109,7 @@ class VitMatteConvStream(nn.Module):
         if config.backbone_config is not None:
             in_channels = config.backbone_config.num_channels
 
-        out_channels = config.convstream_hidden_sizes
+        out_channels = list(config.convstream_hidden_sizes)
 
         self.convs = nn.ModuleList()
         self.conv_chans = [in_channels] + out_channels
@@ -216,7 +218,7 @@ class VitMatteDetailCaptureModule(nn.Module):
     """
 )
 class VitMatteForImageMatting(VitMattePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VitMatteConfig):
         super().__init__(config)
         self.config = config
 
@@ -229,11 +231,11 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.Tensor | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ):
         r"""
@@ -268,7 +270,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         >>> print(alphas.shape)
         torch.Size([1, 1, 640, 960])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

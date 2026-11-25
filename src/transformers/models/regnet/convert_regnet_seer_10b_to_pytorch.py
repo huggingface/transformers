@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from pprint import pprint
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -98,7 +96,7 @@ class FakeRegNetVisslWrapper(nn.Module):
 
 class FakeRegNetParams(RegNetParams):
     """
-    Used to instantiace a RegNet model from classy vision with the same depth as the 10B one but with super small
+    Used to instantiate a RegNet model from classy vision with the same depth as the 10B one but with super small
     parameters, so we can trace it in memory.
     """
 
@@ -159,12 +157,12 @@ def get_from_to_our_keys(model_name: str) -> dict[str, str]:
     return from_to_ours_keys
 
 
-def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: str | None = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 
     repo_id = "huggingface/label-files"
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text(encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     label2id = {v: k for k, v in id2label.items()}

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,6 +27,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -51,49 +51,40 @@ if is_vision_available():
 VJEPA_HF_MODEL = "facebook/vjepa2-vitl-fpc64-256"
 
 
-class VJEPA2ModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        image_size=16,
-        patch_size=16,
-        num_channels=3,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_frames=2,
-        mlp_ratio=1,
-        pred_hidden_size=32,
-        pred_num_attention_heads=2,
-        pred_num_hidden_layers=2,
-        pred_num_mask_tokens=10,
-        is_training=False,
-        attn_implementation="sdpa",
-        mask_ratio=0.5,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_frames = num_frames
-        self.mlp_ratio = mlp_ratio
-        self.pred_hidden_size = pred_hidden_size
-        self.pred_num_attention_heads = pred_num_attention_heads
-        self.pred_num_hidden_layers = pred_num_hidden_layers
-        self.pred_num_mask_tokens = pred_num_mask_tokens
-        self.attn_implementation = attn_implementation
-        self.is_training = is_training
-        self.mask_ratio = mask_ratio
+class VJEPA2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 2,
+        "image_size": 16,
+        "patch_size": 16,
+        "num_channels": 3,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "num_frames": 2,
+        "mlp_ratio": 1.0,
+        "pred_hidden_size": 32,
+        "pred_num_attention_heads": 2,
+        "pred_num_hidden_layers": 2,
+        "pred_num_mask_tokens": 10,
+        "is_training": False,
+        "attn_implementation": "sdpa",
+        "mask_ratio": 0.5,
+    }
 
-        num_patches = ((image_size // patch_size) ** 2) * (num_frames // 2)
-        self.seq_length = num_patches
-        self.num_masks = int(self.mask_ratio * self.seq_length)
-        self.mask_length = num_patches
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        num_patches = ((values["image_size"] // values["patch_size"]) ** 2) * (values["num_frames"] // 2)
+        values["seq_length"] = num_patches
+        values["num_masks"] = int(values["mask_ratio"] * values["seq_length"])
+        values["mask_length"] = num_patches
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values_videos = floats_tensor(
@@ -151,7 +142,7 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    test_torch_exportable = True
+    model_tester_class = VJEPA2ModelTester
 
     all_model_classes = (VJEPA2Model, VJEPA2ForVideoClassification) if is_torch_available() else ()
 
@@ -161,31 +152,13 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VJEPA2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VJEPA2Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VJEPA2Config, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="VJEPA2 does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_get_set_embeddings(self):

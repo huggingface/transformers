@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,13 +17,11 @@ import gc
 import json
 import os
 import re
-from typing import Optional
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
-from transformers import EomtConfig, EomtForUniversalSegmentation, EomtImageProcessorFast
+from transformers import EomtConfig, EomtForUniversalSegmentation, EomtImageProcessor
 
 
 # fmt: off
@@ -118,7 +115,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def ensure_model_downloaded(
-    repo_id: Optional[str] = None, revision: Optional[str] = None, local_dir: Optional[str] = None
+    repo_id: str | None = None, revision: str | None = None, local_dir: str | None = None
 ) -> str:
     """
     Ensures model files are downloaded locally, downloads them if not.
@@ -166,7 +163,7 @@ def load_model_state_dict(input_path: str) -> dict:
     if os.path.exists(index_path):
         print("Loading sharded model...")
         state_dict = {}
-        with open(index_path, "r") as f:
+        with open(index_path, "r", encoding="utf-8") as f:
             index = json.load(f)
 
         # Get unique shard files and load each one only once
@@ -212,7 +209,7 @@ def convert_model(
     # Download or locate model files
     input_path = ensure_model_downloaded(repo_id=repo_id, revision=revision, local_dir=local_dir)
 
-    with open(os.path.join(input_path, "config.json"), "r") as f:
+    with open(os.path.join(input_path, "config.json"), "r", encoding="utf-8") as f:
         config_data = json.load(f)
     # Pop off unwanted keys
     _ = config_data.pop("backbone", None)
@@ -243,7 +240,7 @@ def convert_model(
     else:
         MAPPINGS.update(MLP_MAPPINGS["vanilla_mlp"])
 
-    processor = EomtImageProcessorFast(size=size, do_split_image=do_split_image, do_pad=do_pad)
+    processor = EomtImageProcessor(size=size, do_split_image=do_split_image, do_pad=do_pad)
 
     # Save the config and processor
     if output_dir:
@@ -255,7 +252,7 @@ def convert_model(
 
     # Initialize model with empty weights
     print("Creating empty model...")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = EomtForUniversalSegmentation(config)
 
     # Load and convert state dict

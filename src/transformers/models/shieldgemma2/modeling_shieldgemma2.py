@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 
@@ -23,8 +21,10 @@ from ...modeling_outputs import ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
+    can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModelForImageTextToText
 from .configuration_shieldgemma2 import ShieldGemma2Config
 
@@ -34,23 +34,22 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class ShieldGemma2ImageClassifierOutputWithNoAttention(ImageClassifierOutputWithNoAttention):
-    """ShieldGemma2 classifies imags as violative or not relative to a specific policy
+    """ShieldGemma2 classifies images as violative or not relative to a specific policy
     Args:
     """
 
-    probabilities: Optional[torch.Tensor] = None
+    probabilities: torch.Tensor | None = None
 
 
 @auto_docstring
 class ShieldGemma2ForImageClassification(PreTrainedModel):
     config: ShieldGemma2Config
     input_modalities = ("image", "text")
-    _checkpoint_conversion_mapping = {
-        "model.language_model.model": "model.model.language_model",
-        "model.vision_tower": "model.model.vision_tower",
-        "model.multi_modal_projector": "model.model.multi_modal_projector",
-        "model.language_model.lm_head": "model.lm_head",
-    }
+    base_model_prefix = "model"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def __init__(self, config: ShieldGemma2Config):
         super().__init__(config=config)
@@ -60,35 +59,36 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.language_model.get_input_embeddings()
+        return self.model.get_decoder().get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.language_model.set_input_embeddings(value)
+        self.model.get_decoder().set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.model.language_model.get_output_embeddings()
+        return self.model.get_decoder().get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.model.language_model.set_output_embeddings(new_embeddings)
+        self.model.get_decoder().set_output_embeddings(new_embeddings)
 
     @auto_docstring
+    @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        **lm_kwargs,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs,
     ) -> ShieldGemma2ImageClassifierOutputWithNoAttention:
         r"""
         Returns:
@@ -115,9 +115,8 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             token_type_ids=token_type_ids,
-            cache_position=cache_position,
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
@@ -125,7 +124,7 @@ class ShieldGemma2ForImageClassification(PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             logits_to_keep=logits_to_keep,
-            **lm_kwargs,
+            **kwargs,
         )
         logits = outputs.logits
         selected_logits = logits[:, -1, [self.yes_token_index, self.no_token_index]]

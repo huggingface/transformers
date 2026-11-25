@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,13 @@
 
 import argparse
 import os
+from io import BytesIO
 
 import align
 import numpy as np
-import requests
 import tensorflow as tf
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 from tokenizer import Tokenizer
 
@@ -63,8 +63,9 @@ def get_align_config():
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 def get_processor():

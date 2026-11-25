@@ -20,6 +20,7 @@ from transformers import ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -38,42 +39,31 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class ConvNextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=32,
-        num_channels=3,
-        num_stages=4,
-        hidden_sizes=[10, 20, 30, 40],
-        depths=[2, 2, 3, 2],
-        is_training=True,
-        use_labels=True,
-        intermediate_size=37,
-        hidden_act="gelu",
-        num_labels=10,
-        initializer_range=0.02,
-        out_features=["stage2", "stage3", "stage4"],
-        out_indices=[2, 3, 4],
-        scope=None,
-    ):
+class ConvNextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 32,
+        "num_channels": 3,
+        "num_stages": 4,
+        "hidden_sizes": [10, 20, 30, 40],
+        "depths": [2, 2, 3, 2],
+        "is_training": True,
+        "use_labels": True,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "num_labels": 10,
+        "initializer_range": 0.02,
+        "out_features": ["stage2", "stage3", "stage4"],
+        "out_indices": [2, 3, 4],
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.num_stages = num_stages
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.out_features = out_features
-        self.out_indices = out_indices
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -160,6 +150,8 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     attention_mask and seq_length.
     """
 
+    model_tester_class = ConvNextModelTester
+
     all_model_classes = (
         (
             ConvNextModel,
@@ -177,7 +169,6 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ConvNextModelTester(self)
@@ -185,7 +176,7 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self,
             config_class=ConvNextConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["num_channels", "hidden_sizes"],
         )
 
@@ -284,13 +275,15 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0261, -0.4739, 0.1910]).to(torch_device)
+        expected_slice = torch.tensor([-0.0267, -0.4735, 0.1901]).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
 
 @require_torch
 class ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = ConvNextModelTester
+
     all_model_classes = (ConvNextBackbone,) if is_torch_available() else ()
     config_class = ConvNextConfig
 

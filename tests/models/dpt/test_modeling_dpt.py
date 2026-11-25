@@ -19,9 +19,9 @@ import pytest
 
 from transformers import DPTConfig
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -38,56 +38,45 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DPTImageProcessor
+    from transformers import DPTImageProcessorPil
 
 
-class DPTModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        image_size=32,
-        patch_size=16,
-        num_channels=3,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        backbone_out_indices=[0, 1, 2, 3],
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        num_labels=3,
-        neck_hidden_sizes=[16, 32],
-        is_hybrid=False,
-        scope=None,
-    ):
+class DPTModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "image_size": 32,
+        "patch_size": 16,
+        "num_channels": 3,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "backbone_out_indices": [0, 1, 2, 3],
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "neck_hidden_sizes": [16, 32],
+        "is_hybrid": False,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.backbone_out_indices = backbone_out_indices
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.scope = scope
-        self.is_hybrid = is_hybrid
-        self.neck_hidden_sizes = neck_hidden_sizes
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # sequence length of DPT = num_patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        values["seq_length"] = (values["image_size"] // values["patch_size"]) ** 2 + 1
+        return values
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -159,6 +148,8 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = DPTModelTester
+
     all_model_classes = (DPTModel, DPTForDepthEstimation, DPTForSemanticSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -171,11 +162,10 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DPTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DPTConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -223,7 +213,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         for model_class in self.all_model_classes:
             if model_class.__name__ == "DPTForDepthEstimation":
                 continue
@@ -236,23 +226,11 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 continue
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @unittest.skip(reason="Inductor error for dynamic shape")
     @pytest.mark.torch_compile_test
@@ -271,20 +249,28 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     self.assertEqual(len(model.backbone.out_indices), 2)
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_pretrained_backbone = True
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": [-2, -1]}
+        config_dict = config.to_dict()
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [-2, -1]}
         # Force load_backbone path
-        config.is_hybrid = False
+        config_dict["is_hybrid"] = False
 
         # Load a timm backbone
-        config.backbone = "resnet18"
-        config.use_timm_backbone = True
+        config_dict["backbone"] = "resnet18"
+        config_dict["use_timm_backbone"] = True
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
         # Load a HF backbone
-        config.backbone = "facebook/dinov2-small"
-        config.use_timm_backbone = False
+        config_dict = config.to_dict()
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_config"] = None
+        config_dict["backbone_kwargs"] = {"out_indices": [-2, -1]}
+        config_dict["is_hybrid"] = False
+        config_dict["backbone"] = "facebook/dinov2-small"
+        config_dict["use_timm_backbone"] = False
+        config = config.__class__(**config_dict)
         _validate_backbone_init()
 
     @slow
@@ -305,7 +291,7 @@ def prepare_img():
 @slow
 class DPTModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-large")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large").to(torch_device)
 
         image = prepare_img()
@@ -331,7 +317,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     def test_inference_semantic_segmentation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-large-ade")
         model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device)
 
         image = prepare_img()
@@ -352,7 +338,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.logits[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_post_processing_semantic_segmentation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-large-ade")
         model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device)
 
         image = prepare_img()
@@ -373,7 +359,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(segmentation[0].shape, expected_shape)
 
     def test_post_processing_depth_estimation(self):
-        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large")
+        image_processor = DPTImageProcessorPil.from_pretrained("Intel/dpt-large")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
 
         image = prepare_img()
@@ -397,25 +383,3 @@ class DPTModelIntegrationTest(unittest.TestCase):
         ).squeeze()
         self.assertTrue(output_enlarged.shape == expected_shape)
         torch.testing.assert_close(predicted_depth_l, output_enlarged, atol=1e-3, rtol=1e-3)
-
-    @pytest.mark.torch_export_test
-    def test_export(self):
-        for strict in [True, False]:
-            with self.subTest(strict=strict):
-                if not is_torch_greater_or_equal_than_2_4:
-                    self.skipTest(reason="This test requires torch >= 2.4 to run.")
-                model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device).eval()
-                image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-large-ade")
-                image = prepare_img()
-                inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-                exported_program = torch.export.export(
-                    model,
-                    args=(inputs["pixel_values"],),
-                    strict=strict,
-                )
-                with torch.no_grad():
-                    eager_outputs = model(**inputs)
-                    exported_outputs = exported_program.module().forward(inputs["pixel_values"])
-                self.assertEqual(eager_outputs.logits.shape, exported_outputs.logits.shape)
-                torch.testing.assert_close(eager_outputs.logits, exported_outputs.logits, rtol=1e-4, atol=1e-4)

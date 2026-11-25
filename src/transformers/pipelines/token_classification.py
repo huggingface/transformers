@@ -4,7 +4,6 @@ from typing import Any, overload
 
 import numpy as np
 
-from ..models.bert.tokenization_bert_legacy import BasicTokenizer
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
@@ -63,9 +62,6 @@ class AggregationStrategy(ExplicitEnum):
     r"""
         ignore_labels (`list[str]`, defaults to `["O"]`):
             A list of labels to ignore.
-        grouped_entities (`bool`, *optional*, defaults to `False`):
-            DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to the
-            same entity together in the predictions or not.
         stride (`int`, *optional*):
             If stride is provided, the pipeline is applied on all the text. The text is split into chunks of size
             model_max_length. Works only with fast tokenizers and `aggregation_strategy` different from `NONE`. The
@@ -141,14 +137,14 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
 
+        from ..models.bert.tokenization_bert_legacy import BasicTokenizer
+
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
 
     def _sanitize_parameters(
         self,
         ignore_labels=None,
-        grouped_entities: bool | None = None,
-        ignore_subwords: bool | None = None,
         aggregation_strategy: AggregationStrategy | None = None,
         offset_mapping: list[tuple[int, int]] | None = None,
         is_split_into_words: bool = False,
@@ -165,25 +161,6 @@ class TokenClassificationPipeline(ChunkPipeline):
             preprocess_params["offset_mapping"] = offset_mapping
 
         postprocess_params = {}
-        if grouped_entities is not None or ignore_subwords is not None:
-            if grouped_entities and ignore_subwords:
-                aggregation_strategy = AggregationStrategy.FIRST
-            elif grouped_entities and not ignore_subwords:
-                aggregation_strategy = AggregationStrategy.SIMPLE
-            else:
-                aggregation_strategy = AggregationStrategy.NONE
-
-            if grouped_entities is not None:
-                warnings.warn(
-                    "`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to"
-                    f' `aggregation_strategy="{aggregation_strategy}"` instead.'
-                )
-            if ignore_subwords is not None:
-                warnings.warn(
-                    "`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to"
-                    f' `aggregation_strategy="{aggregation_strategy}"` instead.'
-                )
-
         if aggregation_strategy is not None:
             if isinstance(aggregation_strategy, str):
                 aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
@@ -279,7 +256,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
             words = sentence
             sentence = delimiter.join(words)  # Recreate the sentence string for later display and slicing
-            # This map will allows to convert back word => char indices
+            # This map will allow to convert back word => char indices
             word_to_chars_map = []
             delimiter_len = len(delimiter)
             char_offset = 0

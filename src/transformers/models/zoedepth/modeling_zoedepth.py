@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Intel Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,41 +15,41 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.backbone_utils import load_backbone
 from .configuration_zoedepth import ZoeDepthConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extension of `DepthEstimatorOutput` to include domain logits (ZoeDepth specific).
     """
 )
+@dataclass
 class ZoeDepthDepthEstimatorOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    domain_logits (`torch.FloatTensor` of shape `(batch_size, num_domains)`):
+    domain_logits (`torch.Tensor` of shape `(batch_size, num_domains)`):
         Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    predicted_depth: Optional[torch.FloatTensor] = None
-    domain_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    predicted_depth: torch.Tensor | None = None
+    domain_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class ZoeDepthReassembleStage(nn.Module):
@@ -89,7 +88,7 @@ class ZoeDepthReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height, patch_width) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         batch_size = hidden_states[0].shape[0]
@@ -259,7 +258,7 @@ class ZoeDepthFeatureFusionLayer(nn.Module):
         self.residual_layer1 = ZoeDepthPreActResidualLayer(config)
         self.residual_layer2 = ZoeDepthPreActResidualLayer(config)
 
-    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -309,7 +308,7 @@ class ZoeDepthNeck(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height, patch_width) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -394,8 +393,8 @@ class LogBinomialSoftmax(nn.Module):
         super().__init__()
         self.k = n_classes
         self.act = act
-        self.register_buffer("k_idx", torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
-        self.register_buffer("k_minus_1", torch.tensor([self.k - 1]).view(1, -1, 1, 1), persistent=False)
+        self.k_idx = nn.Buffer(torch.arange(0, n_classes).view(1, -1, 1, 1), persistent=False)
+        self.k_minus_1 = nn.Buffer(torch.tensor([self.k - 1]).view(1, -1, 1, 1), persistent=False)
 
     def forward(self, probabilities, temperature=1.0, eps=1e-4):
         """Compute the log binomial distribution for probabilities.
@@ -415,8 +414,8 @@ class LogBinomialSoftmax(nn.Module):
         if probabilities.ndim == 3:
             probabilities = probabilities.unsqueeze(1)  # make it (batch_size, num_channels, height, width)
 
-        one_minus_probabilities = torch.clamp(1 - probabilities, eps, 1)
-        probabilities = torch.clamp(probabilities, eps, 1)
+        one_minus_probabilities = (1 - probabilities).clamp(min=eps, max=1.0)
+        probabilities = probabilities.clamp(min=eps, max=1.0)
         y = (
             log_binom(self.k_minus_1, self.k_idx)
             + self.k_idx * torch.log(probabilities)
@@ -548,7 +547,6 @@ class ZoeDepthSeedBinRegressor(nn.Module):
             return bin_centers, bin_centers
 
 
-@torch.jit.script
 def inv_attractor(dx, alpha: float = 300, gamma: int = 2):
     """Inverse attractor: dc = dx / (1 + alpha*dx^gamma), where dx = a - c, a = attractor point, c = bin center, dc = shift in bin center
     This is the default one according to the accompanying paper.
@@ -803,8 +801,8 @@ class ZoeDepthMultiheadAttention(nn.Module):
         queries: torch.Tensor,
         keys: torch.Tensor,
         values: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = queries.shape
         query_layer = (
@@ -871,7 +869,7 @@ class ZoeDepthTransformerEncoderLayer(nn.Module):
     def forward(
         self,
         src,
-        src_mask: Optional[torch.Tensor] = None,
+        src_mask: torch.Tensor | None = None,
     ):
         queries = keys = src
         src2 = self.self_attn(queries=queries, keys=keys, values=src, attention_mask=src_mask)[0]
@@ -915,7 +913,7 @@ class ZoeDepthPatchTransformerEncoder(nn.Module):
         """
         position = torch.arange(0, sequence_length, dtype=dtype, device=device).unsqueeze(1)
         index = torch.arange(0, embedding_dim, 2, dtype=dtype, device=device).unsqueeze(0)
-        div_term = torch.exp(index * (-torch.log(torch.tensor(10000.0, device=device)) / embedding_dim))
+        div_term = torch.exp(index * (-torch.log(torch.full((), 10000.0, device=device)) / embedding_dim))
         pos_encoding = position * div_term
         pos_encoding = torch.cat([torch.sin(pos_encoding), torch.cos(pos_encoding)], dim=1)
         pos_encoding = pos_encoding.unsqueeze(dim=0).repeat(batch_size, 1, 1)
@@ -1211,6 +1209,12 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, LogBinomialSoftmax):
+            init.copy_(module.k_idx, torch.arange(0, module.k).view(1, -1, 1, 1))
+            init.copy_(module.k_minus_1, torch.tensor([module.k - 1]).view(1, -1, 1, 1))
+
 
 @auto_docstring(
     custom_intro="""
@@ -1218,7 +1222,7 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     """
 )
 class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -1246,27 +1250,26 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
+    ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
         >>> model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti")
@@ -1293,7 +1296,7 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

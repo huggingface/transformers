@@ -1,7 +1,6 @@
 import os
 import signal
 import threading
-from typing import Optional
 
 from .trainer_callback import TrainerCallback
 from .trainer_utils import PREFIX_CHECKPOINT_DIR
@@ -58,7 +57,7 @@ class CheckpointManager:
 
             # Create a sentinel file to indicate checkpointing is in progress
             sentinel_file = os.path.join(output_dir, checkpoint_folder, "checkpoint-is-incomplete.txt")
-            with open(sentinel_file, "w") as f:
+            with open(sentinel_file, "w", encoding="utf-8") as f:
                 f.write(f"Checkpoint started at step {current_step} and in progress...")
             logger.info(f"Created checkpoint progress sentinel marker file: {sentinel_file}")
 
@@ -88,7 +87,7 @@ class JITCheckpointCallback(TrainerCallback):
 
     def __init__(self):
         self.trainer = None
-        self.jit_manager: Optional[CheckpointManager] = None
+        self.jit_manager: CheckpointManager | None = None
 
     def set_trainer(self, trainer):
         self.trainer = trainer

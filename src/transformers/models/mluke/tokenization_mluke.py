@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Studio Ousia and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import itertools
 import json
 import os
 from collections.abc import Mapping
-from typing import Optional, Union
 
 import numpy as np
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
@@ -184,10 +182,10 @@ class MLukeTokenizer(TokenizersBackend):
             The maximum length of `entity_ids`.
         max_mention_length (`int`, *optional*, defaults to 30):
             The maximum number of tokens inside an entity span.
-        entity_token_1 (`str`, *optional*, defaults to `<ent>`):
+        entity_1_token (`str`, *optional*, defaults to `<ent>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
             `task` is set to `"entity_classification"` or `"entity_pair_classification"`.
-        entity_token_2 (`str`, *optional*, defaults to `<ent2>`):
+        entity_2_token (`str`, *optional*, defaults to `<ent2>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
             `task` is set to `"entity_pair_classification"`.
         additional_special_tokens (`list[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
@@ -228,29 +226,33 @@ class MLukeTokenizer(TokenizersBackend):
         task=None,
         max_entity_length=32,
         max_mention_length=30,
-        entity_token_1="<ent>",
-        entity_token_2="<ent2>",
+        entity_1_token="<ent>",
+        entity_2_token="<ent2>",
         entity_unk_token="[UNK]",
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
         entity_mask2_token="[MASK2]",
-        vocab: Optional[Union[str, dict, list]] = None,
-        entity_vocab: Optional[Union[str, dict, list]] = None,
+        vocab: str | dict | list | None = None,
+        entity_vocab: str | dict | list | None = None,
         **kwargs,
     ) -> None:
+        entity_1_token = kwargs.pop("entity_token_1", entity_1_token)
+        entity_2_token = kwargs.pop("entity_token_2", entity_2_token)
+
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        # we add 2 special tokens for downstream tasks
-        entity_token_1 = (
-            AddedToken(entity_token_1, lstrip=False, rstrip=False)
-            if isinstance(entity_token_1, str)
-            else entity_token_1
+        # we add 2 special tokens for downstream tasks.
+        # v5: add SPIECE_UNDERLINE prefix to add a leading space in decoded output
+        entity_1_token = (
+            AddedToken(SPIECE_UNDERLINE + entity_1_token, lstrip=False, rstrip=False)
+            if isinstance(entity_1_token, str)
+            else entity_1_token
         )
-        entity_token_2 = (
-            AddedToken(entity_token_2, lstrip=False, rstrip=False)
-            if isinstance(entity_token_2, str)
-            else entity_token_2
+        entity_2_token = (
+            AddedToken(SPIECE_UNDERLINE + entity_2_token, lstrip=False, rstrip=False)
+            if isinstance(entity_2_token, str)
+            else entity_2_token
         )
 
         # Handle entity vocab file for backward compatibility
@@ -354,7 +356,7 @@ class MLukeTokenizer(TokenizersBackend):
 
         # Ensure MLuke entity tokens are present exactly once.
         seen = {str(token) for token in extra_tokens}
-        for token in (entity_token_1, entity_token_2):
+        for token in (entity_1_token, entity_2_token):
             token_str = str(token)
             if token_str not in seen:
                 extra_tokens.append(token)
@@ -368,6 +370,8 @@ class MLukeTokenizer(TokenizersBackend):
 
         kwargs["extra_special_tokens"] = extra_tokens
 
+        kwargs.setdefault("clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output", True)
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -379,8 +383,8 @@ class MLukeTokenizer(TokenizersBackend):
             task=task,
             max_entity_length=max_entity_length,
             max_mention_length=max_mention_length,
-            entity_token_1=str(entity_token_1),
-            entity_token_2=str(entity_token_2),
+            entity_1_token=str(entity_1_token),
+            entity_2_token=str(entity_2_token),
             entity_unk_token=entity_unk_token,
             entity_pad_token=entity_pad_token,
             entity_mask_token=entity_mask_token,
@@ -465,24 +469,24 @@ class MLukeTokenizer(TokenizersBackend):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, list[TextInput]],
-        text_pair: Optional[Union[TextInput, list[TextInput]]] = None,
-        entity_spans: Optional[Union[EntitySpanInput, list[EntitySpanInput]]] = None,
-        entity_spans_pair: Optional[Union[EntitySpanInput, list[EntitySpanInput]]] = None,
-        entities: Optional[Union[EntityInput, list[EntityInput]]] = None,
-        entities_pair: Optional[Union[EntityInput, list[EntityInput]]] = None,
+        text: TextInput | list[TextInput],
+        text_pair: TextInput | list[TextInput] | None = None,
+        entity_spans: EntitySpanInput | list[EntitySpanInput] | None = None,
+        entity_spans_pair: EntitySpanInput | list[EntitySpanInput] | None = None,
+        entities: EntityInput | list[EntityInput] | None = None,
+        entities_pair: EntityInput | list[EntityInput] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        is_split_into_words: Optional[bool] = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        is_split_into_words: bool | None = False,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -655,24 +659,24 @@ class MLukeTokenizer(TokenizersBackend):
 
     def _encode_plus(
         self,
-        text: Union[TextInput],
-        text_pair: Optional[Union[TextInput]] = None,
-        entity_spans: Optional[EntitySpanInput] = None,
-        entity_spans_pair: Optional[EntitySpanInput] = None,
-        entities: Optional[EntityInput] = None,
-        entities_pair: Optional[EntityInput] = None,
+        text: TextInput,
+        text_pair: TextInput | None = None,
+        entity_spans: EntitySpanInput | None = None,
+        entity_spans_pair: EntitySpanInput | None = None,
+        entities: EntityInput | None = None,
+        entities_pair: EntityInput | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        is_split_into_words: Optional[bool] = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        is_split_into_words: bool | None = False,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -766,25 +770,23 @@ class MLukeTokenizer(TokenizersBackend):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[list[TextInput], list[TextInputPair]],
-        batch_entity_spans_or_entity_spans_pairs: Optional[
-            Union[list[EntitySpanInput], list[tuple[EntitySpanInput, EntitySpanInput]]]
-        ] = None,
-        batch_entities_or_entities_pairs: Optional[
-            Union[list[EntityInput], list[tuple[EntityInput, EntityInput]]]
-        ] = None,
+        batch_text_or_text_pairs: list[TextInput] | list[TextInputPair],
+        batch_entity_spans_or_entity_spans_pairs: list[EntitySpanInput]
+        | list[tuple[EntitySpanInput, EntitySpanInput]]
+        | None = None,
+        batch_entities_or_entities_pairs: list[EntityInput] | list[tuple[EntityInput, EntityInput]] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        is_split_into_words: Optional[bool] = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        is_split_into_words: bool | None = False,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -909,7 +911,7 @@ class MLukeTokenizer(TokenizersBackend):
 
         return BatchEncoding(batch_outputs)
 
-    def _check_entity_input_format(self, entities: Optional[EntityInput], entity_spans: Optional[EntitySpanInput]):
+    def _check_entity_input_format(self, entities: EntityInput | None, entity_spans: EntitySpanInput | None):
         if not isinstance(entity_spans, list):
             raise TypeError("entity_spans should be given as a list")
         elif len(entity_spans) > 0 and not isinstance(entity_spans[0], tuple):
@@ -929,12 +931,12 @@ class MLukeTokenizer(TokenizersBackend):
 
     def _create_input_sequence(
         self,
-        text: Union[TextInput],
-        text_pair: Optional[Union[TextInput]] = None,
-        entities: Optional[EntityInput] = None,
-        entities_pair: Optional[EntityInput] = None,
-        entity_spans: Optional[EntitySpanInput] = None,
-        entity_spans_pair: Optional[EntitySpanInput] = None,
+        text: TextInput,
+        text_pair: TextInput | None = None,
+        entities: EntityInput | None = None,
+        entities_pair: EntityInput | None = None,
+        entity_spans: EntitySpanInput | None = None,
+        entity_spans_pair: EntitySpanInput | None = None,
         **kwargs,
     ) -> tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
@@ -1016,14 +1018,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
-            first_ids = (
-                first_ids[:entity_token_end] + [self.additional_special_tokens_ids[0]] + first_ids[entity_token_end:]
-            )
-            first_ids = (
-                first_ids[:entity_token_start]
-                + [self.additional_special_tokens_ids[0]]
-                + first_ids[entity_token_start:]
-            )
+            first_ids = first_ids[:entity_token_end] + [self.entity_1_token_id] + first_ids[entity_token_end:]
+            first_ids = first_ids[:entity_token_start] + [self.entity_1_token_id] + first_ids[entity_token_start:]
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
         elif self.task == "entity_pair_classification":
@@ -1044,8 +1040,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
-                (head_token_span, self.additional_special_tokens_ids[0]),
-                (tail_token_span, self.additional_special_tokens_ids[1]),
+                (head_token_span, self.entity_1_token_id),
+                (tail_token_span, self.entity_2_token_id),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)
@@ -1085,19 +1081,19 @@ class MLukeTokenizer(TokenizersBackend):
     def _batch_prepare_for_model(
         self,
         batch_ids_pairs: list[tuple[list[int], None]],
-        batch_entity_ids_pairs: list[tuple[Optional[list[int]], Optional[list[int]]]],
-        batch_entity_token_spans_pairs: list[tuple[Optional[list[tuple[int, int]]], Optional[list[tuple[int, int]]]]],
+        batch_entity_ids_pairs: list[tuple[list[int] | None, list[int] | None]],
+        batch_entity_token_spans_pairs: list[tuple[list[tuple[int, int]] | None, list[tuple[int, int]] | None]],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_length: bool = False,
@@ -1170,22 +1166,22 @@ class MLukeTokenizer(TokenizersBackend):
     def prepare_for_model(
         self,
         ids: list[int],
-        pair_ids: Optional[list[int]] = None,
-        entity_ids: Optional[list[int]] = None,
-        pair_entity_ids: Optional[list[int]] = None,
-        entity_token_spans: Optional[list[tuple[int, int]]] = None,
-        pair_entity_token_spans: Optional[list[tuple[int, int]]] = None,
+        pair_ids: list[int] | None = None,
+        entity_ids: list[int] | None = None,
+        pair_entity_ids: list[int] | None = None,
+        entity_token_spans: list[tuple[int, int]] | None = None,
+        pair_entity_token_spans: list[tuple[int, int]] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -1400,20 +1396,18 @@ class MLukeTokenizer(TokenizersBackend):
 
     def pad(
         self,
-        encoded_inputs: Union[
-            BatchEncoding,
-            list[BatchEncoding],
-            dict[str, EncodedInput],
-            dict[str, list[EncodedInput]],
-            list[dict[str, EncodedInput]],
-        ],
-        padding: Union[bool, str, PaddingStrategy] = True,
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        encoded_inputs: BatchEncoding
+        | list[BatchEncoding]
+        | dict[str, EncodedInput]
+        | dict[str, list[EncodedInput]]
+        | list[dict[str, EncodedInput]],
+        padding: bool | str | PaddingStrategy = True,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         verbose: bool = True,
     ) -> BatchEncoding:
         """
@@ -1564,13 +1558,13 @@ class MLukeTokenizer(TokenizersBackend):
 
     def _pad(
         self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
-        max_entity_length: Optional[int] = None,
+        encoded_inputs: dict[str, EncodedInput] | BatchEncoding,
+        max_length: int | None = None,
+        max_entity_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         """
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
@@ -1706,7 +1700,7 @@ class MLukeTokenizer(TokenizersBackend):
 
         return encoded_inputs
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
         Save only the entity vocabulary file. The tokenizer.json is saved by the parent TokenizersBackend.
         """
@@ -1724,7 +1718,7 @@ class MLukeTokenizer(TokenizersBackend):
         return (entity_vocab_file,)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -1750,7 +1744,7 @@ class MLukeTokenizer(TokenizersBackend):
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -1778,7 +1772,7 @@ class MLukeTokenizer(TokenizersBackend):
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. XLM-RoBERTa does

@@ -247,7 +247,8 @@ class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
         return cls
 
     def setUp(self):
-        # Some tests may change to source mode and not reset
+        # Some tests may change source/target language and not reset
+        self.tokenizer.src_lang = "eng"
         self.tokenizer.set_tgt_lang_special_tokens(self.tokenizer.tgt_lang)
 
     def test_int_remove_extra_whitespaces(self):

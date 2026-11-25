@@ -22,6 +22,7 @@ import numpy as np
 from transformers import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
 from transformers.testing_utils import (
     cleanup,
+    require_numba,
     require_torch,
     slow,
     torch_device,
@@ -32,6 +33,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    floats_tensor,
     ids_tensor,
     random_attention_mask,
 )
@@ -183,10 +185,6 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="ClvpEncoder does not output loss")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="ClvpEncoder does not output loss")
     def test_gradient_checkpointing_enable_disable(self):
         pass
 
@@ -324,6 +322,7 @@ class ClvpModelForConditionalGenerationTester:
     def __init__(self, parent, is_training=False):
         self.parent = parent
         self.clvp_encoder_tester = ClvpEncoderTester(parent)
+        self.text_model_tester = self.clvp_encoder_tester
         self.is_training = is_training
         self.batch_size = self.clvp_encoder_tester.batch_size  # need bs for batching_equivalence test
 
@@ -354,11 +353,8 @@ class ClvpModelForConditionalGenerationTester:
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.clvp_encoder_tester.prepare_config_and_inputs()
 
-        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        audio = ds.sort("id")[0]["audio"]
-        audio_sample = audio["array"]
-        sr = audio["sampling_rate"]
+        sr = 22050
+        audio_sample = floats_tensor([5 * sr], scale=1.0).cpu().numpy()
 
         feature_extractor = ClvpFeatureExtractor()
         input_features = feature_extractor(raw_speech=audio_sample, sampling_rate=sr, return_tensors="pt")[
@@ -390,6 +386,7 @@ class ClvpModelForConditionalGenerationTester:
 
 
 @require_torch
+@require_numba
 class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModelForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
@@ -465,7 +462,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
+            self._set_subconfig_attributes(config, "output_hidden_states", True)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
@@ -509,6 +506,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
 @slow
 @require_torch
+@require_numba
 class ClvpIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.text = "This is an example text."

@@ -362,10 +362,11 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else {}
     )
+    test_can_init_all_missing_weights_before_2023 = True
 
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -398,7 +399,7 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -410,7 +411,7 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -534,12 +535,13 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    test_can_init_all_missing_weights_before_2023 = True
 
     def setUp(self):
         self.model_tester = UniSpeechSatModelTester(
             self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
         )
-        self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=UniSpeechSatConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -572,7 +574,7 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -584,7 +586,7 @@ class UniSpeechSatRobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    @unittest.skip(reason="Model has no input_embeds")
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
 

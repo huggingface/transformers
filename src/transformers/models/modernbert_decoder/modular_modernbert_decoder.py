@@ -12,12 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Literal
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -28,11 +28,13 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..modernbert.modeling_modernbert import (
     ModernBertEmbeddings,
     ModernBertMLP,
@@ -46,84 +48,27 @@ from ..modernbert.modeling_modernbert import (
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="blab-jhu/test-32m-dec")
+@strict
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
-    decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ModernBERT-base decoder.
-    e.g. [blab-jhu/test-32m-dec](https://huggingface.co/blab-jhu/test-32m-dec)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 50368):
-            Vocabulary size of the ModernBert decoder model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ModernBertDecoderModel`]
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 1152):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 22):
-            Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu"`
-            if not specified.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
-            The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        norm_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the normalization layers.
-        pad_token_id (`int`, *optional*, defaults to 50283):
-            Padding token id.
-        eos_token_id (`int`, *optional*, defaults to 50282):
-            End of stream token id.
-        bos_token_id (`int`, *optional*, defaults to 50281):
-            Beginning of stream token id.
-        cls_token_id (`int`, *optional*, defaults to 50281):
-            Classification token id.
-        sep_token_id (`int`, *optional*, defaults to 50282):
-            Separation token id.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        embedding_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the embeddings.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the MLP layers.
-        mlp_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the MLP layers.
-        decoder_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in the decoder layers.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the classifier.
-        classifier_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the classifier.
-        classifier_activation (`str`, *optional*, defaults to `"gelu"`):
-            The activation function for the classifier.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        local_attention (`int`, *optional*, defaults to 128):
-            The sliding window size for local attention. Only used for layers that use local attention. Note that for
-            the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
-        global_attn_every_n_layers (`int`, *optional*, defaults to 3):
-            Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
-        layer_types (`list[str]`, *optional*):
-            List of layer types, one for each layer. If not specified, will be automatically generated based on
-            `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
+    initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
+        The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+    norm_eps (`float`, *optional*, defaults to 1e-05):
+        The epsilon used by the rms normalization layers.
+    norm_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the normalization layers.
+    mlp_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout ratio for the MLP layers.
+    decoder_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use bias in the decoder layers.
+    classifier_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the classifier.
+    classifier_activation (`str`, *optional*, defaults to `"gelu"`):
+        The activation function for the classifier.
+    local_attention (`int`, *optional*, defaults to 128):
+        The sliding window size for local attention. Only used for layers that use local attention. Note that for
+        the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
 
     Examples:
 
@@ -141,92 +86,55 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernbert-decoder"
-    keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
-    def __init__(
-        self,
-        vocab_size: Optional[int] = 50368,
-        hidden_size: Optional[int] = 768,
-        intermediate_size: Optional[int] = 1152,
-        num_hidden_layers: Optional[int] = 22,
-        num_attention_heads: Optional[int] = 12,
-        hidden_activation: Optional[str] = "gelu",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        initializer_cutoff_factor: Optional[float] = 2.0,
-        norm_eps: Optional[int] = 1e-5,
-        norm_bias: Optional[bool] = False,
-        pad_token_id: Optional[int] = 50283,
-        eos_token_id: Optional[int] = 50282,
-        bos_token_id: Optional[int] = 50281,
-        cls_token_id: Optional[int] = 50281,
-        sep_token_id: Optional[int] = 50282,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        embedding_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        mlp_dropout: Optional[float] = 0.0,
-        decoder_bias: Optional[bool] = True,
-        classifier_dropout: Optional[float] = 0.0,
-        classifier_bias: Optional[bool] = False,
-        classifier_activation: Optional[str] = "gelu",
-        use_cache: Optional[bool] = True,
-        local_attention: Optional[int] = 128,
-        global_attn_every_n_layers: Optional[int] = 3,
-        layer_types: Optional[list[str]] = None,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.initializer_cutoff_factor = initializer_cutoff_factor
-        self.norm_eps = norm_eps
-        self.norm_bias = norm_bias
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.embedding_dropout = embedding_dropout
-        self.mlp_bias = mlp_bias
-        self.mlp_dropout = mlp_dropout
-        self.decoder_bias = decoder_bias
-        self.classifier_dropout = classifier_dropout
-        self.classifier_bias = classifier_bias
-        self.classifier_activation = classifier_activation
-        self.use_cache = use_cache
-        self.global_attn_every_n_layers = global_attn_every_n_layers
-        # for consistency with ModernBert
-        self.reference_compile = False
+    vocab_size: int = 50368
+    hidden_size: int = 768
+    intermediate_size: int = 1152
+    num_hidden_layers: int = 22
+    num_attention_heads: int = 12
+    hidden_activation: str = "gelu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    initializer_cutoff_factor: float = 2.0
+    norm_eps: float = 1e-5
+    norm_bias: bool = False
+    pad_token_id: int = 50283
+    eos_token_id: int | list[int] | None = 50282
+    bos_token_id: int = 50281
+    cls_token_id: int = 50281
+    sep_token_id: int = 50282
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    embedding_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    mlp_dropout: float | int = 0.0
+    decoder_bias: bool = True
+    classifier_dropout: float | int = 0.0
+    classifier_bias: bool = False
+    classifier_activation: str = "gelu"
+    use_cache: bool = True
+    local_attention: int | None = 128
+    layer_types: list[str] | None = None
+    tie_word_embeddings: bool = True
+    rope_parameters: dict[Literal["full_attention", "sliding_attention"], dict] | None = None
 
-        # Set up layer_types for standardized layer type detection
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
+        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+        global_attn_every_n_layers = kwargs.get("global_attn_every_n_layers", 3)
         if self.layer_types is None:
-            # Create layer_types based on the alternating pattern
             self.layer_types = []
-            for layer_id in range(num_hidden_layers):
+            for layer_id in range(self.num_hidden_layers):
                 if layer_id % global_attn_every_n_layers != 0:
                     self.layer_types.append("sliding_attention")
                 else:
                     self.layer_types.append("full_attention")
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
-        self.sliding_window = local_attention // 2 if local_attention else -1
-        self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            cls_token_id=cls_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        self.sliding_window = self.local_attention // 2 if self.local_attention else -1
+        super().__post_init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -239,16 +147,21 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)
+
+        # Set default values if not present
+        if self.rope_parameters.get("full_attention") is None:
+            self.rope_parameters["full_attention"] = {"rope_type": "default"}
         self.rope_parameters["full_attention"].setdefault(
             "rope_theta", kwargs.pop("global_rope_theta", self.default_theta["global"])
         )
+        if self.rope_parameters.get("sliding_attention") is None:
+            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
             "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
         )
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 
@@ -269,12 +182,12 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    dropout: float = 0.0,
-    scaling: Optional[float] = None,
-    sliding_window: Optional[int] = None,
+    attention_mask: torch.Tensor | None,
+    dropout: float | int = 0.0,
+    scaling: float | None = None,
+    sliding_window: int | None = None,
     **kwargs,
-) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> tuple[torch.Tensor, torch.Tensor | None]:
     """A simple eager attention implementation for ModernBERT decoder."""
     if scaling is None:
         scaling = module.head_dim**-0.5
@@ -283,8 +196,7 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     # Use the pre-computed attention mask
-    causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-    attn_weights = attn_weights + causal_mask
+    attn_weights = attn_weights + attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -300,7 +212,7 @@ class ModernBertDecoderAttention(nn.Module):
     It supports both local attention (sliding window) and global attention patterns.
     """
 
-    def __init__(self, config: ModernBertDecoderConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: ModernBertDecoderConfig, layer_idx: int | None = None):
         super().__init__()
         self.is_sliding = config.layer_types[layer_idx] == "sliding_attention"
         self.config = config
@@ -327,15 +239,15 @@ class ModernBertDecoderAttention(nn.Module):
 
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -346,14 +258,12 @@ class ModernBertDecoderAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -373,11 +283,10 @@ class ModernBertDecoderAttention(nn.Module):
 
 
 class ModernBertDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: ModernBertDecoderConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: ModernBertDecoderConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.attn_norm = (
             nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
             if layer_idx != 0
@@ -387,15 +296,15 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertDecoderMLP(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states)
 
@@ -404,8 +313,7 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
+            cache=cache,
             **kwargs,
         )
         hidden_states = attn_outputs[0]
@@ -427,17 +335,18 @@ class ModernBertDecoderPredictionHead(ModernBertPredictionHead):
 
 @auto_docstring
 class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
-    _skip_keys_device_placement = ["past_key_values"]
     _no_split_modules = ["ModernBertDecoderLayer"]
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": ModernBertDecoderLayer,
         "attentions": ModernBertDecoderAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        PreTrainedModel._init_weights(self, module)
+
         cutoff_factor = self.config.initializer_cutoff_factor
         if cutoff_factor is None:
             cutoff_factor = 3
@@ -478,19 +387,14 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
             init_weight(module.classifier, stds["final_out"])
         elif isinstance(module, ModernBertDecoderForCausalLM):
             init_weight(module.decoder, stds["out"])
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-
-    def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
-        raise AttributeError("No need to inherit!")
-
-    def _maybe_set_compile(self):
-        raise AttributeError("No need to inherit!")
-
-    def resize_token_embeddings(self, *args, **kwargs):
-        raise AttributeError("No need to inherit!")
+        elif isinstance(module, ModernBertDecoderRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 @auto_docstring
@@ -514,55 +418,44 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor, ...], BaseModelOutputWithPast]:
-        if (input_ids is None) == (inputs_embeds is None):
+    ) -> tuple[torch.Tensor, ...] | BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            batch_size, seq_length = input_ids.shape[:2]
-        else:
-            batch_size, seq_length = inputs_embeds.shape[:2]
-
-        # Handle past_key_values and cache setup
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens,
-                past_seen_tokens + seq_length,
-                device=input_ids.device if input_ids is not None else inputs_embeds.device,
-            )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
 
         # Calculate embeddings
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+
+        # Handle cache and cache setup
+        if use_cache and cache is None:
+            cache = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            batch_size = hidden_states.shape[0]
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0).expand(batch_size, -1)
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
-                "input_embeds": hidden_states,
+                "inputs_embeds": hidden_states,
                 "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
+                "cache": cache,
                 "position_ids": position_ids,
             }
 
@@ -572,16 +465,15 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
             }
 
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
-                past_key_values=past_key_values,
-                cache_position=cache_position,
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
+                cache=cache,
                 position_ids=position_ids,
                 **kwargs,
             )
@@ -590,7 +482,7 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
 
 
@@ -620,24 +512,20 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Returns:
             [`~modeling_outputs.CausalLMOutputWithPast`]
             comprising various elements depending on the configuration and inputs.
@@ -663,33 +551,24 @@ class ModernBertDecoderForCausalLM(ModernBertDecoderPreTrainedModel, GenerationM
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.decoder(self.lm_head(hidden_states[:, slice_indices, :]))
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.decoder(self.lm_head(hidden_states))
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -724,28 +603,23 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
 
     @can_return_tuple
     @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, SequenceClassifierOutputWithPast]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+    ) -> tuple | SequenceClassifierOutputWithPast:
         transformer_outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             **kwargs,
@@ -803,7 +677,7 @@ class ModernBertDecoderForSequenceClassification(ModernBertDecoderPreTrainedMode
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
+            cache=transformer_outputs.cache,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )

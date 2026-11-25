@@ -45,10 +45,10 @@ if __name__ == "__main__":
 
     report_repo_id = os.getenv("REPORT_REPO_ID")
 
-    with open("new_failures_with_bad_commit.json") as fp:
+    with open("new_failures_with_bad_commit.json", encoding="utf-8") as fp:
         data = json.load(fp)
 
-    with open(f"ci_results_{job_name}/job_links.json") as fp:
+    with open(f"ci_results_{job_name}/job_links.json", encoding="utf-8") as fp:
         job_links = json.load(fp)
 
     # Update `new_failures_with_bad_commit.json` with job links information before uploading to Hub repository
@@ -61,7 +61,7 @@ if __name__ == "__main__":
                     key = job_name
                 failed_test["job_link"] = job_links[key][device.replace("-gpu", "")]
 
-    with open("new_failures_with_bad_commit.json", "w") as fp:
+    with open("new_failures_with_bad_commit.json", "w", encoding="utf-8") as fp:
         json.dump(data, fp, indent=4, ensure_ascii=False)
 
     commit_info = api.upload_file(
@@ -71,6 +71,10 @@ if __name__ == "__main__":
         repo_type="dataset",
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )
+    url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/new_failures_with_bad_commit.json"
+
+    with open("new_failures_with_bad_commit_url.txt", "w", encoding="utf-8") as fp:
+        fp.write(url)
 
     # TODO: extend
     team_members = [
@@ -91,6 +95,7 @@ if __name__ == "__main__":
         "vasqu",
         "ydshieh",
         "zucchini-nlp",
+        "tarekziade",
     ]
 
     # Counting the number of failures grouped by authors
@@ -100,7 +105,8 @@ if __name__ == "__main__":
             for failed_test in failed_tests:
                 author = failed_test["author"]
 
-                if author not in team_members:
+                # If author is not a team member, and the PR is already merged: change to the one who merged the PR
+                if author not in team_members and failed_test["merged_by"] is not None:
                     author = failed_test["merged_by"]
 
                 if author not in new_data:
@@ -114,12 +120,16 @@ if __name__ == "__main__":
     for author, _data in new_data_full.items():
         for model, model_result in _data.items():
             for device, failed_tests in model_result.items():
-                failed_tests = [x for x in failed_tests if x["author"] == author or x["merged_by"] == author]
+                failed_tests = [
+                    x
+                    for x in failed_tests
+                    if x["author"] == author or (x["merged_by"] is not None and x["merged_by"] == author)
+                ]
                 model_result[device] = failed_tests
             _data[model] = {k: v for k, v in model_result.items() if len(v) > 0}
         new_data_full[author] = {k: v for k, v in _data.items() if len(v) > 0}
 
-    with open("new_failures_with_bad_commit_grouped_by_authors.json", "w") as fp:
+    with open("new_failures_with_bad_commit_grouped_by_authors.json", "w", encoding="utf-8") as fp:
         json.dump(new_data_full, fp, ensure_ascii=False, indent=4)
     commit_info = api.upload_file(
         path_or_fileobj="new_failures_with_bad_commit_grouped_by_authors.json",

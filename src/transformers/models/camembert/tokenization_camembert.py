@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +13,7 @@
 # limitations under the License
 """Tokenization classes for Camembert model."""
 
-from typing import Optional, Union
-
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_python import AddedToken
@@ -101,11 +98,12 @@ class CamembertTokenizer(TokenizersBackend):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        _spm_precompiled_charsmap=None,
         mask_token="<mask>",
         additional_special_tokens=None,
         add_prefix_space=True,
         vocab_file=None,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: str | dict | list | None = None,
         **kwargs,
     ):
         self.vocab_file = vocab_file
@@ -131,15 +129,16 @@ class CamembertTokenizer(TokenizersBackend):
             ]
             self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
-                normalizers.Strip(left=False, right=True),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
 
         prepend_scheme = "always" if add_prefix_space else "never"
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement=SPIECE_UNDERLINE, prepend_scheme=prepend_scheme, split=True),
+            ]
+        )
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
 
         super().__init__(

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,40 +16,26 @@ Image/Text processor class for SigLIP2.
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 
 
-class Siglip2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 64,
-        },
-        "images_kwargs": {
-            "max_num_patches": 256,
-            "patch_size": 16,
-        },
-    }
-
-
+@auto_docstring
 class Siglip2Processor(ProcessorMixin):
-    r"""
-    Constructs a Siglip2 processor which wraps a Siglip2 image processor and a Gemma tokenizer into a single processor.
-
-    [`Siglip2Processor`] offers all the functionalities of [`Siglip2ImageProcessor`] and [`GemmaTokenizerFast`]. See the
-    [`~Siglip2Processor.__call__`] and [`~Siglip2Processor.decode`] for more information.
-
-    Args:
-        image_processor ([`Siglip2ImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`GemmaTokenizerFast`]):
-            The tokenizer is a required input.
-    """
-
-    valid_processor_kwargs = Siglip2ProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 64,
+    }
+    images_kwargs = {
+        "max_num_patches": 256,
+        "patch_size": 16,
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Siglip2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Siglip2Processor"]

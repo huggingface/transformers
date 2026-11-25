@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,12 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import DeformableDetrConfig, DeformableDetrForObjectDetection, DeformableDetrImageProcessor
@@ -78,9 +78,10 @@ def read_in_q_k_v(state_dict):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
-    return im
+    return image
 
 
 @torch.no_grad()
@@ -109,7 +110,7 @@ def convert_deformable_detr_checkpoint(
     config.num_labels = 91
     repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text(encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -139,8 +140,7 @@ def convert_deformable_detr_checkpoint(
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
-    model = DeformableDetrForObjectDetection(config)
-    model.load_state_dict(state_dict)
+    model = DeformableDetrForObjectDetection.from_pretrained(None, config=config, state_dict=state_dict)
     model.eval()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"

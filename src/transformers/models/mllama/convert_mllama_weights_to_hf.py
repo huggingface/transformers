@@ -17,7 +17,6 @@ import gc
 import json
 import math
 import os
-from typing import Optional
 
 import regex as re
 import torch
@@ -90,7 +89,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 CONTEXT_LENGTH = 131072
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -214,7 +213,7 @@ def write_model(
 ):
     os.makedirs(model_path, exist_ok=True)
 
-    with open(os.path.join(input_base_path, "params.json"), "r") as f:
+    with open(os.path.join(input_base_path, "params.json"), "r", encoding="utf-8") as f:
         params = json.load(f)
 
     params = params.get("model", params)
@@ -477,7 +476,7 @@ class MllamaConverter(TikTokenConverter):
         special_tokens: list[str],
         pattern: str,
         model_max_length: int,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=pattern)
@@ -560,12 +559,12 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     if instruct:
         print("Saving chat template...")
         chat_template_path = os.path.join(save_dir, "chat_template.json")
-        with open(chat_template_path, "w") as f:
+        with open(chat_template_path, "w", encoding="utf-8") as f:
             json.dump({"chat_template": chat_template}, f, indent=2)
 
 
 def write_image_processor(config_path: str, save_dir: str):
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         params = json.load(f)
 
     tile_size = params["vision_chunk_size"]

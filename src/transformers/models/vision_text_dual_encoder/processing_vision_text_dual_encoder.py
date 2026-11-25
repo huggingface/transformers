@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,30 +16,16 @@ Processor class for VisionTextDualEncoder
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 
 
-class VisionTextDualEncoderProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {}
-
-
+@auto_docstring
 class VisionTextDualEncoderProcessor(ProcessorMixin):
-    r"""
-    Constructs a VisionTextDualEncoder processor which wraps an image processor and a tokenizer into a single
-    processor.
-
-    [`VisionTextDualEncoderProcessor`] offers all the functionalities of [`AutoImageProcessor`] and [`AutoTokenizer`].
-    See the [`~VisionTextDualEncoderProcessor.__call__`] and [`~VisionTextDualEncoderProcessor.decode`] for more
-    information.
-
-    Args:
-        image_processor ([`AutoImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`], *optional*):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VisionTextDualEncoderProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VisionTextDualEncoderProcessor"]

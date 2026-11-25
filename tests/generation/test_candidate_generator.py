@@ -5,7 +5,13 @@ from unittest.mock import MagicMock
 
 import torch
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, pipeline
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
+    pipeline,
+)
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     AssistantVocabTranslatorCache,
@@ -237,8 +243,7 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         self.target_config = AutoConfig.from_pretrained(self.target_name)
         self.assistant_model = AutoModelForCausalLM.from_pretrained(self.assistant_name).to(torch_device)
         self.assistant_tokenizer = AutoTokenizer.from_pretrained(self.assistant_name)
-
-        self.generation_config = GenerationConfig()
+        self.generation_config = GenerationConfig(max_length=20, min_length=0)
 
         # Ensure required tokens exist
         if self.target_tokenizer.pad_token_id is None:

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,12 +17,14 @@ import unittest
 
 import numpy as np
 import torch
+from parameterized import parameterized
 
 from transformers import TimesFmConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin
+from ...test_modeling_common import TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION, ModelTesterMixin
 
 
 if is_torch_available():
@@ -32,50 +33,39 @@ if is_torch_available():
 TOLERANCE = 1e-4
 
 
-class TimesFmModelTester:
-    def __init__(
-        self,
-        parent,
-        patch_length: int = 32,
-        context_length: int = 512,
-        horizon_length: int = 128,
-        freq_size: int = 3,
-        num_hidden_layers: int = 1,
-        hidden_size: int = 16,
-        intermediate_size: int = 32,
-        head_dim: int = 8,
-        num_heads: int = 2,
-        tolerance: float = 1e-6,
-        rms_norm_eps: float = 1e-6,
-        quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-        pad_val: float = 1123581321.0,
-        use_positional_embedding: bool = True,
-        initializer_factor: float = 0.0,
-        is_training: bool = False,
-        batch_size: int = 3,
-    ):
-        self.parent = parent
-        self.patch_length = patch_length
-        self.context_length = context_length
-        self.horizon_length = horizon_length
-        self.quantiles = quantiles
-        self.pad_val = pad_val
-        self.freq_size = freq_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.head_dim = head_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_heads
-        self.tolerance = tolerance
-        self.rms_norm_eps = rms_norm_eps
-        self.use_positional_embedding = use_positional_embedding
-        self.initializer_factor = initializer_factor
-        self.is_training = is_training
-        self.batch_size = batch_size
+class TimesFmModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "patch_length": 32,
+        "context_length": 512,
+        "horizon_length": 128,
+        "freq_size": 3,
+        "num_hidden_layers": 1,
+        "hidden_size": 16,
+        "intermediate_size": 32,
+        "head_dim": 8,
+        "num_attention_heads": 2,
+        "tolerance": 1e-6,
+        "rms_norm_eps": 1e-6,
+        "quantiles": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        "pad_val": 1123581321.0,
+        "use_positional_embedding": True,
+        "initializer_factor": 0.0,
+        "is_training": False,
+        "batch_size": 3,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # The size of test input
-        self.seq_length = context_length // patch_length
-        self.hidden_size = hidden_size
+        values["seq_length"] = values["context_length"] // values["patch_length"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def get_config(self):
         return TimesFmConfig(
@@ -121,6 +111,8 @@ class TimesFmModelTester:
 
 @require_torch
 class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = TimesFmModelTester
+
     all_model_classes = (TimesFmModelForPrediction,) if is_torch_available() else ()
     all_generative_model_classes = ()
 
@@ -143,6 +135,59 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Compile not yet supported because of masks")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        """TimesFM computes its own attention mask internally, so the generic test
+        (which injects external masks) is not compatible. This override directly
+        verifies eager vs SDPA equivalence on model outputs."""
+        if not self.all_model_classes[0]._supports_sdpa:
+            self.skipTest("Model does not support SDPA")
+
+        if dtype == "fp16":
+            dtype = torch.float16
+        elif dtype == "bf16":
+            dtype = torch.bfloat16
+        elif dtype == "fp32":
+            dtype = torch.float32
+
+        tolerance = {torch.float32: 1e-5, torch.bfloat16: 1e-3, torch.float16: 1e-3}[dtype]
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+
+        model_eager = TimesFmModelForPrediction._from_config(config, attn_implementation="eager")
+        model_eager.to(dtype=dtype, device=torch_device)
+        model_eager.eval()
+
+        model_sdpa = TimesFmModelForPrediction._from_config(config, attn_implementation="sdpa")
+        model_sdpa.load_state_dict(model_eager.state_dict())
+        model_sdpa.to(dtype=dtype, device=torch_device)
+        model_sdpa.eval()
+
+        past_values = inputs_dict["past_values"].to(dtype=dtype, device=torch_device)
+        freq = inputs_dict["freq"].to(device=torch_device)
+
+        with torch.no_grad():
+            out_eager = model_eager(past_values=past_values, freq=freq)
+            out_sdpa = model_sdpa(past_values=past_values, freq=freq)
+
+        self.assertTrue(
+            torch.allclose(out_eager.mean_predictions, out_sdpa.mean_predictions, atol=tolerance),
+            f"mean_predictions max diff: {(out_eager.mean_predictions - out_sdpa.mean_predictions).abs().max().item():.2e}",
+        )
+        self.assertTrue(
+            torch.allclose(out_eager.full_predictions, out_sdpa.full_predictions, atol=tolerance),
+            f"full_predictions max diff: {(out_eager.full_predictions - out_sdpa.full_predictions).abs().max().item():.2e}",
+        )
+        hs_eager = out_eager.hidden_states[-1]
+        hs_sdpa = out_sdpa.hidden_states[-1]
+        self.assertTrue(
+            torch.allclose(hs_eager, hs_sdpa, atol=tolerance),
+            f"hidden_states max diff: {(hs_eager - hs_sdpa).abs().max().item():.2e}",
+        )
 
     @unittest.skip(reason="Model does not have input embeddings")
     def test_model_get_set_embeddings(self):

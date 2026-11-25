@@ -4,7 +4,6 @@ import io
 import json
 import os
 import re
-from typing import Optional
 
 import torch
 from tokenizers import AddedToken, processors
@@ -14,7 +13,7 @@ from transformers import (
     GenerationConfig,
     Llama4Config,
     Llama4ForConditionalGeneration,
-    Llama4ImageProcessorFast,
+    Llama4ImageProcessor,
     Llama4Processor,
     Llama4TextConfig,
     Llama4VisionConfig,
@@ -91,7 +90,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -201,7 +200,7 @@ def max_context_length(model_path, instruct=False):
     if not instruct:
         return 256 * 1024
 
-    with open(os.path.join(model_path, "params.json"), "r") as f:
+    with open(os.path.join(model_path, "params.json"), "r", encoding="utf-8") as f:
         params = json.load(f)
     params = params.get("model", params)
     if params.get("moe_args") is None:
@@ -219,7 +218,7 @@ def write_model(
 ):
     os.makedirs(model_path, exist_ok=True)
 
-    with open(os.path.join(input_base_path, "params.json"), "r") as f:
+    with open(os.path.join(input_base_path, "params.json"), "r", encoding="utf-8") as f:
         params = json.load(f)
 
     params = params.get("model", params)
@@ -623,7 +622,7 @@ class Llama4Converter(TikTokenConverter):
         special_tokens: list[str],
         pattern: str,
         model_max_length: int = 0,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=pattern)
@@ -681,7 +680,7 @@ def write_tokenizer(args):
     )
     tokenizer = converter.converted_tokenizer
 
-    image_processor = Llama4ImageProcessorFast()
+    image_processor = Llama4ImageProcessor()
     processor = Llama4Processor(
         image_processor=image_processor,
         tokenizer=tokenizer,

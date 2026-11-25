@@ -32,7 +32,7 @@ sarai l'artefice di un importante contributo open-source a 🤗 Transformers. Du
 - ottenere più comprensione delle best practices in open-source
 - capire i principi di design di una della librerie NLP più popolari
 - capire come efficientemente testare complessi modelli NLP
-- capire come integrare utilit Python come `black`, `ruff`, `make fix-copies` in una libreria per garantire sempre di avere un codice leggibile e pulito
+- capire come integrare utilit Python come `black`, `ruff`, `make fix-repo` in una libreria per garantire sempre di avere un codice leggibile e pulito
 
 Siamo anche contenti se vuoi aggiungere un modello che non può essere trovato nella cartella “calls-for-model-addition”.
 Le seguenti sezioni spiegano in dettaglio come aggiungere un nuovo modello. Può anche essere molto utile controllare modelli
@@ -708,7 +708,7 @@ Siete quasi alla fine! L'ultima cosa rimasta é avere una bella docstring e una 
 un template chiamato `docs/source/model_doc/brand_new_bert.rst`, che dovrete compilare. La prima cosa che un utente farà
 per usare il vostro modello sarà dare una bella lettura al doc. Quindi proponete una documentazione chiara e concisa. É molto
 utile per la community avere anche delle *Tips* per mostrare come il modello puo' essere usato. Non esitate a chiedere a Hugging Face
-riguardo alle docstirng.
+riguardo alle docstring.
 
 Quindi, assicuratevi che la docstring sia stata aggiunta a `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`.
 Assicuratevi che la docstring sia corretta e che includa tutti i necessari input e output. Abbiamo una guida dettagliata per
@@ -726,7 +726,7 @@ make style
 E che il codice passi i quality check:
 
 ```bash
-make quality
+make check-repo
 ```
 
 A volte capita che manchino delle informazioninella docstring o alcuni nomi sbagliati, questo farà fallire i tests sopra.

@@ -18,6 +18,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import BitNetQuantConfig
 
 from ..utils import is_accelerate_available, is_torch_available, logging
 
@@ -38,9 +39,7 @@ class BitNetHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
-
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    quantization_config: "BitNetQuantConfig"
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -68,13 +67,12 @@ class BitNetHfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_bitnet_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_bitnet_linear(
@@ -86,10 +84,6 @@ class BitNetHfQuantizer(HfQuantizer):
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
-
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        target_dtype = torch.int8
-        return target_dtype
 
     def is_serializable(self):
         return True
@@ -108,3 +102,13 @@ class BitNetHfQuantizer(HfQuantizer):
             self.quantization_config.linear_class == "autobitlinear"
             and self.quantization_config.quantization_mode == "online"
         )
+
+    serialized_names = {"weight": ["weight"]}
+
+    def get_load_operations(self):
+        from ..integrations.bitnet import BitNetDeserialize
+
+        config = self.quantization_config
+        if config.linear_class == "autobitlinear" and config.quantization_mode == "offline":
+            return {"deserialize": BitNetDeserialize}
+        return {}

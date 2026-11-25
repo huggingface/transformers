@@ -22,6 +22,7 @@ import numpy as np
 from datasets import Audio, load_dataset
 from parameterized import parameterized
 
+from tests.utils.test_audio_utils import compute_rmse
 from transformers import AutoProcessor, EncodecConfig
 from transformers.testing_utils import (
     is_torch_available,
@@ -30,6 +31,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -60,33 +62,27 @@ def prepare_inputs_dict(
 
 
 @require_torch
-class EncodecModelTester:
-    def __init__(
-        self,
-        parent,
+class EncodecModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
         # `batch_size` needs to be an even number if the model has some outputs with batch dim != 0.
-        batch_size=12,
-        num_channels=2,
-        is_training=False,
-        intermediate_size=40,
-        hidden_size=32,
-        num_filters=8,
-        num_residual_layers=1,
-        upsampling_ratios=[8, 4],
-        num_lstm_layers=1,
-        codebook_size=64,
-    ):
+        "batch_size": 12,
+        "num_channels": 2,
+        "is_training": False,
+        "intermediate_size": 40,
+        "hidden_size": 32,
+        "num_filters": 8,
+        "num_residual_layers": 1,
+        "upsampling_ratios": [8, 4],
+        "num_lstm_layers": 1,
+        "codebook_size": 64,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.intermediate_size = intermediate_size
-        self.hidden_size = hidden_size
-        self.num_filters = num_filters
-        self.num_residual_layers = num_residual_layers
-        self.upsampling_ratios = upsampling_ratios
-        self.num_lstm_layers = num_lstm_layers
-        self.codebook_size = codebook_size
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
@@ -142,10 +138,13 @@ class EncodecModelTester:
 
 @require_torch
 class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = EncodecModelTester
+
     all_model_classes = (EncodecModel,) if is_torch_available() else ()
     is_encoder_decoder = True
 
     test_resize_embeddings = False
+    test_torch_exportable = False  # data-dependent control flow in `_pad1d` (`if length <= max_pad`)
     pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -160,7 +159,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def setUp(self):
         self.model_tester = EncodecModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=EncodecConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self, config_class=EncodecConfig, hidden_size=32, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):
@@ -222,7 +221,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             torch.manual_seed(0)
             config.chunk_length_s = 2
-            config.overlap = 0
+            config.overlap = 0.0
             config.sampling_rate = 20
 
             model = model_class(config)
@@ -315,23 +314,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_forward_with_normalization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_normalization()
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
-
-
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
-
-
-def compute_rmse(arr1, arr2):
-    arr1_np = arr1.cpu().numpy().squeeze()
-    arr2_np = arr2.cpu().numpy().squeeze()
-    max_length = min(arr1.shape[-1], arr2.shape[-1])
-    arr1_np = arr1_np[..., :max_length]
-    arr2_np = arr2_np[..., :max_length]
-    arr1_normalized = normalize(arr1_np)
-    arr2_normalized = normalize(arr2_np)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
 """

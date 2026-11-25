@@ -19,13 +19,14 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
 
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -43,53 +44,42 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import CLIPProcessor
 
 
-class GroupViTVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        depths=[6, 3, 3],
-        num_group_tokens=[64, 8, 0],
-        num_output_groups=[64, 8, 8],
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.depths = depths
-        self.num_hidden_layers = sum(depths)
-        self.expected_num_hidden_layers = len(depths) + 1
-        self.num_group_tokens = num_group_tokens
-        self.num_output_groups = num_output_groups
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class GroupViTVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "depths": [6, 3, 3],
+        "num_group_tokens": [64, 8, 0],
+        "num_output_groups": [64, 8, 8],
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
 
-        num_patches = (image_size // patch_size) ** 2
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_hidden_layers"] = sum(values["depths"])
+        values["expected_num_hidden_layers"] = len(values["depths"]) + 1
         # no [CLS] token for GroupViT
-        self.seq_length = num_patches
+        values["seq_length"] = (values["image_size"] // values["patch_size"]) ** 2
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         rng = random.Random(0)
@@ -139,6 +129,8 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = GroupViTVisionModelTester
+
     all_model_classes = (GroupViTVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -146,7 +138,7 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = GroupViTVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=GroupViTVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -249,24 +241,20 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
                     ],
                 )
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     # override since the attention mask from GroupViT is not used to compute loss, thus no grad
@@ -336,42 +324,30 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class GroupViTTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class GroupViTTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         rng = random.Random(0)
@@ -424,11 +400,13 @@ class GroupViTTextModelTester:
 
 @require_torch
 class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = GroupViTTextModelTester
+
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = GroupViTTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -437,24 +415,20 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="GroupViTTextModel does not use inputs_embeds")
@@ -468,8 +442,20 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class GroupViTModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class GroupViTModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # need bs for batching_equivalence test
+        values["batch_size"] = GroupViTTextModelTester.get_small_config_defaults(**(text_kwargs or {}))["batch_size"]
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -478,8 +464,8 @@ class GroupViTModelTester:
         self.parent = parent
         self.text_model_tester = GroupViTTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = GroupViTVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
+        for key, value in self.get_small_config_defaults(text_kwargs, vision_kwargs, **kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -521,6 +507,8 @@ class GroupViTModelTester:
 
 @require_torch
 class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = GroupViTModelTester
+
     all_model_classes = (GroupViTModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
 
@@ -549,7 +537,7 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="input_embeds are tested in individual model tests")
+    @unittest.skip(reason="inputs_embeds are tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 
@@ -582,11 +570,22 @@ class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model = GroupViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester.vision_model_tester
+        # GroupViT returns attention grouping of each stage
+        return sum(g > 0 for g in self.model_tester.vision_model_tester.num_group_tokens)
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester.vision_model_tester
+        return model_tester.expected_num_hidden_layers
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 

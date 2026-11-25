@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Microsoft and the Hugging Face Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch DeBERTa-v2 model."""
 
 from collections.abc import Sequence
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -55,7 +53,6 @@ class DebertaV2SelfOutput(nn.Module):
         return hidden_states
 
 
-@torch.jit.script
 def make_log_bucket_position(relative_pos, bucket_size: int, max_position: int):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
@@ -103,30 +100,22 @@ def build_relative_position(query_layer, key_layer, bucket_size: int = -1, max_p
     return rel_pos_ids
 
 
-@torch.jit.script
-# Copied from transformers.models.deberta.modeling_deberta.c2p_dynamic_expand
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)])
 
 
-@torch.jit.script
-# Copied from transformers.models.deberta.modeling_deberta.p2c_dynamic_expand
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), key_layer.size(-2), key_layer.size(-2)])
 
 
-@torch.jit.script
-# Copied from transformers.models.deberta.modeling_deberta.pos_dynamic_expand
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-@torch.jit.script
 def scaled_size_sqrt(query_layer: torch.Tensor, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
 
 
-@torch.jit.script
 def build_rpos(query_layer, key_layer, relative_pos, position_buckets: int, max_relative_positions: int):
     if key_layer.size(-2) != query_layer.size(-2):
         return build_relative_position(
@@ -206,7 +195,7 @@ class DisentangledSelfAttention(nn.Module):
         Call the module
 
         Args:
-            hidden_states (`torch.FloatTensor`):
+            hidden_states (`torch.Tensor`):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
 
@@ -218,14 +207,14 @@ class DisentangledSelfAttention(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether return the attention matrix.
 
-            query_states (`torch.FloatTensor`, *optional*):
+            query_states (`torch.Tensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`torch.LongTensor`):
                 The relative position encoding between the tokens in the sequence. It's of shape [*B*, *N*, *N*] with
                 values ranging in [*-max_relative_positions*, *max_relative_positions*].
 
-            rel_embeddings (`torch.FloatTensor`):
+            rel_embeddings (`torch.Tensor`):
                 The embedding of relative distances. It's a tensor of shape [\\(2 \\times
                 \\text{max_relative_positions}\\), *hidden_size*].
 
@@ -366,7 +355,7 @@ class DebertaV2Attention(nn.Module):
         query_states=None,
         relative_pos=None,
         rel_embeddings=None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         self_output, att_matrix = self.self(
             hidden_states,
             attention_mask,
@@ -433,7 +422,7 @@ class DebertaV2Layer(GradientCheckpointingLayer):
         relative_pos=None,
         rel_embeddings=None,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         attention_output, att_matrix = self.attention(
             hidden_states,
             attention_mask,
@@ -518,9 +507,7 @@ class DebertaV2Embeddings(nn.Module):
         self.config = config
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, mask=None, inputs_embeds=None):
         if input_ids is not None:
@@ -649,7 +636,7 @@ class DebertaV2Encoder(nn.Module):
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
-        all_hidden_states: Optional[tuple[torch.Tensor]] = (hidden_states,) if output_hidden_states else None
+        all_hidden_states: tuple[torch.Tensor] | None = (hidden_states,) if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         next_kv = hidden_states
@@ -694,18 +681,19 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, (LegacyDebertaV2LMPredictionHead, DebertaV2LMPredictionHead)):
             init.zeros_(module.bias)
+        elif isinstance(module, DebertaV2Embeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaModel with Deberta->DebertaV2
 class DebertaV2Model(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         self.embeddings = DebertaV2Embeddings(config)
@@ -724,21 +712,21 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -896,16 +884,14 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     }
     _keys_to_ignore_on_load_unexpected = [r"mask_predictions.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.legacy = config.legacy
         self.deberta = DebertaV2Model(config)
         if self.legacy:
             self.cls = LegacyDebertaV2OnlyMLMHead(config)
         else:
-            self._tied_weights_keys = {
-                "lm_predictions.lm_head.weight": "deberta.embeddings.word_embeddings.weight",
-            }
+            self._tied_weights_keys = {}
             self.lm_predictions = DebertaV2OnlyMLMHead(config)
         # Initialize weights and apply final processing
         self.post_init()
@@ -928,25 +914,18 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     # Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM.forward with Deberta->DebertaV2
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, MaskedLMOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | MaskedLMOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.deberta(
             input_ids,
@@ -1012,7 +991,7 @@ class ContextPooler(nn.Module):
     """
 )
 class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1040,24 +1019,18 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
     # Copied from transformers.models.deberta.modeling_deberta.DebertaForSequenceClassification.forward with Deberta->DebertaV2
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SequenceClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | SequenceClassifierOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.deberta(
             input_ids,
@@ -1122,7 +1095,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaForTokenClassification with Deberta->DebertaV2
 class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1136,22 +1109,18 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, TokenClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | TokenClassifierOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.deberta(
             input_ids,
@@ -1185,7 +1154,7 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1199,19 +1168,19 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
     # Copied from transformers.models.deberta.modeling_deberta.DebertaForQuestionAnswering.forward with Deberta->DebertaV2
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, QuestionAnsweringModelOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | QuestionAnsweringModelOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.deberta(
             input_ids,
@@ -1263,7 +1232,7 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1289,24 +1258,18 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, MultipleChoiceModelOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | MultipleChoiceModelOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None

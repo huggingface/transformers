@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 University of Wisconsin-Madison and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch MRA model."""
 
 import math
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -54,9 +52,9 @@ def load_cuda_kernels():
     global mra_cuda_kernel
     if not is_kernels_available():
         raise ImportError("kernels is not installed, please install it with `pip install kernels`")
-    from kernels import get_kernel
+    from ...integrations.hub_kernels import get_kernel
 
-    mra_cuda_kernel = get_kernel("kernels-community/mra")
+    mra_cuda_kernel = get_kernel("kernels-community/mra", version=1)
 
 
 def sparse_max(sparse_qk_prod, indices, query_num_block, key_num_block):
@@ -476,11 +474,9 @@ class MraEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
-        self.register_buffer(
-            "token_type_ids",
-            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
-            persistent=False,
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)) + 2)
+        self.token_type_ids = nn.Buffer(
+            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device), persistent=False
         )
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
@@ -569,8 +565,11 @@ class MraSelfAttention(nn.Module):
             .transpose(1, 2)
         )
 
-        # revert changes made by get_extended_attention_mask
-        attention_mask = 1.0 + attention_mask / 10000.0
+        # revert changes made by float mask
+        if attention_mask.ndim == 4 and attention_mask.is_floating_point():
+            # (B, 1, Q, K) additive -> (B, K) with 1 = real-token, 0 = pad
+            attention_mask = (attention_mask[:, 0, -1, :] == 0).int()
+
         attention_mask = (
             attention_mask.squeeze()
             .repeat(1, self.num_attention_heads, 1)
@@ -790,17 +789,19 @@ class MraPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mra"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, MraLMPredictionHead):
             init.zeros_(module.bias)
+        elif isinstance(module, MraEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)) + 2)
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring
 class MraModel(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.config = config
 
@@ -819,19 +820,19 @@ class MraModel(MraPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
+    ) -> tuple | BaseModelOutputWithCrossAttentions:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -857,19 +858,16 @@ class MraModel(MraPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -893,7 +891,7 @@ class MraForMaskedLM(MraPreTrainedModel):
         "cls.predictions.decoder.weight": "mra.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         self.mra = MraModel(config)
@@ -912,23 +910,17 @@ class MraForMaskedLM(MraPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, MaskedLMOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | MaskedLMOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mra(
             input_ids,
@@ -989,7 +981,7 @@ class MraClassificationHead(nn.Module):
     """
 )
 class MraForSequenceClassification(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.mra = MraModel(config)
@@ -1001,23 +993,17 @@ class MraForSequenceClassification(MraPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SequenceClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | SequenceClassifierOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mra(
             input_ids,
@@ -1068,7 +1054,7 @@ class MraForSequenceClassification(MraPreTrainedModel):
 
 @auto_docstring
 class MraForMultipleChoice(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         self.mra = MraModel(config)
@@ -1081,16 +1067,16 @@ class MraForMultipleChoice(MraPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, MultipleChoiceModelOutput]:
+    ) -> tuple | MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1112,16 +1098,12 @@ class MraForMultipleChoice(MraPreTrainedModel):
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1171,7 +1153,7 @@ class MraForMultipleChoice(MraPreTrainedModel):
 
 @auto_docstring
 class MraForTokenClassification(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1185,21 +1167,17 @@ class MraForTokenClassification(MraPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, TokenClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | TokenClassifierOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mra(
             input_ids,
@@ -1244,7 +1222,7 @@ class MraForTokenClassification(MraPreTrainedModel):
 
 @auto_docstring
 class MraForQuestionAnswering(MraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MraConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -1259,18 +1237,18 @@ class MraForQuestionAnswering(MraPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, QuestionAnsweringModelOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    ) -> tuple | QuestionAnsweringModelOutput:
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mra(
             input_ids,

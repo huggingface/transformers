@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import gc
+import itertools
 import logging
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import datasets
 from huggingface_hub import delete_repo, snapshot_download
@@ -29,14 +31,14 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
+    ImageTextToTextPipeline,
     MaskGenerationPipeline,
-    T5ForConditionalGeneration,
     TextClassificationPipeline,
     TextGenerationPipeline,
     pipeline,
 )
-from transformers.pipelines import PIPELINE_REGISTRY, get_task
-from transformers.pipelines.base import Pipeline, _pad
+from transformers.pipelines import PIPELINE_REGISTRY, REMOVED_TASKS, check_task, get_task
+from transformers.pipelines.base import Pipeline, _pad, pad_collate_fn
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -46,6 +48,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
+    require_peft,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -54,6 +57,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, is_torch_available
 from transformers.utils import logging as transformers_logging
+from transformers.utils.chat_template_utils import Chat
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
@@ -140,6 +144,17 @@ class CommonPipelineTest(unittest.TestCase):
 
         self.assertIsInstance(text_classifier, MyPipeline)
 
+    @require_torch
+    def test_pipeline_tokenizer_tuple_respects_use_fast_override(self):
+        text_classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-bert",
+            tokenizer=("hf-internal-testing/tiny-random-bert", {"use_fast": False}),
+        )
+
+        self.assertIsInstance(text_classifier, TextClassificationPipeline)
+        self.assertEqual(type(text_classifier.tokenizer).__name__, "BertTokenizer")
+
     def test_check_task(self):
         task = get_task("openai-community/gpt2")
         self.assertEqual(task, "text-generation")
@@ -147,6 +162,82 @@ class CommonPipelineTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             # Wrong framework
             get_task("espnet/siddhana_slurp_entity_asr_train_asr_conformer_raw_en_word_valid.acc.ave_10best")
+
+    def test_check_task_deprecated_tasks(self):
+        """
+        Some tasks were deprecated, such as image-to-text. Models which had this pipeline tag can still be loaded
+        through different tasks (in this case, image-text-to-text). This test verifies that there is an adequate
+        warning and that the loaded pipeline is the one expected.
+        """
+        with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+            normalized_task, _, _ = check_task("image-to-text")
+        self.assertEqual(normalized_task, "image-text-to-text")
+
+    def test_check_task_removed_tasks(self):
+        """
+        Same as above, except some pipelines were removed. This test verifies that the correct error is raised.
+        """
+        for task in [*REMOVED_TASKS, "translation_en_to_fr"]:
+            with self.subTest(task=task), self.assertRaisesRegex(KeyError, "has been removed from transformers"):
+                check_task(task)
+
+    @staticmethod
+    def _mock_hub_pipeline_tag(pipeline_tag):
+        model_info = mock.Mock(pipeline_tag=pipeline_tag, library_name="transformers")
+        return mock.patch(
+            "transformers.pipelines.hf_api", return_value=mock.Mock(model_info=lambda *a, **k: model_info)
+        )
+
+    def test_get_task_deprecated_hub_tag(self):
+        """
+        Ensures that when a model has a deprecated pipeline tag, the correct task is returned in `get_task`.
+        """
+        with self._mock_hub_pipeline_tag("image-to-text"):
+            with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+                task = get_task("some/model")
+        self.assertEqual(task, "image-text-to-text")
+
+    def test_get_task_removed_hub_tag(self):
+        """
+        Same as above, but with removed tags.
+        """
+        for task in REMOVED_TASKS:
+            with self.subTest(task=task), self._mock_hub_pipeline_tag(task):
+                with self.assertRaisesRegex(KeyError, f"The task {task} has been removed from transformers"):
+                    get_task("some/model")
+
+    @require_torch
+    def test_pipeline_deprecated_task_is_redirected(self):
+        """
+        Ensures that loading a model with a deprecated pipeline tag redirects to the correct task.
+        """
+        model_id = "hf-internal-testing/tiny-random-LlavaForConditionalGeneration"
+
+        # Task passed explicitly
+        with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+            pipe = pipeline("image-to-text", model=model_id)
+        self.assertIsInstance(pipe, ImageTextToTextPipeline)
+        self.assertEqual(pipe.task, "image-text-to-text")
+
+        # Task inferred from the Hub `pipeline_tag`
+        with self._mock_hub_pipeline_tag("image-to-text"):
+            with self.assertWarnsRegex(UserWarning, "image-to-text has been removed"):
+                pipe = pipeline(model=model_id)
+        self.assertIsInstance(pipe, ImageTextToTextPipeline)
+        self.assertEqual(pipe.task, "image-text-to-text")
+
+    def test_pipeline_removed_task_raises(self):
+        """
+        Same as above, except with removed tasks (should raise).
+        """
+        # Raises before any default model would be downloaded
+        with self.assertRaisesRegex(KeyError, "The task summarization has been removed from transformers"):
+            pipeline("summarization")
+
+        # Task inferred from the Hub `pipeline_tag`
+        with self._mock_hub_pipeline_tag("question-answering"):
+            with self.assertRaisesRegex(KeyError, "The task question-answering has been removed from transformers"):
+                pipeline(model="hf-internal-testing/tiny-random-bert")
 
     @require_torch
     def test_iterator_data(self):
@@ -169,6 +260,83 @@ class CommonPipelineTest(unittest.TestCase):
             self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
             results.append(out)
         self.assertEqual(len(results), 10)
+
+    @require_torch
+    def test_generator_input_not_materialized(self):
+        # Regression test for #47116: passing a generator must stream lazily rather than be pulled into a
+        # list up front, which OOMs on large/streaming inputs.
+        produced = 0
+
+        def data(n: int):
+            nonlocal produced
+            for _ in range(n):
+                produced += 1
+                yield "This is a test"
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+
+        outputs = pipe(data(1000))
+        # A generator input returns a lazy iterator, not a fully materialized list of outputs.
+        self.assertNotIsInstance(outputs, list)
+        # Detecting chat-style inputs only peeks at the first item, so at most one element is consumed up
+        # front (the old code did `list(inputs)`, draining all 1000 here).
+        self.assertLessEqual(produced, 1)
+        # Pulling only the first few outputs must not drain the whole generator.
+        first = list(itertools.islice(outputs, 3))
+        self.assertEqual(len(first), 3)
+        self.assertLess(produced, 1000)
+
+    @require_torch
+    def test_chat_input_as_generator(self):
+        # A single chat can be passed as a generator of messages; it is a bounded conversation that gets
+        # detected and wrapped as a `Chat` (one input), matching the list-of-messages behavior. Downstream
+        # tokenization does not understand `Chat` for text-classification, so we short-circuit `run_single`
+        # and only assert on what it receives.
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ]
+
+        class _Stop(Exception):
+            pass
+
+        captured = {}
+
+        def spy(self, inputs, *args, **kwargs):
+            captured["inputs"] = inputs
+            raise _Stop
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with mock.patch.object(Pipeline, "run_single", spy), self.assertRaises(_Stop):
+            pipe(m for m in messages)
+
+        self.assertIsInstance(captured["inputs"], Chat)
+        self.assertEqual(captured["inputs"].messages, messages)
+
+    @require_torch
+    def test_chats_as_generator_wrapped_lazily(self):
+        # A generator of chats (each a list of messages) is wrapped as `Chat` per item and streamed lazily,
+        # rather than being materialized to a list of `Chat` up front like the list-of-chats case.
+        chats = [
+            [{"role": "user", "content": "Hello!"}],
+            [{"role": "user", "content": "Goodbye!"}],
+        ]
+
+        captured = {}
+
+        def fake_get_iterator(self, inputs, *args, **kwargs):
+            captured["inputs"] = inputs
+            return iter([])
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-distilbert")
+        with mock.patch.object(Pipeline, "get_iterator", fake_get_iterator):
+            list(pipe(c for c in chats))
+
+        # `get_iterator` receives a still-unconsumed generator; draining it here yields one `Chat` per item.
+        streamed = list(captured["inputs"])
+        self.assertEqual(len(streamed), 2)
+        self.assertTrue(all(isinstance(chat, Chat) for chat in streamed))
+        self.assertEqual(streamed[0].messages, chats[0])
 
     @require_torch
     def test_unbatch_attentions_hidden_states(self):
@@ -214,30 +382,50 @@ class CommonPipelineTest(unittest.TestCase):
 
             self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load
 
+    @require_peft
     @require_torch
-    def test_pipeline_with_task_parameters_no_side_effects(self):
+    def test_pipeline_from_local_with_embedded_adapter(self):
         """
-        Regression test: certain pipeline flags, like `task`, modified the model configuration, causing unexpected
-        side-effects
+        Test for issue #43746: Only overwrite the pretrained_model_name_or_path if needed with adapter.
+
+        This test ensures that when a pipeline loads from a local directory that contains a base model
+        with an embedded adapter (i.e., it has a config.json file), the path should NOT be overwritten
+        with the base_model_name_or_path from the adapter config. The fix is applied in
+        src/transformers/pipelines/__init__.py in the pipeline function.
         """
-        # This checkpoint has task-specific parameters that will modify the behavior of the pipeline
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
-        self.assertTrue(model.config.num_beams == 1)
+        peft_test_model = "peft-internal-testing/tiny-OPTForCausalLM-lora"
+        transformers_test_model = "hf-internal-testing/tiny-random-OPTForCausalLM"
 
-        # The task-specific parameters used to cause side-effects on `model.config` -- not anymore
-        pipe = pipeline(model=model, tokenizer=AutoTokenizer.from_pretrained("t5-small"), task="translation_en_to_de")
-        self.assertTrue(model.config.num_beams == 1)
-        self.assertTrue(model.generation_config.num_beams == 1)
+        # Create a temporary directory with a complete adapter model structure
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_dir = Path(tmp_dir)
 
-        # Under the hood: we now store a generation config in the pipeline. This generation config stores the
-        # task-specific parameters.
-        self.assertTrue(pipe.generation_config.num_beams == 4)
+            # Save the model and adapter locally
+            from transformers import AutoConfig, AutoModel
 
-        # We can confirm that the task-specific parameters have an effect. (In this case, the default is `num_beams=1`,
-        # which would crash when `num_return_sequences=4` is passed.)
-        pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4)
-        with self.assertRaises(ValueError):
-            pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4, num_beams=1)
+            config = AutoConfig.from_pretrained(transformers_test_model)
+            model = AutoModel.from_pretrained(transformers_test_model)
+            adapter_model = AutoModel.from_pretrained(peft_test_model)
+            config.save_pretrained(tmp_dir)
+            model.save_pretrained(tmp_dir)
+            adapter_model.save_pretrained(tmp_dir)
+
+            # Overwrite the base_model_name_or_path to an invalid value that
+            # would cause the pipeline load to fail later
+            import json
+
+            from transformers.utils import ADAPTER_CONFIG_NAME
+
+            adapter_config_path = tmp_dir / ADAPTER_CONFIG_NAME
+            with open(adapter_config_path, "r", encoding="utf-8") as handle:
+                adapter_config = json.load(handle)
+            adapter_config["base_model_name_or_path"] = "some/model/that/does/not/exist"
+            with open(adapter_config_path, "w", encoding="utf-8") as handle:
+                json.dump(adapter_config, handle)
+
+            # Load from the saved path and make sure it actually loads despite
+            # the invalid adapter config path
+            pipeline("text-generation", tmp_dir)
 
 
 @is_pipeline_test
@@ -294,11 +482,40 @@ class PipelinePadTest(unittest.TestCase):
                 torch.LongTensor([[10, 10, 1, 23, 24, 2], [1, 23, 24, 43, 44, 2]]),
             )
         )
+        empty = [{"input_ids": torch.LongTensor([[]])}, {"input_ids": torch.LongTensor([[1, 2]])}]
+        self.assertTrue(torch.equal(_pad(empty, "input_ids", 10, "left"), torch.LongTensor([[10, 10], [1, 2]])))
         self.assertTrue(
             torch.allclose(
                 _pad(items, "attention_mask", 0, "right"), torch.LongTensor([[0, 1, 1, 0, 0, 0], [0, 1, 1, 1, 1, 0]])
             )
         )
+
+    @require_torch
+    def test_pipeline_padding_text_left_and_audio_features_right(self):
+        import torch
+
+        tokenizer = mock.Mock(pad_token_id=0, padding_side="left", model_input_names=["input_ids", "attention_mask"])
+        feature_extractor = mock.Mock(padding_value=0.0, padding_side="right", model_input_names=["input_features"])
+        items = [
+            {
+                "input_ids": torch.LongTensor([[5]]),
+                "attention_mask": torch.LongTensor([[1]]),
+                "input_features": torch.ones(1, 1, 2),
+                "input_features_mask": torch.LongTensor([[1]]),
+            },
+            {
+                "input_ids": torch.LongTensor([[5, 6]]),
+                "attention_mask": torch.LongTensor([[1, 1]]),
+                "input_features": torch.ones(1, 2, 2),
+                "input_features_mask": torch.LongTensor([[1, 1]]),
+            },
+        ]
+
+        batch = pad_collate_fn(tokenizer, feature_extractor)(items)
+        self.assertTrue(torch.equal(batch["input_ids"], torch.LongTensor([[0, 5], [5, 6]])))
+        self.assertTrue(torch.equal(batch["attention_mask"], torch.LongTensor([[0, 1], [1, 1]])))
+        self.assertTrue(torch.equal(batch["input_features"][:, :, 0], torch.tensor([[1.0, 0.0], [1.0, 1.0]])))
+        self.assertTrue(torch.equal(batch["input_features_mask"], torch.LongTensor([[1, 0], [1, 1]])))
 
     @require_torch
     def test_pipeline_image_padding(self):
@@ -534,6 +751,14 @@ class PipelineUtilsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             pipe = pipeline("text-generation", model=model, device="cpu", tokenizer=tokenizer)
 
+    @require_torch_accelerator
+    def test_pipeline_single_device_device_map(self):
+        # A single-device `device_map` must not be overridden by the pipeline's fallback to device 0
+        import torch
+
+        pipe = pipeline("text-generation", model="hf-internal-testing/tiny-random-bert", device_map="cpu")
+        self.assertEqual(pipe.model.device, torch.device("cpu"))
+
     @require_torch_multi_accelerator
     def test_pipeline_device_not_equal_model_device(self):
         # Test when device ids are different, pipeline should move the model to the passed device id
@@ -640,24 +865,11 @@ class PipelineUtilsTest(unittest.TestCase):
         auto_model_cls = relevant_auto_classes[0]
 
         # retrieve correct model ids
-        if task == "translation":
-            # special case for translation pipeline which has multiple languages
-            model_ids = []
-            revisions = []
-            tasks = []
-            for translation_pair in task_dict["default"]:
-                model_id, revision = task_dict["default"][translation_pair]["model"]
+        model_id, revision = task_dict["default"]["model"]
 
-                model_ids.append(model_id)
-                revisions.append(revision)
-                tasks.append(task + f"_{'_to_'.join(translation_pair)}")
-        else:
-            # normal case - non-translation pipeline
-            model_id, revision = task_dict["default"]["model"]
-
-            model_ids = [model_id]
-            revisions = [revision]
-            tasks = [task]
+        model_ids = [model_id]
+        revisions = [revision]
+        tasks = [task]
 
         # check for equality
         for model_id, revision, task in zip(model_ids, revisions, tasks):

@@ -160,13 +160,6 @@ python src/transformers/commands/transformers_cli.py env
 
    🤗 Transformers 使用 `black` 和 `ruff` 来保持代码风格的一致性。进行更改后，使用以下命令自动执行格式更正和代码验证：
 
-   ```bash
-   make fixup
-   ```
-
-   它已经被优化为仅适用于你创建的 PR 所修改过的文件。
-
-   如果想要逐个运行检查，可以使用以下命令：
 
    ```bash
    make style
@@ -175,13 +168,7 @@ python src/transformers/commands/transformers_cli.py env
    🤗 Transformers 还使用了 `ruff` 和一些自定义脚本来检查编码错误。虽然质量管理是通过 CI 进行的，但你也可以使用以下命令来运行相同的检查：
 
    ```bash
-   make quality
-   ```
-
-   最后，我们有许多脚本来确保在添加新模型时不会忘记更新某些文件。你可以使用以下命令运行这些脚本：
-
-   ```bash
-   make repo-consistency
+   make check-repo
    ```
 
    想要了解有关这些检查及如何解决相关问题的更多信息，请阅读 [检查 Pull Request](https://huggingface.co/docs/transformers/pr_checks) 指南。
@@ -247,7 +234,7 @@ python src/transformers/commands/transformers_cli.py env
 
 ### 测试
 
-包含了广泛的测试套件来测试库的行为和一些示例。库测试可以在 [tests](https://github.com/huggingface/transformers/tree/main/tests) 文件夹中找到，示例测试可以在 [examples](https://github.com/huggingface/transformers/tree/main/examples) 文件夹中找到。
+包含了广泛的测试套件来测试库的行为。库测试可以在 [tests](https://github.com/huggingface/transformers/tree/main/tests) 文件夹中找到。
 
 我们喜欢使用 `pytest` 和 `pytest-xdist`，因为它运行更快。在仓库的根目录，指定一个*子文件夹的路径或测试文件*来运行测试：
 
@@ -255,14 +242,7 @@ python src/transformers/commands/transformers_cli.py env
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
-同样地，在 `examples` 目录，指定一个*子文件夹的路径或测试文件* 来运行测试。例如，以下命令会测试 PyTorch `examples` 目录中的文本分类子文件夹：
-
-```bash
-pip install -r examples/xxx/requirements.txt  # 仅在第一次需要
-python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
-```
-
-实际上这就是我们的 `make test` 和 `make test-examples` 命令的实现方式（不包括 `pip install`）！
+实际上这就是我们的 `make test` 命令的实现方式！
 
 你也可以指定一个较小的测试集来仅测试特定功能。
 
@@ -270,13 +250,12 @@ python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classific
 
 <Tip warning={true}>
 
-记得指定一个*子文件夹的路径或测试文件*来运行测试。否则你将会运行 `tests` 或 `examples` 文件夹中的所有测试，它会花费很长时间！
+记得指定一个*子文件夹的路径或测试文件*来运行测试。否则你将会运行 `tests` 文件夹中的所有测试，它会花费很长时间！
 
 </Tip>
 
 ```bash
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
-RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
 和时间较长的测试一样，还有其他环境变量在测试过程中，在默认情况下是未启用的：
@@ -290,7 +269,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 
 ```bash
 python -m unittest discover -s tests -t . -v
-python -m unittest discover -s examples -t examples -v
 ```
 
 ### 风格指南

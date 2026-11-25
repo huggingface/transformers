@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -24,9 +24,9 @@ This guide shows how to work around this difference by using a web server to han
 
 ## Create a server
 
-[Starlette](https://www.starlette.io/) is a lightweight framework for building web servers. You can use any other framework you'd like, but you may have to make some changes to the code below.
+[Starlette](https://starlette.dev/) is a lightweight framework for building web servers. You can use any other framework you'd like, but you may have to make some changes to the code below.
 
-Before you begin, make sure Starlette and [uvicorn](http://www.uvicorn.org/) are installed.
+Before you begin, make sure Starlette and [uvicorn](https://uvicorn.dev/) are installed.
 
 ```py
 !pip install starlette uvicorn
@@ -41,6 +41,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from transformers import pipeline
+from contextlib import asynccontextmanager
 import asyncio
 
 async def homepage(request):
@@ -58,17 +59,20 @@ async def server_loop(q):
         out = pipe(string)
         await response_q.put(out)
 
+@asynccontextmanager
+async def lifespan(app):
+    q = asyncio.Queue()
+    app.model_queue = q
+    task = asyncio.create_task(server_loop(q))
+    yield
+    task.cancel()
+
 app = Starlette(
     routes=[
         Route("/", homepage, methods=["POST"]),
     ],
+    lifespan=lifespan,
 )
-
-@app.on_event("startup")
-async def startup_event():
-    q = asyncio.Queue()
-    app.model_queue = q
-    asyncio.create_task(server_loop(q))
 ```
 
 Start the server with the following command.

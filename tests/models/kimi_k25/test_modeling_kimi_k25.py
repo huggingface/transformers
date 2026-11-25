@@ -1,0 +1,404 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch Kimi2.6 model."""
+
+import unittest
+
+from parameterized import parameterized
+
+from transformers import (
+    AutoProcessor,
+    Kimi_K25Config,
+    is_torch_available,
+)
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_torch,
+    slow,
+    torch_device,
+)
+
+from ...test_modeling_common import (
+    floats_tensor,
+)
+from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTest, VLMModelTester
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import Kimi_K25ForConditionalGeneration, Kimi_K25Model
+
+
+class Kimi_K25VisionText2TextModelTester(VLMModelTester):
+    base_model_class = Kimi_K25Model
+    config_class = Kimi_K25Config
+
+    conditional_generation_class = Kimi_K25ForConditionalGeneration
+
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "image_size": 32,
+        "patch_size": 8,
+        "num_image_tokens": 16,
+        "hidden_act": "silu",
+        "head_dim": 8,
+        "num_heads": 4,
+        "pos_emb_height": 4,
+        "merge_kernel_size": (1, 1),
+        "pos_emb_width": 4,
+        "pos_emb_time": 1,
+        "kv_lora_rank": 16,
+        "q_lora_rank": 32,
+        "qk_rope_head_dim": 16,
+        "v_head_dim": 32,
+        "qk_nope_head_dim": 32,
+        "attention_probs_dropout_prob": 0.0,
+        # MoE fields synced with DeepSeekV3Tester
+        # `first_k_dense_replace` enables MoEs after `layer=0`
+        "first_k_dense_replace": 1,
+        "n_group": 2,
+        "topk_group": 1,
+        "num_experts_per_tok": 8,
+        "n_shared_experts": 1,
+        "n_routed_experts": 8,
+        "moe_intermediate_size": 16,
+        "aux_loss_alpha": 0.001,
+        "routed_scaling_factor": 2.5,
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": 10000,
+        },
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # These can be inferred from existing properties and don't get separate kwargs
+        values["projection_hidden_size"] = values["hidden_size"]
+        return values
+
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return floats_tensor(
+            [
+                batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels,
+                self.patch_size,
+                self.patch_size,
+            ]
+        )
+
+    def place_image_tokens(self, input_ids, config):
+        # Place image tokens with vision_start_token_id prefix
+        input_ids = input_ids.clone()
+        # Clear any accidental special tokens first
+        input_ids[:, -1] = self.pad_token_id
+        input_ids[input_ids == self.video_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        # Place image tokens with vision_start_token_id prefix
+        input_ids[:, : self.num_image_tokens] = self.image_token_id
+        return input_ids
+
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        return {
+            "image_grid_thw": torch.tensor([[1, 4, 4]] * batch_size, device=torch_device),
+        }
+
+
+@require_torch
+class Kimi_K25ModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Kimi_K25VisionText2TextModelTester
+
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip("DeepseekV3 backbone is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("DeepseekV3 backbone is not compatible with assisted decoding")
+    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("DeepseekV3 backbone is not compatible with assisted decoding")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("Deepseek-V3 backbone uses MLA so it is not compatible with the standard cache format")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Deepseek-V3 backbone uses MLA so it is not compatible with the standard cache format")
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="SDPA can't dispatch on flash due to unsupported head dims on LM backbone")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+
+@slow
+@require_torch
+class KimiK25IntegrationTest(unittest.TestCase):
+    model_id = "hf-internal-testing/kimi-k25-for-integration-test"
+    model = None
+    processor = None
+
+    @classmethod
+    def setUpClass(cls):
+        cleanup(torch_device, gc_collect=True)
+        cls.model = Kimi_K25ForConditionalGeneration.from_pretrained(cls.model_id, device_map="auto")
+        cls.processor = AutoProcessor.from_pretrained(cls.model_id)
+
+        cls.message1 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+        cls.message2 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
+                        ),
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+        cls.message3 = [{"role": "user", "content": "Who would win in a fight - a dinosaur or a cow named Moo Moo?"}]
+
+        cls.message_video = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/karate.mp4"
+                        ),
+                    },
+                    {"type": "text", "text": "What kind of dog is this?"},
+                ],
+            }
+        ]
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_model_logits_text_only(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.00000000, -0.02641739,  0.01707786, -0.08232787,  0.12016402, -0.15289734, -0.08252842,
+                    0.15658118, -0.04173164,  0.10555173],
+                    [ 0.00000000, -0.02639876,  0.01706616, -0.08229892,  0.12015337, -0.15289734, -0.08251060,
+                    0.15658717, -0.04172155,  0.10556119],
+                    [ 0.00000000, -0.02639606,  0.01708876, -0.08232962,  0.12015553, -0.15291165, -0.08253470,
+                    0.15658627, -0.04173409,  0.10555199],
+                    [ 0.00000000, -0.02638427,  0.01708288, -0.08230965,  0.12014508, -0.15289523, -0.08252528,
+                    0.15660310, -0.04173251,  0.10554133],
+                    [ 0.00000000, -0.02639318,  0.01706917, -0.08231460,  0.12016111, -0.15290320, -0.08252579,
+                    0.15659124, -0.04173930,  0.10554294],
+                    [ 0.00000000, -0.02638769,  0.01707737, -0.08231344,  0.12015510, -0.15289856, -0.08252031,
+                    0.15659934, -0.04173541,  0.10554094],
+                    [ 0.00000000, -0.02639529,  0.01708556, -0.08231322,  0.12014811, -0.15291123, -0.08251978,
+                    0.15660490, -0.04173838,  0.10553965],
+                    [ 0.00000000, -0.02639412,  0.01707170, -0.08232507,  0.12014882, -0.15289663, -0.08251097,
+                    0.15659560, -0.04172803,  0.10553968],
+                    [ 0.00000000, -0.02639644,  0.01707644, -0.08233012,  0.12013669, -0.15289611, -0.08249903,
+                    0.15660135, -0.04172298,  0.10554458],
+                    [ 0.00000000, -0.02639807,  0.01707577, -0.08232461,  0.12014168, -0.15288822, -0.08250540,
+                    0.15660320, -0.04172593,  0.10553741]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): -0.014419052749872208})
+
+        inputs = self.processor.apply_chat_template(
+            self.message3, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
+
+    def test_model_logits(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.00000000, -0.02641739,  0.01707786, -0.08232787,  0.12016402, -0.15289734, -0.08252842,
+                    0.15658118, -0.04173164,  0.10555173],
+                    [ 0.00000000, -0.02639876,  0.01706616, -0.08229892,  0.12015337, -0.15289734, -0.08251060,
+                    0.15658717, -0.04172155,  0.10556119],
+                    [ 0.00000000, -0.02639606,  0.01708876, -0.08232962,  0.12015553, -0.15291165, -0.08253470,
+                    0.15658627, -0.04173409,  0.10555199],
+                    [ 0.00000000, -0.02639439,  0.01708424, -0.08231656,  0.12013876, -0.15291429, -0.08251298,
+                    0.15660164, -0.04171884,  0.10554679],
+                    [ 0.00000000, -0.02638364,  0.01708178, -0.08230615,  0.12013706, -0.15290739, -0.08251728,
+                    0.15661213, -0.04172764,  0.10554501],
+                    [ 0.00000000, -0.02639332,  0.01708583, -0.08231664,  0.12012445, -0.15291154, -0.08248951,
+                    0.15662190, -0.04171957,  0.10554942],
+                    [ 0.00000000,  0.08700177,  0.08366316,  0.07953200, -0.16923970,  0.06034253,  0.23461264,
+                    0.23159909, -0.08662768, -0.01452735],
+                    [ 0.00000000, -0.07244547,  0.02737196,  0.07369756,  0.11849800, -0.01468838, -0.08068197,
+                    -0.22196104, -0.10857108,  0.00384381],
+                    [ 0.00000000,  0.24396195,  0.07257971,  0.02183190,  0.05994213, -0.09902838, -0.05029112,
+                    -0.09634171, -0.11046760,  0.02089387],
+                    [ 0.00000000,  0.05029136, -0.03608268,  0.03495589,  0.02199023, -0.06974902,  0.11681847,
+                    -0.12890734, -0.07075065,  0.12983331]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.007999920286238194})
+
+        inputs = self.processor.apply_chat_template(
+            self.message1, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
+
+    def test_model_logits_batched(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.00000000, -0.02641735,  0.01707790, -0.08232785,  0.12016401, -0.15289739, -0.08252840,
+                    0.15658122, -0.04173165,  0.10555175],
+                    [ 0.00000000, -0.02639874,  0.01706615, -0.08229891,  0.12015339, -0.15289740, -0.08251059,
+                    0.15658718, -0.04172156,  0.10556121],
+                    [ 0.00000000, -0.02639605,  0.01708876, -0.08232963,  0.12015552, -0.15291169, -0.08253470,
+                    0.15658626, -0.04173411,  0.10555198],
+                    [ 0.00000000, -0.02639438,  0.01708425, -0.08231656,  0.12013876, -0.15291435, -0.08251297,
+                    0.15660165, -0.04171887,  0.10554679],
+                    [ 0.00000000, -0.02638364,  0.01708182, -0.08230612,  0.12013703, -0.15290746, -0.08251727,
+                    0.15661217, -0.04172765,  0.10554502],
+                    [ 0.00000000, -0.02639329,  0.01708584, -0.08231664,  0.12012445, -0.15291159, -0.08248951,
+                    0.15662192, -0.04171958,  0.10554940],
+                    [ 0.00000000,  0.08700177,  0.08366317,  0.07953200, -0.16923971,  0.06034254,  0.23461263,
+                    0.23159909, -0.08662771, -0.01452734],
+                    [ 0.00000000, -0.07244548,  0.02737197,  0.07369757,  0.11849802, -0.01468838, -0.08068197,
+                    -0.22196105, -0.10857107,  0.00384379],
+                    [ 0.00000000,  0.24396195,  0.07257971,  0.02183192,  0.05994214, -0.09902842, -0.05029113,
+                    -0.09634172, -0.11046763,  0.02089386],
+                    [ 0.00000000,  0.05029136, -0.03608267,  0.03495590,  0.02199023, -0.06974902,  0.11681848,
+                    -0.12890735, -0.07075066,  0.12983333]],
+
+                    [[ 0.00000000, -0.02641735,  0.01707790, -0.08232785,  0.12016401, -0.15289739, -0.08252840,
+                    0.15658122, -0.04173165,  0.10555175],
+                    [ 0.00000000, -0.02639874,  0.01706615, -0.08229891,  0.12015339, -0.15289740, -0.08251059,
+                    0.15658718, -0.04172156,  0.10556121],
+                    [ 0.00000000, -0.02639605,  0.01708876, -0.08232963,  0.12015552, -0.15291169, -0.08253470,
+                    0.15658626, -0.04173411,  0.10555198],
+                    [ 0.00000000, -0.02639438,  0.01708425, -0.08231656,  0.12013876, -0.15291435, -0.08251297,
+                    0.15660165, -0.04171887,  0.10554679],
+                    [ 0.00000000, -0.02638364,  0.01708182, -0.08230612,  0.12013703, -0.15290746, -0.08251727,
+                    0.15661217, -0.04172765,  0.10554502],
+                    [ 0.00000000, -0.02639329,  0.01708584, -0.08231664,  0.12012445, -0.15291159, -0.08248951,
+                    0.15662192, -0.04171958,  0.10554940],
+                    [ 0.00000000, -0.06525577,  0.08833339,  0.19255474, -0.08825377, -0.13921326,  0.14602648,
+                    0.04482564, -0.14889751,  0.11028164],
+                    [ 0.00000000, -0.00419279,  0.03873007,  0.31887013, -0.01151188, -0.30564448,  0.16670589,
+                    0.19029431, -0.13194472,  0.02135594],
+                    [ 0.00000000, -0.05691863,  0.09113241,  0.07550406,  0.09380092, -0.17235518,  0.20939635,
+                    0.04311826, -0.04715816, -0.00544562],
+                    [ 0.00000000, -0.01738080,  0.05235744,  0.22640616, -0.09752068, -0.16835804,  0.23356910,
+                    -0.02671638, -0.13405795, -0.09033854]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.007677852641791105})
+
+        inputs = self.processor.apply_chat_template(
+            [self.message1, self.message2],
+            tokenize=True,
+            add_generation_prompt=True,
+            padding=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))
+
+    def test_model_video(self):
+        expectations = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 0.0000e+00, -2.6417e-02,  1.7078e-02, -8.2328e-02,  1.2016e-01,
+                    -1.5290e-01, -8.2528e-02,  1.5658e-01, -4.1732e-02,  1.0555e-01],
+                    [ 0.0000e+00, -2.6399e-02,  1.7066e-02, -8.2299e-02,  1.2015e-01,
+                    -1.5290e-01, -8.2511e-02,  1.5659e-01, -4.1722e-02,  1.0556e-01],
+                    [ 0.0000e+00, -2.6396e-02,  1.7089e-02, -8.2330e-02,  1.2016e-01,
+                    -1.5291e-01, -8.2535e-02,  1.5659e-01, -4.1734e-02,  1.0555e-01],
+                    [ 0.0000e+00, -2.6388e-02,  1.7073e-02, -8.2334e-02,  1.2015e-01,
+                    -1.5293e-01, -8.2515e-02,  1.5659e-01, -4.1720e-02,  1.0556e-01],
+                    [ 0.0000e+00, -2.1670e-01,  1.6695e-01, -3.0506e-02,  1.4273e-01,
+                    -7.2325e-02, -2.1406e-01, -6.7767e-02, -4.7789e-02,  6.6907e-02],
+                    [ 0.0000e+00, -1.6136e-02,  4.4733e-02, -7.7766e-02,  1.3756e-01,
+                    -2.0453e-01, -1.0643e-01,  1.8437e-01, -7.5915e-02,  1.0252e-01],
+                    [ 0.0000e+00, -2.1125e-01,  1.7319e-01, -2.3906e-02,  1.4516e-01,
+                    -8.5956e-02, -2.1811e-01, -6.3858e-02, -5.6757e-02,  6.4419e-02],
+                    [ 0.0000e+00, -1.0793e-02,  5.9532e-02, -7.1375e-02,  1.4503e-01,
+                    -2.3454e-01, -1.1700e-01,  1.9887e-01, -9.4966e-02,  1.0046e-01],
+                    [ 0.0000e+00,  1.1804e-02, -9.0175e-02, -9.4707e-02,  1.3777e-01,
+                    -2.0531e-01, -1.1191e-01,  1.2696e-02, -7.1477e-02,  1.5818e-01],
+                    [ 0.0000e+00, -1.5441e-04,  5.1317e-02, -7.6136e-02,  1.2778e-01,
+                    -2.3561e-01, -1.0532e-01,  1.8567e-01, -8.6557e-02,  1.1266e-01]]
+                ],
+            }
+        )  # fmt: skip
+        expectations_mean = Expectations({("cuda", None): 0.0129})
+
+        inputs = self.processor.apply_chat_template(
+            [self.message_video],
+            tokenize=True,
+            add_generation_prompt=True,
+            padding=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(self.model.device)
+
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+
+        torch.testing.assert_close(logits[:, :10, :10].cpu(), torch.tensor(expectations.get_expectation()))
+        torch.testing.assert_close(logits.mean().cpu(), torch.tensor(expectations_mean.get_expectation()))

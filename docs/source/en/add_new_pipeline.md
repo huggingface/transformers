@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -146,7 +146,7 @@ class PairClassificationPipeline(Pipeline):
         return preprocess_kwargs, {}, {}
 
     def preprocess(self, text, second_text=None):
-        return self.tokenizer(text, text_pair=second_text, return_tensors=self.framework)
+        return self.tokenizer(text, text_pair=second_text, return_tensors="pt")
 
     def _forward(self, model_inputs):
         return self.model(**model_inputs)

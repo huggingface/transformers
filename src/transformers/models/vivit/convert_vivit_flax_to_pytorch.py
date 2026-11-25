@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,10 +21,10 @@ import os.path
 from collections import OrderedDict
 
 import numpy as np
-import requests
 import torch
 from flax.training.checkpoints import restore_checkpoint
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 
 from transformers import VivitConfig, VivitForVideoClassification, VivitImageProcessor
 from transformers.image_utils import PILImageResampling
@@ -35,8 +34,9 @@ def download_checkpoint(path):
     url = "https://storage.googleapis.com/scenic-bucket/vivit/kinetics_400/vivit_base_16x2_unfactorized/checkpoint"
 
     with open(path, "wb") as f:
-        with requests.get(url, stream=True) as req:
-            f.writelines(req.iter_content(chunk_size=2048))
+        with httpx.stream("GET", url) as resp:
+            resp.raise_for_status()
+            f.writelines(resp.iter_bytes(chunk_size=2048))
 
 
 def get_vivit_config() -> VivitConfig:
@@ -46,7 +46,7 @@ def get_vivit_config() -> VivitConfig:
     repo_id = "huggingface/label-files"
     filename = "kinetics400-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}

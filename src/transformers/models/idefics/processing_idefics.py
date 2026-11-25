@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 Processor class for IDEFICS.
 """
 
-from typing import Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -28,31 +26,52 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available
+from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
     import torch
 
 
+logger = logging.get_logger(__name__)
+
 IMAGE_TOKEN = "<image>"
 
 
-class IdeficsTextKwargs(TextKwargs, total=False):
-    add_eos_token: Optional[bool]
-    add_end_of_utterance_token: Optional[bool]
+class DeprecatedIdeficsTextKwargs(TextKwargs, total=False):
+    """
+    add_eos_token (`bool`, *optional*):
+        Deprecated, use [`IdeficsProcessorKwargs.add_eos_token`] instead.
+        Whether to add an end-of-sequence token at the end of the text input. When enabled, an EOS token is
+        appended to mark the end of the text sequence, which is useful for generation tasks.
+    add_end_of_utterance_token (`bool`, *optional*):
+        Deprecated, use [`IdeficsProcessorKwargs.add_end_of_utterance_token`] instead.
+        Whether to add an end-of-utterance token to mark the end of a user's message in conversational contexts.
+        This token helps the model distinguish between different utterances in a multi-turn conversation and is
+        particularly important for chat-based models.
+    """
+
+    add_eos_token: bool | None
+    add_end_of_utterance_token: bool | None
 
 
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: IdeficsTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": "longest",
-            "add_eos_token": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    """
+    add_eos_token (`bool`, *optional*, defaults to `False`):
+        Whether to add an end-of-sequence token at the end of the text input. When enabled, an EOS token is
+        appended to mark the end of the text sequence, which is useful for generation tasks.
+    add_end_of_utterance_token (`bool`, *optional*):
+        Whether to add an end-of-utterance token to mark the end of a user's message in conversational contexts.
+        This token helps the model distinguish between different utterances in a multi-turn conversation and is
+        particularly important for chat-based models. If `None`, the token is added only if the tokenizer was
+        trained with it.
+    """
+
+    text_kwargs: DeprecatedIdeficsTextKwargs
+
+    add_eos_token: bool
+    add_end_of_utterance_token: bool | None
 
 
 # copied from m4.training.packing
@@ -134,25 +153,28 @@ def is_url(string):
     return all([result.scheme, result.netloc])
 
 
+@auto_docstring
 class IdeficsProcessor(ProcessorMixin):
-    r"""
-    Constructs a IDEFICS processor which wraps a LLama tokenizer and IDEFICS image processor into a single processor.
+    valid_processor_kwargs = IdeficsProcessorKwargs
 
-    [`IdeficsProcessor`] offers all the functionalities of [`IdeficsImageProcessor`] and [`LlamaTokenizerFast`]. See
-    the docstring of [`~IdeficsProcessor.__call__`] and [`~IdeficsProcessor.decode`] for more information.
+    text_kwargs = {
+        "add_special_tokens": False,
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
 
-    Args:
-        image_processor (`IdeficsImageProcessor`):
-            An instance of [`IdeficsImageProcessor`]. The image processor is a required input.
-        tokenizer (`LlamaTokenizerFast`):
-            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
-        image_size (`int`, *optional*, defaults to 224):
-            Image size (assuming a square image)
-        add_end_of_utterance_token (`str`, *optional*):
-            The string representation of token representing end of utterance
-    """
+    add_eos_token = False
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
+        r"""
+        image_size (int, *optional*, defaults to 224):
+            The size of the image to be processed.
+        add_end_of_utterance_token (bool, *optional*, defaults to None):
+            Whether to add the end of utterance token to the text.
+        """
         super().__init__(image_processor, tokenizer)
         self.image_token_id = (
             tokenizer.image_token_id
@@ -170,42 +192,28 @@ class IdeficsProcessor(ProcessorMixin):
             "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
         )
 
+    @auto_docstring
     def __call__(
         self,
-        images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,
-        text: Union[
-            TextInput,
-            PreTokenizedInput,
-            list[TextInput],
-            list[PreTokenizedInput],
-            list[list[TextInput]],
-            list[list[PreTokenizedInput]],
-        ] = None,
+        images: ImageInput | list[ImageInput] | str | list[str] | list[list[str]] = None,
+        text: TextInput
+        | PreTokenizedInput
+        | list[TextInput]
+        | list[PreTokenizedInput]
+        | list[list[TextInput]]
+        | list[list[PreTokenizedInput]] = None,
         **kwargs: Unpack[IdeficsProcessorKwargs],
     ) -> BatchFeature:
-        """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
-        the model was trained on and prepares the image pixel values for the model to process.
-
-        Args:
-            images (`Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]]`):
-                either a single image or a batched list of images - can be passed in when text contains only text prompts,
-                in order to use the image-text-to-text behavior.
-            text (`Union[list[TextInput], [list[list[TextInput]]]]`):
-                either a single prompt or a batched list of prompts - see the detailed description immediately after
-                the end of the arguments doc section.
-            return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
-                The type of tensors to return. Can be one of:
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-
+        r"""
         Returns:
             a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
             directly passed to `model.generate`
 
-        Detailed explanation:
+            Detailed explanation:
 
-        Each entry in `text` is either a text to be passed as is or an image that will be processed.
+            Each entry in `text` is either a text to be passed as is or an image that will be processed.
 
-        An image can be either an image object (`PIL.Image`) or a url from which the image can be retrieved.
+            An image can be either an image object (`PIL.Image`) or a url from which the image can be retrieved.
 
         When the processor encounters an image it'll inject `<fake_token_around_image><image><fake_token_around_image>`
         entry into the prompt.
@@ -294,13 +302,22 @@ class IdeficsProcessor(ProcessorMixin):
                 prompts = list(zip(images, text))
 
         output_kwargs = self._merge_kwargs(
-            IdeficsProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
-        add_end_of_utterance_token = output_kwargs["text_kwargs"].pop("add_end_of_utterance_token", None)
+        for key in ("add_eos_token", "add_end_of_utterance_token"):
+            if key in output_kwargs["text_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `text_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+        # Modality-specific kwargs have priority for backwards compatibility.
+        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", output_kwargs["add_eos_token"])
+        add_end_of_utterance_token = output_kwargs["text_kwargs"].pop(
+            "add_end_of_utterance_token", output_kwargs.get("add_end_of_utterance_token", None)
+        )
 
         # if the value isn't overridden by the user, check if the tokenizer was trained with this token and then use it
         if add_end_of_utterance_token is None:
@@ -355,7 +372,8 @@ class IdeficsProcessor(ProcessorMixin):
             if add_eos_token:
                 full_text += self.tokenizer.eos_token
 
-            image_objects = self.image_processor(image_objects, **output_kwargs["images_kwargs"])
+            if len(image_objects) > 0:
+                image_objects = self.image_processor(image_objects, **output_kwargs["images_kwargs"])
 
             all_prompts.append(full_text)
             all_images.append(image_objects)
@@ -379,7 +397,6 @@ class IdeficsProcessor(ProcessorMixin):
             padded_input_ids = text_single
             image_count = padded_input_ids.count(self.image_token_id)
             local_max_num_images = min(image_count, max_num_images)
-
             current_images = extracted_images[:local_max_num_images]
 
             if len(current_images) > 0:
@@ -429,4 +446,5 @@ class IdeficsProcessor(ProcessorMixin):
         return list(tokenizer_input_names + image_processor_input_names + ["image_attention_mask"])
 
 
+__getattr__ = deprecate_attr(__name__, remove={"IdeficsTextKwargs": (DeprecatedIdeficsTextKwargs, "5.29.0")})
 __all__ = ["IdeficsProcessor"]

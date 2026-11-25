@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,18 +13,17 @@
 # limitations under the License.
 """Fast Image processor class for SAM2."""
 
-from typing import Optional, Union
-
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, SizeDict
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 
 
+@auto_docstring
 class Sam2VideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -41,7 +39,7 @@ class Sam2VideoVideoProcessor(BaseVideoProcessor):
         self,
         videos: list["torch.Tensor"],
         size: SizeDict,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         original_sizes = [video.shape[-2:] for video in videos]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,72 +15,41 @@
 Processor class for Pix2Struct.
 """
 
-from typing import Union
-
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import logging
-
-
-class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-        "images_kwargs": {
-            "max_patches": 2048,
-        },
-    }
+from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class Pix2StructProcessor(ProcessorMixin):
-    r"""
-    Constructs a PIX2STRUCT processor which wraps a BERT tokenizer and PIX2STRUCT image processor into a single
-    processor.
-
-    [`Pix2StructProcessor`] offers all the functionalities of [`Pix2StructImageProcessor`] and [`T5Tokenizer`]. See
-    the docstring of [`~Pix2StructProcessor.__call__`] and [`~Pix2StructProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`Pix2StructImageProcessor`):
-            An instance of [`Pix2StructImageProcessor`]. The image processor is a required input.
-        tokenizer (`T5Tokenizer`):
-            An instance of ['T5Tokenizer`]. The tokenizer is a required input.
-    """
+    text_kwargs = {
+        "add_special_tokens": True,
+        "return_token_type_ids": False,
+    }
+    images_kwargs = {
+        "max_patches": 2048,
+    }
 
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images=None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        **kwargs: Unpack[Pix2StructProcessorKwargs],
-    ) -> Union[BatchEncoding, BatchFeature]:
-        """
-        This method uses [`Pix2StructImageProcessor.preprocess`] method to prepare image(s) for the model, and
-        [`T5Tokenizer.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-        """
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchEncoding | BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
         output_kwargs = self._merge_kwargs(
-            Pix2StructProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -126,5 +94,7 @@ class Pix2StructProcessor(ProcessorMixin):
         decoder_ids = ["decoder_attention_mask", "decoder_input_ids"]
         return image_processor_input_names + decoder_ids
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Pix2StructProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Pix2StructProcessor"]

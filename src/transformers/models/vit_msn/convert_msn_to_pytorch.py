@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,11 @@
 
 import argparse
 import json
+from io import BytesIO
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import ViTImageProcessor, ViTMSNConfig, ViTMSNModel
@@ -151,7 +151,7 @@ def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     repo_id = "datasets/huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -194,7 +194,8 @@ def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     image_processor = ViTImageProcessor(
         size=config.image_size, image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD
     )

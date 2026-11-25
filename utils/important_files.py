@@ -13,7 +13,7 @@ IMPORTANT_MODELS = [
     "whisper",
     "wav2vec2",
     "qwen2_audio",
-    "speech_t5",
+    "speecht5",
     "csm",
     "llama",
     "gemma3",
@@ -26,4 +26,5 @@ IMPORTANT_MODELS = [
     "gemma3n",
     "gpt_oss",
     "qwen2_5_omni",
+    "pi0",
 ]

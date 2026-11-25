@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-07-21.*
+*This model was contributed to Hugging Face Transformers on 2025-07-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -32,7 +31,7 @@ The Ernie 4.5 model was released in the [Ernie 4.5 Model Family](https://ernie.b
 This family of models contains multiple different architectures and model sizes. This model in specific targets the base text
 model without mixture of experts (moe) with 0.3B parameters in total. It uses the standard [Llama](./llama) at its core.
 
-Other models from the family can be found at [Ernie 4.5 Moe](./ernie4_5_moe).
+Other models from the family can be found at [Ernie 4.5 Moe](./ernie4_5_moe) and [Ernie 4.5 VL MoE](./ernie4_5_vl_moe.md).
 
 <div class="flex justify-center">
     <img src="https://ernie.baidu.com/blog/posts/ernie4.5/overview.png"/>
@@ -43,8 +42,8 @@ Other models from the family can be found at [Ernie 4.5 Moe](./ernie4_5_moe).
 ### Generate text
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_name = "baidu/ERNIE-4.5-0.3B-PT"
 
@@ -53,11 +52,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    dtype=torch.bfloat16,
 )
 
 # prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt").to(model.device)
 prompt = "Hey, are you conscious? Can you talk to me?"
 messages = [
     {"role": "user", "content": prompt}

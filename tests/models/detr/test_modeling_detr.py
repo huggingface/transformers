@@ -13,16 +13,25 @@
 # limitations under the License.
 """Testing suite for the PyTorch DETR model."""
 
+import copy
 import inspect
 import math
 import unittest
 from functools import cached_property
 
+from parameterized import parameterized
+
 from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_timm, require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
+    floats_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -35,51 +44,42 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DetrImageProcessor
+    from transformers import DetrImageProcessorPil
 
 
-class DetrModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=8,
-        is_training=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        intermediate_size=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        num_queries=12,
-        num_channels=3,
-        min_size=200,
-        max_size=200,
-        n_targets=8,
-        num_labels=91,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_queries = num_queries
-        self.num_channels = num_channels
-        self.min_size = min_size
-        self.max_size = max_size
-        self.n_targets = n_targets
-        self.num_labels = num_labels
+class DetrModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 8,
+        "is_training": True,
+        "use_labels": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 8,
+        "intermediate_size": 4,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "num_queries": 12,
+        "num_channels": 3,
+        "min_size": 200,
+        "max_size": 200,
+        "n_targets": 8,
+        "num_labels": 91,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # we also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.min_size / 32) * math.ceil(self.max_size / 32)
-        self.decoder_seq_length = self.num_queries
+        values["encoder_seq_length"] = math.ceil(values["min_size"] / 32) * math.ceil(values["max_size"] / 32)
+        values["decoder_seq_length"] = values["num_queries"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size])
@@ -168,6 +168,8 @@ class DetrModelTester:
 
 @require_torch
 class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = DetrModelTester
+
     all_model_classes = (
         (
             DetrModel,
@@ -190,7 +192,6 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_missing_keys = False
     zero_init_hidden_state = True
-    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -226,6 +227,14 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_config_with_null_backbone_kwargs(self):
+        """Regression test for configs with backbone_kwargs=None: https://github.com/huggingface/transformers/pull/51027"""
+        config = DetrConfig(backbone_kwargs=None)
+        self.assertEqual(config.backbone_config.model_type, "timm_backbone")
+
+        config = DetrConfig(backbone="microsoft/resnet-18", use_timm_backbone=False, backbone_kwargs=None)
+        self.assertIsInstance(config.backbone_config, ResNetConfig)
+
     def test_detr_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_detr_model(*config_and_inputs)
@@ -233,11 +242,6 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_detr_object_detection_head_model(*config_and_inputs)
-
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip(reason="DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -315,8 +319,8 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
                 if model_class.__name__ == "DetrForSegmentation":
                     correct_outlen += 3
-                if "past_key_values" in outputs:
-                    correct_outlen += 1  # past_key_values have been returned
+                if "cache" in outputs:
+                    correct_outlen += 1  # cache have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -435,74 +439,55 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_different_timm_backbone(self):
+    def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-        config.backbone_config = None
-        config.use_timm_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+        def _validate_backbone_init(config):
+            for model_class in self.all_model_classes:
+                model = model_class(copy.deepcopy(config))
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                if model_class.__name__ == "DetrForObjectDetection":
+                    expected_shape = (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_queries,
+                        self.model_tester.num_labels + 1,
+                    )
+                    self.assertEqual(outputs.logits.shape, expected_shape)
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+                elif model_class.__name__ == "DetrForSegmentation":
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.detr.model.backbone.intermediate_channel_sizes), 3)
+                else:
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
-            if model_class.__name__ == "DetrForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels + 1,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
-            elif model_class.__name__ == "DetrForSegmentation":
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.detr.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
+                self.assertTrue(outputs)
 
-            self.assertTrue(outputs)
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
+        # let's test a random timm backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "tf_mobilenetv3_small_075"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
-    def test_hf_backbone(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Load a pretrained HF checkpoint as backbone
-        config.backbone = "microsoft/resnet-18"
-        config.backbone_config = None
-        config.use_timm_backbone = False
-        config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            if model_class.__name__ == "DetrForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels + 1,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
-            elif model_class.__name__ == "DetrForSegmentation":
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.detr.model.backbone.conv_encoder.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 3)
-
-            self.assertTrue(outputs)
+        # Test a pretrained HF checkpoint as backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = False
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
     def test_greyscale_images(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -525,6 +510,18 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertTrue(outputs)
 
+    # override test_eager_matches_sdpa_inference to set use_attention_mask to False
+    # as masks used in test are not adapted to the ones used in the model
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        if use_attention_mask:
+            self.skipTest(
+                "This test uses attention masks which are not compatible with DETR. Skipping when use_attention_mask is True."
+            )
+        _test_eager_matches_sdpa_inference(self, name, dtype, padding_side, False, output_attentions, enable_kernels)
+
 
 TOLERANCE = 1e-4
 
@@ -541,7 +538,7 @@ def prepare_img():
 class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return DetrImageProcessor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+        return DetrImageProcessorPil.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
@@ -733,47 +730,3 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertEqual(predicted_first_segment["label_id"], expected_first_segment["label_id"])
         self.assertEqual(predicted_first_segment["was_fused"], expected_first_segment["was_fused"])
         self.assertAlmostEqual(predicted_first_segment["score"], expected_first_segment["score"], places=3)
-
-
-@require_vision
-@require_torch
-@slow
-class DetrModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_image_processor(self):
-        return (
-            DetrImageProcessor.from_pretrained("facebook/detr-resnet-50", revision="no_timm")
-            if is_vision_available()
-            else None
-        )
-
-    def test_inference_no_head(self):
-        model = DetrModel.from_pretrained("facebook/detr-resnet-50", revision="no_timm").to(torch_device)
-
-        image_processor = self.default_image_processor
-        image = prepare_img()
-        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(**encoding)
-
-        expected_shape = torch.Size((1, 100, 256))
-        assert outputs.last_hidden_state.shape == expected_shape
-        expected_slices = Expectations(
-            {
-                (None, None):
-                    [
-                        [0.0616, -0.5146, -0.4032],
-                        [-0.7629, -0.4934, -1.7153],
-                        [-0.4768, -0.6403, -0.7826],
-                    ],
-                ("rocm", (9, 5)):
-                    [
-                        [ 0.0616, -0.5146, -0.4032],
-                        [-0.7629, -0.4934, -1.7153],
-                        [-0.4768, -0.6403, -0.7826]
-                    ],
-            }
-        )  # fmt: skip
-        expected_slice = torch.tensor(expected_slices.get_expectation(), device=torch_device)
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

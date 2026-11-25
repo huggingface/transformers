@@ -14,6 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch RT_DETR model."""
 
+import copy
 import inspect
 import math
 import tempfile
@@ -24,13 +25,14 @@ from parameterized import parameterized
 
 from transformers import (
     RTDetrConfig,
-    RTDetrImageProcessor,
+    RTDetrImageProcessorPil,
     RTDetrResNetConfig,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
+    require_scipy,
     require_torch,
     require_torch_accelerator,
     require_vision,
@@ -38,6 +40,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -47,6 +50,7 @@ if is_torch_available():
     import torch
 
     from transformers import RTDetrForObjectDetection, RTDetrModel
+    from transformers.loss.loss_rt_detr import RTDetrHungarianMatcher, RTDetrLoss
 
 if is_vision_available():
     from PIL import Image
@@ -55,100 +59,67 @@ if is_vision_available():
 CHECKPOINT = "PekingU/rtdetr_r50vd"  # TODO: replace
 
 
-class RTDetrModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        is_training=True,
-        use_labels=True,
-        n_targets=3,
-        num_labels=10,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
-        batch_norm_eps=1e-5,
-        # backbone
-        backbone_config=None,
-        # encoder HybridEncoder
-        encoder_hidden_dim=32,
-        encoder_in_channels=[128, 256, 512],
-        feat_strides=[8, 16, 32],
-        encoder_layers=1,
-        encoder_ffn_dim=64,
-        encoder_attention_heads=2,
-        dropout=0.0,
-        activation_dropout=0.0,
-        encode_proj_layers=[2],
-        positional_encoding_temperature=10000,
-        encoder_activation_function="gelu",
-        activation_function="silu",
-        eval_size=None,
-        normalize_before=False,
-        # decoder RTDetrTransformer
-        d_model=32,
-        num_queries=30,
-        decoder_in_channels=[32, 32, 32],
-        decoder_ffn_dim=64,
-        num_feature_levels=3,
-        decoder_n_points=4,
-        decoder_layers=2,
-        decoder_attention_heads=2,
-        decoder_activation_function="relu",
-        attention_dropout=0.0,
-        num_denoising=0,
-        label_noise_ratio=0.5,
-        box_noise_scale=1.0,
-        learn_initial_query=False,
-        anchor_image_size=None,
-        image_size=64,
-        disable_custom_kernels=True,
-        with_box_refine=True,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = 3
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.n_targets = n_targets
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.batch_norm_eps = batch_norm_eps
-        self.backbone_config = backbone_config
-        self.encoder_hidden_dim = encoder_hidden_dim
-        self.encoder_in_channels = encoder_in_channels
-        self.feat_strides = feat_strides
-        self.encoder_layers = encoder_layers
-        self.encoder_ffn_dim = encoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.dropout = dropout
-        self.activation_dropout = activation_dropout
-        self.encode_proj_layers = encode_proj_layers
-        self.positional_encoding_temperature = positional_encoding_temperature
-        self.encoder_activation_function = encoder_activation_function
-        self.activation_function = activation_function
-        self.eval_size = eval_size
-        self.normalize_before = normalize_before
-        self.d_model = d_model
-        self.num_queries = num_queries
-        self.decoder_in_channels = decoder_in_channels
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_feature_levels = num_feature_levels
-        self.decoder_n_points = decoder_n_points
-        self.decoder_layers = decoder_layers
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_activation_function = decoder_activation_function
-        self.attention_dropout = attention_dropout
-        self.num_denoising = num_denoising
-        self.label_noise_ratio = label_noise_ratio
-        self.box_noise_scale = box_noise_scale
-        self.learn_initial_query = learn_initial_query
-        self.anchor_image_size = anchor_image_size
-        self.image_size = image_size
-        self.disable_custom_kernels = disable_custom_kernels
-        self.with_box_refine = with_box_refine
+class RTDetrModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
-        self.encoder_seq_length = math.ceil(self.image_size / 32) * math.ceil(self.image_size / 32)
+    small_config_overrides = {
+        "batch_size": 3,
+        "is_training": True,
+        "use_labels": True,
+        "n_targets": 3,
+        "num_labels": 10,
+        "initializer_range": 0.02,
+        "layer_norm_eps": 1e-5,
+        "batch_norm_eps": 1e-5,
+        # backbone
+        "backbone_config": None,
+        # encoder HybridEncoder
+        "encoder_hidden_dim": 32,
+        "encoder_in_channels": [128, 256, 512],
+        "feat_strides": [8, 16, 32],
+        "encoder_layers": 1,
+        "encoder_ffn_dim": 64,
+        "encoder_attention_heads": 2,
+        "dropout": 0.0,
+        "activation_dropout": 0.0,
+        "encode_proj_layers": [2],
+        "positional_encoding_temperature": 10000,
+        "encoder_activation_function": "gelu",
+        "activation_function": "silu",
+        "eval_size": None,
+        "normalize_before": False,
+        # decoder RTDetrTransformer
+        "d_model": 32,
+        "num_queries": 30,
+        "decoder_in_channels": [32, 32, 32],
+        "decoder_ffn_dim": 64,
+        "num_feature_levels": 3,
+        "decoder_n_points": 4,
+        "decoder_layers": 2,
+        "decoder_attention_heads": 2,
+        "decoder_activation_function": "relu",
+        "attention_dropout": 0.0,
+        "num_denoising": 0,
+        "label_noise_ratio": 0.5,
+        "box_noise_scale": 1.0,
+        "learn_initial_query": False,
+        "anchor_image_size": None,
+        "image_size": 64,
+        "disable_custom_kernels": True,
+        "with_box_refine": True,
+        "num_channels": 3,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["encoder_seq_length"] = math.ceil(values["image_size"] / 32) * math.ceil(values["image_size"] / 32)
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -251,6 +222,8 @@ class RTDetrModelTester:
 
 @require_torch
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = RTDetrModelTester
+
     all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": RTDetrModel, "object-detection": RTDetrForObjectDetection}
@@ -258,9 +231,6 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = True
-
-    test_missing_keys = False
-    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -524,68 +494,117 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_different_timm_backbone(self):
+    def test_backbone_selection(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # let's pick a random timm backbone
-        config.backbone = "tf_mobilenetv3_small_075"
-        config.backbone_config = None
-        config.use_timm_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+        def _validate_backbone_init(config):
+            for model_class in self.all_model_classes:
+                model = model_class(copy.deepcopy(config))
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                if model_class.__name__ == "RTDetrForObjectDetection":
+                    expected_shape = (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_queries,
+                        self.model_tester.num_labels,
+                    )
+                    self.assertEqual(outputs.logits.shape, expected_shape)
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+                else:
+                    # Confirm out_indices was propagated to backbone
+                    self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
-            if model_class.__name__ == "RTDetrForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+                self.assertTrue(outputs)
 
-            self.assertTrue(outputs)
+        # These kwargs are all removed and are supported only for BC
+        # In new models we have only `backbone_config`. Let's test that there is no regression
+        # let's test a random timm backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "tf_mobilenetv3_small_075"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
 
-    def test_hf_backbone(self):
+        # Test a pretrained HF checkpoint as backbone
+        config_dict = config.to_dict()
+        config_dict["backbone"] = "microsoft/resnet-18"
+        config_dict["backbone_config"] = None
+        config_dict["use_timm_backbone"] = False
+        config_dict["use_pretrained_backbone"] = True
+        config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
+        config = config.__class__(**config_dict)
+        _validate_backbone_init(config)
+
+    def test_main_loss_excludes_denoising_queries(self):
+        """The main loss must only see the normal queries, not the denoising ones.
+        See https://github.com/huggingface/transformers/pull/48528
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_denoising = 10
+        config.auxiliary_loss = True
+        inputs_dict = self._prepare_for_class(inputs_dict, RTDetrForObjectDetection, return_labels=True)
 
-        # Load a pretrained HF checkpoint as backbone
-        config.backbone = "microsoft/resnet-18"
-        config.backbone_config = None
-        config.use_timm_backbone = False
-        config.use_pretrained_backbone = True
-        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+        model = RTDetrForObjectDetection(config)
+        model.to(torch_device)
+        model.train()
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        outputs = model(**inputs_dict)
 
-            if model_class.__name__ == "RTDetrForObjectDetection":
-                expected_shape = (
-                    self.model_tester.batch_size,
-                    self.model_tester.num_queries,
-                    self.model_tester.num_labels,
-                )
-                self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
-            else:
-                # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+        # In training mode the last-layer outputs contain the denoising queries followed by the normal queries.
+        # `num_denoising` is split into groups of one positive and one negative query per (padded) target.
+        num_denoising_queries, num_queries = outputs.denoising_meta_values["dn_num_split"]
+        max_num_targets = max(len(target["class_labels"]) for target in inputs_dict["labels"])
+        num_groups = config.num_denoising // max_num_targets
+        self.assertEqual(num_denoising_queries, 2 * max_num_targets * num_groups)
+        self.assertEqual(outputs.logits.shape[1], num_denoising_queries + num_queries)
 
-            self.assertTrue(outputs)
+        # The main loss terms must equal the loss computed on the normal queries alone
+        criterion = RTDetrLoss(config).to(torch_device)
+        reference = criterion(
+            {
+                "logits": outputs.logits[:, num_denoising_queries:],
+                "pred_boxes": outputs.pred_boxes[:, num_denoising_queries:],
+            },
+            inputs_dict["labels"],
+        )
+        for key in ("loss_vfl", "loss_bbox", "loss_giou"):
+            torch.testing.assert_close(outputs.loss_dict[key], reference[key])
+
+    def _prepare_matcher_and_targets(self, num_queries, num_targets):
+        config = RTDetrConfig(num_labels=4)
+        matcher = RTDetrHungarianMatcher(config)
+        logits = torch.rand(1, num_queries, config.num_labels)
+        pred_boxes = torch.rand(1, num_queries, 4) * 0.5 + 0.25
+        targets = [
+            {
+                "class_labels": torch.arange(num_targets) % config.num_labels,
+                "boxes": torch.rand(num_targets, 4) * 0.5 + 0.25,
+            }
+        ]
+        return matcher, logits, pred_boxes, targets
+
+    @require_scipy
+    def test_matcher_with_nan_logits(self):
+        """NaN costs must not make `linear_sum_assignment` fail. Predictions with NaN costs must only be
+        matched if there is no finite prediction left.
+
+        See https://github.com/huggingface/transformers/issues/47000
+        """
+        num_queries, num_nan_queries, num_targets = 4, 2, 2
+        matcher, logits, pred_boxes, targets = self._prepare_matcher_and_targets(num_queries, num_targets)
+        logits[0, :num_nan_queries] = float("nan")
+
+        indices = matcher({"logits": logits, "pred_boxes": pred_boxes}, targets)
+
+        source_indices, target_indices = indices[0]
+        self.assertEqual(source_indices.tolist(), list(range(num_nan_queries, num_queries)))
+        self.assertEqual(sorted(target_indices.tolist()), list(range(num_targets)))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
@@ -651,6 +670,31 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 f"Max diff: {(outputs_static.last_hidden_state - outputs_dynamic.last_hidden_state).abs().max()}",
             )
 
+    def test_num_feature_levels_greater_than_backbone_outputs(self):
+        # Regression test for indexing bug when num_feature_levels > number of backbone outputs.
+        # This previously crashed with TypeError when num_feature_levels exceeded the number of backbone output levels.
+        config = self.model_tester.get_config()
+        config.num_labels = self.model_tester.num_labels
+        config.num_feature_levels = 4
+        config.decoder_in_channels = [32, 32, 32, 32]
+        model = RTDetrForObjectDetection(config)
+        model.to(torch_device)
+        model.eval()
+        pixel_values = torch.rand(
+            self.model_tester.batch_size,
+            self.model_tester.num_channels,
+            self.model_tester.image_size,
+            self.model_tester.image_size,
+            device=torch_device,
+        )
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values)
+        self.assertIsNotNone(outputs.logits)
+        self.assertEqual(
+            outputs.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.num_queries, self.model_tester.num_labels),
+        )
+
 
 TOLERANCE = 1e-4
 
@@ -667,7 +711,22 @@ def prepare_img():
 class RTDetrModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return RTDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
+
+    def test_base_model_from_detection_checkpoint(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/48722: detection checkpoints
+        # store every weight under the `model.` prefix, and `RTDetrModel` used to load them with all weights
+        # randomly initialized.
+        base_model, loading_info = RTDetrModel.from_pretrained(CHECKPOINT, output_loading_info=True)
+
+        self.assertFalse(loading_info["missing_keys"])
+        # only the object detection heads are not part of the base model
+        self.assertTrue(all("class_embed" in k or "bbox_embed" in k for k in loading_info["unexpected_keys"]))
+
+        head_model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT)
+        head_state_dict = {k.removeprefix("model."): v for k, v in head_model.state_dict().items()}
+        for key, value in base_model.state_dict().items():
+            self.assertTrue(torch.equal(value, head_state_dict[key]))
 
     def test_inference_object_detection_head(self):
         model = RTDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)

@@ -18,6 +18,7 @@ import unittest
 from transformers import EsmConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, is_flaky, require_torch, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -29,54 +30,37 @@ if is_torch_available():
     from transformers.models.esm.modeling_esmfold import EsmForProteinFolding
 
 
-class EsmFoldModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=False,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=False,
-        vocab_size=19,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
-    ):
+class EsmFoldModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": False,
+        "use_input_mask": True,
+        "use_token_type_ids": False,
+        "use_labels": False,
+        "vocab_size": 19,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 512,
+        "type_vocab_size": 16,
+        "type_sequence_label_size": 2,
+        "initializer_range": 0.02,
+        "num_labels": 3,
+        "num_choices": 4,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -165,15 +149,18 @@ class EsmFoldModelTester:
 
 @require_torch
 class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = EsmFoldModelTester
+
     test_mismatched_shapes = False
 
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
     pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
+    test_torch_exportable = False  # unhashable SymInt inside ESMFold fold module
 
     def setUp(self):
         self.model_tester = EsmFoldModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=48)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -224,16 +211,29 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="ESMFold doesn't support data parallel.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
+    def test_reverse_loading_mapping(self):
+        # EsmFold defaults to absolute position embeddings, which means it has no
+        # rotary_embeddings.inv_freq keys. Temporarily switch to rotary so the
+        # inv_freq conversion pattern registered for "esm" has keys to match.
+        original = self.model_tester.get_config
+
+        def _get_config_with_rotary():
+            config = original()
+            config.position_embedding_type = "rotary"
+            return config
+
+        self.model_tester.get_config = _get_config_with_rotary
+        try:
+            super().test_reverse_loading_mapping()
+        finally:
+            self.model_tester.get_config = original
 
 
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_protein_folding(self):
-        model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1").float()
+        model = EsmForProteinFolding.from_pretrained("hf-internal-testing/esmfold_v1-safetensors").float()
         model.eval()
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         position_outputs = model(input_ids)["positions"]

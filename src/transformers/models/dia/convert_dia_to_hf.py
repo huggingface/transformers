@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Nari Labs and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +30,7 @@ from transformers import (
     DiaTokenizer,
     GenerationConfig,
 )
-from transformers.utils.import_utils import _is_package_available
+from transformers.utils.import_utils import is_tiktoken_available
 
 
 # Provide just the list of layer keys you want to fix
@@ -181,7 +180,7 @@ if __name__ == "__main__":
     model = convert_dia_model_to_hf(args.checkpoint_path, args.verbose)
     if args.convert_preprocessor:
         try:
-            if not _is_package_available("tiktoken"):
+            if not is_tiktoken_available(with_blobfile=False):
                 raise ModuleNotFoundError(
                     """`tiktoken` is not installed, use `pip install tiktoken` to convert the tokenizer"""
                 )

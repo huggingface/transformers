@@ -12,25 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 import inspect
 import json
 import re
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
-from copy import deepcopy
+from contextvars import ContextVar
 from datetime import datetime
-from functools import lru_cache
+from enum import Enum
+from functools import lru_cache, partial
 from inspect import isfunction
-from typing import (
-    Any,
-    Literal,
-    Union,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
 
+import numpy as np
 from packaging import version
 
 from . import logging
@@ -41,6 +37,11 @@ logger = logging.get_logger(__name__)
 
 if is_jinja_available():
     import jinja2
+    import jinja2.exceptions
+    import jinja2.ext
+    import jinja2.meta
+    import jinja2.nodes
+    import jinja2.runtime
     from jinja2.ext import Extension
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
@@ -49,25 +50,25 @@ else:
 if is_vision_available():
     from PIL.Image import Image
 
-if is_torch_available():
-    from torch import Tensor
-
-
 ChatType = list[dict[str, Any]]
+
+# Private-use characters that `mark_control_tokens` wraps around control tokens in user input
+_CONTROL_TOKEN_START = "\U000f0000"
+_CONTROL_TOKEN_END = "\U000f0001"
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
 # Extracts the initial segment of the docstring, containing the function description
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
 # Extracts the Args: block from the docstring
-args_re = re.compile(r"\n\s*Args:\n\s*(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
+args_re = re.compile(r"\n\s*Args:\n(.*?)[\n\s]*(Returns:|Raises:|\Z)", re.DOTALL)
 # Splits the Args: block into individual arguments
 args_split_re = re.compile(
     r"""
 (?:^|\n)  # Match the start of the args block, or a newline
-\s*(\w+):\s*  # Capture the argument name and strip spacing
+([ \t]*)(\w+)(?:[ \t]*\([^()\n]*\))?:\s*  # Capture the indentation and the argument name, skip a "(type)"
 (.*?)\s*  # Capture the argument description, which can span multiple lines, and strip trailing spacing
-(?=\n\s*\w+:|\Z)  # Stop when you hit the next argument or the end of the block
+(?=\n(?!\1[ \t])[ \t]*\w+(?:[ \t]*\([^()\n]*\))?:|\Z)  # Stop at the next "name:" not indented deeper, or the end
 """,
     re.DOTALL | re.VERBOSE,
 )
@@ -83,33 +84,70 @@ class DocstringParsingException(Exception):
     """Exception raised for errors in parsing docstrings to generate JSON schemas"""
 
 
-def _get_json_schema_type(param_type: type) -> dict[str, str]:
+# The Python types that can be written directly as a JSON value, and so can appear in a schema "enum",
+# mapped to the name of their JSON schema type
+JSON_SCALAR_TYPES = {int: "integer", float: "number", str: "string", bool: "boolean", type(None): "null"}
+
+
+def _get_json_schema_type(param_type: type) -> dict[str, str] | None:
     type_mapping = {
         int: {"type": "integer"},
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
         type(None): {"type": "null"},
+        list: {"type": "array"},
+        tuple: {"type": "array"},
+        dict: {"type": "object"},
         Any: {},
     }
     if is_vision_available():
         type_mapping[Image] = {"type": "image"}
     if is_torch_available():
-        type_mapping[Tensor] = {"type": "audio"}
-    return type_mapping.get(param_type, {"type": "object"})
+        import torch
+
+        type_mapping[torch.Tensor] = {"type": "audio"}
+    return type_mapping.get(param_type)
+
+
+def _enum_values_to_json_schema(values: list) -> dict:
+    # The "type" lists each JSON type that appears in the values once, in the order they first appear
+    value_types = list(dict.fromkeys(JSON_SCALAR_TYPES[type(value)] for value in values))
+    return {"type": value_types[0] if len(value_types) == 1 else value_types, "enum": values}
 
 
 def _parse_type_hint(hint: str) -> dict:
     origin = get_origin(hint)
     args = get_args(hint)
 
-    if origin is None:
-        try:
-            return _get_json_schema_type(hint)
-        except KeyError:
+    if origin is None and isinstance(hint, type) and issubclass(hint, Enum):
+        # An Enum class becomes a JSON "enum" of its member values, since those are what the model has to generate
+        values = [member.value for member in hint]
+        if not values:
             raise TypeHintParsingException(
-                "Couldn't parse this type hint, likely due to a custom class or object: ", hint
+                f"The Enum {hint.__name__} has no members, so no value could ever match it."
             )
+        if any(type(value) not in JSON_SCALAR_TYPES for value in values):
+            raise TypeHintParsingException(
+                f"The Enum {hint.__name__} has member values that cannot be written as JSON scalars.\n"
+                f"Values: {values}\n"
+                "Enum member values must be int, float, str, bool or None to be converted to a JSON schema."
+            )
+        return _enum_values_to_json_schema(values)
+
+    elif origin is None:
+        # Any other bare type is either one of the basic types we know how to map, or a custom class.
+        # We can't know what JSON a custom class expects, so we raise instead of guessing
+        json_schema_type = _get_json_schema_type(hint)
+        if json_schema_type is None:
+            raise TypeHintParsingException(
+                f"Couldn't convert the type hint {hint!r} to a JSON schema, likely because it is a custom class "
+                "or object. Supported type hints are basic types like int, float, str and bool, Enum classes, "
+                "typing.Literal, and list, tuple, dict and Union types containing those. If you need a more complex "
+                "schema than that, you can write the JSON schema for your tool by hand and pass that instead "
+                "of the function."
+            )
+        return json_schema_type
 
     elif origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
@@ -117,9 +155,12 @@ def _parse_type_hint(hint: str) -> dict:
         if len(subtypes) == 1:
             # A single non-null type can be expressed directly
             return_dict = subtypes[0]
-        elif all(isinstance(subtype["type"], str) for subtype in subtypes):
-            # A union of basic types can be expressed as a list in the schema
-            return_dict = {"type": sorted([subtype["type"] for subtype in subtypes])}
+        elif all(subtype.keys() == {"type"} and isinstance(subtype["type"], str) for subtype in subtypes):
+            # A union of basic types can be expressed as a list in the schema. Subtypes carrying extra keys
+            # (`items`, `enum`, `prefixItems`, ...) must go through `anyOf` so that information is not lost
+            # Duplicates are dropped, since different hints (e.g. `list | tuple`) can map to the same type
+            subtype_names = sorted({subtype["type"] for subtype in subtypes})
+            return_dict = {"type": subtype_names[0] if len(subtype_names) == 1 else subtype_names}
         else:
             # A union of more complex types requires "anyOf"
             return_dict = {"anyOf": subtypes}
@@ -128,18 +169,9 @@ def _parse_type_hint(hint: str) -> dict:
         return return_dict
 
     elif origin is Literal and len(args) > 0:
-        LITERAL_TYPES = (int, float, str, bool, type(None))
-        args_types = []
-        for arg in args:
-            if type(arg) not in LITERAL_TYPES:
-                raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
-            arg_type = _get_json_schema_type(type(arg)).get("type")
-            if arg_type is not None and arg_type not in args_types:
-                args_types.append(arg_type)
-        return {
-            "type": args_types.pop() if len(args_types) == 1 else list(args_types),
-            "enum": list(args),
-        }
+        if any(type(arg) not in JSON_SCALAR_TYPES for arg in args):
+            raise TypeHintParsingException("Only the valid python literals can be listed in typing.Literal.")
+        return _enum_values_to_json_schema(list(args))
 
     elif origin is list:
         if not args:
@@ -181,16 +213,39 @@ def _parse_type_hint(hint: str) -> dict:
 def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     type_hints = get_type_hints(func)
     signature = inspect.signature(func)
+    func_name = getattr(func, "__name__", "operation")
+    # For methods, we need to ignore the first "self" or "cls" parameter. Here we assume that if the first parameter
+    # is named "self" or "cls" and has no type hint, it is an implicit receiver argument.
+    first_param_name = next(iter(signature.parameters), None)
+    if (
+        first_param_name in {"self", "cls"}
+        and signature.parameters[first_param_name].annotation == inspect.Parameter.empty
+    ):
+        implicit_arg_name = first_param_name
+    else:
+        implicit_arg_name = None
     required = []
     for param_name, param in signature.parameters.items():
+        if param_name == implicit_arg_name:
+            continue
         if param.annotation == inspect.Parameter.empty:
-            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func.__name__}")
+            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func_name}")
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
     properties = {}
     for param_name, param_type in type_hints.items():
-        properties[param_name] = _parse_type_hint(param_type)
+        if param_name == implicit_arg_name:
+            continue
+        if param_name == "return":
+            # The model never generates the return value, so a return hint we can't convert shouldn't stop the
+            # tool from being used. We leave the return out of the schema rather than describing it wrongly.
+            try:
+                properties[param_name] = _parse_type_hint(param_type)
+            except TypeHintParsingException:
+                pass
+        else:
+            properties[param_name] = _parse_type_hint(param_type)
 
     schema = {"type": "object", "properties": properties}
     if required:
@@ -218,14 +273,14 @@ def parse_google_format_docstring(docstring: str) -> tuple[str | None, dict | No
 
     # Clean and store the sections
     description = description_match.group(1).strip() if description_match else None
-    docstring_args = args_match.group(1).strip() if args_match else None
+    docstring_args = args_match.group(1) if args_match else None
     returns = returns_match.group(1).strip() if returns_match else None
 
     # Parsing the arguments into a dictionary
     if docstring_args is not None:
         docstring_args = "\n".join([line for line in docstring_args.split("\n") if line.strip()])  # Remove blank lines
         matches = args_split_re.findall(docstring_args)
-        args_dict = {match[0]: re.sub(r"\s*\n+\s*", " ", match[1].strip()) for match in matches}
+        args_dict = {match[1]: re.sub(r"\s*\n+\s*", " ", match[2].strip()) for match in matches}
     else:
         args_dict = {}
 
@@ -238,7 +293,8 @@ def get_json_schema(func: Callable) -> dict:
     mostly used for passing lists of tools to a chat template. The JSON schema contains the name and description of
     the function, as well as the names, types and descriptions for each of its arguments. `get_json_schema()` requires
     that the function has a docstring, and that each argument has a description in the docstring, in the standard
-    Google docstring format shown below. It also requires that all the function arguments have a valid Python type hint.
+    Google docstring format shown below. It also requires that all user-facing arguments have valid Python type hints.
+    When passing methods, implicit receiver arguments (`self` or `cls`) are ignored.
 
     Although it is not required, a `Returns` block can also be added, which will be included in the schema. This is
     optional because most chat templates ignore the return value of the function.
@@ -340,10 +396,10 @@ def get_json_schema(func: Callable) -> dict:
     }
     """
     doc = inspect.getdoc(func)
+    func_name = getattr(func, "__name__", "operation")
+
     if not doc:
-        raise DocstringParsingException(
-            f"Cannot generate JSON schema for {func.__name__} because it has no docstring!"
-        )
+        raise DocstringParsingException(f"Cannot generate JSON schema for {func_name} because it has no docstring!")
     doc = doc.strip()
     main_doc, param_descriptions, return_doc = parse_google_format_docstring(doc)
 
@@ -354,19 +410,135 @@ def get_json_schema(func: Callable) -> dict:
     for arg, schema in json_schema["properties"].items():
         if arg not in param_descriptions:
             raise DocstringParsingException(
-                f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
+                f"Cannot generate JSON schema for {func_name} because the docstring has no description for the argument '{arg}'"
             )
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
         if enum_choices:
-            schema["enum"] = [c.strip() for c in json.loads(enum_choices.group(1))]
+            schema["enum"] = [c.strip() if isinstance(c, str) else c for c in json.loads(enum_choices.group(1))]
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 
-    output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}
+    output = {"name": func_name, "description": main_doc, "parameters": json_schema}
     if return_dict is not None:
         output["return"] = return_dict
     return {"type": "function", "function": output}
+
+
+@lru_cache
+@no_type_check
+def _get_template_variables(chat_template: str | None) -> frozenset[str]:
+    """Return the set of undeclared variables referenced by a chat template.
+
+    Uses ``jinja2.meta.find_undeclared_variables`` so that callers can
+    automatically distinguish template-level kwargs from processor kwargs
+    without maintaining a manual allowlist. Needed only to support BC as we
+    allowed all `kwargs` to be merged into one in the past
+    """
+    if chat_template is None:
+        return frozenset()
+    compiled = _compile_jinja_template(chat_template)
+    ast = compiled.environment.parse(chat_template)
+    return frozenset(jinja2.meta.find_undeclared_variables(ast))
+
+
+@lru_cache
+@no_type_check
+def _get_template_literal_text(chat_template: str) -> str:
+    """
+    Return the literal strings in a chat template (its raw template text, plus every string constant), joined with null
+    characters so that a substring search can't match across two of them.
+
+    Added tokens found in this text are treated as control tokens by `sanitize_control_tokens`. This misses tokens that
+    the template builds from pieces, like Phi-4-mini's `'<|' + message['role'] + '|>'`. Special tokens are always
+    control tokens, so only non-special tokens can be missed, and tokenizers whose templates build them should list
+    their control tokens in `tokenizer.chat_control_tokens` instead.
+    """
+    compiled = _compile_jinja_template(chat_template)
+    ast = compiled.environment.parse(chat_template)
+    literals = {node.data for node in ast.find_all(jinja2.nodes.TemplateData)}
+    literals |= {node.value for node in ast.find_all(jinja2.nodes.Const) if isinstance(node.value, str)}
+    return "\0".join(literals)
+
+
+@lru_cache
+def _get_control_token_patterns(control_tokens: tuple[str, ...]) -> tuple[re.Pattern, re.Pattern]:
+    """
+    Return a regex that matches any of `control_tokens`, and a regex that matches a control token wrapped in the markers
+    added by `mark_control_tokens`, or a lone marker. Longer tokens are matched first, so a token takes priority over
+    the tokens it contains.
+    """
+    longest_first = sorted(control_tokens, key=len, reverse=True)
+    control_tokens_re = re.compile("|".join(map(re.escape, longest_first)) or "(?!)")  # (?!) never matches
+    start, end = _CONTROL_TOKEN_START, _CONTROL_TOKEN_END
+    markers_re = re.compile(f"{start}({control_tokens_re.pattern}){end}|[{start}{end}]")
+    return control_tokens_re, markers_re
+
+
+def mark_control_tokens(obj: Any, control_tokens_re: re.Pattern) -> Any:
+    """
+    Wrap the control tokens in user-supplied strings with private-use markers, so that `encode_marked_chat` can tell
+    them apart from the control tokens the chat template writes itself.
+
+    Args:
+        obj: A string, or a list or dict (like messages, tools or documents) whose values are marked recursively. Dict
+            keys aren't marked.
+        control_tokens_re: A regex that matches any control token, from `_get_control_token_patterns`.
+    """
+    if isinstance(obj, str):
+        # Drop any markers already in the string first, so they can't be used to forge a marked token
+        obj = obj.replace(_CONTROL_TOKEN_START, "").replace(_CONTROL_TOKEN_END, "")
+        return control_tokens_re.sub(f"{_CONTROL_TOKEN_START}\\g<0>{_CONTROL_TOKEN_END}", obj)
+    if isinstance(obj, dict):
+        return {key: mark_control_tokens(value, control_tokens_re) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [mark_control_tokens(value, control_tokens_re) for value in obj]
+    return obj
+
+
+def encode_marked_chat(tokenizer, chat: str) -> list[int]:
+    """
+    Encode a chat rendered from inputs marked by `mark_control_tokens`. Marked control tokens are encoded as plain text,
+    without their markers, and the rest of the chat, including the template's own control tokens, is encoded normally.
+
+    String methods in the template, like `split()`, can separate the markers around a token. Lone markers like these
+    are dropped, but still break the text, so that the text on either side can't join into a control token.
+
+    Args:
+        tokenizer: The tokenizer that rendered the chat.
+        chat: The rendered chat.
+    """
+    # Splitting on the markers gives [text, marked token, text, marked token, ..., text], with None in place of the
+    # token for a lone marker
+    _, markers_re = _get_control_token_patterns(tuple(tokenizer.added_tokens_encoder))
+    pieces = markers_re.split(chat)
+    newline_ids = tokenizer.encode("\n", add_special_tokens=False)
+    ids = tokenizer.encode(pieces[0], add_special_tokens=False)
+    for i, piece in enumerate(pieces[1:], start=1):
+        if not piece:
+            continue
+        as_text = i % 2 == 1  # Odd pieces are marked tokens, which we encode as plain text
+        piece_ids = _encode_chat_piece(tokenizer, piece, as_text, newline_ids)
+        if as_text and tokenizer.convert_tokens_to_ids(piece) in piece_ids:
+            raise ValueError(f"Can't sanitize {piece!r}: the tokenizer produces it from plain text")
+        ids += piece_ids
+    return ids
+
+
+def _encode_chat_piece(tokenizer, piece: str, as_text: bool, newline_ids: list[int]) -> list[int]:
+    """Encode a piece from the middle of a chat, ignoring added tokens if `as_text` is set."""
+    if as_text:
+        encode = tokenizer._encode_without_added_tokens
+    else:
+        encode = partial(tokenizer.encode, add_special_tokens=False)
+    # Encode after a newline, so SentencePiece doesn't add the prefix space it adds at the start of a string, then
+    # remove the newline again
+    # FIXME: This is a trick to avoid SentencePiece hacks, so we can remove it if we get tokenizer support
+    #        for encoding with an offset, or something similar
+    piece_ids = encode("\n" + piece)
+    if piece_ids[: len(newline_ids)] == newline_ids:
+        return piece_ids[len(newline_ids) :]
+    return encode(piece)
 
 
 def _render_with_assistant_indices(
@@ -389,6 +561,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    return _cached_compile_jinja_template(chat_template)
+
+
+@no_type_check
+def _cached_compile_jinja_template(chat_template):
     if not is_jinja_available():
         raise ImportError(
             "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
@@ -402,8 +579,7 @@ def _compile_jinja_template(chat_template):
             # The class is only initiated by jinja.
             super().__init__(environment)
             environment.extend(activate_tracker=self.activate_tracker)
-            self._rendered_blocks = None
-            self._generation_indices = None
+            self._tracking = ContextVar("assistant_tracker", default=None)
 
         def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
             lineno = next(parser.stream).lineno
@@ -413,32 +589,32 @@ def _compile_jinja_template(chat_template):
         @jinja2.pass_eval_context
         def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
             rv = caller()
-            if self.is_active():
+            if (tracking := self._tracking.get()) is not None:
                 # Only track generation indices if the tracker is active
-                start_index = len("".join(self._rendered_blocks))
+                rendered_blocks, generation_indices = tracking
+                start_index = len("".join(rendered_blocks))
                 end_index = start_index + len(rv)
-                self._generation_indices.append((start_index, end_index))
+                generation_indices.append((start_index, end_index))
             return rv
 
         def is_active(self) -> bool:
-            return self._rendered_blocks or self._generation_indices
+            return self._tracking.get() is not None
 
         @contextmanager
         def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
+            if self.is_active():
+                raise ValueError("AssistantTracker should not be reused before closed")
+            token = self._tracking.set((rendered_blocks, generation_indices))
             try:
-                if self.is_active():
-                    raise ValueError("AssistantTracker should not be reused before closed")
-                self._rendered_blocks = rendered_blocks
-                self._generation_indices = generation_indices
-
                 yield
             finally:
-                self._rendered_blocks = None
-                self._generation_indices = None
+                self._tracking.reset(token)
 
-    if version.parse(jinja2.__version__) < version.parse("3.1.0"):
+    if version.parse(jinja2.__version__) < version.parse("3.1.6"):
+        # Older versions have known sandbox escapes, and chat templates from the Hub are untrusted code
         raise ImportError(
-            f"apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}."
+            f"apply_chat_template requires jinja2>=3.1.6 to be installed. Your version is {jinja2.__version__}. "
+            "You can upgrade it with `pip install -U jinja2`."
         )
 
     def raise_exception(message):
@@ -452,13 +628,136 @@ def _compile_jinja_template(chat_template):
     def strftime_now(format):
         return datetime.now().strftime(format)
 
+    class TemplateDict:
+        # Make a limited subclass so that users can't break out with dictionary attribute access
+        # or type-hackery
+        def __call__(self, *args, **kwargs):
+            return dict(*args, **kwargs)
+
+        def fromkeys(self, *args, **kwargs):
+            return dict.fromkeys(*args, **kwargs)
+
+    class TemplateNamespace(jinja2.utils.Namespace):
+        # Namespaces reject any dunder attributes to prevent access to CPython internals
+        def __init__(*args, **kwargs):
+            # Same signature trick as Jinja's Namespace, so that `namespace(self=...)` still works
+            self, args = args[0], args[1:]
+            attrs = dict(*args, **kwargs)
+            for name in attrs:
+                TemplateNamespace._check_name(name)
+            jinja2.utils.Namespace.__init__(self, attrs)
+
+        def __setitem__(self, name, value):
+            TemplateNamespace._check_name(name)
+            jinja2.utils.Namespace.__setitem__(self, name, value)
+
+        @staticmethod
+        def _check_name(name):
+            if isinstance(name, str) and name.startswith("_"):
+                raise jinja2.exceptions.SecurityError(
+                    f"Chat templates cannot store underscore-prefixed attributes on a namespace, but got {name!r}. "
+                    "Please rename the attribute."
+                )
+
     jinja_env = ImmutableSandboxedEnvironment(
         trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
     )
     jinja_env.filters["tojson"] = tojson
     jinja_env.globals["raise_exception"] = raise_exception
     jinja_env.globals["strftime_now"] = strftime_now
+    jinja_env.globals["dict"] = TemplateDict()
+    jinja_env.globals["namespace"] = TemplateNamespace
     return jinja_env.from_string(chat_template)
+
+
+# Names a message's reasoning is passed under. The first is the standard one that chat templates read.
+_REASONING_FIELDS = ("reasoning_content", "thinking", "reasoning")
+
+
+def _alias_reasoning_fields(chat: ChatType) -> ChatType:
+    # Fill `reasoning_content` from older names for it, and fill `thinking` for gpt-oss templates, which read that
+    aliased_chat = []
+    for message in chat:
+        if isinstance(message, dict):
+            reasoning = next((message[key] for key in _REASONING_FIELDS if message.get(key) is not None), None)
+            if reasoning is not None:
+                message = {"thinking": reasoning, **message, "reasoning_content": reasoning}
+        aliased_chat.append(message)
+    return aliased_chat
+
+
+def _message_objects_to_dicts(value: Any) -> Any:
+    # Unlike `_plain_template_data`, this leaves media (images, arrays, tensors) untouched, because processors still
+    # need to load them from the content blocks after this runs.
+    if isinstance(value, Mapping):
+        return {key: _message_objects_to_dicts(item) for key, item in value.items()}
+    elif isinstance(value, list):
+        return [_message_objects_to_dicts(item) for item in value]
+    elif isinstance(value, tuple):
+        return tuple(_message_objects_to_dicts(item) for item in value)
+    elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+        # We don't use `dataclasses.asdict()` here because it deep-copies everything, including any media in the fields
+        return {
+            field.name: _message_objects_to_dicts(getattr(value, field.name)) for field in dataclasses.fields(value)
+        }
+    elif callable(getattr(value, "model_dump", None)):
+        # Pydantic models, like the messages returned by the OpenAI SDK
+        return _message_objects_to_dicts(value.model_dump())
+    else:
+        # Strings, numbers and media are returned as-is
+        return value
+
+
+def _normalize_chat_messages(conversation: Any) -> list[dict]:
+    # First, convert message objects (and any objects nested inside them, like tool calls or content blocks) to dicts.
+    # We do this before anything else touches the chat, because control token sanitization and media loading
+    # only know how to walk dicts and lists.
+    messages = _message_objects_to_dicts(getattr(conversation, "messages", conversation))
+    normalized_messages = []
+    for message in messages:
+        if not isinstance(message, dict):
+            raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
+        # Next, drop the keys whose value is None. Some APIs (e.g. OpenAI) return `content=None` or `tool_calls=None`,
+        # but many chat templates crash or produce wrong output (e.g. rendering literal "None") on them, while they
+        # handle a missing key.
+        normalized_messages.append({key: value for key, value in message.items() if value is not None})
+    return normalized_messages
+
+
+def _plain_template_data(value: Any) -> Any:
+    # Chat templates come from the Hub, but callers often put rich objects in their inputs, like the decoded images,
+    # arrays and tensors in multimodal content blocks. Those objects have methods that the sandbox doesn't know are
+    # dangerous (some of them write files!), so we rebuild everything the template sees out of plain JSON types,
+    # and replace anything else with an inert placeholder. Templates only check whether media keys are present,
+    # and never read their values, so this doesn't change what they render.
+    if value is None or type(value) in (str, int, float, bool):
+        # Exact JSON scalars are safe as-is
+        return value
+    elif isinstance(value, str):
+        # Subclasses (enums, numpy scalars, ...) can carry extra methods, so we strip them back to the base type
+        return str.__str__(value)
+    elif isinstance(value, int):
+        return int.__int__(value)
+    elif isinstance(value, float):
+        return float.__float__(value)
+    elif isinstance(value, Mapping):
+        return {_plain_template_data(key): _plain_template_data(item) for key, item in value.items()}
+    elif isinstance(value, list):
+        return [_plain_template_data(item) for item in value]
+    elif isinstance(value, tuple):
+        return tuple(_plain_template_data(item) for item in value)
+    elif isinstance(value, np.generic):
+        # `np.bool_(False)` would otherwise become a truthy placeholder string
+        return _plain_template_data(value.item())
+    elif dataclasses.is_dataclass(value) and not isinstance(value, type):
+        # Fields are read one level at a time, so arrays and images inside are not deep-copied
+        return {field.name: _plain_template_data(getattr(value, field.name)) for field in dataclasses.fields(value)}
+    elif callable(getattr(value, "model_dump", None)):
+        # Pydantic models
+        return _plain_template_data(value.model_dump())
+    else:
+        # Anything else becomes a placeholder naming its type, e.g. "<ndarray>"
+        return f"<{type(value).__name__}>"
 
 
 def render_jinja_template(
@@ -467,7 +766,7 @@ def render_jinja_template(
     documents: ChatType | None = None,
     chat_template: str | None = None,
     return_assistant_tokens_mask: bool = False,
-    continue_final_message: bool = False,
+    continue_final_message: bool | str = False,
     add_generation_prompt: bool = False,
     **kwargs,
 ) -> str:
@@ -485,7 +784,7 @@ def render_jinja_template(
         for tool in tools:
             if isinstance(tool, dict):
                 tool_schemas.append(tool)
-            elif isfunction(tool):
+            elif isfunction(tool) or inspect.ismethod(tool):
                 tool_schemas.append(get_json_schema(tool))
             else:
                 raise ValueError(
@@ -500,6 +799,11 @@ def render_jinja_template(
             if not isinstance(document, dict):
                 raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
 
+    # Everything the template can see goes through `_plain_template_data`. The conversations are converted below.
+    tool_schemas = _plain_template_data(tool_schemas)
+    documents = _plain_template_data(documents)
+    kwargs = _plain_template_data(kwargs)
+
     rendered = []
     all_generation_indices = []
     continue_final_message_tag = "CONTINUE_FINAL_MESSAGE_TAG "
@@ -507,10 +811,31 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        # The converted chat is a fresh copy, so the edits below never touch the caller's messages
+        chat = _plain_template_data(chat)
+        for message in chat:
+            if not isinstance(message, dict):
+                raise TypeError(f"Chat messages should be dicts, dataclasses or pydantic models, but got {message!r}.")
+        chat = _alias_reasoning_fields(chat)
         if continue_final_message:
-            chat = deepcopy(chat)
-            final_message = chat[-1]["content"]
-            if isinstance(final_message, (list, tuple)):
+            if not chat:
+                raise ValueError("continue_final_message is set but the conversation is empty!")
+            continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
+
+            if (final_message := chat[-1].get(continue_final_message)) is None:
+                raise ValueError(
+                    f'continue_final_message is set but the final message has no "{continue_final_message}" to continue!'
+                )
+            continue_fields = [continue_final_message]
+            if continue_final_message in _REASONING_FIELDS:
+                # Reasoning is copied under several names, so tag every copy and accept whichever one the template reads
+                continue_fields = [field for field in _REASONING_FIELDS if chat[-1].get(field) == final_message]
+            if not any(field in chat_template for field in continue_fields):
+                raise ValueError(
+                    f'continue_final_message is set to "{continue_final_message}" but this is not an accepted field in the chat_template'
+                )
+
+            elif isinstance(final_message, (list, tuple)):
                 for content_block in reversed(final_message):
                     if "text" in content_block:
                         # Pick the last text block in the message (the first one we hit while iterating in reverse)
@@ -522,7 +847,8 @@ def render_jinja_template(
                         "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
             else:
-                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
+                for field in continue_fields:
+                    chat[-1][field] = chat[-1][field] + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,
@@ -550,6 +876,7 @@ def render_jinja_template(
                     "applying the chat template! This can happen if the chat template deletes portions of "
                     "the final message. Please verify the chat template and final message in your chat to "
                     "ensure they are compatible."
+                    f"Final message to continue: {final_message.strip()}\nRendered chat:\n{rendered_chat}"
                 )
             tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
             if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:

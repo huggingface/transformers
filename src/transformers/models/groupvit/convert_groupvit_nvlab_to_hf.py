@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +19,10 @@ URL: https://github.com/NVlabs/GroupViT
 """
 
 import argparse
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import CLIPProcessor, GroupViTConfig, GroupViTModel
@@ -149,8 +149,9 @@ def convert_state_dict(orig_state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()

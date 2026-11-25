@@ -23,14 +23,10 @@ if TYPE_CHECKING:
 from ..utils import (
     is_accelerate_available,
     is_optimum_quanto_available,
-    is_torch_available,
     logging,
 )
 from ..utils.quantization_config import QuantoConfig
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -41,9 +37,11 @@ class QuantoHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "QuantoConfig"
 
-    def __init__(self, quantization_config: QuantoConfig, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    @property
+    def quantized_element_size(self) -> float | None:
+        return {"int8": 1, "float8": 1, "int4": 0.5, "int2": 0.25}.get(self.quantization_config.weights)
 
     def validate_environment(self, *args, **kwargs):
         if not is_optimum_quanto_available():
@@ -83,25 +81,11 @@ class QuantoHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
-        from accelerate.utils import CustomDtype
-
-        mapping = {
-            "int8": torch.int8,
-            "float8": CustomDtype.FP8,
-            "int4": CustomDtype.INT4,
-            "int2": CustomDtype.INT2,
-        }
-        target_dtype = mapping[self.quantization_config.weights]
-        return target_dtype
-
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         from ..integrations import replace_with_quanto_layers
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_quanto_layers(

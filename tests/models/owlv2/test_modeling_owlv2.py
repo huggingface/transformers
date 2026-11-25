@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
+from parameterized import parameterized
 
 from transformers import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
 from transformers.testing_utils import (
@@ -31,9 +31,13 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
+    _test_eager_matches_sdpa_inference,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -49,48 +53,41 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import OwlViTImageProcessor, OwlViTProcessor
+    from transformers import OwlViTImageProcessorPil, OwlViTProcessor
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTester with OwlViT->Owlv2
-class Owlv2VisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=32,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class Owlv2VisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
 
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 32,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        num_patches = (values["image_size"] // values["patch_size"]) ** 2
+        values["seq_length"] = num_patches + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -140,6 +137,8 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = Owlv2VisionModelTester
+
     all_model_classes = (Owlv2VisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -147,7 +146,7 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Owlv2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -182,24 +181,20 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -210,47 +205,39 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTester with OwlViT->Owlv2
-class Owlv2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        num_queries=4,
-        seq_length=16,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=64,
-        num_hidden_layers=12,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=16,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class Owlv2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 12,
+        "num_queries": 4,
+        "seq_length": 16,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 64,
+        "num_hidden_layers": 12,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 16,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.num_queries = num_queries
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size * self.num_queries, self.seq_length], self.vocab_size)
+        # The text model pools at `input_ids.argmax(-1)` (the EOS token has the highest id). Put a unique highest id at
+        # the last position, so the pooled token never lands on the left-padded positions used in
+        # `test_eager_matches_sdpa_inference`: such a token attends to nothing (causal mask) and eager/SDPA diverge.
+        input_ids = ids_tensor([self.batch_size * self.num_queries, self.seq_length], self.vocab_size - 1)
+        input_ids[:, -1] = self.vocab_size - 1
         input_mask = None
 
         if self.use_input_mask:
@@ -302,11 +289,13 @@ class Owlv2TextModelTester:
 @require_torch
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTTextModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Owlv2TextModelTester
+
     all_model_classes = (Owlv2TextModel,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = Owlv2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -315,24 +304,20 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="OWLV2 does not use inputs_embeds")
@@ -346,8 +331,14 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class Owlv2ModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+class Owlv2ModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -356,10 +347,19 @@ class Owlv2ModelTester:
         self.parent = parent
         self.text_model_tester = Owlv2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Owlv2VisionModelTester(parent, **vision_kwargs)
-        self.is_training = is_training
-        self.text_config = self.text_model_tester.get_config().to_dict()
-        self.vision_config = self.vision_model_tester.get_config().to_dict()
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        values = self.get_small_config_defaults(text_kwargs=text_kwargs, vision_kwargs=vision_kwargs, **kwargs)
+        for key, value in values.items():
+            setattr(self, key, value)
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, vision_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_model_tester = Owlv2TextModelTester(None, **(text_kwargs or {}))
+        vision_model_tester = Owlv2VisionModelTester(None, **(vision_kwargs or {}))
+        values["text_config"] = text_model_tester.get_config().to_dict()
+        values["vision_config"] = vision_model_tester.get_config().to_dict()
+        values["batch_size"] = text_model_tester.batch_size  # need bs for batching_equivalence test
+        return values
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -410,6 +410,8 @@ class Owlv2ModelTester:
 @require_torch
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Owlv2ModelTester
+
     all_model_classes = (Owlv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -422,6 +424,8 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = Owlv2ModelTester(self)
@@ -468,6 +472,35 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             text_config = Owlv2TextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(
+        self,
+        name,
+        dtype,
+        padding_side,
+        use_attention_mask,
+        output_attentions,
+        enable_kernels,
+    ):
+        # `logits_per_text` is scaled by `exp(logit_scale)` (~14), which amplifies the bf16 eager/sdpa difference
+        atols = {
+            ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.float16): 5e-3,
+            ("cpu", False, torch.bfloat16): 5e-2,  # this was relaxed
+            ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.float16): 5e-3,
+            ("cpu", True, torch.bfloat16): 5e-2,  # this was relaxed
+            ("cuda", False, torch.float32): 1e-6,
+            ("cuda", False, torch.bfloat16): 5e-2,  # this was relaxed
+            ("cuda", False, torch.float16): 5e-3,
+            ("cuda", True, torch.float32): 1e-6,
+            ("cuda", True, torch.bfloat16): 5e-2,  # this was relaxed
+            ("cuda", True, torch.float16): 5e-3,
+        }
+        _test_eager_matches_sdpa_inference(
+            self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
+        )
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/owlv2-base-patch16-ensemble"
@@ -476,15 +509,28 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTester with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
-class Owlv2ForObjectDetectionTester:
-    def __init__(self, parent, is_training=True):
+class Owlv2ForObjectDetectionTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "is_training": True,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_model_tester = Owlv2TextModelTester(None)
+        values["text_config"] = text_model_tester.get_config().to_dict()
+        values["vision_config"] = Owlv2VisionModelTester(None).get_config().to_dict()
+        values["batch_size"] = text_model_tester.batch_size  # need bs for batching_equivalence test
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
         self.text_model_tester = Owlv2TextModelTester(parent)
         self.vision_model_tester = Owlv2VisionModelTester(parent)
-        self.is_training = is_training
-        self.text_config = self.text_model_tester.get_config().to_dict()
-        self.vision_config = self.vision_model_tester.get_config().to_dict()
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -542,10 +588,14 @@ class Owlv2ForObjectDetectionTester:
 @require_torch
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTForObjectDetectionTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2, owlvit-base-patch32->owlv2-base-patch16-ensemble
 class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = Owlv2ForObjectDetectionTester
+
     all_model_classes = (Owlv2ForObjectDetection,) if is_torch_available() else ()
 
     test_resize_embeddings = False
     test_attention_outputs = False
+
+    additional_model_inputs = ["pixel_values", "attention_mask"]
 
     def setUp(self):
         self.model_tester = Owlv2ForObjectDetectionTester(self)
@@ -557,6 +607,10 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(self, *args):
+        self.skipTest("Owlv2ObjectDetectionOutput has no top-level hidden_states; SDPA tested in sub-models")
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):
@@ -574,24 +628,20 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -603,8 +653,8 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 
@@ -615,7 +665,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
@@ -647,7 +697,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
         processor.image_processor.size = {"height": 1024, "width": 1024}
 
@@ -711,7 +761,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
 
         # Deactivate interpolate_pos_encoding on same model, and use default image size.
         # Verify the dynamic change caused by the activation/deactivation of interpolate_pos_encoding of variables: self.sqrt_num_patches, self.box_bias from (OwlViTForObjectDetection).
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
@@ -735,7 +785,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
                 [-3.3644, -4.0717, -4.0717, -4.0717],
                 [-2.9425, -4.0717, -4.0717, -4.0717],
             ]
-        )
+        ).to(torch_device)
 
         torch.testing.assert_close(model.box_bias[:3, :4], expected_default_box_bias, rtol=1e-4, atol=1e-4)
 
@@ -787,7 +837,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
@@ -837,7 +887,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_one_shot_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
@@ -861,6 +911,9 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         torch.testing.assert_close(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
+        expected_slice_logits = torch.tensor([[-24.8582], [-20.6109], [-25.1590]]).to(torch_device)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice_logits, rtol=1e-3, atol=1e-3)
+
     @slow
     @require_torch_accelerator
     @require_torch_fp16
@@ -868,7 +921,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()

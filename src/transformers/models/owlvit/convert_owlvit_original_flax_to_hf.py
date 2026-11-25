@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit"""
 
 import argparse
-import collections
+from collections.abc import MutableMapping
 
 import jax
 import jax.numpy as jnp
@@ -82,7 +81,7 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
     for k, v in params.items():
         new_key = parent_key + sep + k if parent_key else k
 
-        if isinstance(v, collections.MutableMapping):
+        if isinstance(v, MutableMapping):
             items.extend(flatten_nested_dict(v, new_key, sep=sep).items())
         else:
             items.append((new_key, v))

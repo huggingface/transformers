@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,7 @@
 """Tokenization classes for RAG."""
 
 import os
-import warnings
-from typing import Optional
 
-from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_rag import RagConfig
 
@@ -73,52 +69,6 @@ class RagTokenizer:
 
     def _switch_to_target_mode(self):
         self.current_tokenizer = self.generator
-
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: list[str],
-        tgt_texts: Optional[list[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        padding: str = "longest",
-        return_tensors: Optional[str] = None,
-        truncation: bool = True,
-        **kwargs,
-    ) -> BatchEncoding:
-        warnings.warn(
-            "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of Hugging Face Transformers. Use the "
-            "regular `__call__` method to prepare your inputs and the tokenizer under the `with_target_tokenizer` "
-            "context manager to prepare your targets. See the documentation of your specific tokenizer for more "
-            "details",
-            FutureWarning,
-        )
-        if max_length is None:
-            max_length = self.current_tokenizer.model_max_length
-        model_inputs = self(
-            src_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-            **kwargs,
-        )
-        if tgt_texts is None:
-            return model_inputs
-        # Process tgt_texts
-        if max_target_length is None:
-            max_target_length = self.current_tokenizer.model_max_length
-        labels = self(
-            text_target=tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_target_length,
-            truncation=truncation,
-            **kwargs,
-        )
-        model_inputs["labels"] = labels["input_ids"]
-        return model_inputs
 
 
 __all__ = ["RagTokenizer"]

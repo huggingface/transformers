@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -17,10 +16,8 @@
 PyTorch XLNet model.
 """
 
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -29,9 +26,10 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN, get_activation
 from ...generation import GenerationMixin
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_xlnet import XLNetConfig
 
 
@@ -370,19 +368,17 @@ class XLNetPoolerStartLogits(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, 1)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, p_mask: Optional[torch.FloatTensor] = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, p_mask: torch.Tensor | None = None) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
         Returns:
-            `torch.FloatTensor`: The start logits for SQuAD.
+            `torch.Tensor`: The start logits for SQuAD.
         """
         x = self.dense(hidden_states).squeeze(-1)
 
@@ -415,20 +411,20 @@ class XLNetPoolerEndLogits(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        start_states: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        p_mask: Optional[torch.FloatTensor] = None,
-    ) -> torch.FloatTensor:
+        hidden_states: torch.Tensor,
+        start_states: torch.Tensor | None = None,
+        start_positions: torch.LongTensor | None = None,
+        p_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            start_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
                 The hidden states of the first tokens for the labeled span.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 The position of the first token for the labeled span.
-            p_mask (`torch.FloatTensor` of shape `(batch_size, seq_len)`, *optional*):
+            p_mask (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
 
@@ -440,7 +436,7 @@ class XLNetPoolerEndLogits(nn.Module):
         </Tip>
 
         Returns:
-            `torch.FloatTensor`: The end logits for SQuAD.
+            `torch.Tensor`: The end logits for SQuAD.
         """
         assert start_states is not None or start_positions is not None, (
             "One of start_states, start_positions should be not None"
@@ -483,16 +479,16 @@ class XLNetPoolerAnswerClass(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        start_states: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        cls_index: Optional[torch.LongTensor] = None,
-    ) -> torch.FloatTensor:
+        hidden_states: torch.Tensor,
+        start_states: torch.Tensor | None = None,
+        start_positions: torch.LongTensor | None = None,
+        cls_index: torch.LongTensor | None = None,
+    ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
                 The final hidden states of the model.
-            start_states (`torch.FloatTensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
+            start_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`, *optional*):
                 The hidden states of the first tokens for the labeled span.
             start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
                 The position of the first token for the labeled span.
@@ -507,7 +503,7 @@ class XLNetPoolerAnswerClass(nn.Module):
         </Tip>
 
         Returns:
-            `torch.FloatTensor`: The SQuAD 2.0 answer class.
+            `torch.Tensor`: The SQuAD 2.0 answer class.
         """
         # No dependency on end_feature so that we can obtain one single `cls_logits` for each sample.
         hsz = hidden_states.shape[-1]
@@ -587,20 +583,18 @@ class XLNetSequenceSummary(nn.Module):
         if hasattr(config, "summary_last_dropout") and config.summary_last_dropout > 0:
             self.last_dropout = nn.Dropout(config.summary_last_dropout)
 
-    def forward(
-        self, hidden_states: torch.FloatTensor, cls_index: Optional[torch.LongTensor] = None
-    ) -> torch.FloatTensor:
+    def forward(self, hidden_states: torch.Tensor, cls_index: torch.LongTensor | None = None) -> torch.Tensor:
         """
         Compute a single vector summary of a sequence hidden states.
 
         Args:
-            hidden_states (`torch.FloatTensor` of shape `[batch_size, seq_len, hidden_size]`):
+            hidden_states (`torch.Tensor` of shape `[batch_size, seq_len, hidden_size]`):
                 The hidden states of the last layer.
             cls_index (`torch.LongTensor` of shape `[batch_size]` or `[batch_size, ...]` where ... are optional leading dimensions of `hidden_states`, *optional*):
                 Used if `summary_type == "cls_index"` and takes the last token of the sequence as classification token.
 
         Returns:
-            `torch.FloatTensor`: The summary of the sequence hidden states.
+            `torch.Tensor`: The summary of the sequence hidden states.
         """
         if self.summary_type == "last":
             output = hidden_states[:, -1]
@@ -636,7 +630,6 @@ class XLNetPreTrainedModel(PreTrainedModel):
     config: XLNetConfig
     base_model_prefix = "transformer"
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
         super()._init_weights(module)
@@ -657,206 +650,206 @@ class XLNetPreTrainedModel(PreTrainedModel):
             init.normal_(module.mask_emb, mean=0.0, std=self.config.initializer_range)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetModel`].
     """
 )
+@dataclass
 class XLNetModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_predict, hidden_size)`):
         Sequence of hidden-states at the last layer of the model.
 
         `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
         corresponds to `sequence_length`.
-    mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+    mems (`list[torch.Tensor]` of length `config.n_layers`):
         Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
         token ids which have their past given to this model should not be passed as `input_ids` as they have
         already been computed.
     """
 
-    last_hidden_state: torch.FloatTensor
-    mems: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.Tensor
+    mems: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetLMHeadModel`].
     """
 )
+@dataclass
 class XLNetLMHeadModelOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, num_predict, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_predict, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
 
         `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
         corresponds to `sequence_length`.
-    mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+    mems (`list[torch.Tensor]` of length `config.n_layers`):
         Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
         token ids which have their past given to this model should not be passed as `input_ids` as they have
         already been computed.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    mems: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    mems: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForSequenceClassification`].
     """
 )
+@dataclass
 class XLNetForSequenceClassificationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `label` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `label` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+    mems (`list[torch.Tensor]` of length `config.n_layers`):
         Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
         token ids which have their past given to this model should not be passed as `input_ids` as they have
         already been computed.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    mems: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    mems: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForTokenClassificationOutput`].
     """
 )
+@dataclass
 class XLNetForTokenClassificationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Classification scores (before SoftMax).
-    mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+    mems (`list[torch.Tensor]` of length `config.n_layers`):
         Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
         token ids which have their past given to this model should not be passed as `input_ids` as they have
         already been computed.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    mems: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    mems: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForMultipleChoice`].
     """
 )
+@dataclass
 class XLNetForMultipleChoiceOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
         Classification loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_choices)`):
         *num_choices* is the second dimension of the input tensors. (see *input_ids* above).
 
         Classification scores (before SoftMax).
-    mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+    mems (`list[torch.Tensor]` of length `config.n_layers`):
         Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
         token ids which have their past given to this model should not be passed as `input_ids` as they have
         already been computed.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    mems: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    mems: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForQuestionAnsweringSimple`].
     """
 )
+@dataclass
 class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    start_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length,)`):
+    start_logits (`torch.Tensor` of shape `(batch_size, sequence_length,)`):
         Span-start scores (before SoftMax).
-    end_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length,)`):
+    end_logits (`torch.Tensor` of shape `(batch_size, sequence_length,)`):
         Span-end scores (before SoftMax).
-    mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+    mems (`list[torch.Tensor]` of length `config.n_layers`):
         Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
         token ids which have their past given to this model should not be passed as `input_ids` as they have
         already been computed.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    start_logits: Optional[torch.FloatTensor] = None
-    end_logits: Optional[torch.FloatTensor] = None
-    mems: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    start_logits: torch.Tensor | None = None
+    end_logits: torch.Tensor | None = None
+    mems: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`XLNetForQuestionAnswering`].
     """
 )
+@dataclass
 class XLNetForQuestionAnsweringOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
         Classification loss as the sum of start token, end token (and is_impossible if provided) classification
         losses.
-    start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    start_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top config.start_n_top start token possibilities (beam-search).
     start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top config.start_n_top start token possibilities (beam-search).
-    end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    end_top_log_probs (`torch.Tensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
         (beam-search).
     end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-    cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+    cls_logits (`torch.Tensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
         Log probabilities for the `is_impossible` label of the answers.
-    mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+    mems (`list[torch.Tensor]` of length `config.n_layers`):
         Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
         token ids which have their past given to this model should not be passed as `input_ids` as they have
         already been computed.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    start_top_log_probs: Optional[torch.FloatTensor] = None
-    start_top_index: Optional[torch.LongTensor] = None
-    end_top_log_probs: Optional[torch.FloatTensor] = None
-    end_top_index: Optional[torch.LongTensor] = None
-    cls_logits: Optional[torch.FloatTensor] = None
-    mems: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    start_top_log_probs: torch.Tensor | None = None
+    start_top_index: torch.LongTensor | None = None
+    end_top_log_probs: torch.Tensor | None = None
+    end_top_index: torch.LongTensor | None = None
+    cls_logits: torch.Tensor | None = None
+    mems: list[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring
 class XLNetModel(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
 
         self.mem_len = config.mem_len
@@ -933,7 +926,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
     @staticmethod
     def positional_embedding(pos_seq, inv_freq, bsz=None):
-        sinusoid_inp = torch.einsum("i,d->id", pos_seq, inv_freq)
+        sinusoid_inp = pos_seq[:, None] * inv_freq
         pos_emb = torch.cat([torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)], dim=-1)
         pos_emb = pos_emb[:, None, :]
 
@@ -942,9 +935,9 @@ class XLNetModel(XLNetPreTrainedModel):
 
         return pos_emb
 
-    def relative_positional_encoding(self, qlen, klen, bsz=None):
+    def relative_positional_encoding(self, qlen, klen, bsz=None, device=None):
         # create relative positional encoding.
-        freq_seq = torch.arange(0, self.d_model, 2.0, dtype=torch.int64).float()
+        freq_seq = torch.arange(0, self.d_model, 2.0, dtype=torch.int64, device=device).float()
         inv_freq = 1 / torch.pow(10000, (freq_seq / self.d_model))
 
         if self.attn_type == "bi":
@@ -957,8 +950,8 @@ class XLNetModel(XLNetPreTrainedModel):
             raise ValueError(f"Unknown `attn_type` {self.attn_type}.")
 
         if self.bi_data:
-            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.int64).float()
-            bwd_pos_seq = torch.arange(-beg, -end, 1.0, dtype=torch.int64).float()
+            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.int64, device=device).float()
+            bwd_pos_seq = torch.arange(-beg, -end, 1.0, dtype=torch.int64, device=device).float()
 
             if self.clamp_len > 0:
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
@@ -973,7 +966,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
             pos_emb = torch.cat([fwd_pos_emb, bwd_pos_emb], dim=1)
         else:
-            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.int64).float()
+            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.int64, device=device).float()
             if self.clamp_len > 0:
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
             pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz)
@@ -983,28 +976,28 @@ class XLNetModel(XLNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        mems: Optional[torch.Tensor] = None,
-        perm_mask: Optional[torch.Tensor] = None,
-        target_mapping: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        input_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        mems: torch.Tensor | None = None,
+        perm_mask: torch.Tensor | None = None,
+        target_mapping: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        input_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_mems: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,  # delete after depreciation warning is removed
-    ) -> Union[tuple, XLNetModelOutput]:
+    ) -> tuple | XLNetModelOutput:
         r"""
-        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
             decoding. The token ids which have their past given to this model should not be passed as `input_ids` as
             they have already been computed.
 
             `use_mems` has to be set to `True` to make use of `mems`.
-        perm_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
+        perm_mask (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
             Mask to indicate the attention pattern for each input token with values selected in `[0, 1]`:
 
             - if `perm_mask[k, i, j] = 0`, i attend to j in batch k;
@@ -1012,11 +1005,11 @@ class XLNetModel(XLNetPreTrainedModel):
 
             If not set, each token attends to all the others (full bidirectional attention). Only used during
             pretraining (to define factorization order) or for sequential decoding (generation).
-        target_mapping (`torch.FloatTensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
+        target_mapping (`torch.Tensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
             Mask to indicate the output tokens to use. If `target_mapping[k, i, j] = 1`, the i-th predict in batch k is
             on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
             (generation).
-        input_mask (`torch.FloatTensor` of shape `batch_size, sequence_length`, *optional*):
+        input_mask (`torch.Tensor` of shape `batch_size, sequence_length`, *optional*):
             Mask to avoid performing attention on padding token indices. Negative of `attention_mask`, i.e. with 0 for
             real tokens and 1 for padding which is kept for compatibility with the original code base.
 
@@ -1035,15 +1028,7 @@ class XLNetModel(XLNetPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if "use_cache" in kwargs:
-            warnings.warn(
-                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems`"
-                " instead.",
-                FutureWarning,
-            )
-            use_mems = kwargs["use_cache"]
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.training:
             use_mems = use_mems if use_mems is not None else self.config.use_mems_train
@@ -1103,7 +1088,9 @@ class XLNetModel(XLNetPreTrainedModel):
         if data_mask is not None:
             # all mems can be attended to
             if mlen > 0:
-                mems_mask = torch.zeros([data_mask.shape[0], mlen, bsz]).to(data_mask)
+                mems_mask = torch.zeros(
+                    [data_mask.shape[0], mlen, bsz], device=data_mask.device, dtype=data_mask.dtype
+                )
                 data_mask = torch.cat([mems_mask, data_mask], dim=1)
             if attn_mask is None:
                 attn_mask = data_mask[:, :, :, None]
@@ -1114,9 +1101,11 @@ class XLNetModel(XLNetPreTrainedModel):
             attn_mask = (attn_mask > 0).to(dtype_float)
 
         if attn_mask is not None:
-            non_tgt_mask = -torch.eye(qlen).to(attn_mask)
+            non_tgt_mask = -torch.eye(qlen, device=attn_mask.device, dtype=attn_mask.dtype)
             if mlen > 0:
-                non_tgt_mask = torch.cat([torch.zeros([qlen, mlen]).to(attn_mask), non_tgt_mask], dim=-1)
+                non_tgt_mask = torch.cat(
+                    [torch.zeros([qlen, mlen], device=attn_mask.device, dtype=attn_mask.dtype), non_tgt_mask], dim=-1
+                )
             non_tgt_mask = ((attn_mask + non_tgt_mask[:, :, None, None]) > 0).to(attn_mask)
         else:
             non_tgt_mask = None
@@ -1152,8 +1141,7 @@ class XLNetModel(XLNetPreTrainedModel):
             seg_mat = None
 
         # Positional encoding
-        pos_emb = self.relative_positional_encoding(qlen, klen, bsz=bsz)
-        pos_emb = pos_emb.to(output_h.device)
+        pos_emb = self.relative_positional_encoding(qlen, klen, bsz=bsz, device=output_h.device)
         pos_emb = self.dropout(pos_emb)
 
         new_mems = ()
@@ -1227,7 +1215,7 @@ class XLNetModel(XLNetPreTrainedModel):
 class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_loss.weight": "transformer.word_embedding.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.attn_type = config.attn_type
         self.same_length = config.same_length
@@ -1244,9 +1232,20 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_loss = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_mems=None, **kwargs):
-        # Overwritten -- this model has unique input preparation
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict,
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict:
+        # Non standard cache name, so need to override here
+        if "mems" in outputs:
+            model_kwargs["mems"] = outputs.mems
+        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder, num_new_tokens)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
+    def prepare_inputs_for_generation(self, input_ids, cache=None, use_mems=None, is_first_iteration=False, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -1257,7 +1256,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         # offset = 1; offset = 2 seems to have slightly better computation.
         offset = 2
 
-        if past_key_values:
+        if kwargs.get("mems"):
             input_ids = torch.cat([input_ids[:, -offset:], dummy_token], dim=1)
         else:
             input_ids = torch.cat([input_ids, dummy_token], dim=1)
@@ -1283,8 +1282,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         }
 
         # if past is defined in model kwargs then use it for faster decoding
-        if past_key_values:
-            model_inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past_key_values)
+        if kwargs.get("mems"):
+            model_inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in kwargs.get("mems"))
 
         # Attention mask is computed on the fly on XLNetModel.forward()
         kwargs.pop("attention_mask", None)
@@ -1300,30 +1299,30 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        mems: Optional[torch.Tensor] = None,
-        perm_mask: Optional[torch.Tensor] = None,
-        target_mapping: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        input_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        mems: torch.Tensor | None = None,
+        perm_mask: torch.Tensor | None = None,
+        target_mapping: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        input_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_mems: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[tuple, XLNetLMHeadModelOutput]:
+    ) -> tuple | XLNetLMHeadModelOutput:
         r"""
-        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
             decoding. The token ids which have their past given to this model should not be passed as `input_ids` as
             they have already been computed.
 
             `use_mems` has to be set to `True` to make use of `mems`.
-        perm_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
+        perm_mask (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
             Mask to indicate the attention pattern for each input token with values selected in `[0, 1]`:
 
             - if `perm_mask[k, i, j] = 0`, i attend to j in batch k;
@@ -1331,11 +1330,11 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
 
             If not set, each token attends to all the others (full bidirectional attention). Only used during
             pretraining (to define factorization order) or for sequential decoding (generation).
-        target_mapping (`torch.FloatTensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
+        target_mapping (`torch.Tensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
             Mask to indicate the output tokens to use. If `target_mapping[k, i, j] = 1`, the i-th predict in batch k is
             on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
             (generation).
-        input_mask (`torch.FloatTensor` of shape `batch_size, sequence_length`, *optional*):
+        input_mask (`torch.Tensor` of shape `batch_size, sequence_length`, *optional*):
             Mask to avoid performing attention on padding token indices. Negative of `attention_mask`, i.e. with 0 for
             real tokens and 1 for padding which is kept for compatibility with the original code base.
 
@@ -1414,7 +1413,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         ...     outputs.logits
         ... )  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1433,9 +1432,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_loss(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_loss(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1458,8 +1456,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     @staticmethod
     def _reorder_cache(mems: list[torch.Tensor], beam_idx: torch.Tensor) -> list[torch.Tensor]:
         """
-        This function is used to re-order the `mems` cache if [`~PreTrainedModel.beam_search`] or
-        [`~PreTrainedModel.beam_sample`] is called. This is required to match `mems` with the correct beam_idx at every
+        This function is used to re-order the `mems` cache if beam search is used. This is required to match `mems` with the correct beam_idx at every
         generation step.
         """
         return [layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in mems]
@@ -1472,7 +1469,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
     """
 )
 class XLNetForSequenceClassification(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1487,29 +1484,29 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        mems: Optional[torch.Tensor] = None,
-        perm_mask: Optional[torch.Tensor] = None,
-        target_mapping: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        input_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        mems: torch.Tensor | None = None,
+        perm_mask: torch.Tensor | None = None,
+        target_mapping: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        input_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_mems: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[tuple, XLNetForSequenceClassificationOutput]:
+    ) -> tuple | XLNetForSequenceClassificationOutput:
         r"""
-        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
             decoding. The token ids which have their past given to this model should not be passed as `input_ids` as
             they have already been computed.
 
             `use_mems` has to be set to `True` to make use of `mems`.
-        perm_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
+        perm_mask (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
             Mask to indicate the attention pattern for each input token with values selected in `[0, 1]`:
 
             - if `perm_mask[k, i, j] = 0`, i attend to j in batch k;
@@ -1517,11 +1514,11 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
             If not set, each token attends to all the others (full bidirectional attention). Only used during
             pretraining (to define factorization order) or for sequential decoding (generation).
-        target_mapping (`torch.FloatTensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
+        target_mapping (`torch.Tensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
             Mask to indicate the output tokens to use. If `target_mapping[k, i, j] = 1`, the i-th predict in batch k is
             on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
             (generation).
-        input_mask (`torch.FloatTensor` of shape `batch_size, sequence_length`, *optional*):
+        input_mask (`torch.Tensor` of shape `batch_size, sequence_length`, *optional*):
             Mask to avoid performing attention on padding token indices. Negative of `attention_mask`, i.e. with 0 for
             real tokens and 1 for padding which is kept for compatibility with the original code base.
 
@@ -1531,16 +1528,12 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             - 0 for tokens that are **not masked**.
 
             You can only uses one of `input_mask` and `attention_mask`.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         use_mems (`bool`, *optional*):
             Whether to use memory states to speed up sequential decoding. If set to `True`, the model will use the hidden
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1600,7 +1593,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForTokenClassification(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1613,29 +1606,29 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        mems: Optional[torch.Tensor] = None,
-        perm_mask: Optional[torch.Tensor] = None,
-        target_mapping: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        input_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        mems: torch.Tensor | None = None,
+        perm_mask: torch.Tensor | None = None,
+        target_mapping: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        input_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_mems: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[tuple, XLNetForTokenClassificationOutput]:
+    ) -> tuple | XLNetForTokenClassificationOutput:
         r"""
-        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
             decoding. The token ids which have their past given to this model should not be passed as `input_ids` as
             they have already been computed.
 
             `use_mems` has to be set to `True` to make use of `mems`.
-        perm_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
+        perm_mask (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
             Mask to indicate the attention pattern for each input token with values selected in `[0, 1]`:
 
             - if `perm_mask[k, i, j] = 0`, i attend to j in batch k;
@@ -1643,11 +1636,11 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
             If not set, each token attends to all the others (full bidirectional attention). Only used during
             pretraining (to define factorization order) or for sequential decoding (generation).
-        target_mapping (`torch.FloatTensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
+        target_mapping (`torch.Tensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
             Mask to indicate the output tokens to use. If `target_mapping[k, i, j] = 1`, the i-th predict in batch k is
             on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
             (generation).
-        input_mask (`torch.FloatTensor` of shape `batch_size, sequence_length`, *optional*):
+        input_mask (`torch.Tensor` of shape `batch_size, sequence_length`, *optional*):
             Mask to avoid performing attention on padding token indices. Negative of `attention_mask`, i.e. with 0 for
             real tokens and 1 for padding which is kept for compatibility with the original code base.
 
@@ -1663,11 +1656,11 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         use_mems (`bool`, *optional*):
             Whether to use memory states to speed up sequential decoding. If set to `True`, the model will use the hidden
             states from previous forward passes to compute attention, which can significantly improve performance for
-            sequential decoding tasks.emory states to speed up sequential decoding. If set to `True`, the model will use the hidden
+            sequential decoding tasks. Memory states to speed up sequential decoding. If set to `True`, the model will use the hidden
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -1708,7 +1701,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForMultipleChoice(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
 
         self.transformer = XLNetModel(config)
@@ -1721,21 +1714,21 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        input_mask: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        mems: Optional[torch.Tensor] = None,
-        perm_mask: Optional[torch.Tensor] = None,
-        target_mapping: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        input_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        mems: torch.Tensor | None = None,
+        perm_mask: torch.Tensor | None = None,
+        target_mapping: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        use_mems: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[tuple, XLNetForMultipleChoiceOutput]:
+    ) -> tuple | XLNetForMultipleChoiceOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1752,7 +1745,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
-        input_mask (`torch.FloatTensor` of shape `batch_size, num_choices, sequence_length`, *optional*):
+        input_mask (`torch.Tensor` of shape `batch_size, num_choices, sequence_length`, *optional*):
             Mask to avoid performing attention on padding token indices. Negative of `attention_mask`, i.e. with 0 for
             real tokens and 1 for padding which is kept for compatibility with the original code base.
 
@@ -1762,13 +1755,13 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             - 0 for tokens that are **not masked**.
 
             You can only uses one of `input_mask` and `attention_mask`.
-        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
             decoding. The token ids which have their past given to this model should not be passed as `input_ids` as
             they have already been computed.
 
             `use_mems` has to be set to `True` to make use of `mems`.
-        perm_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
+        perm_mask (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
             Mask to indicate the attention pattern for each input token with values selected in `[0, 1]`:
 
             - if `perm_mask[k, i, j] = 0`, i attend to j in batch k;
@@ -1776,11 +1769,11 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
             If not set, each token attends to all the others (full bidirectional attention). Only used during
             pretraining (to define factorization order) or for sequential decoding (generation).
-        target_mapping (`torch.FloatTensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
+        target_mapping (`torch.Tensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
             Mask to indicate the output tokens to use. If `target_mapping[k, i, j] = 1`, the i-th predict in batch k is
             on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
             (generation).
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -1791,7 +1784,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1852,7 +1845,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
     """
 )
 class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1865,30 +1858,30 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        mems: Optional[torch.Tensor] = None,
-        perm_mask: Optional[torch.Tensor] = None,
-        target_mapping: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        input_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        mems: torch.Tensor | None = None,
+        perm_mask: torch.Tensor | None = None,
+        target_mapping: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        input_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        use_mems: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[tuple, XLNetForQuestionAnsweringSimpleOutput]:
+    ) -> tuple | XLNetForQuestionAnsweringSimpleOutput:
         r"""
-        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
             decoding. The token ids which have their past given to this model should not be passed as `input_ids` as
             they have already been computed.
 
             `use_mems` has to be set to `True` to make use of `mems`.
-        perm_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
+        perm_mask (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
             Mask to indicate the attention pattern for each input token with values selected in `[0, 1]`:
 
             - if `perm_mask[k, i, j] = 0`, i attend to j in batch k;
@@ -1896,11 +1889,11 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
             If not set, each token attends to all the others (full bidirectional attention). Only used during
             pretraining (to define factorization order) or for sequential decoding (generation).
-        target_mapping (`torch.FloatTensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
+        target_mapping (`torch.Tensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
             Mask to indicate the output tokens to use. If `target_mapping[k, i, j] = 1`, the i-th predict in batch k is
             on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
             (generation).
-        input_mask (`torch.FloatTensor` of shape `batch_size, sequence_length`, *optional*):
+        input_mask (`torch.Tensor` of shape `batch_size, sequence_length`, *optional*):
             Mask to avoid performing attention on padding token indices. Negative of `attention_mask`, i.e. with 0 for
             real tokens and 1 for padding which is kept for compatibility with the original code base.
 
@@ -1915,7 +1908,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             states from previous forward passes to compute attention, which can significantly improve performance for
             sequential decoding tasks.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,
@@ -1973,7 +1966,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
 @auto_docstring
 class XLNetForQuestionAnswering(XLNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLNetConfig):
         super().__init__(config)
         self.start_n_top = config.start_n_top
         self.end_n_top = config.end_n_top
@@ -1989,33 +1982,33 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        mems: Optional[torch.Tensor] = None,
-        perm_mask: Optional[torch.Tensor] = None,
-        target_mapping: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        input_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        is_impossible: Optional[torch.Tensor] = None,
-        cls_index: Optional[torch.Tensor] = None,
-        p_mask: Optional[torch.Tensor] = None,
-        use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        mems: torch.Tensor | None = None,
+        perm_mask: torch.Tensor | None = None,
+        target_mapping: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        input_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
+        is_impossible: torch.Tensor | None = None,
+        cls_index: torch.Tensor | None = None,
+        p_mask: torch.Tensor | None = None,
+        use_mems: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[tuple, XLNetForQuestionAnsweringOutput]:
+    ) -> tuple | XLNetForQuestionAnsweringOutput:
         r"""
-        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
             decoding. The token ids which have their past given to this model should not be passed as `input_ids` as
             they have already been computed.
 
             `use_mems` has to be set to `True` to make use of `mems`.
-        perm_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
+        perm_mask (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length)`, *optional*):
             Mask to indicate the attention pattern for each input token with values selected in `[0, 1]`:
 
             - if `perm_mask[k, i, j] = 0`, i attend to j in batch k;
@@ -2023,11 +2016,11 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
             If not set, each token attends to all the others (full bidirectional attention). Only used during
             pretraining (to define factorization order) or for sequential decoding (generation).
-        target_mapping (`torch.FloatTensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
+        target_mapping (`torch.Tensor` of shape `(batch_size, num_predict, sequence_length)`, *optional*):
             Mask to indicate the output tokens to use. If `target_mapping[k, i, j] = 1`, the i-th predict in batch k is
             on the j-th token. Only used during pretraining for partial prediction or for sequential decoding
             (generation).
-        input_mask (`torch.FloatTensor` of shape `batch_size, sequence_length`, *optional*):
+        input_mask (`torch.Tensor` of shape `batch_size, sequence_length`, *optional*):
             Mask to avoid performing attention on padding token indices. Negative of `attention_mask`, i.e. with 0 for
             real tokens and 1 for padding which is kept for compatibility with the original code base.
 
@@ -2042,7 +2035,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         cls_index (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the classification token to use as input for computing plausibility of the
             answer.
-        p_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        p_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Optional mask of tokens which can't be in answers (e.g. [CLS], [PAD], ...). 1.0 means token should be
             masked. 0.0 mean token is not masked.
         use_mems (`bool`, *optional*):
@@ -2068,7 +2061,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         >>> loss = outputs.loss
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 """Tokenization classes for LayoutXLM model."""
-
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -210,7 +207,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list]] = None,
+        vocab: str | list | None = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -297,20 +294,20 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
     def encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput],
-        text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[list[list[int]]] = None,
-        word_labels: Optional[list[int]] = None,
+        text: TextInput | PreTokenizedInput,
+        text_pair: PreTokenizedInput | None = None,
+        boxes: list[list[int]] | None = None,
+        word_labels: list[int] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -356,24 +353,20 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
-        ],
-        is_pair: Optional[bool] = None,
-        boxes: Optional[list[list[list[int]]]] = None,
-        word_labels: Optional[list[list[int]]] = None,
+        batch_text_or_text_pairs: list[TextInput] | list[TextInputPair] | list[PreTokenizedInput],
+        is_pair: bool | None = None,
+        boxes: list[list[list[int]]] | None = None,
+        word_labels: list[list[int]] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -420,20 +413,20 @@ class LayoutXLMTokenizer(TokenizersBackend):
     @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
-        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
-        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        text_pair: PreTokenizedInput | list[PreTokenizedInput] | None = None,
+        boxes: list[list[int]] | list[list[list[int]]] | None = None,
+        word_labels: list[int] | list[list[int]] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -569,7 +562,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
                 **kwargs,
             )
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
+    def tokenize(self, text: str, pair: str | None = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         batched_input = [(text, pair)] if pair else [text]
 
         # Handle split_special_tokens parameter
@@ -586,24 +579,20 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
-        ],
-        is_pair: Optional[bool] = None,
-        boxes: Optional[list[list[list[int]]]] = None,
-        word_labels: Optional[list[list[int]]] = None,
+        batch_text_or_text_pairs: list[TextInput] | list[TextInputPair] | list[PreTokenizedInput],
+        is_pair: bool | None = None,
+        boxes: list[list[list[int]]] | None = None,
+        word_labels: list[list[int]] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -718,14 +707,16 @@ class LayoutXLMTokenizer(TokenizersBackend):
                 else:
                     original_index = batch_index
                 labels_example = []
-                for id, offset, word_id in zip(
-                    sanitized_tokens["input_ids"][batch_index],
+                previous_word_id = None
+                for offset, word_id in zip(
                     sanitized_tokens["offset_mapping"][batch_index],
                     sanitized_encodings[batch_index].word_ids,
                 ):
                     if word_id is not None:
                         if self.only_label_first_subword:
-                            if offset[0] == 0:
+                            # A word cut by an overflow window boundary continues at the start of the next window,
+                            # so a new word id alone doesn't mean it's the word's first token
+                            if word_id != previous_word_id and offset[0] == 0:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
                                 labels_example.append(word_labels[original_index][word_id])
                             else:
@@ -734,6 +725,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
                             labels_example.append(word_labels[original_index][word_id])
                     else:
                         labels_example.append(self.pad_token_label)
+                    previous_word_id = word_id
                 labels.append(labels_example)
 
             sanitized_tokens["labels"] = labels
@@ -745,20 +737,20 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput],
-        text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[list[list[int]]] = None,
-        word_labels: Optional[list[int]] = None,
+        text: TextInput | PreTokenizedInput,
+        text_pair: PreTokenizedInput | None = None,
+        boxes: list[list[int]] | None = None,
+        word_labels: list[int] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[bool] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: bool | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -813,12 +805,12 @@ class LayoutXLMTokenizer(TokenizersBackend):
 
     def _pad(
         self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
+        encoded_inputs: dict[str, EncodedInput] | BatchEncoding,
+        max_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         """
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
@@ -901,7 +893,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
         return encoded_inputs
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -927,7 +919,7 @@ class LayoutXLMTokenizer(TokenizersBackend):
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. XLM-RoBERTa does

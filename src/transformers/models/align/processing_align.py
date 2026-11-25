@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,52 +16,21 @@ Image/Text processor class for ALIGN
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 
 
-class AlignProcessorKwargs(ProcessingKwargs, total=False):
-    # see processing_utils.ProcessingKwargs documentation for usage.
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "max_length": 64,
-        },
-    }
-
-
+@auto_docstring
 class AlignProcessor(ProcessorMixin):
-    r"""
-    Constructs an ALIGN processor which wraps [`EfficientNetImageProcessor`] and
-    [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~AlignProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
-    information.
-    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
-        ```python
-        from transformers import AlignProcessor
-        from PIL import Image
-        model_id = "kakaobrain/align-base"
-        processor = AlignProcessor.from_pretrained(model_id)
-
-        processor(
-            images=your_pil_image,
-            text=["What is that?"],
-            images_kwargs = {"crop_size": {"height": 224, "width": 224}},
-            text_kwargs = {"padding": "do_not_pad"},
-            common_kwargs = {"return_tensors": "pt"},
-        )
-        ```
-
-    Args:
-        image_processor ([`EfficientNetImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`BertTokenizer`, `BertTokenizerFast`]):
-            The tokenizer is a required input.
-
-    """
-
-    valid_processor_kwargs = AlignProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "max_length": 64,
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"AlignProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["AlignProcessor"]

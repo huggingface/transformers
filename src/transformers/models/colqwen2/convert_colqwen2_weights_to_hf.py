@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ python src/transformers/models/colqwen2/convert_colqwen2_weights_to_hf.py \
 import argparse
 import glob
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from huggingface_hub import snapshot_download
@@ -55,7 +54,7 @@ logger = logging.get_logger(__name__)
 ORIGINAL_DTYPE = torch.bfloat16
 
 
-def load_original_state_dict(model_id: str, revision: Optional[str] = None) -> dict[str, torch.Tensor]:
+def load_original_state_dict(model_id: str, revision: str | None = None) -> dict[str, torch.Tensor]:
     directory_path = snapshot_download(
         repo_id=model_id,
         revision=revision,
@@ -98,8 +97,8 @@ def convert_colqwen2_weights_to_hf(
     model_id: str,
     output_dir: str,
     push_to_hub: bool,
-    revision: Optional[str] = None,
-    original_vlm_name_or_path: Optional[str] = None,
+    revision: str | None = None,
+    original_vlm_name_or_path: str | None = None,
 ):
     # Load the original model data
     original_config = AutoConfig.from_pretrained(

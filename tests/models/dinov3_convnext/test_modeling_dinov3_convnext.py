@@ -20,6 +20,7 @@ from transformers import DINOv3ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -38,36 +39,27 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class DINOv3ConvNextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=32,
-        num_channels=3,
-        hidden_sizes=[10, 20, 30, 40],
-        depths=[2, 2, 3, 2],
-        is_training=False,
-        use_labels=True,
-        intermediate_size=37,
-        hidden_act="gelu",
-        num_labels=10,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class DINOv3ConvNextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 32,
+        "num_channels": 3,
+        "hidden_sizes": [10, 20, 30, 40],
+        "depths": [2, 2, 3, 2],
+        "is_training": False,
+        "use_labels": True,
+        "intermediate_size": 37,
+        "hidden_act": "gelu",
+        "num_labels": 10,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -162,12 +154,13 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     attention_mask and seq_length.
     """
 
+    model_tester_class = DINOv3ConvNextModelTester
+
     all_model_classes = (DINOv3ConvNextModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-feature-extraction": DINOv3ConvNextModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DINOv3ConvNextModelTester(self)
@@ -175,7 +168,7 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             self,
             config_class=DINOv3ConvNextConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["num_channels", "hidden_sizes"],
         )
 
@@ -290,6 +283,8 @@ class DINOv3ConvNextModelIntegrationTest(unittest.TestCase):
 
 @require_torch
 class DINOv3ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    model_tester_class = DINOv3ConvNextModelTester
+
     all_model_classes = (DINOv3ConvNextBackbone,) if is_torch_available() else ()
     config_class = DINOv3ConvNextConfig
 

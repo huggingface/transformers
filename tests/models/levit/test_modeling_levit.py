@@ -22,6 +22,7 @@ from transformers import LevitConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -44,7 +45,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LevitImageProcessor
+    from transformers import LevitImageProcessorPil
 
 
 class LevitConfigTester(ConfigTester):
@@ -54,53 +55,44 @@ class LevitConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
 
 
-class LevitModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        image_size=64,
-        num_channels=3,
-        kernel_size=3,
-        stride=2,
-        padding=1,
-        patch_size=16,
-        hidden_sizes=[16, 32, 48],
-        num_attention_heads=[1, 2, 3],
-        depths=[2, 3, 4],
-        key_dim=[8, 8, 8],
-        drop_path_rate=0,
-        mlp_ratio=[2, 2, 2],
-        attention_ratio=[2, 2, 2],
-        initializer_range=0.02,
-        is_training=True,
-        use_labels=True,
-        num_labels=2,  # Check
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.kernel_size = kernel_size
-        self.stride = stride
-        self.padding = padding
-        self.hidden_sizes = hidden_sizes
-        self.num_attention_heads = num_attention_heads
-        self.depths = depths
-        self.key_dim = key_dim
-        self.drop_path_rate = drop_path_rate
-        self.patch_size = patch_size
-        self.attention_ratio = attention_ratio
-        self.mlp_ratio = mlp_ratio
-        self.initializer_range = initializer_range
-        self.down_ops = [
+class LevitModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 13,
+        "image_size": 64,
+        "num_channels": 3,
+        "kernel_size": 3,
+        "stride": 2,
+        "padding": 1,
+        "hidden_sizes": [16, 32, 48],
+        "num_attention_heads": [1, 2, 3],
+        "depths": [2, 3, 4],
+        "key_dim": [8, 8, 8],
+        "drop_path_rate": 0,
+        "patch_size": 16,
+        "attention_ratio": [2, 2, 2],
+        "mlp_ratio": [2, 2, 2],
+        "initializer_range": 0.02,
+        "is_training": True,
+        "use_labels": True,
+        "num_labels": 2,  # Check
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        key_dim = values["key_dim"]
+        hidden_sizes = values["hidden_sizes"]
+        values["down_ops"] = [
             ["Subsample", key_dim[0], hidden_sizes[0] // key_dim[0], 4, 2, 2],
             ["Subsample", key_dim[0], hidden_sizes[1] // key_dim[0], 4, 2, 2],
         ]
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.num_labels = num_labels
-        self.initializer_range = initializer_range
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -167,6 +159,8 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as Levit does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    model_tester_class = LevitModelTester
 
     all_model_classes = (
         (LevitModel, LevitForImageClassification, LevitForImageClassificationWithTeacher)
@@ -312,7 +306,7 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if model_class.__name__ == "LevitForImageClassificationWithTeacher":
                 continue
             model = model_class(config)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable()
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
@@ -386,7 +380,7 @@ def prepare_img():
 class LevitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LevitImageProcessor.from_pretrained("facebook/levit-128S")
+        return LevitImageProcessorPil.from_pretrained("facebook/levit-128S")
 
     @slow
     def test_inference_image_classification_head(self):

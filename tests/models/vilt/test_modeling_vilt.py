@@ -16,7 +16,7 @@
 import unittest
 from functools import cached_property
 
-from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from packaging import version
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
@@ -224,13 +224,10 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"image-feature-extraction": ViltModel, "visual-question-answering": ViltForQuestionAnswering}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-feature-extraction": ViltModel} if is_torch_available() else {}
 
     model_split_percents = [0.5, 0.8, 0.9]
+    test_torch_exportable = False  # data-dependent image/text placeholder logic
 
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -254,7 +251,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ViltModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -291,7 +288,7 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             self.skipTest(reason="model_tester.is_training is set to False.")
 
@@ -309,23 +306,11 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable()
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @unittest.skip(
         reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
@@ -543,7 +528,7 @@ class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCa
 
     def setUp(self):
         self.model_tester = ViltModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
-        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViltConfig, hidden_size=32)
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_model(self):
@@ -635,9 +620,8 @@ class ViltModelIntegrationTest(unittest.TestCase):
 
         processor = self.default_processor
 
-        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="train")
-        image1 = dataset[0]["image"]
-        image2 = dataset[1]["image"]
+        image1 = Image.open(hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image1.jpeg", repo_type="dataset"))
+        image2 = Image.open(hf_hub_download("hf-internal-testing/fixtures_nlvr2", "image2.jpeg", repo_type="dataset"))
 
         text = (
             "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"
@@ -667,7 +651,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
             )
         else:
             expected_slice = torch.tensor(
-                [-2.3713, 2.9168],
+                [-2.3694, 2.9153],
                 device=torch_device,
             )
 

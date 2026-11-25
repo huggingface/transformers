@@ -16,6 +16,7 @@
 import copy
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import timeout_decorator  # noqa
 
@@ -24,11 +25,13 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
+    require_torch_gpu,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -36,6 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
         GPT2Tokenizer,
@@ -44,6 +48,7 @@ if is_torch_available():
         OPTForSequenceClassification,
         OPTModel,
     )
+    from transformers.masking_utils import create_causal_mask
 
 
 def prepare_opt_inputs_dict(
@@ -61,53 +66,37 @@ def prepare_opt_inputs_dict(
     }
 
 
-class OPTModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_labels=False,
-        vocab_size=99,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=50,
-        eos_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
-        embed_dim=16,
-        num_labels=3,
-        word_embed_proj_dim=16,
-        type_sequence_label_size=2,
-    ):
+class OPTModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 13,
+        "seq_length": 7,
+        "is_training": True,
+        "use_labels": False,
+        "vocab_size": 99,
+        "hidden_size": 16,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 4,
+        "hidden_act": "gelu",
+        "hidden_dropout_prob": 0.1,
+        "attention_probs_dropout_prob": 0.1,
+        "max_position_embeddings": 50,
+        "eos_token_id": 2,
+        "pad_token_id": 1,
+        "bos_token_id": 0,
+        "embed_dim": 16,
+        "num_labels": 3,
+        "type_sequence_label_size": 2,
+        "word_embed_proj_dim": 16,
+        "is_encoder_decoder": False,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.embed_dim = embed_dim
-        self.num_labels = num_labels
-        self.type_sequence_label_size = type_sequence_label_size
-        self.word_embed_proj_dim = word_embed_proj_dim
-        self.is_encoder_decoder = False
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -157,7 +146,7 @@ class OPTModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -168,9 +157,7 @@ class OPTModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -184,10 +171,10 @@ class OPTModelTester:
 
         # test no attention_mask works
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
-        _, past_key_values = outputs.to_tuple()
+        _, cache = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
 
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, cache=cache)["last_hidden_state"]
 
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
@@ -195,9 +182,40 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    def create_and_check_attention_mask_is_not_overwritten_for_causal_mask(self, config, inputs_dict):
+        """
+        OPT needs a dense 2D mask to compute its learned positional embeddings, but it must not leak into
+        `create_causal_mask`, otherwise sdpa can never rely on its `is_causal` argument.
+        """
+        config._attn_implementation = "sdpa"
+        model = OPTModel(config).to(torch_device).eval()
+
+        with patch(
+            "transformers.models.opt.modeling_opt.create_causal_mask", wraps=create_causal_mask
+        ) as mocked_create_causal_mask:
+            with torch.no_grad():
+                model(inputs_dict["input_ids"], attention_mask=None)
+
+        self.parent.assertTrue(mocked_create_causal_mask.called)
+        self.parent.assertIsNone(mocked_create_causal_mask.call_args.kwargs["attention_mask"])
+
+    def create_and_check_compiled_forward_dispatches_to_flash_attention(self, config, inputs_dict):
+        """
+        The dense mask must not reach sdpa: flash attention rejects any `attn_mask`, so a compiled forward
+        with the flash backend forced only runs if the mask creation was skipped.
+        """
+        config._attn_implementation = "sdpa"
+        model = OPTModel(config).to(torch_device, torch.float16).eval()
+        compiled_model = torch.compile(model, dynamic=False)
+
+        with torch.no_grad(), sdpa_kernel([SDPBackend.FLASH_ATTENTION]):
+            compiled_model(inputs_dict["input_ids"], attention_mask=None)
+
 
 @require_torch
 class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = OPTModelTester
+
     all_model_classes = (
         (OPTModel, OPTForCausalLM, OPTForSequenceClassification, OPTForQuestionAnswering)
         if is_torch_available()
@@ -206,7 +224,6 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "feature-extraction": OPTModel,
-            "question-answering": OPTForQuestionAnswering,
             "text-classification": OPTForSequenceClassification,
             "text-generation": OPTForCausalLM,
             "zero-shot": OPTForSequenceClassification,
@@ -261,6 +278,16 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_attention_mask_is_not_overwritten_for_causal_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_attention_mask_is_not_overwritten_for_causal_mask(*config_and_inputs)
+
+    @require_torch_gpu
+    @require_torch_fp16
+    def test_compiled_forward_dispatches_to_flash_attention(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_compiled_forward_dispatches_to_flash_attention(*config_and_inputs)
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -332,6 +359,12 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
+    @unittest.skip(reason="Position ids follow custom logic")
+    def attention_mask_padding_matches_padding_free_with_position_ids(
+        self, attn_implementation: str, fa_kwargs: bool = False
+    ):
+        pass
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
@@ -360,7 +393,7 @@ def _long_tensor(tok_lst):
 class OPTModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = OPTModel.from_pretrained("facebook/opt-350m").to(torch_device)
+        model = OPTModel.from_pretrained("facebook/opt-350m", torch_dtype=torch.float32).to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
 
         with torch.no_grad():
@@ -540,42 +573,3 @@ class OPTGenerationTest(unittest.TestCase):
             self.assertFalse(
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
-
-    # TODO joao, manuel: remove this in v4.62.0
-    @slow
-    def test_contrastive_search_opt(self):
-        article = (
-            "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the "
-            "Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived "
-            "there?"
-        )
-
-        opt_tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
-        opt_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b").to(torch_device)
-        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        outputs = opt_model.generate(
-            input_ids,
-            penalty_alpha=0.6,
-            top_k=5,
-            max_length=256,
-            trust_remote_code=True,
-            custom_generate="transformers-community/contrastive-search",
-        )
-        generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-        self.assertListEqual(
-            generated_text,
-            [
-                "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I "
-                "am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have "
-                "you lived there?\nStatue: A hundred years.\nHuman: And you’re from what country?\nStatue: The United "
-                "States of America.\nHuman: Why did you come to America?\nStatue: I came to escape the tyranny of my "
-                "country.\nHuman: What tyranny?\nStatue: They didn’t let me speak my mind.\nHuman: What was your "
-                "country?\nStatue: It was a country of immigrants.\nHuman: Who were the immigrants?\nStatue: They "
-                "were from all over the world.\nHuman: What language did they speak?\nStatue: French, Spanish, "
-                "Italian, German, English—you name it.\nHuman: And where did they come from?\nStatue: They came from "
-                "every country in the world.\nHuman: And you were born in what country?\nStatue: I was born in "
-                "France.\nHuman: And your parents were French?\nStatue"
-            ],
-        )

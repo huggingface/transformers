@@ -34,6 +34,7 @@ from transformers.models.bark.generation_configuration_bark import (
 )
 from transformers.testing_utils import (
     backend_torch_accelerator_module,
+    require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -153,7 +154,7 @@ class BarkSemanticModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -164,9 +165,7 @@ class BarkSemanticModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["logits"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "logits"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["logits"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -180,10 +179,10 @@ class BarkSemanticModelTester:
 
         # test no attention_mask works
         outputs = model(input_ids, use_cache=True)
-        _, past_key_values = outputs.to_tuple()
+        _, cache = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["logits"]
 
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["logits"]
+        output_from_past = model(next_tokens, cache=cache)["logits"]
 
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
@@ -286,7 +285,7 @@ class BarkCoarseModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -297,9 +296,7 @@ class BarkCoarseModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["logits"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "logits"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["logits"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -313,10 +310,10 @@ class BarkCoarseModelTester:
 
         # test no attention_mask works
         outputs = model(input_ids, use_cache=True)
-        _, past_key_values = outputs.to_tuple()
+        _, cache = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["logits"]
 
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["logits"]
+        output_from_past = model(next_tokens, cache=cache)["logits"]
 
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
@@ -423,7 +420,7 @@ class BarkFineModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+        output, cache = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -434,9 +431,7 @@ class BarkFineModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["logits"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "logits"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, cache=cache)["logits"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -450,10 +445,10 @@ class BarkFineModelTester:
 
         # test no attention_mask works
         outputs = model(input_ids, use_cache=True)
-        _, past_key_values = outputs.to_tuple()
+        _, cache = outputs.to_tuple()
         output_from_no_past = model(next_input_ids)["logits"]
 
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["logits"]
+        output_from_past = model(next_tokens, cache=cache)["logits"]
 
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
         output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
@@ -491,10 +486,10 @@ class BarkModelTester:
 
     def get_config(self):
         return BarkConfig(
-            self.semantic_model_tester.get_config(),
-            self.coarse_acoustics_model_tester.get_config(),
-            self.fine_acoustics_model_tester.get_config(),
-            self.codec_model_tester.get_config(),
+            semantic_config=self.semantic_model_tester.get_config(),
+            coarse_acoustics_config=self.coarse_acoustics_model_tester.get_config(),
+            fine_acoustics_config=self.fine_acoustics_model_tester.get_config(),
+            codec_config=self.codec_model_tester.get_config(),
         )
 
     def get_pipeline_config(self):
@@ -545,48 +540,6 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()
-            inputs["input_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)[0]
-
-    # override as the input arg is called "input_embeds", not "inputs_embeds"
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            with torch.no_grad():
-                out_ids = model(**inputs)[0]
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()
-            inputs["input_embeds"] = wte(input_ids)
-            with torch.no_grad():
-                out_embeds = model(**inputs)[0]
-
-            torch.testing.assert_close(out_embeds, out_ids)
-
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -635,48 +588,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()
-            inputs["input_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)[0]
-
-    # override as the input arg is called "input_embeds", not "inputs_embeds"
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            with torch.no_grad():
-                out_ids = model(**inputs)[0]
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-
-            wte = model.get_input_embeddings()
-            inputs["input_embeds"] = wte(input_ids)
-            with torch.no_grad():
-                out_embeds = model(**inputs)[0]
-
-            torch.testing.assert_close(out_embeds, out_ids)
-
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -718,6 +629,10 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], set())
 
+    @unittest.skip(reason="FineModel relies on codebook idx and does not return same logits")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -733,14 +648,10 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 
             wte = model.get_input_embeddings()[inputs_dict["codebook_idx"]]
 
-            inputs["input_embeds"] = wte(input_ids[:, :, inputs_dict["codebook_idx"]])
+            inputs["inputs_embeds"] = wte(input_ids[:, :, inputs_dict["codebook_idx"]])
 
             with torch.no_grad():
                 model(**inputs)[0]
-
-    @unittest.skip(reason="FineModel relies on codebook idx and does not return same logits")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
 
     @require_torch_fp16
     def test_generate_fp16(self):
@@ -1098,6 +1009,7 @@ class BarkModelIntegrationTests(unittest.TestCase):
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
 
+    @require_deterministic_for_xpu
     def test_generate_batching(self):
         args = {"do_sample": False, "temperature": None}
 

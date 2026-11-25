@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 SwitchTransformers Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch SwitchTransformers model."""
 
 import copy
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -24,7 +22,7 @@ from torch.nn import CrossEntropyLoss
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     MoEModelOutput,
@@ -37,19 +35,17 @@ from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
-    is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import (
+    can_return_tuple,
+    merge_with_config_defaults,
+)
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
-
-
-if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -148,9 +144,12 @@ class SwitchTransformersTop1Router(nn.Module):
             hidden_states (`torch.Tensor`):
                 (batch_size, sequence_length, hidden_dim) from which router probabilities are computed.
         Returns:
-            router_probabilities (`torch.Tensor`):
-                Tensor of shape (batch_size, sequence_length, num_experts) corresponding to the probabilities for each
-                token and expert. Used for routing tokens to experts.
+            expert_index (`torch.Tensor`):
+                One-hot dispatch mask of shape (batch_size, sequence_length, num_experts) with tokens routed to an
+                expert beyond its capacity masked out.
+            router_probs (`torch.Tensor`):
+                Tensor of shape (batch_size, sequence_length, 1) with the probability of the selected expert for each
+                token. Used to scale the expert outputs.
             router_logits (`torch.Tensor`):
                 Logits tensor of shape (batch_size, sequence_length, num_experts) corresponding to raw router logits.
                 This is used later for computing router z-loss.
@@ -163,18 +162,19 @@ class SwitchTransformersTop1Router(nn.Module):
         if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        self.classifier = self.classifier.to(self.dtype)
         router_logits = self.classifier(hidden_states)
 
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
-        router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
+        expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
-        # mask if the token routed to to the expert will overflow
+        # mask if the token routed to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
-        return router_probs, expert_index, router_logits
+        return expert_index, router_probs, router_logits
 
 
 class SwitchTransformersLayerNorm(T5LayerNorm):
@@ -215,8 +215,11 @@ class SwitchTransformersSparseMLP(nn.Module):  # inherit from mixtral
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
+        # Route on the unflattened hidden states so that expert capacity is accounted per sequence
+        selected_experts, routing_weights, _ = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_dim)
-        _, selected_experts, routing_weights = self.router(hidden_states)
+        selected_experts = selected_experts.view(-1, 1, self.router.num_experts)
+        routing_weights = routing_weights.view(-1, 1)
         hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
@@ -267,7 +270,7 @@ class SwitchTransformersLayerCrossAttention(T5LayerCrossAttention):
 
 
 class SwitchTransformersBlock(GradientCheckpointingLayer):
-    def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.is_sparse = is_sparse
@@ -282,6 +285,7 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
 
         self.layer.append(SwitchTransformersLayerFF(config, is_sparse=self.is_sparse))
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states,
@@ -290,49 +294,59 @@ class SwitchTransformersBlock(GradientCheckpointingLayer):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        past_key_values=None,
-        use_cache=False,
-        cache_position=None,
-        **kwargs,
+        cache=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
-        hidden_states, _ = self.layer[0](
+        hidden_states, self_attn_position_bias, _ = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
+            cache=cache,
+            **kwargs,
         )
 
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
+        cross_attn_position_bias = None
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            hidden_states, _ = self.layer[1](
+            hidden_states, cross_attn_position_bias, _ = self.layer[1](
                 hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                past_key_values=past_key_values,
-                query_length=cache_position[-1] + 1,
-                use_cache=use_cache,
-                cache_position=cache_position,
+                cache=cache,
+                **kwargs,
             )
 
             # clamp inf values to enable fp16 training
-            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            if hidden_states.dtype == torch.float16:
+                clamp_value = torch.where(
+                    torch.isinf(hidden_states).any(),
+                    torch.finfo(hidden_states.dtype).max - 1000,
+                    torch.finfo(hidden_states.dtype).max,
+                )
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         hidden_states = self.layer[-1](hidden_states)
+
         # clamp inf values to enable fp16 training
-        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-        return hidden_states
+
+        return hidden_states, self_attn_position_bias, cross_attn_position_bias
 
 
 @auto_docstring
@@ -343,9 +357,9 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, SwitchTransformersLayerNorm):
             init.constant_(module.weight, factor * 1.0)
@@ -409,10 +423,10 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         "hidden_states": SwitchTransformersBlock,
         "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
         "cross_attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.1"),
-        "router_logits": SwitchTransformersTop1Router,
+        "router_logits": OutputRecorder(SwitchTransformersTop1Router, index=2),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -436,7 +450,9 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs
+    @merge_with_config_defaults
+    @capture_outputs
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         input_ids=None,
@@ -444,11 +460,10 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         inputs_embeds=None,
-        past_key_values=None,
+        cache=None,
         use_cache=None,
-        cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple | MoEModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -464,203 +479,71 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
                 raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
         if self.is_decoder:
-            if use_cache and past_key_values is None:
+            if use_cache and cache is None:
                 if self.config.is_encoder_decoder:
-                    past_key_values = EncoderDecoderCache(
-                        DynamicCache(config=self.config), DynamicCache(config=self.config)
-                    )
+                    cache = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
                 else:
-                    past_key_values = DynamicCache(config=self.config)
+                    cache = DynamicCache(config=self.config)
         elif not self.is_decoder:
             # do not pass cache object down the line for encoder stack
             # it messes indexing later in decoder-stack because cache object is modified in-place
-            past_key_values = None
+            cache = None
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
-
+        cache_length = cache.get_seq_length() if cache is not None else 0
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
-            mask_seq_length = past_key_values_length + seq_length
+            mask_seq_length = cache_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
-            causal_mask = self._update_causal_mask(
-                attention_mask,
-                inputs_embeds,
-                cache_position,
-                past_key_values.self_attention_cache
-                if isinstance(past_key_values, EncoderDecoderCache)
-                else past_key_values,
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                cache=cache,
             )
         else:
             causal_mask = attention_mask[:, None, None, :]
             causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
             causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = create_bidirectional_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=encoder_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+            )
 
         position_bias = None
         encoder_decoder_position_bias = None
 
         hidden_states = self.dropout(inputs_embeds)
 
-        for i, layer_module in enumerate(self.block):
-            hidden_states = layer_module(
+        for layer_module in self.block:
+            hidden_states, self_attention_position_bias, cross_attention_position_bias = layer_module(
                 hidden_states,
                 causal_mask,
                 position_bias,
                 encoder_hidden_states,
-                encoder_extended_attention_mask,
+                encoder_attention_mask,
                 encoder_decoder_position_bias,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                cache_position=cache_position,
+                cache=cache,
                 **kwargs,
             )
+
+            # We share the position biases between the layers - the first layer stores them
+            position_bias = self_attention_position_bias
+            if self.is_decoder and encoder_hidden_states is not None:
+                encoder_decoder_position_bias = cross_attention_position_bias
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         return MoEModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            cache=cache,
         )
-
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and (attention_mask == 0.0).any():
-                return attention_mask
-            return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
-
-        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
-        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
-        # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
-
-        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
-            if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
-            ):
-                return None
-
-        dtype = input_tensor.dtype
-        sequence_length = input_tensor.shape[1]
-        if using_compilable_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
-        )
-
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
-
-        return causal_mask
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
 
 
 @auto_docstring
@@ -669,6 +552,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
     }
+    _input_embed_layer = "shared"
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -677,19 +561,14 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
         self.encoder = SwitchTransformersStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         self.decoder = SwitchTransformersStack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.shared
 
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
@@ -698,19 +577,19 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
+    ) -> tuple[torch.Tensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
@@ -721,16 +600,15 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            cache_position=cache_position,
             **kwargs,
         )
 
         return Seq2SeqMoEModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
@@ -763,12 +641,10 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
         self.encoder = SwitchTransformersStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = SwitchTransformersStack(decoder_config)
 
@@ -788,24 +664,28 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
     @auto_docstring
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_router_logits: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_router_logits: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
+    ) -> tuple[torch.Tensor] | Seq2SeqMoEOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                output_router_logits=output_router_logits,
+                **kwargs,
             )
 
         hidden_states = encoder_outputs[0]
@@ -819,10 +699,10 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
+            cache=cache,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            cache_position=cache_position,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -879,26 +759,22 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
             encoder_aux_loss=encoder_aux_loss,
             decoder_z_loss=decoder_z_loss,
             decoder_aux_loss=decoder_aux_loss,
-            past_key_values=decoder_outputs.past_key_values,
+            cache=decoder_outputs.cache,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            decoder_router_logits=decoder_outputs.router_probs,
+            decoder_router_logits=decoder_outputs.router_logits,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            encoder_router_logits=encoder_outputs.router_probs,
+            encoder_router_logits=encoder_outputs.router_logits,
         )
 
     def _unpack_router_logits(self, router_outputs):
-        total_router_logits = []
-        total_expert_indexes = []
-        for router_output in router_outputs:
-            if len(router_output[0].shape) > 1:
-                router_logits, expert_indexes = router_output
-                total_router_logits.append(router_logits)
-                total_expert_indexes.append(expert_indexes)
-        return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+        # `router_outputs` holds the raw router logits recorded for each sparse layer, of shape
+        # (batch_size, sequence_length, num_experts)
+        router_logits = torch.cat(router_outputs, dim=1)
+        return router_logits, router_logits.argmax(dim=-1)
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
@@ -907,11 +783,6 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     _tied_weights_keys = {
         "encoder.embed_tokens.weight": "shared.weight",
-    }
-    _can_record_outputs = {
-        "hidden_states": SwitchTransformersBlock,
-        "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
-        "router_logits": SwitchTransformersTop1Router,
     }
 
     def __init__(self, config: SwitchTransformersConfig):
@@ -932,15 +803,15 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
 
     @auto_docstring
-    @check_model_inputs
+    @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], MoEModelOutput]:
+    ) -> tuple[torch.Tensor] | MoEModelOutput:
         use_cache = False
         encoder_outputs = self.encoder(
             input_ids=input_ids,

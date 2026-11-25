@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 ABEJA, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,6 @@ import collections
 import json
 import os
 import re
-import sys
-from typing import Optional
 
 import numpy as np
 
@@ -163,7 +160,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
@@ -233,22 +230,15 @@ class SubWordJapaneseTokenizer:
             r"(明治|大正|昭和|平成|令和|㍾|㍽|㍼|㍻|\u32ff)\d{1,2}年(0?[1-9]|1[0-2])月(0?[1-9]|[12][0-9]|3[01])日(\d{1,2}|:|\d{1,2}時|\d{1,2}分|\(日\)|\(月\)|\(火\)|\(水\)|\(木\)|\(金\)|\(土\)|㈰|㈪|㈫|㈬|㈭|㈮|㈯)*"
         )
         # The original version of this regex displays catastrophic backtracking behaviour. We avoid this using
-        # possessive quantifiers in Py >= 3.11. In versions below this, we avoid the vulnerability using a slightly
-        # different regex that should generally have the same behaviour in most non-pathological cases.
-        if sys.version_info >= (3, 11):
-            self.content_repatter6 = re.compile(
-                r"(?:\d,\d{3}|[\d億])*+"
-                r"(?:\d,\d{3}|[\d万])*+"
-                r"(?:\d,\d{3}|[\d千])*+"
-                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
-                r"(?:\(税込\)|\(税抜\)|\+tax)*"
-            )
-        else:
-            self.content_repatter6 = re.compile(
-                r"(?:\d,\d{3}|[\d億万千])*"
-                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
-                r"(?:\(税込\)|\(税抜\)|\+tax)*"
-            )
+        # possessive quantifiers.
+        self.content_repatter6 = re.compile(
+            r"(?:\d,\d{3}|[\d億])*+"
+            r"(?:\d,\d{3}|[\d万])*+"
+            r"(?:\d,\d{3}|[\d千])*+"
+            r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
+            r"(?:\(税込\)|\(税抜\)|\+tax)*"
+        )
+
         keisen = "─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬╭╮╯╰╱╲╳╴╵╶╷╸╹╺╻╼╽╾╿"
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
         self.content_trans1 = str.maketrans(dict.fromkeys(keisen + blocks, "<BLOCK>"))
@@ -283,7 +273,7 @@ class SubWordJapaneseTokenizer:
         if clean:
             text = self.clean_text(text)
 
-        def check_simbol(x):
+        def check_symbol(x):
             e = x.encode()
             if len(x) == 1 and len(e) == 2:
                 c = (int(e[0]) << 8) + int(e[1])
@@ -325,7 +315,7 @@ class SubWordJapaneseTokenizer:
             else:
                 end = pos + 1
                 wd = text[pos:end]
-                if check_simbol(wd):
+                if check_symbol(wd):
                     result.append("<KIGOU>")
                 elif checku2e(wd):
                     result.append("<U2000U2BFF>")

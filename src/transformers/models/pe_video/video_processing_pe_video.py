@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,25 +11,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...processing_utils import Unpack, VideosKwargs
+from ...utils import auto_docstring
 from ...video_processing_utils import BaseVideoProcessor, VideoMetadata
 from ...video_utils import VideoInput
 
 
+@auto_docstring
 class PeVideoVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
 
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         if num_frames:
@@ -38,7 +38,7 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
             num_frames = num_frames if num_frames is not None else self.num_frames
             assert num_frames is not None, "`num_frames` must be specified if `fixed_len_video == True`"
             frame_idxs = [int(i * (total_frames - 1) / (num_frames - 1)) for i in range(num_frames)]
-            return torch.tensor(frame_idxs)
+            return frame_idxs
         else:
             return super().sample_frames(metadata, num_frames, fps, **kwargs)
 
@@ -48,7 +48,7 @@ class PeVideoVideoProcessor(BaseVideoProcessor):
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
         # Always set `return_tensors` to `None` since it won't pad variable length videos
-        # We'll handle this after we call the parent' method
+        # We'll handle this after we call the parent's method
         return_tensors = kwargs.pop("return_tensors", None)
         result = super()._preprocess(videos, **kwargs)
         pixels = result.pixel_values_videos

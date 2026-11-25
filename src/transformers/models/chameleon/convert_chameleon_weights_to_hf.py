@@ -15,11 +15,11 @@ import argparse
 import gc
 import json
 import os
+from io import BytesIO
 
-import requests
 import torch
 import yaml
-from accelerate import init_empty_weights
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -72,12 +72,12 @@ def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def write_json(text, path):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(text, f)
 
 
@@ -326,7 +326,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
     multiple_of = params.get("multiple_of", 256)
 
-    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json")) as tokenizer_file:
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer.json"), encoding="utf-8") as tokenizer_file:
         tokenizer_config = json.load(tokenizer_file)
         vocabulary_map = tokenizer_config["model"]["vocab"]
         vocabulary_map["<image>"] = vocabulary_map[
@@ -338,7 +338,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
             if token["content"] == "<reserved08707>":
                 token["content"] = "<image>"
 
-    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w") as f:
+    with open(os.path.join(input_base_path, "tokenizer/text_tokenizer_modified.json"), "w", encoding="utf-8") as f:
         json.dump(tokenizer_config, f)  # save the new file to init tokenizer later
 
     vq_keys_to_replace = [
@@ -349,7 +349,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         ("double_z", "double_latent"),
         ("z_channels", "latent_channels"),
     ]
-    with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml")) as vqgan_cfg_file:
+    with open(os.path.join(input_base_path, "tokenizer/vqgan.yaml"), encoding="utf-8") as vqgan_cfg_file:
         vq_config = yaml.safe_load(vqgan_cfg_file)["model"]["params"]
         vq_config.update(**vq_config["ddconfig"])
         for old, new in vq_keys_to_replace:
@@ -373,7 +373,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         vq_config=vq_config,
         vocabulary_map=vocabulary_map,
     )
-    with init_empty_weights():
+    with torch.device("meta"):
         model = ChameleonForConditionalGeneration(config)
 
     model.load_state_dict(state_dict, assign=True, strict=False)
@@ -405,11 +405,9 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     processor = ChameleonProcessor.from_pretrained(model_path)
 
     prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
-    image = Image.open(
-        requests.get(
-            "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
-        ).raw
-    )
+    url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.bfloat16)
     length = inputs.input_ids.shape[1]
 
@@ -421,14 +419,14 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     # Multi-image example
     prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
-    image = Image.open(
-        requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-    )
-    image_2 = Image.open(
-        requests.get("https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg", stream=True).raw
-    )
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/big_dipper.jpg"
+    with httpx.stream("GET", url) as response:
+        image_1 = Image.open(BytesIO(response.read()))
+    url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/orion.jpg"
+    with httpx.stream("GET", url) as response:
+        image_2 = Image.open(BytesIO(response.read()))
 
-    inputs = processor(prompt, images=[image, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+    inputs = processor(prompt, images=[image_1, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)
     length = inputs.input_ids.shape[1]
     out = model.generate(**inputs, max_new_tokens=50, do_sample=False)
     generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]

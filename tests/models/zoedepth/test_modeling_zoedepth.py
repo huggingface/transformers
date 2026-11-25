@@ -20,8 +20,8 @@ import numpy as np
 from transformers import Dinov2Config, ZoeDepthConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils.import_utils import get_torch_major_and_minor_version
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -36,53 +36,44 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ZoeDepthImageProcessor
+    from transformers import ZoeDepthImageProcessorPil
 
 
-class ZoeDepthModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        num_channels=3,
-        image_size=32,
-        patch_size=16,
-        use_labels=True,
-        num_labels=3,
-        is_training=True,
-        hidden_size=4,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        intermediate_size=8,
-        out_features=["stage1", "stage2"],
-        apply_layernorm=False,
-        reshape_hidden_states=False,
-        neck_hidden_sizes=[2, 2],
-        fusion_hidden_size=6,
-        bottleneck_features=6,
-        num_out_features=[6, 6, 6, 6],
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.out_features = out_features
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
-        self.use_labels = use_labels
-        self.num_labels = num_labels
-        self.is_training = is_training
-        self.neck_hidden_sizes = neck_hidden_sizes
-        self.fusion_hidden_size = fusion_hidden_size
-        self.bottleneck_features = bottleneck_features
-        self.num_out_features = num_out_features
+class ZoeDepthModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 2,
+        "num_channels": 3,
+        "image_size": 32,
+        "patch_size": 16,
+        "use_labels": True,
+        "num_labels": 3,
+        "is_training": True,
+        "hidden_size": 4,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 2,
+        "intermediate_size": 8,
+        "out_features": ["stage1", "stage2"],
+        "apply_layernorm": False,
+        "reshape_hidden_states": False,
+        "neck_hidden_sizes": [2, 2],
+        "fusion_hidden_size": 6,
+        "bottleneck_features": 6,
+        "num_out_features": [6, 6, 6, 6],
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # ZoeDepth's sequence length
-        self.seq_length = (self.image_size // self.patch_size) ** 2 + 1
+        values["seq_length"] = (values["image_size"] // values["patch_size"]) ** 2 + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -141,17 +132,17 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     attention_mask and seq_length.
     """
 
+    model_tester_class = ZoeDepthModelTester
+
     all_model_classes = (ZoeDepthForDepthEstimation,) if is_torch_available() else ()
     pipeline_model_mapping = {"depth-estimation": ZoeDepthForDepthEstimation} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    # `strict=True/False` are both failing with torch 2.7, see #38677
-    test_torch_exportable = get_torch_major_and_minor_version() != "2.7"
 
     def setUp(self):
         self.model_tester = ZoeDepthModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=37, common_properties=[]
+            self, config_class=ZoeDepthConfig, has_text_modality=False, hidden_size=32, common_properties=[]
         )
 
     def test_config(self):
@@ -173,20 +164,20 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="ZoeDepth does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="ZoeDepth does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="ZoeDepth does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="ZoeDepth does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -226,7 +217,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
     }  # (pad, flip)
 
     def test_inference_depth_estimation(self):
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu")
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained("Intel/zoedepth-nyu")
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu").to(torch_device)
 
         image = prepare_img()
@@ -248,7 +239,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_depth_estimation_multiple_heads(self):
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained("Intel/zoedepth-nyu-kitti")
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         image = prepare_img()
@@ -321,28 +312,36 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
 
     def test_post_processing_depth_estimation_post_processing_nopad_noflip(self):
         images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained(
+            "Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False
+        )
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=False, flip_aug=False)
 
     def test_inference_depth_estimation_post_processing_nopad_flip(self):
         images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained(
+            "Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False
+        )
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=False, flip_aug=True)
 
     def test_inference_depth_estimation_post_processing_pad_noflip(self):
         images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained(
+            "Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False
+        )
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=True, flip_aug=False)
 
     def test_inference_depth_estimation_post_processing_pad_flip(self):
         images = [prepare_img(), Image.open("./tests/fixtures/tests_samples/COCO/000000004016.png")]
-        image_processor = ZoeDepthImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False)
+        image_processor = ZoeDepthImageProcessorPil.from_pretrained(
+            "Intel/zoedepth-nyu-kitti", keep_aspect_ratio=False
+        )
         model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti").to(torch_device)
 
         self.check_post_processing_test(image_processor, images, model, pad_input=True, flip_aug=True)

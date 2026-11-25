@@ -31,51 +31,40 @@ class DbrxModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = DbrxModel
 
-    def __init__(
-        self,
-        parent,
-        clip_qkv=8,
-        rope_theta=500000,
-        attn_config_model_type="",
-        moe_jitter_eps=0,
-        moe_loss_weight=0.05,
-        moe_num_experts=8,
-        moe_top_k=4,
-        ffn_config_model_type="",
-        initializer_range=0.02,
-        resid_pdrop=0.0,
-        is_decoder=True,
-        pad_token_id=0,
-    ):
-        # Call parent init
-        super().__init__(
-            parent=parent,
-            hidden_dropout_prob=resid_pdrop,
-            attention_probs_dropout_prob=resid_pdrop,
-            initializer_range=initializer_range,
-            pad_token_id=pad_token_id,
-            is_decoder=is_decoder,
-        )
-
+    small_config_overrides = {
+        "hidden_dropout_prob": 0.0,
+        "attention_probs_dropout_prob": 0.0,
+        "initializer_range": 0.02,
+        "pad_token_id": 0,
+        "is_decoder": True,
         # Set DBRX's unusual params
-        self.clip_qkv = clip_qkv
+        "clip_qkv": 8,
+        "attn_config": {
+            "clip_qkv": 8,
+            "model_type": "",
+            "rope_theta": 500000,
+        },
+    }
 
-        # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here
-        self.ffn_config = {
-            "ffn_hidden_size": self.hidden_size,
-            "hidden_size": 2 * self.hidden_size,
-            "moe_jitter_eps": moe_jitter_eps,
-            "moe_loss_weight": moe_loss_weight,
-            "moe_num_experts": moe_num_experts,
-            "moe_top_k": moe_top_k,
-            "model_type": ffn_config_model_type,
-            "ffn_act_fn": {"name": self.hidden_act},
-        }
-        self.attn_config = {
-            "clip_qkv": clip_qkv,
-            "model_type": attn_config_model_type,
-            "rope_theta": rope_theta,
-        }
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here.
+        # `ffn_config.hidden_size` is not set here on purpose: it always mirrors the model's `hidden_size` and
+        # is propagated by `DbrxConfig`.
+        values.setdefault(
+            "ffn_config",
+            {
+                "ffn_hidden_size": 2 * values["hidden_size"],
+                "moe_jitter_eps": 0.0,
+                "moe_loss_weight": 0.05,
+                "moe_num_experts": 8,
+                "moe_top_k": 4,
+                "model_type": "",
+                "ffn_act_fn": {"name": values["hidden_act"]},
+            },
+        )
+        return values
 
     @property
     def config_args(self):
@@ -88,7 +77,7 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "trl-internal-testing/tiny-DbrxForCausalLM"
+        model_name = "hf-internal-testing/tiny-DbrxForCausalLM"
         model = DbrxModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -96,6 +85,10 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
     # The issue is that the offloaded weights of the mlp layer are still on meta device (w1_chunked, v1_chunked, w2_chunked)
     @unittest.skip(reason="Dbrx models do not work with offload")
     def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="DbrxConfig rejects `tie_word_embeddings=True`, so the head is never tied")
+    def test_tied_weights_are_sharded_together(self):
         pass
 
     @unittest.skip(reason="Dbrx models do not work with offload")
@@ -111,7 +104,7 @@ class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
 class DbrxModelIntegrationTest(unittest.TestCase):
     @slow
     def test_tiny_model_logits(self):
-        model = DbrxForCausalLM.from_pretrained("Rocketknight1/dbrx-tiny-random")
+        model = DbrxForCausalLM.from_pretrained("Rocketknight1/dbrx-tiny-random", dtype=torch.float32)
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
         vocab_size = model.vocab_size

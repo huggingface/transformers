@@ -15,8 +15,6 @@
     title: データの前処理
   - local: training
     title: 事前トレーニングされたモデルを微調整する
-  - local: run_scripts
-    title: スクリプトを使用してトレーニングする
   - local: accelerate
     title: 🤗 Accelerate を使用して分散トレーニングをセットアップする
   - local: peft
@@ -67,8 +65,6 @@
       title: ゼロショット画像分類
     - local: tasks/monocular_depth_estimation
       title: 深さの推定
-    - local: tasks/image_to_image
-      title: 画像から画像へ
     - local: tasks/knowledge_distillation_for_image_classification
       title: コンピュータビジョンのための知識の蒸留
     title: コンピュータビジョン
@@ -274,8 +270,6 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
-      - local: model_doc/dialogpt
-        title: DialoGPT
       title: 文章モデル
     - isExpanded: false
       sections:

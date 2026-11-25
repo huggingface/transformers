@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,12 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import DPTConfig, DPTForDepthEstimation, DPTForSemanticSegmentation, DPTImageProcessor
@@ -61,7 +61,9 @@ def get_dpt_config(checkpoint_url):
         config.patch_size = 16
         repo_id = "huggingface/label-files"
         filename = "ade20k-id2label.json"
-        id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+        id2label = json.loads(
+            Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text(encoding="utf-8")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -212,8 +214,9 @@ def read_in_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()

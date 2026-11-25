@@ -16,10 +16,12 @@
 
 import unittest
 
+from pytest import mark
+
 from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_read_token,
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -62,7 +64,6 @@ class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class NemotronIntegrationTest(unittest.TestCase):
     @slow
-    @require_read_token
     def test_nemotron_8b_generation_sdpa(self):
         text = ["What is the largest planet in solar system?"]
         EXPECTED_TEXT = [
@@ -80,7 +81,6 @@ class NemotronIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, output_text)
 
     @slow
-    @require_read_token
     def test_nemotron_8b_generation_eager(self):
         text = ["What is the largest planet in solar system?"]
         EXPECTED_TEXTS = Expectations(
@@ -90,6 +90,9 @@ class NemotronIntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", 7): [
                     "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
+                ],
+                ("cuda", 8): [
+                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
                 ],
             }
         )
@@ -105,12 +108,13 @@ class NemotronIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, output_text)
 
+    @require_flash_attn
+    @mark.flash_attn_test
     @slow
-    @require_read_token
     def test_nemotron_8b_generation_fa2(self):
         text = ["What is the largest planet in solar system?"]
         EXPECTED_TEXT = [
-            "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
+            "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
         ]
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(

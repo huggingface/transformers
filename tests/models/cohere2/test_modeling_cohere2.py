@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
@@ -26,8 +25,9 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_flash_attn_2_available,
+    is_kernels_available,
+    is_torch_xpu_available,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_large_accelerator,
     slow,
@@ -53,13 +53,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 class Cohere2ModelTester(CohereModelTester):
     config_class = Cohere2Config
-    if is_torch_available():
-        model_class = Cohere2Model
-        for_causal_lm_class = Cohere2ForCausalLM
+    model_class = Cohere2Model
 
 
 @require_torch
 class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = Cohere2ModelTester
+
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -77,7 +77,7 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = Cohere2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -88,7 +88,6 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 @slow
-@require_read_token
 @require_torch_large_accelerator
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
@@ -183,9 +182,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.5.0"):
-            self.skipTest(reason="This test requires torch >= 2.5 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
@@ -240,7 +236,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_read_token
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
@@ -252,11 +247,12 @@ class Cohere2IntegrationTest(unittest.TestCase):
                 reason="`flex_attention` gives `torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147456 Hardware limit:101376 Reducing block sizes or `num_stages` may help.`"
             )
 
-        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+        if (
+            attn_implementation == "flash_attention_2"
+            and not is_flash_attn_2_available()
+            and not (is_torch_xpu_available() and is_kernels_available())
+        ):
             self.skipTest("FlashAttention2 is required for this test.")
-
-        if torch_device == "xpu" and attn_implementation == "flash_attention_2":
-            self.skipTest(reason="Intel XPU doesn't support flash_attention_2 as of now.")
 
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_COMPLETIONS = [

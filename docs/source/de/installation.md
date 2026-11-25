@@ -22,11 +22,9 @@ rendered properly in your Markdown viewer.
 
 Installieren Sie 🤗 Transformers für die Deep-Learning-Bibliothek, mit der Sie arbeiten, richten Sie Ihren Cache ein und konfigurieren Sie 🤗 Transformers optional für den Offline-Betrieb.
 
-🤗 Transformers wurde unter Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+, und Flax getestet. Folgen Sie den Installationsanweisungen unten für die von Ihnen verwendete Deep-Learning-Bibliothek:
+🤗 Transformers wurde unter Python 3.11+ und PyTorch 2.4+ getestet. Folgen Sie den Installationsanweisungen unten für die von Ihnen verwendete Deep-Learning-Bibliothek:
 
 * [PyTorch](https://pytorch.org/get-started/locally/) installation instructions.
-* [TensorFlow 2.0](https://www.tensorflow.org/install/pip) installation instructions.
-* [Flax](https://flax.readthedocs.io/en/latest/) installation instructions.
 
 ## Installation mit pip
 
@@ -60,18 +58,6 @@ Bei reiner CPU-Unterstützung können wir 🤗 Transformers und eine Deep-Learni
 
 ```bash
 pip install transformers[torch]
-```
-
-🤗 Transformers und TensorFlow 2.0:
-
-```bash
-pip install transformers[tf-cpu]
-```
-
-🤗 Transformers und Flax:
-
-```bash
-pip install transformers[flax]
 ```
 
 Überprüfen wir abschließend, ob 🤗 Transformers ordnungsgemäß installiert wurde, indem wir den folgenden Befehl ausführen. Es wird ein vortrainiertes Modell heruntergeladen:
@@ -118,7 +104,7 @@ cd transformers
 pip install -e .
 ```
 
-Diese Befehle verknüpfen den Ordner, in den Sie das Repository geklont haben, mit den Pfaden Ihrer Python-Bibliotheken. Python wird nun in dem Ordner suchen, in den Sie geklont haben, zusätzlich zu den normalen Bibliothekspfaden. Wenn zum Beispiel Ihre Python-Pakete normalerweise in `~/anaconda3/envs/main/lib/python3.7/site-packages/` installiert sind, wird Python auch den Ordner durchsuchen, in den Sie geklont haben: `~/transformers/`.
+Diese Befehle verknüpfen den Ordner, in den Sie das Repository geklont haben, mit den Pfaden Ihrer Python-Bibliotheken. Python wird nun in dem Ordner suchen, in den Sie geklont haben, zusätzlich zu den normalen Bibliothekspfaden. Wenn zum Beispiel Ihre Python-Pakete normalerweise in `~/anaconda3/envs/main/lib/python3.11/site-packages/` installiert sind, wird Python auch den Ordner durchsuchen, in den Sie geklont haben: `~/transformers/`.
 
 
 <Tip warning={true}>
@@ -163,22 +149,6 @@ Transformers ist in der Lage, in einer Firewall- oder Offline-Umgebung zu laufen
 Fügen sie [🤗 Datasets](https://huggingface.co/docs/datasets/) zu Ihrem Offline-Trainingsworkflow hinzufügen, indem Sie die Umgebungsvariable `HF_DATASETS_OFFLINE=1` setzen.
 
 </Tip>
-
-So würden Sie beispielsweise ein Programm in einem normalen Netzwerk mit einer Firewall für externe Instanzen mit dem folgenden Befehl ausführen:
-
-```bash
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Führen Sie das gleiche Programm in einer Offline-Instanz mit aus:
-
-```bash
-HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-Das Skript sollte nun laufen, ohne sich aufzuhängen oder eine Zeitüberschreitung abzuwarten, da es weiß, dass es nur nach lokalen Dateien suchen soll.
-
 
 ### Abrufen von Modellen und Tokenizern zur Offline-Verwendung
 

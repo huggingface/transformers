@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright Studio Ousia and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -24,6 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN, gelu
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -35,257 +34,257 @@ from .configuration_luke import LukeConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the LUKE model.
     """
 )
+@dataclass
 class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Last layer hidden-state of the first token of the sequence (classification token) further processed by a
         Linear layer and a Tanh activation function.
-    entity_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, entity_length, hidden_size)`):
+    entity_last_hidden_state (`torch.Tensor` of shape `(batch_size, entity_length, hidden_size)`):
         Sequence of entity hidden-states at the output of the last layer of the model.
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    entity_last_hidden_state: Optional[torch.FloatTensor] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    entity_last_hidden_state: torch.Tensor | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class BaseLukeModelOutput(BaseModelOutput):
     r"""
-    entity_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, entity_length, hidden_size)`):
+    entity_last_hidden_state (`torch.Tensor` of shape `(batch_size, entity_length, hidden_size)`):
         Sequence of entity hidden-states at the output of the last layer of the model.
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    entity_last_hidden_state: Optional[torch.FloatTensor] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    entity_last_hidden_state: torch.Tensor | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class LukeMaskedLMOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         The sum of masked language modeling (MLM) loss and entity prediction loss.
-    mlm_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    mlm_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Masked language modeling (MLM) loss.
-    mep_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    mep_loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Masked entity prediction (MEP) loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    entity_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    entity_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the entity prediction head (scores for each entity vocabulary token before SoftMax).
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    mlm_loss: Optional[torch.FloatTensor] = None
-    mep_loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    entity_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    mlm_loss: torch.Tensor | None = None
+    mep_loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    entity_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Outputs of entity classification models.
     """
 )
+@dataclass
 class EntityClassificationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Classification scores (before SoftMax).
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Outputs of entity pair classification models.
     """
 )
+@dataclass
 class EntityPairClassificationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Classification scores (before SoftMax).
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Outputs of entity span classification models.
     """
 )
+@dataclass
 class EntitySpanClassificationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, entity_length, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, entity_length, config.num_labels)`):
         Classification scores (before SoftMax).
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Outputs of sentence classification models.
     """
 )
+@dataclass
 class LukeSequenceClassifierOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification (or regression if config.num_labels==1) loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, config.num_labels)`):
         Classification (or regression if config.num_labels==1) scores (before SoftMax).
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of token classification models.
     """
 )
+@dataclass
 class LukeTokenClassifierOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Classification scores (before SoftMax).
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Outputs of question answering models.
     """
 )
+@dataclass
 class LukeQuestionAnsweringModelOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    start_logits: Optional[torch.FloatTensor] = None
-    end_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    start_logits: torch.Tensor | None = None
+    end_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Outputs of multiple choice models.
     """
 )
+@dataclass
 class LukeMultipleChoiceModelOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
         Classification loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_choices)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_choices)`):
         *num_choices* is the second dimension of the input tensors. (see *input_ids* above).
 
         Classification scores (before SoftMax).
-    entity_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+    entity_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of each
         layer plus the initial entity embedding outputs.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    entity_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    entity_hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class LukeEmbeddings(nn.Module):
@@ -378,7 +377,7 @@ class LukeEntityEmbeddings(nn.Module):
         self,
         entity_ids: torch.LongTensor,
         position_ids: torch.LongTensor,
-        token_type_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: torch.LongTensor | None = None,
     ):
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(entity_ids)
@@ -767,14 +766,10 @@ class LukePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["LukeAttention", "LukeEntityEmbeddings"]
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
+        super()._init_weights(module)
+        if isinstance(module, nn.Embedding):
             if module.embedding_dim == 1:  # embedding for bias parameters
                 init.zeros_(module.weight)
             else:
@@ -782,9 +777,6 @@ class LukePreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring(
@@ -825,27 +817,27 @@ class LukeModel(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.FloatTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.Tensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseLukeModelOutputWithPooling]:
+    ) -> tuple | BaseLukeModelOutputWithPooling:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -899,7 +891,7 @@ class LukeModel(LukePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -933,8 +925,15 @@ class LukeModel(LukePreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        # Second, compute extended attention mask
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, entity_attention_mask)
+        if entity_attention_mask is not None:
+            attention_mask = torch.cat([attention_mask, entity_attention_mask], dim=-1)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            # Simulating fused embeddings which is done later downstream
+            inputs_embeds=attention_mask[..., None].to(word_embedding_output.dtype),
+            attention_mask=attention_mask,
+        )
 
         # Third, compute entity embeddings and concatenate with word embeddings
         if entity_ids is None:
@@ -946,7 +945,7 @@ class LukeModel(LukePreTrainedModel):
         encoder_outputs = self.encoder(
             word_embedding_output,
             entity_embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -969,36 +968,6 @@ class LukeModel(LukePreTrainedModel):
             entity_last_hidden_state=encoder_outputs.entity_last_hidden_state,
             entity_hidden_states=encoder_outputs.entity_hidden_states,
         )
-
-    def get_extended_attention_mask(
-        self, word_attention_mask: torch.LongTensor, entity_attention_mask: Optional[torch.LongTensor]
-    ):
-        """
-        Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
-
-        Arguments:
-            word_attention_mask (`torch.LongTensor`):
-                Attention mask for word tokens with ones indicating tokens to attend to, zeros for tokens to ignore.
-            entity_attention_mask (`torch.LongTensor`, *optional*):
-                Attention mask for entity tokens with ones indicating tokens to attend to, zeros for tokens to ignore.
-
-        Returns:
-            `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
-        """
-        attention_mask = word_attention_mask
-        if entity_attention_mask is not None:
-            attention_mask = torch.cat([attention_mask, entity_attention_mask], dim=-1)
-
-        if attention_mask.dim() == 3:
-            extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
-            extended_attention_mask = attention_mask[:, None, None, :]
-        else:
-            raise ValueError(f"Wrong shape for attention_mask (shape {attention_mask.shape})")
-
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
-        return extended_attention_mask
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
@@ -1052,7 +1021,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
         "lm_head.bias": "lm_head.decoder.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1074,29 +1043,29 @@ class LukeForMaskedLM(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.LongTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        entity_labels: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.LongTensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        entity_labels: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, LukeMaskedLMOutput]:
+    ) -> tuple | LukeMaskedLMOutput:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -1110,17 +1079,13 @@ class LukeForMaskedLM(LukePreTrainedModel):
         entity_position_ids (`torch.LongTensor` of shape `(batch_size, entity_length, max_mention_length)`, *optional*):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         entity_labels (`torch.LongTensor` of shape `(batch_size, entity_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1194,7 +1159,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
     """
 )
 class LukeForEntityClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1209,28 +1174,28 @@ class LukeForEntityClassification(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.FloatTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.Tensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, EntityClassificationOutput]:
+    ) -> tuple | EntityClassificationOutput:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -1268,7 +1233,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: person
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1323,7 +1288,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
     """
 )
 class LukeForEntityPairClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1338,28 +1303,28 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.FloatTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.Tensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, EntityPairClassificationOutput]:
+    ) -> tuple | EntityPairClassificationOutput:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -1400,7 +1365,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: per:cities_of_residence
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1457,7 +1422,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
     """
 )
 class LukeForEntitySpanClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1472,30 +1437,30 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.LongTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        entity_start_positions: Optional[torch.LongTensor] = None,
-        entity_end_positions: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.LongTensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        entity_start_positions: torch.LongTensor | None = None,
+        entity_end_positions: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, EntitySpanClassificationOutput]:
+    ) -> tuple | EntitySpanClassificationOutput:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -1548,7 +1513,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         Beyoncé PER
         Los Angeles LOC
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1615,7 +1580,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
     """
 )
 class LukeForSequenceClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.luke = LukeModel(config)
@@ -1630,28 +1595,28 @@ class LukeForSequenceClassification(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.FloatTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.Tensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, LukeSequenceClassifierOutput]:
+    ) -> tuple | LukeSequenceClassifierOutput:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -1665,12 +1630,8 @@ class LukeForSequenceClassification(LukePreTrainedModel):
         entity_position_ids (`torch.LongTensor` of shape `(batch_size, entity_length, max_mention_length)`, *optional*):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1741,7 +1702,7 @@ class LukeForSequenceClassification(LukePreTrainedModel):
     """
 )
 class LukeForTokenClassification(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1757,28 +1718,28 @@ class LukeForTokenClassification(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.FloatTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.Tensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, LukeTokenClassifierOutput]:
+    ) -> tuple | LukeTokenClassifierOutput:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -1797,7 +1758,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1844,7 +1805,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
 
 @auto_docstring
 class LukeForQuestionAnswering(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1858,29 +1819,29 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.FloatTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.FloatTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.Tensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.LongTensor | None = None,
+        end_positions: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, LukeQuestionAnsweringModelOutput]:
+    ) -> tuple | LukeQuestionAnsweringModelOutput:
         r"""
         entity_ids (`torch.LongTensor` of shape `(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -1895,7 +1856,7 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1962,7 +1923,7 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
 
 @auto_docstring
 class LukeForMultipleChoice(LukePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LukeConfig):
         super().__init__(config)
 
         self.luke = LukeModel(config)
@@ -1977,21 +1938,21 @@ class LukeForMultipleChoice(LukePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        entity_ids: Optional[torch.LongTensor] = None,
-        entity_attention_mask: Optional[torch.FloatTensor] = None,
-        entity_token_type_ids: Optional[torch.LongTensor] = None,
-        entity_position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        entity_ids: torch.LongTensor | None = None,
+        entity_attention_mask: torch.Tensor | None = None,
+        entity_token_type_ids: torch.LongTensor | None = None,
+        entity_position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, LukeMultipleChoiceModelOutput]:
+    ) -> tuple | LukeMultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -2018,7 +1979,7 @@ class LukeForMultipleChoice(LukePreTrainedModel):
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-        entity_attention_mask (`torch.FloatTensor` of shape `(batch_size, entity_length)`, *optional*):
+        entity_attention_mask (`torch.Tensor` of shape `(batch_size, entity_length)`, *optional*):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in `[0, 1]`:
 
             - 1 for entity tokens that are **not masked**,
@@ -2032,16 +1993,12 @@ class LukeForMultipleChoice(LukePreTrainedModel):
         entity_position_ids (`torch.LongTensor` of shape `(batch_size, entity_length, max_mention_length)`, *optional*):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
+        inputs_embeds (`torch.Tensor` of shape `(batch_size, num_choices, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None

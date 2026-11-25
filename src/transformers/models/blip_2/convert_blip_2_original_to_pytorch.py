@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +18,10 @@ URL: https://github.com/salesforce/LAVIS/tree/main/projects/blip2
 """
 
 import argparse
+from io import BytesIO
 
-import requests
 import torch
+from huggingface_hub.utils import httpx
 
 # pip3 install salesforce-lavis
 # I'm actually installing a slightly modified version: pip3 install -U git+https://github.com/nielsrogge/LAVIS.git@blip2_float32
@@ -48,7 +48,8 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 def load_demo_image():
     url = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
 
     return image
 

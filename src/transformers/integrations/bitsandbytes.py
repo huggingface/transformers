@@ -22,7 +22,6 @@ if is_torch_available():
 
 if is_accelerate_available():
     import accelerate
-    from accelerate import init_empty_weights
     from accelerate.hooks import add_hook_to_module, remove_hook_from_module
 
 logger = logging.get_logger(__name__)
@@ -40,23 +39,26 @@ class Bnb4bitQuantize(ConversionOps):
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         """
-        we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that it stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
+        we need to store some parameters to create the quantized weight. For example, bnb requires 6 values that are stored in the checkpoint to recover the quantized weight. So we store them in a dict that is stored in hf_quantizer for now as we can't save it in the op since we create an op per tensor.
         """
-        value = list(input_dict.values())[0]
-        value = value[0]
+        result = {}
+        for param_name, value in input_dict.items():
+            if isinstance(value, list):
+                value = value[0]
 
-        # update param name to get the weights instead of the quantized stats
-        module, _ = get_module_from_name(model, full_layer_name)
+            # update param name to get the weights instead of the quantized stats
+            module, _ = get_module_from_name(model, param_name)
 
-        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
-        # Since weights are saved in the correct "orientation", we skip transposing when loading.
-        if issubclass(module.source_cls, Conv1D):
-            value = value.T
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+            # Since weights are saved in the correct "orientation", we skip transposing when loading.
+            if issubclass(module.source_cls, Conv1D):
+                value = value.T
 
-        old_value = model.get_parameter_or_buffer(full_layer_name)
-        new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
-        module._is_hf_initialized = True
-        return {full_layer_name: new_value}
+            old_value = model.get_parameter_or_buffer(param_name)
+            new_value = bnb.nn.Params4bit(value, requires_grad=False, **old_value.__dict__).to(value.device)
+            module._is_hf_initialized = True
+            result[param_name] = new_value
+        return result
 
 
 class Bnb4bitDeserialize(ConversionOps):
@@ -105,20 +107,22 @@ class Bnb8bitQuantize(ConversionOps):
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        value = list(input_dict.values())[0]
-        value = value[0] if isinstance(value, list) else value
+        result = {}
+        for param_name, value in input_dict.items():
+            value = value[0] if isinstance(value, list) else value
 
-        module, _ = get_module_from_name(model, full_layer_name)
+            module, _ = get_module_from_name(model, param_name)
 
-        # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
-        # Since weights are saved in the correct "orientation", we skip transposing when loading.
-        if issubclass(module.source_cls, Conv1D):
-            value = value.T
-        value_device = value.device
-        kwargs = model.get_parameter_or_buffer(full_layer_name).__dict__
-        kwargs.pop("SCB", None)
-        new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **kwargs).to(value_device)
-        return {full_layer_name: new_value}
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. openai-community/gpt2) by transposing the weight matrix prior to quantization.
+            # Since weights are saved in the correct "orientation", we skip transposing when loading.
+            if issubclass(module.source_cls, Conv1D):
+                value = value.T
+            value_device = value.device
+            params_kwargs = model.get_parameter_or_buffer(param_name).__dict__
+            params_kwargs.pop("SCB", None)
+            new_value = bnb.nn.Int8Params(value.to("cpu"), requires_grad=False, **params_kwargs).to(value_device)
+            result[param_name] = new_value
+        return result
 
 
 class Bnb8bitDeserialize(ConversionOps):
@@ -172,7 +176,7 @@ def replace_with_bnb_linear(
             converted.
         quantization_config (`BitsAndBytesConfig`):
             The quantization config object that contains the quantization parameters.
-        pre_quantized (`book`, defaults to `False`):
+        pre_quantized (`bool`, defaults to `False`):
             Whether the model is pre-quantized or not
     """
     has_been_replaced = False
@@ -181,8 +185,8 @@ def replace_with_bnb_linear(
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         new_module = None
-        with init_empty_weights():
-            if isinstance(module, (nn.Linear, Conv1D)):
+        with torch.device("meta"):
+            if isinstance(module, Conv1D) or type(module) is nn.Linear:
                 if isinstance(module, Conv1D):
                     in_features, out_features = module.weight.shape
                 else:
@@ -233,7 +237,7 @@ def replace_with_bnb_linear(
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
-def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", state=None):
+def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
     """
     Helper function to dequantize 4bit or 8bit bnb weights.
 
@@ -248,10 +252,7 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", st
 
     if cls_name == "Params4bit":
         output_tensor = bnb.functional.dequantize_4bit(weight.data, weight.quant_state)
-        logger.warning_once(
-            f"The model is going to be dequantized in {output_tensor.dtype} - if you want to upcast it to another dtype, make sure to pass the desired dtype when quantizing the model through `bnb_4bit_quant_type` argument of `BitsAndBytesConfig`"
-        )
-        return output_tensor.to(dtype)
+        return output_tensor
 
     if state.SCB is None:
         state.SCB = weight.SCB
@@ -263,7 +264,7 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", st
         # Multiply by (scale/127) to dequantize.
         dequantized = weight.data * state.SCB.view(-1, 1) * 7.874015718698502e-3
 
-    return dequantized.to(dtype)
+    return dequantized
 
 
 def _create_accelerate_new_hook(old_hook):
@@ -283,10 +284,7 @@ def _create_accelerate_new_hook(old_hook):
     return new_hook
 
 
-def dequantize_and_replace(
-    model,
-    quantization_config=None,
-):
+def dequantize_and_replace(model, quantization_config=None, dtype=None):
     """
     Converts a quantized model into its dequantized original version. The newly converted model will have
     some performance drop compared to the original model before quantization - use it only for specific usecases
@@ -297,14 +295,22 @@ def dequantize_and_replace(
     quant_method = quantization_config.quantization_method()
 
     target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
-
     for module_name, module in model.named_modules():
         if isinstance(module, target_cls):
-            with init_empty_weights():
+            with torch.device("meta"):
                 bias = getattr(module, "bias", None)
                 new_module = torch.nn.Linear(module.in_features, module.out_features, bias=bias is not None)
             state = module.state if quant_method == "llm_int8" else None
-            new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, model.dtype, state))
+            new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, state))
+            weight = dequantize_bnb_weight(module.weight, state)
+            if dtype is None:
+                logger.warning_once(
+                    f"The modules are dequantized in {weight.dtype}. If you want to change the dtype, please specify `dtype` in `dequantize`. "
+                )
+            else:
+                logger.warning_once(f"The modules are dequantized in {weight.dtype} and casted to {dtype}.")
+                weight = weight.to(dtype)
+            new_module.weight = torch.nn.Parameter(weight)
             if bias is not None:
                 new_module.bias = bias
             if hasattr(module, "_hf_hook"):

@@ -19,10 +19,10 @@ import copy
 import json
 import os
 from collections import UserDict
-from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 import numpy as np
-from huggingface_hub import create_repo, is_offline_mode
+from huggingface_hub import is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .utils import (
@@ -30,6 +30,7 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
+    _is_tensor_or_array_like,
     copy_func,
     is_numpy_array,
     is_torch_available,
@@ -39,7 +40,7 @@ from .utils import (
     requires_backends,
     safe_load_json_file,
 )
-from .utils.hub import cached_file
+from .utils.hub import cached_file, hf_api, resolve_revision
 
 
 if TYPE_CHECKING:
@@ -73,12 +74,13 @@ class BatchFeature(UserDict):
 
     def __init__(
         self,
-        data: Optional[dict[str, Any]] = None,
-        tensor_type: Union[None, str, TensorType] = None,
-        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+        data: dict[str, Any] | None = None,
+        tensor_type: None | str | TensorType = None,
+        skip_tensor_conversion: list[str] | set[str] | None = None,
     ):
         super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
+        self.skip_tensor_conversion = skip_tensor_conversion
+        self.convert_to_tensors(tensor_type=tensor_type)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -103,7 +105,7 @@ class BatchFeature(UserDict):
         if "data" in state:
             self.data = state["data"]
 
-    def _get_is_as_tensor_fns(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def _get_is_as_tensor_fns(self, tensor_type: str | TensorType | None = None):
         if tensor_type is None:
             return None, None
 
@@ -155,8 +157,8 @@ class BatchFeature(UserDict):
 
     def convert_to_tensors(
         self,
-        tensor_type: Optional[Union[str, TensorType]] = None,
-        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+        tensor_type: str | TensorType | None = None,
+        skip_tensor_conversion: list[str] | set[str] | None = None,
     ):
         """
         Convert the inner content to tensors.
@@ -167,16 +169,28 @@ class BatchFeature(UserDict):
                 `None`, no modification is done.
             skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
                 List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+
+        Note:
+            Values that don't have an array-like structure (e.g., strings, dicts, lists of strings) are
+            automatically skipped and won't be converted to tensors. Ragged arrays (lists of arrays with
+            different lengths) are still attempted, though they may raise errors during conversion.
         """
         if tensor_type is None:
             return self
 
         is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type)
+        skip_tensor_conversion = (
+            skip_tensor_conversion if skip_tensor_conversion is not None else self.skip_tensor_conversion
+        )
 
         # Do the tensor conversion in batch
         for key, value in self.items():
             # Skip keys explicitly marked for no conversion
             if skip_tensor_conversion and key in skip_tensor_conversion:
+                continue
+
+            # Skip values that are not array-like
+            if not _is_tensor_or_array_like(value):
                 continue
 
             try:
@@ -233,12 +247,15 @@ class BatchFeature(UserDict):
 
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         def maybe_to(v):
-            # check if v is a floating point
+            # check if v is a floating point tensor
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 return v.to(*args, **kwargs)
             elif isinstance(v, torch.Tensor) and device is not None:
                 return v.to(device=device, non_blocking=non_blocking)
+            # recursively handle lists and tuples
+            elif isinstance(v, (list, tuple)):
+                return type(v)(maybe_to(item) for item in v)
             else:
                 return v
 
@@ -269,11 +286,11 @@ class FeatureExtractionMixin(PushToHubMixin):
     @classmethod
     def from_pretrained(
         cls: type[SpecificFeatureExtractorType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> SpecificFeatureExtractorType:
@@ -290,7 +307,7 @@ class FeatureExtractionMixin(PushToHubMixin):
                 - a path to a *directory* containing a feature extractor file saved using the
                   [`~feature_extraction_utils.FeatureExtractionMixin.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved feature extractor JSON *file*, e.g.,
+                - a path to a saved feature extractor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model feature extractor should be cached if the
@@ -354,7 +371,14 @@ class FeatureExtractionMixin(PushToHubMixin):
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
+        # Resolve the revision once, so that all the files of this load come from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         if token is not None:
             kwargs["token"] = token
@@ -363,7 +387,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         return cls.from_dict(feature_extractor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save a feature_extractor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] class method.
@@ -386,7 +410,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -413,7 +437,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     @classmethod
     def get_feature_extractor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -433,6 +457,15 @@ class FeatureExtractionMixin(PushToHubMixin):
         token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+
+        # Resolve the revision once, so that all the files below come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -498,7 +531,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         # Load feature_extractor dict. Priority goes as (nested config if found -> image processor config)
         # We are downloading both configs because almost all models have a `processor_config.json` but
-        # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+        # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
         feature_extractor_dict = None
         if resolved_processor_file is not None:
             processor_dict = safe_load_json_file(resolved_processor_file)
@@ -578,7 +611,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         return output
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "FeatureExtractionMixin":
+    def from_json_file(cls, json_file: str | os.PathLike) -> "FeatureExtractionMixin":
         """
         Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] from the path to
         a JSON file of parameters.
@@ -611,7 +644,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 

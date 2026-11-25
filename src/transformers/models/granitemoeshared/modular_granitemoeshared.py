@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -13,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import torch
 from torch import nn
@@ -22,6 +21,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
     GraniteMoeForCausalLM,
@@ -39,17 +39,16 @@ class GraniteFlashAttentionKwargs(TypedDict, total=False):
     Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
     Use cases include padding-free training and fewer `torch.compile` graph breaks.
 
-    Attributes:
-        cu_seq_lens_q (`torch.LongTensor`)
-            Gets cumulative sequence length for query state.
-        cu_seq_lens_k (`torch.LongTensor`)
-            Gets cumulative sequence length for key state.
-        max_length_q (`int`):
-            Maximum sequence length for query state.
-        max_length_k (`int`):
-            Maximum sequence length for key state.
-        seq_idx (`torch.IntTensor):
-            Index of each packed sequence.
+    cu_seq_lens_q (`torch.LongTensor`):
+        Gets cumulative sequence length for query state.
+    cu_seq_lens_k (`torch.LongTensor`):
+        Gets cumulative sequence length for key state.
+    max_length_q (`int`):
+        Maximum sequence length for query state.
+    max_length_k (`int`):
+        Maximum sequence length for key state.
+    seq_idx (`torch.IntTensor):
+        Index of each packed sequence.
     """
 
     cu_seq_lens_q: torch.LongTensor
@@ -90,18 +89,18 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         super().__init__(config, layer_idx)
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[GraniteFlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -110,10 +109,9 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )

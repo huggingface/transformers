@@ -1,9 +1,7 @@
-from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..core_model_loading import ConversionOps
+from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
+from ..utils import is_torch_available, logging
 
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 if is_torch_available():
     import torch
@@ -92,7 +90,7 @@ def unpack_weights(packed: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
 
     Explanation of the example:
     ---------------------------
-    Let's take the first value for example 0b10100001, we we will only focus on the first column,
+    Let's take the first value for example 0b10100001, we will only focus on the first column,
     because every element is unpacked across the first dimension
     - First 2 bits: `01` → 0 at [0][0]
     - Second 2 bits: `00` → -1 at [0][2]
@@ -139,24 +137,12 @@ class BitLinear(nn.Module):
         self.dtype = dtype
         self.in_features = in_features
         self.out_features = out_features
-        self.register_buffer(
-            "weight",
-            torch.zeros(
-                (out_features // VALUES_PER_ITEM, in_features),
-                dtype=torch.uint8,
-                device=device,
-            ),
+        self.weight = nn.Buffer(
+            torch.zeros((out_features // VALUES_PER_ITEM, in_features), dtype=torch.uint8, device=device)
         )
-        self.register_buffer(
-            "weight_scale",
-            torch.ones(
-                (1),
-                dtype=dtype,
-                device=device,
-            ),
-        )
+        self.weight_scale = nn.Buffer(torch.ones((1), dtype=dtype, device=device))
         if bias:
-            self.register_buffer("bias", torch.zeros((out_features), dtype=dtype, device=device))
+            self.bias = nn.Buffer(torch.zeros((out_features), dtype=dtype, device=device))
         else:
             self.bias = None
 
@@ -173,7 +159,7 @@ class BitLinear(nn.Module):
         Activation function : Performs symmetric, per-token quantization on the input activations.
         Parameters:
         -----------
-        x : torch.Tensor
+        input : torch.Tensor
             Input activations to be quantized.
         num_bits : int, optional (default=8)
             Number of bits to use for quantization, determining the quantization range.
@@ -269,7 +255,7 @@ class AutoBitLinear(nn.Linear):
         use_rms_norm: bool = False,
         rms_norm_eps: float = 1e-6,
     ):
-        super().__init__(in_features, out_features, bias)
+        super().__init__(in_features, out_features, bias, device=device, dtype=dtype)
         self.online_quant = online_quant
         # Optional RMSNorm
         self.rms_norm = None
@@ -278,26 +264,7 @@ class AutoBitLinear(nn.Linear):
 
             self.rms_norm = LlamaRMSNorm(in_features, eps=rms_norm_eps)
         if not online_quant:
-            self.register_buffer(
-                "weight_scale",
-                torch.ones(
-                    (1),
-                    dtype=dtype,
-                    device=device,
-                ),
-            )
-            self._register_load_state_dict_pre_hook(self.load_hook)
-
-    def load_hook(
-        self,
-        state_dict,
-        prefix,
-        *args,
-        **kwargs,
-    ):
-        if (prefix + "weight") in state_dict and state_dict[prefix + "weight"].dtype != self.weight.dtype:
-            state_dict[prefix + "weight"] = unpack_weights(state_dict[prefix + "weight"], dtype=self.weight.dtype)
-        return state_dict
+            self.weight_scale = nn.Buffer(torch.ones((1), dtype=dtype, device=device))
 
     def forward(self, input):
         # Optional RMSNorm on activations prior to quantization.
@@ -334,7 +301,7 @@ def replace_with_bitnet_linear(model, modules_to_not_convert: list[str] | None =
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
-        with init_empty_weights():
+        with torch.device("meta"):
             if isinstance(module, nn.Linear):
                 if quantization_config and quantization_config.linear_class == "autobitlinear":
                     new_module = AutoBitLinear(
@@ -365,9 +332,29 @@ def replace_with_bitnet_linear(model, modules_to_not_convert: list[str] | None =
 
     if not has_been_replaced:
         logger.warning(
-            "You are loading your model using eetq but no linear modules were found in your model."
+            "You are loading your model using bitnet but no linear modules were found in your model."
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."
         )
 
     return model
+
+
+class BitNetDeserialize(ConversionOps):
+    def __init__(self, hf_quantizer):
+        self.hf_quantizer = hf_quantizer
+
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        model: torch.nn.Module | None = None,
+        full_layer_name: str | None = None,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        weight = input_dict["weight"]
+        weight = weight[0] if isinstance(weight, list) else weight
+        module, _ = get_module_from_name(model, full_layer_name)
+        # packed checkpoints hold VALUES_PER_ITEM ternary rows per stored row
+        if isinstance(module, AutoBitLinear) and weight.shape[0] * VALUES_PER_ITEM == module.out_features:
+            weight = unpack_weights(weight.to(torch.uint8), dtype=module.weight.dtype)
+        return {"weight": weight}

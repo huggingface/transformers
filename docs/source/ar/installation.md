@@ -2,11 +2,9 @@
 
 قم بتثبيت مكتبة 🤗 Transformers المناسبة لمكتبة التعلم العميق التي تستخدمها، وقم بإعداد ذاكرة التخزين المؤقت الخاصة بك، وقم بإعداد 🤗 Transformers للعمل دون اتصال بالإنترنت (اختياري).
 
-تم اختبار 🤗 Transformers على Python 3.6  والإصدارات الأحدث، وPyTorch 1.1.0 والإصدارات الأحدث، وTensorFlow 2.0 والإصدارات الأحدث، وFlax. اتبع تعليمات التثبيت أدناه لمكتبة التعلم العميق التي تستخدمها:
+تم اختبار 🤗 Transformers على Python 3.11 والإصدارات الأحدث، وPyTorch 2.4 والإصدارات الأحدث. اتبع تعليمات التثبيت أدناه لمكتبة التعلم العميق التي تستخدمها:
 
 * تعليمات تثبيت [PyTorch](https://pytorch.org/get-started/locally/).
-* تعليمات تثبيت [TensorFlow 2.0](https://www.tensorflow.org/install/pip).
-* تعليمات تثبيت [Flax](https://flax.readthedocs.io/en/latest/).
 
 ## التثبيت باستخدام pip
 
@@ -40,30 +38,6 @@ pip install transformers
 
 ```bash
 pip install 'transformers[torch]'
-```
-
-🤗 Transformers وTensorFlow 2.0:
-
-```bash
-pip install 'transformers[tf-cpu]'
-```
-
-<Tip warning={true}>
-
-لمستخدمي M1 / ARM
-
-ستحتاج إلى تثبيت ما يلي قبل تثبيت TensorFLow 2.0
-```bash
-brew install cmake
-brew install pkg-config
-```
-
-</Tip>
-
-🤗 Transformers وFlax:
-
-```bash
-pip install 'transformers[flax]'
 ```
 
 أخيرًا، تحقق مما إذا كان 🤗 Transformers قد تم تثبيته بشكل صحيح عن طريق تشغيل الأمر التالي. سيقوم بتنزيل نموذج مدرب مسبقًا:
@@ -115,7 +89,7 @@ cd transformers
 pip install -e .
 ```
 
- ستقوم هذه الأوامر بربط المجلد الذي قمت باستنساخ المستودع فيه بمسارات مكتبة Python. بمعنى آخر، سيبحث Python داخل المجلد الذي قمت باستنساخه بالإضافة إلى المسارات المعتادة للمكتبات. على سبيل المثال، إذا تم تثبيت حزم Python الخاصة بك عادةً في `~/anaconda3/envs/main/lib/python3.7/site-packages/`, فسيقوم Python أيضًا بالبحث في المجلد الذي قمت باستنساخه: `~/transformers/`.
+ ستقوم هذه الأوامر بربط المجلد الذي قمت باستنساخ المستودع فيه بمسارات مكتبة Python. بمعنى آخر، سيبحث Python داخل المجلد الذي قمت باستنساخه بالإضافة إلى المسارات المعتادة للمكتبات. على سبيل المثال، إذا تم تثبيت حزم Python الخاصة بك عادةً في `~/anaconda3/envs/main/lib/python3.11/site-packages/`, فسيقوم Python أيضًا بالبحث في المجلد الذي قمت باستنساخه: `~/transformers/`.
 
 <Tip warning={true}>
 
@@ -158,13 +132,6 @@ conda install conda-forge::transformers
 أضف [🤗 Datasets](https://huggingface.co/docs/datasets/) إلى سير عمل التدريب غير المتصل باستخدام متغير البيئة `HF_DATASETS_OFFLINE=1`.
 
 </Tip>
-
-```bash
-HF_DATASETS_OFFLINE=1 HF_HUB_OFFLINE=1 \
-python examples/pytorch/translation/run_translation.py --model_name_or_path google-t5/t5-small --dataset_name wmt16 --dataset_config ro-en ...
-```
-
-يجب أن يعمل هذا البرنامج النصي دون توقف أو انتظار انتهاء المهلة الزمنية لأنه لن يحاول تنزيل النموذج من Hub.
 
 يمكنك أيضًا تجاوز تحميل نموذج من Hub من كل استدعاء [`~PreTrainedModel.from_pretrained`] باستخدام معلمة [`local_files_only`]. عندما يتم تعيينها على `True`، يتم تحميل الملفات المحلية فقط:
 

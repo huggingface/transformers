@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import Gemma3Processor
 from transformers.testing_utils import get_tests_dir, require_vision
 
@@ -26,10 +28,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Gemma3Processor
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.boi_token
+    model_id = "hf-internal-testing/tiny-gemma3"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -41,19 +40,6 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "pan_and_scan_min_ratio_to_activate": 1.2,
         }
         return image_processor_class(**gemma3_image_processor_kwargs)
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        extra_special_tokens = {
-            "image_token": "<image_soft_token>",
-            "boi_token": "<start_of_image>",
-            "eoi_token": "<end_of_image>",
-        }
-        tokenizer = tokenizer_class.from_pretrained(
-            SAMPLE_VOCAB, keep_accents=True, extra_special_tokens=extra_special_tokens
-        )
-        return tokenizer
 
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
@@ -74,9 +60,9 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }  # fmt: skip
 
     # Override as Gemma3 needs images to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_images_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
-        images = super().prepare_image_inputs(batch_size)
+        images = super().prepare_images_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
@@ -90,7 +76,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text_single_image = f"{processor.boi_token}Dummy text!"
         text_no_image = "Dummy text!"
 
-        image = self.prepare_image_inputs()
+        image = self.prepare_images_inputs()
 
         # If text has no image tokens, image should be `None`
         with self.assertRaises(ValueError):
@@ -115,7 +101,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(**processor_components, **processor_kwargs)
 
         input_str = self.prepare_text_inputs(modalities="image")
-        image_input = self.prepare_image_inputs()
+        image_input = self.prepare_images_inputs()
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -143,7 +129,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.get_processor()
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
         _ = processor(
             text=input_str,
             images=image_input,
@@ -161,3 +147,32 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 padding=True,
                 max_length=5,
             )
+
+    def test_get_num_multimodal_tokens_matches_processor_call(self):
+        "Tests that the helper used internally in vLLM works correctly"
+
+        processor = self.get_processor()
+        if processor.tokenizer.pad_token_id is None:
+            processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        if not hasattr(processor, "_get_num_multimodal_tokens"):
+            self.skipTest("Processor doesn't support `_get_num_multimodal_tokens` yet")
+
+        image_sizes = [(100, 100), (300, 100), (500, 30), (213, 167)]
+
+        # Overwritten because Gemma3 needs nested image inputs
+        image_inputs = []
+        for h, w in image_sizes:
+            image_inputs.append([np.random.randint(255, size=(h, w, 3), dtype=np.uint8)])
+
+        text = [f"This is an image {getattr(self, 'image_token', '')}"] * len(image_inputs)
+        inputs = processor(
+            text=text, images=image_inputs, padding=True, return_mm_token_type_ids=True, return_tensors="pt"
+        )
+
+        if "mm_token_type_ids" not in inputs:
+            self.skipTest("Processor doesn't support `mm_token_type_ids`")
+
+        num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
+        num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
+        self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import collections
 import os
-from typing import Optional
 
 from transformers.utils import is_rjieba_available, requires_backends
 
@@ -150,7 +148,9 @@ class CpmAntTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         for special_token in [space_token, line_token]:
-            token_id = self.added_tokens_encoder.pop(special_token, None)
+            # pop from the real `_added_tokens_encoder` dict; `added_tokens_encoder` is a
+            # property returning a fresh dict, so popping it has no effect
+            token_id = self._added_tokens_encoder.pop(special_token, None)
             if token_id is not None:
                 self._added_tokens_decoder.pop(token_id, None)
         self._update_total_vocab_size()
@@ -203,7 +203,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index, self.unk_token)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]

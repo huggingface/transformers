@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -24,7 +24,7 @@ Token classification assigns a label to individual tokens in a sentence. One of 
 
 This guide will show you how to:
 
-1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [WNUT 17](https://huggingface.co/datasets/wnut_17) dataset to detect new entities.
+1. Finetune [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) on the [WNUT 17](https://huggingface.co/datasets/flaitenberger/wnut_17) dataset to detect new entities.
 2. Use your finetuned model for inference.
 
 <Tip>
@@ -54,7 +54,7 @@ Start by loading the WNUT 17 dataset from the 🤗 Datasets library:
 ```py
 >>> from datasets import load_dataset
 
->>> wnut = load_dataset("wnut_17")
+>>> wnut = load_dataset("flaitenberger/wnut_17")
 ```
 
 Then take a look at an example:
@@ -120,7 +120,7 @@ As you saw in the example `tokens` field above, it looks like the input has alre
 
 However, this adds some special tokens `[CLS]` and `[SEP]` and the subword tokenization creates a mismatch between the input and labels. A single word corresponding to a single label may now be split into two subwords. You'll need to realign the tokens and labels by:
 
-1. Mapping all tokens to their corresponding word with the [`word_ids`](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.BatchEncoding.word_ids) method.
+1. Mapping all tokens to their corresponding word with the [`~BatchEncoding#word_ids`] method.
 2. Assigning the label `-100` to the special tokens `[CLS]` and `[SEP]` so they're ignored by the PyTorch loss function (see [CrossEntropyLoss](https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html)).
 3. Only labeling the first token of a given word. Assign `-100` to other subtokens from the same word.
 
@@ -244,7 +244,7 @@ Before you start training your model, create a map of the expected ids to their 
 
 <Tip>
 
-If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
+If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training)!
 
 </Tip>
 

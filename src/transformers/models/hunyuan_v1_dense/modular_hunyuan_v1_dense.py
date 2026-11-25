@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch HunYuanDenseV1 model."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch import nn
@@ -29,6 +27,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
+from ...utils.deprecation import deprecate_kwarg
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -67,13 +66,13 @@ class HunYuanDenseV1Attention(LlamaAttention):
         self.query_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.key_layernorm = HunYuanDenseV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        cache: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -88,14 +87,12 @@ class HunYuanDenseV1Attention(LlamaAttention):
         query_states = self.query_layernorm(query_states)
         key_states = self.key_layernorm(key_states)
 
-        if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if cache is not None:
+            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -124,31 +121,48 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
 
 
 class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
-    def __init__(self, config: HunYuanDenseV1Config, device=None):
+    def __init__(self, config: HunYuanDenseV1Config):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-
         self.rope_type = self.config.rope_parameters["rope_type"]
 
-        # Diff from Llama - DynamicNTKAlphaRotary
+        # Diff from Llama - DynamicNTKAlphaRotary. The checkpoints label it "dynamic", but a fixed `alpha` makes the
+        # frequencies static, so we give it its own type to keep `dynamic_rope_update` from recomputing them.
         if self.rope_type == "dynamic" and self.config.rope_parameters.get("alpha"):
-            self.dim = config.head_dim
-            base = self.config.rope_parameters["rope_theta"] * self.config.rope_parameters["alpha"] ** (
-                self.config.head_dim / (self.config.head_dim - 2)
-            )
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.config.head_dim))
-            self.attention_scaling = 1.0
-        else:
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if self.rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-            inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+            self.rope_type = "ntk_alpha"
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type == "ntk_alpha":
+            rope_init_fn = self.compute_ntk_alpha_rope_parameters
+        elif self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_ntk_alpha_rope_parameters(config: HunYuanDenseV1Config, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies for NTK-aware scaling with a fixed `alpha`, which only stretches the RoPE
+        base. Unlike `dynamic` scaling, the result does not depend on the sequence length.
+
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        dim = config.head_dim
+        base = config.rope_parameters["rope_theta"] * config.rope_parameters["alpha"] ** (dim / (dim - 2))
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq, attention_factor
 
 
 class HunYuanDenseV1Model(LlamaModel):

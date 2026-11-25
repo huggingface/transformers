@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -307,7 +306,7 @@ def convert_checkpoint(
             subfolder=f"models/{language}",
         )
 
-        with open(config_file, "r") as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             data = f.read()
             hps = json.loads(data)
 

@@ -13,7 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3VLMoe model."""
 
-import copy
+import tempfile
 import unittest
 
 import pytest
@@ -27,233 +27,183 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
+    backend_device_count,
+    get_cpu_ram_total_gib,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    run_first,
     slow,
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ...test_modeling_common import floats_tensor, ids_tensor
+from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
 
 
-class Qwen3VLMoeVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=16,
-        text_config={
-            "bos_token_id": 0,
-            "eos_token_id": 1,
-            "pad_token_id": 2,
-            "hidden_act": "silu",
-            "hidden_size": 32,
-            "vocab_size": 99,
-            "intermediate_size": 37,
-            "max_position_embeddings": 512,
-            "model_type": "qwen3_vl_moe",
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "num_hidden_layers": 2,
-            "moe_intermediate_size": 16,
-            "num_experts_per_tok": 4,
-            "num_experts": 8,
-            "rope_theta": 10000,
-            "tie_word_embeddings": True,
-            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
-        },
-        vision_config={
-            "depth": 2,
-            "in_chans": 3,
-            "hidden_act": "gelu_pytorch_tanh",
-            "intermediate_size": 32,
-            "out_hidden_size": 32,
-            "hidden_size": 32,
-            "num_heads": 4,
-            "patch_size": 16,
-            "spatial_merge_size": 1,
-            "temporal_patch_size": 2,
-            "num_position_embeddings": 16,
-            "deepstack_visual_indexes": [0, 1],
-        },
-        image_token_id=3,
-        video_token_id=4,
-        vision_start_token_id=5,
-        vision_end_token_id=6,
-        tie_word_embeddings=True,
-        is_training=True,
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.is_training = is_training
+class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
+    base_model_class = Qwen3VLMoeModel
+    config_class = Qwen3VLMoeConfig
 
-        self.vision_config = vision_config
-        self.text_config = text_config
+    conditional_generation_class = Qwen3VLMoeForConditionalGeneration
 
-        self.vocab_size = text_config["vocab_size"]
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.hidden_size = text_config["hidden_size"]
-        self.intermediate_size = text_config["intermediate_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_theta = text_config["rope_theta"]
-        self.rope_parameters = text_config["rope_parameters"]
-        self.hidden_act = text_config["hidden_act"]
-        self.max_position_embeddings = text_config["max_position_embeddings"]
-        self.model_type = text_config["model_type"]
+    small_config_overrides = {
+        "image_token_id": 3,
+        "video_token_id": 4,
+        "vision_start_token_id": 5,
+        "vision_end_token_id": 6,
+        "image_size": 16,
+        "patch_size": 16,
+        "num_image_tokens": 32,
+        "hidden_act": "silu",
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 16,
+        "moe_intermediate_size": 16,
+        "num_experts_per_tok": 4,
+        "num_experts": 8,
+        "depth": 2,
+        "vision_hidden_act": "gelu_pytorch_tanh",
+        "num_heads": 2,
+        "spatial_merge_size": 1,
+        "temporal_patch_size": 2,
+        "num_position_embeddings": 16,
+        "deepstack_visual_indexes": [0, 1],
+        "rope_parameters": {"rope_type": "default", "mrope_section": [2, 3, 3], "mrope_interleaved": True},
+        "decoder_sparse_step": 1,
+    }
 
-        self.vision_start_token_id = vision_start_token_id
-        self.vision_end_token_id = vision_end_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.tie_word_embeddings = tie_word_embeddings
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        # Qwen3 VL MoE-specific vision config attributes (computed from the other values)
+        values["in_channels"] = values["num_channels"]
+        values["out_hidden_size"] = values["hidden_size"]
+        values["vision_hidden_size"] = values["hidden_size"]
+        values["vision_intermediate_size"] = values["hidden_size"]
+        return values
 
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.num_image_tokens = 32
-        self.seq_length = seq_length + self.num_image_tokens
-
-    def get_config(self):
-        return Qwen3VLMoeConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-        )
-
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_size = config.vision_config.patch_size
-        temporal_patch_size = config.vision_config.temporal_patch_size
-        pixel_values = floats_tensor(
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        """Qwen3 VL MoE expects flattened patches: (total_patches, channels * patch_size^2 * temporal_patch_size)"""
+        return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (patch_size**2),
-                self.num_channels * (patch_size**2) * temporal_patch_size,
+                batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             ]
         )
 
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
+        # Clear any accidental special tokens first
         input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
-        input_ids[:, self.num_image_tokens] = self.image_token_id
-        input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
+        # Place image tokens with vision_start_token_id prefix
+        input_ids[:, 1] = self.image_token_id
+        input_ids[:, 0] = self.vision_start_token_id
+        return input_ids
+
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        # Qwen3VL requires image_grid_thw tensor
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.image_token_id] = 1
+        return {
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
+            "mm_token_type_ids": mm_token_type_ids,
         }
-        return config, inputs_dict
 
 
 @require_torch
-class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    """
-    Model tester for `Qwen3VLMoeForConditionalGeneration`.
-    """
+class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Qwen3VLMoeVisionText2TextModelTester
 
-    all_model_classes = (
-        (
-            Qwen3VLMoeModel,
-            Qwen3VLMoeForConditionalGeneration,
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
+
+    def test_image_forward(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        B = self.model_tester.batch_size
+        C = config.vision_config.in_channels
+        T = config.vision_config.temporal_patch_size
+        P = config.vision_config.patch_size
+        num_images = 2
+
+        input_ids = ids_tensor([B, self.model_tester.seq_length], self.model_tester.vocab_size)
+        input_ids[:, -1] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
+
+        # For this tiny config, each image corresponds to one patch token.
+        patches_per_image = 1
+        pixel_values = floats_tensor(
+            [
+                B * num_images * patches_per_image,
+                C * T * (P**2),
+            ]
         )
-        if is_torch_available()
-        else ()
-    )
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (B * num_images), device=torch_device)
+        self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
 
-    def setUp(self):
-        self.model_tester = Qwen3VLMoeVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Qwen3VLMoeConfig, has_text_modality=False)
+        insertion_point = 0
+        tokens_per_image = 3  # vision_start + image_token + vision_end
+        required_seq_length = insertion_point + num_images * tokens_per_image
+        self.assertLessEqual(required_seq_length, input_ids.shape[1])
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
+        for b in range(B):
+            for image_idx in range(num_images):
+                image_start = insertion_point + image_idx * tokens_per_image
+                input_ids[b, image_start] = self.model_tester.vision_start_token_id
+                input_ids[b, image_start + 1] = self.model_tester.image_token_id
+                input_ids[b, image_start + 2] = self.model_tester.vision_end_token_id
 
-    def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompr has multiple image tokens.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.image_token_id] = 1
+
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            model.eval()
-            _ = model(**input_dict)  # successful forward with no modifications
-            curr_input_dict = copy.deepcopy(input_dict)
-
-            # remove one image but leave the image token in text
-            patch_size = config.vision_config.patch_size
-            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
-                _ = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                )
-
-            # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            _ = model(
+            outputs = model(
                 input_ids=input_ids,
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
+            self.assertIsNotNone(outputs)
 
     def test_video_forward(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         B = self.model_tester.batch_size
-        C = config.vision_config.in_chans
+        C = config.vision_config.in_channels
         T = config.vision_config.temporal_patch_size
         P = config.vision_config.patch_size
 
         input_ids = ids_tensor([B, self.model_tester.seq_length], self.model_tester.vocab_size)
 
         F = 4
+        num_video = 2
+        frame_timestamp_tokens = 5
         patch_H = self.model_tester.image_size // P
         patch_W = self.model_tester.image_size // P
         patch_T = F // T
@@ -262,12 +212,13 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pixel_values_videos = floats_tensor(
             [
                 # first dim: batch_size * num_patches
-                B * patches_per_video,
+                B * num_video * patches_per_video,
                 # second dim: in_channels * temporal_patch_size * patch_size^2
                 C * T * (P**2),
             ]
         )
-        video_grid_thw = torch.tensor([[1, patch_H, patch_W] for _ in range(patch_T)] * B)
+
+        video_grid_thw = torch.tensor([[patch_T, patch_H, patch_W]] * (B * num_video), device=torch_device)
 
         # sanity check
         self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
@@ -277,22 +228,49 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         input_ids[input_ids == self.model_tester.video_token_id] = self.model_tester.pad_token_id
         input_ids[input_ids == self.model_tester.image_token_id] = self.model_tester.pad_token_id
         input_ids[input_ids == self.model_tester.vision_start_token_id] = self.model_tester.pad_token_id
-        input_ids[:, self.model_tester.num_image_tokens] = self.model_tester.video_token_id
+        input_ids[input_ids == self.model_tester.vision_end_token_id] = self.model_tester.pad_token_id
 
-        insertion_point = self.model_tester.num_image_tokens
+        insertion_point = 0
+        tokens_per_frame = frame_timestamp_tokens + 1 + pathed_per_frame + 1
+        tokens_per_video = patch_T * tokens_per_frame
+        required_seq_length = insertion_point + num_video * tokens_per_video
+        if required_seq_length > input_ids.shape[1]:
+            pad_extension = torch.full(
+                (B, required_seq_length - input_ids.shape[1]),
+                self.model_tester.pad_token_id,
+                dtype=input_ids.dtype,
+                device=input_ids.device,
+            )
+            input_ids = torch.cat([input_ids, pad_extension], dim=1)
+        timestamp_start_token_id = self.model_tester.vision_end_token_id + 1
+        self.assertLessEqual(timestamp_start_token_id + frame_timestamp_tokens, self.model_tester.vocab_size)
+        timestamp_token_ids = torch.arange(
+            timestamp_start_token_id,
+            timestamp_start_token_id + frame_timestamp_tokens,
+            device=input_ids.device,
+            dtype=input_ids.dtype,
+        )
 
-        self.assertLessEqual((B * patches_per_video) + insertion_point, self.model_tester.seq_length)
+        self.assertLessEqual(required_seq_length, input_ids.shape[1])
         for b in range(B):
-            # each frame is separated by a vision_start_token_id
-            for frame_idx in range(patch_T):
-                input_ids[b, insertion_point + frame_idx * (pathed_per_frame + 1)] = (
-                    self.model_tester.vision_start_token_id
-                )
-                input_ids[
-                    b,
-                    insertion_point + frame_idx * (pathed_per_frame + 1) + 1 : insertion_point
-                    + (frame_idx + 1) * (pathed_per_frame + 1),
-                ] = self.model_tester.video_token_id
+            for video_idx in range(num_video):
+                video_start = insertion_point + video_idx * tokens_per_video
+                for frame_idx in range(patch_T):
+                    frame_start = video_start + frame_idx * tokens_per_frame
+                    input_ids[b, frame_start : frame_start + frame_timestamp_tokens] = timestamp_token_ids
+
+                    vision_start_pos = frame_start + frame_timestamp_tokens
+                    input_ids[b, vision_start_pos] = self.model_tester.vision_start_token_id
+
+                    frame_token_start = vision_start_pos + 1
+                    frame_token_end = frame_token_start + pathed_per_frame
+                    input_ids[b, frame_token_start:frame_token_end] = self.model_tester.video_token_id
+
+                    input_ids[b, frame_token_end] = self.model_tester.vision_end_token_id
+
+        # build mm_token_type_ids
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == self.model_tester.video_token_id] = 2
 
         for model_class in self.all_model_classes:
             # TODO:we should remove this because we use timestamps for video
@@ -301,14 +279,59 @@ class Qwen3VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 input_ids=input_ids,
                 pixel_values_videos=pixel_values_videos,
                 video_grid_thw=video_grid_thw,
+                mm_token_type_ids=mm_token_type_ids,
             )
             self.assertIsNotNone(outputs)
 
+    # Need to be False as we only use a Transpose without modifying the keys
+    def test_reverse_loading_mapping(self, check_keys_were_modified=False):
+        super().test_reverse_loading_mapping(check_keys_were_modified)
+
 
 @require_torch
-class Qwen3VLMoeIntegrationTest(unittest.TestCase):
+class Qwen3VLMoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    maxDiff = None
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Assigned here rather than in the class body: `MemoryCleanupMixin` snapshots the class body and
+        # protects it from teardown, so a checkpoint parked on a class-body `model` is never released.
+        cls.model = None
+        cls.offload_dir = None
+        # device_map="auto" fills GPUs to ~100%, leaving no room for the transpose temporary
+        # buffer that fuses per-expert weight shards into a single gate_up_proj tensor during
+        # from_pretrained — causing CUDA OOM on multi-GPU runners. A 70% per-GPU max_memory cap
+        # reserves the headroom.
+        cls.max_memory = None
+        n = backend_device_count(torch_device)
+        if n > 0 and torch_device != "cpu":
+            torch_accel = getattr(torch, torch_device)
+            per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+            cls.max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            cls.max_memory["cpu"] = f"{int(get_cpu_ram_total_gib())}GiB"
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.offload_dir = tempfile.TemporaryDirectory()
+            cls.model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
+                "Qwen/Qwen3-VL-30B-A3B-Instruct",
+                dtype="auto",
+                device_map="auto",
+                max_memory=cls.max_memory,
+                offload_folder=cls.offload_dir.name,
+            )
+        return cls.model
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
+
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
 
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-30B-A3B-Instruct")
         self.processor.tokenizer.padding_side = "left"
@@ -318,7 +341,9 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -330,7 +355,9 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/coco_sample.png"
+                        ),
                     },
                     {"type": "text", "text": "What kind of dog is this?"},
                 ],
@@ -342,26 +369,24 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
             }
         ]
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
     @slow
     def test_small_model_integration_test(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
 
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        expected_input_ids = [151644, 872, 198, 151652, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655]  # fmt: skip
+        expected_input_ids = [151644, 872, 198, 151652, 151655, 151655, 151655, 151655,
+                              151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655, 151655]  # fmt: skip
         self.assertListEqual(expected_input_ids, inputs.input_ids[0].tolist()[:17])
 
         expected_pixel_slice = torch.tensor(
@@ -382,7 +407,13 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        EXPECTED_DECODED_TEXT = "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes"
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
+                ("xpu", 5): "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -390,9 +421,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
             batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -401,10 +430,23 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions"
-        ]  # fmt: skip
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                ],
+                ("xpu", 5): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and stepp",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -415,9 +457,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-VL-30B-A3B-Instruct", max_image_size={"longest_edge": 50176}
         )
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype=torch.float16, device_map="auto"
-        )
+        model = self.get_model()
         questions = ["How long is the video? Describe the it in short."]
         video_urls = ["https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"]
         messages = [
@@ -449,19 +489,25 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (*Otocolobus manul*), also known",
-            "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (also known as the manul), a wild f"
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (*Otocolobus manul*), also known",
+                    "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (also known as the **manul**), a",
+                ],
+                ("xpu", 5): [
+                    "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (*Otocolobus manul*), also known",
+                    "user\nWhat kind of dog is this?\nassistant\nThe animal in the image is not a dog. It is a **Pallas's cat** (also known as the manul), a wild f",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -469,19 +515,25 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand_with_video(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = self.get_model()
         inputs = self.processor.apply_chat_template(
             self.message3, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False, num_beams=2, num_return_sequences=2)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book.",
-            "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book."
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book.",
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book.",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through a book.",
+                    "user\n<0.3 seconds><1.3 seconds><2.4 seconds><3.5 seconds><4.6 seconds><5.6 seconds><6.7 seconds><7.8 seconds><8.9 seconds><9.7 seconds>Describe the video in short.\nassistant\nA baby wearing glasses sits on a bed and flips through the pages of a book.",
+                ],
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -490,116 +542,7 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
-        message_wo_image = [
-            {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
-        ]
-        batched_messages = [self.message, message_wo_image]
-        inputs = self.processor.apply_chat_template(
-            batched_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
-            "user\nWho are you?\nassistant\nI am Qwen, a large-scale language model developed by Alibaba Cloud's Tongyi Lab. I can assist you with answering questions, creating text such"
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct", dtype="auto", device_map="auto"
-        )
-        batched_messages = [self.message, self.message2]
-        inputs = self.processor.apply_chat_template(
-            batched_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-
-        EXPECTED_DECODED_TEXT = [
-            "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and steppes",
-            "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, the animals are not dogs. They are two cats.\n\nHere is a description of the animals in the image:\n\n-  "
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_flash_attn
-    @require_torch_accelerator
-    @pytest.mark.flash_attn_test
-    def test_small_model_integration_test_batch_flashatt2(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct",
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        batched_messages = [self.message, self.message2]
-        inputs = self.processor.apply_chat_template(
-            batched_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-        ).to(torch_device)
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-
-        # fmt: off
-        EXPECTED_DECODED_TEXTS = Expectations(
-            {
-                (None, None): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
-                               "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
-                              ],
-                ("xpu", None): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
-                                'user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere is a description of the scene:\n-'
-                              ],
-            }
-        )
-        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
-        # fmt: on
-
-        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
-        self.assertEqual(
-            DECODED_TEXT,
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_flash_attn
-    @require_torch_accelerator
-    @pytest.mark.flash_attn_test
-    def test_small_model_integration_test_batch_wo_image_flashatt2(self):
-        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen3-VL-30B-A3B-Instruct",
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
+        model = self.get_model()
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
         ]
@@ -620,6 +563,154 @@ class Qwen3VLMoeIntegrationTest(unittest.TestCase):
             "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
             "user\nWho are you?\nassistant\nI am Qwen, a large-scale language model developed by Alibaba Cloud's Tongyi Lab. I can assist you with answering questions, creating text such"
         ]  # fmt: skip
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    def test_small_model_integration_test_batch_different_resolutions(self):
+        model = self.get_model()
+        batched_messages = [self.message, self.message2]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        expected_decoded_texts = Expectations(
+            {
+                (None, None): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat species native to the grasslands and montane",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere is a description of the scene:\n-",
+                ],
+                ("xpu", 5): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we keep the
+    # loaded model (without FA) in `cls.model`. If this test is not run first, there is already a loaded model in
+    # `cls.model` when loading the flash attention model here, and we will get GPU OOM.
+    @run_first
+    @slow
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    def test_small_model_integration_test_batch_flashatt2(self):
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
+        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen3-VL-30B-A3B-Instruct",
+            dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+            device_map="auto",
+            max_memory=self.max_memory,
+            offload_folder=offload_dir.name,
+        )
+        batched_messages = [self.message, self.message2]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+                               "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
+                              ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+                    "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere is a description of the animals in the",
+                ],
+
+                ("xpu", 5): ["user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and montane regions",
+                                "user\nWhat kind of dog is this?\nassistant\nBased on the image provided, there is no dog present. The animals in the picture are two cats.\n\nHere are some observations about the cats in the"
+                                ],
+            }
+        )
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+        # fmt: on
+
+        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(
+            DECODED_TEXT,
+            EXPECTED_DECODED_TEXT,
+        )
+
+    # Run this test first because it needs to load the model with `flash_attention_2`. For other tests, we keep the
+    # loaded model (without FA) in `cls.model`. If this test is not run first, there is already a loaded model in
+    # `cls.model` when loading the flash attention model here, and we will get GPU OOM.
+    @run_first
+    @slow
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    def test_small_model_integration_test_batch_wo_image_flashatt2(self):
+        offload_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(offload_dir.cleanup)
+        model = Qwen3VLMoeForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen3-VL-30B-A3B-Instruct",
+            dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+            device_map="auto",
+            max_memory=self.max_memory,
+            offload_folder=offload_dir.name,
+        )
+        message_wo_image = [
+            {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
+        ]
+        batched_messages = [self.message, message_wo_image]
+        inputs = self.processor.apply_chat_template(
+            batched_messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+        ).to(torch_device)
+
+        # it should not matter whether two images are the same size or not
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a wild cat species native to the grasslands and montane regions",
+                    "user\nWho are you?\nassistant\nI am Qwen, a large-scale language model developed by Alibaba Cloud's Tongyi Lab. I can assist you with answering questions, creating text such",
+                ],
+                ("cuda", (8, 6)): [
+                    "user\nWhat kind of dog is this?\nassistant\nThis is a Pallas's cat, also known as the manul. It's a small wild cat native to the grasslands and steppes",
+                    "user\nWho are you?\nassistant\nI am Qwen, a large-scale language model developed by Alibaba Cloud's Tongyi Lab. I can assist you with answering questions, creating text such",
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),

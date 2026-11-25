@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Intel Labs, OpenMMLab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@ https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_hea
 import collections.abc
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torch import nn
@@ -30,61 +28,62 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states, load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.backbone_utils import load_backbone
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_dpt import DPTConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that also contains intermediate activations that can be used at later stages. Useful
     in the context of Vision models.:
     """
 )
+@dataclass
 class BaseModelOutputWithIntermediateActivations(ModelOutput):
     r"""
-    last_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_states (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
-    intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+    intermediate_activations (`tuple(torch.Tensor)`, *optional*):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_activations: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_states: torch.Tensor | None = None
+    intermediate_activations: tuple[torch.Tensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that also contains a pooling of the last hidden states as well as intermediate
     activations that can be used by the model at later stages.
     """
 )
+@dataclass
 class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
     r"""
-    pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+    pooler_output (`torch.Tensor` of shape `(batch_size, hidden_size)`):
         Last layer hidden-state of the first token of the sequence (classification token) after further processing
         through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
         the classification token after processing through a linear layer and a tanh activation function. The linear
         layer weights are trained from the next sentence prediction (classification) objective during pretraining.
-    intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
+    intermediate_activations (`tuple(torch.Tensor)`, *optional*):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    intermediate_activations: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.Tensor | None = None
+    pooler_output: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
+    intermediate_activations: tuple[torch.Tensor, ...] | None = None
 
 
 class DPTViTHybridEmbeddings(nn.Module):
@@ -94,7 +93,7 @@ class DPTViTHybridEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config: DPTConfig, feature_size: Optional[tuple[int, int]] = None):
+    def __init__(self, config: DPTConfig, feature_size: tuple[int, int] | None = None):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
@@ -132,7 +131,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        old_grid_size = torch_int(len(posemb_grid) ** 0.5)
+        old_grid_size = torch_int(posemb_grid.shape[0] ** 0.5)
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
         posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
@@ -275,8 +274,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -287,7 +286,6 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -299,7 +297,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DPT
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DPT
 class DPTSelfAttention(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -321,7 +319,11 @@ class DPTSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
 
@@ -329,9 +331,9 @@ class DPTSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -342,6 +344,7 @@ class DPTSelfAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scaling,
             dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -350,7 +353,7 @@ class DPTSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViTConfig->DPTConfig, ViTSelfOutput->DPTViTSelfOutput
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DPTConfig, ViTSelfOutput->DPTViTSelfOutput
 class DPTViTSelfOutput(nn.Module):
     """
     The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
@@ -368,20 +371,24 @@ class DPTViTSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DPTConfig, ViTSelfAttention->DPTSelfAttention, ViTSelfOutput->DPTViTSelfOutput
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DPTConfig, ViTSelfAttention->DPTSelfAttention, ViTSelfOutput->DPTViTSelfOutput
 class DPTViTAttention(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
         self.attention = DPTSelfAttention(config)
         self.output = DPTViTSelfOutput(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViTConfig->DPTConfig, ViTIntermediate->DPTViTIntermediate
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP with ViTConfig->DPTConfig, ViTIntermediate->DPTViTIntermediate
 class DPTViTIntermediate(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -397,7 +404,7 @@ class DPTViTIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViTConfig->DPTConfig, ViTOutput->DPTViTOutput
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP with ViTConfig->DPTConfig, ViTOutput->DPTViTOutput
 class DPTViTOutput(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -411,7 +418,7 @@ class DPTViTOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViTConfig->DPTConfig, ViTAttention->DPTViTAttention, ViTIntermediate->DPTViTIntermediate, ViTOutput->DPTViTOutput, ViTLayer->DPTViTLayer
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTLayer with ViTConfig->DPTConfig, ViTAttention->DPTViTAttention, ViTIntermediate->DPTViTIntermediate, ViTOutput->DPTViTOutput, ViTLayer->DPTViTLayer
 class DPTViTLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -425,9 +432,13 @@ class DPTViTLayer(GradientCheckpointingLayer):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm)
+        attention_output = self.attention(hidden_states_norm, **kwargs)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -440,27 +451,6 @@ class DPTViTLayer(GradientCheckpointingLayer):
         layer_output = self.output(layer_output, hidden_states)
 
         return layer_output
-
-
-# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Encoder with Dinov2Config->DPTConfig, Dinov2->DPTViT
-class DPTViTEncoder(nn.Module):
-    def __init__(self, config: DPTConfig):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
-        all_hidden_states = [hidden_states] if output_hidden_states else None
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states)
-            if all_hidden_states:
-                all_hidden_states.append(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
-        )
 
 
 class DPTReassembleStage(nn.Module):
@@ -532,7 +522,7 @@ class DPTReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         out = []
@@ -568,7 +558,7 @@ class DPTReassembleStage(nn.Module):
 
 
 def _get_backbone_hidden_size(config):
-    if config.backbone_config is not None and config.is_hybrid is False:
+    if config.backbone_config is not None and hasattr(config.backbone_config, "hidden_size"):
         return config.backbone_config.hidden_size
     else:
         return config.hidden_size
@@ -701,7 +691,7 @@ class DPTFeatureFusionLayer(nn.Module):
         self.residual_layer1 = DPTPreActResidualLayer(config)
         self.residual_layer2 = DPTPreActResidualLayer(config)
 
-    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -730,16 +720,31 @@ class DPTPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
+        "hidden_states": DPTViTLayer,
         "attentions": DPTSelfAttention,
     }
 
-    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, (DPTViTEmbeddings, DPTViTHybridEmbeddings)):
             init.zeros_(module.cls_token)
             init.zeros_(module.position_embeddings)
+
+
+class DPTViTEncoder(nn.Module):
+    def __init__(self, config: DPTConfig):
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([DPTViTLayer(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(
+        self, hidden_states: torch.Tensor, output_hidden_states: bool = False, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -771,23 +776,18 @@ class DPTModel(DPTPreTrainedModel):
         else:
             return self.embeddings.patch_embeddings
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
-        **kwargs,
+        pixel_values: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPoolingAndIntermediateActivations:
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         embedding_output: BaseModelOutputWithIntermediateActivations = self.embeddings(pixel_values)
         embedding_last_hidden_states = embedding_output.last_hidden_states
 
-        encoder_outputs: BaseModelOutput = self.encoder(
-            embedding_last_hidden_states, output_hidden_states=output_hidden_states
-        )
+        encoder_outputs: BaseModelOutput = self.encoder(embedding_last_hidden_states, **kwargs)
         sequence_output = encoder_outputs.last_hidden_state
 
         sequence_output = self.layernorm(sequence_output)
@@ -797,11 +797,10 @@ class DPTModel(DPTPreTrainedModel):
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             intermediate_activations=embedding_output.intermediate_activations,
-            hidden_states=encoder_outputs.hidden_states,
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViTConfig->DPTConfig, ViTPooler->DPTViTPooler
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTPooler with ViTConfig->DPTConfig, ViTPooler->DPTViTPooler
 class DPTViTPooler(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -849,12 +848,12 @@ class DPTNeck(nn.Module):
     def forward(
         self,
         hidden_states: list[torch.Tensor],
-        patch_height: Optional[int] = None,
-        patch_width: Optional[int] = None,
+        patch_height: int | None = None,
+        patch_width: int | None = None,
     ) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -921,11 +920,11 @@ class DPTDepthEstimationHead(nn.Module):
     """
 )
 class DPTForDepthEstimation(DPTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DPTConfig):
         super().__init__(config)
 
         self.backbone = None
-        if config.is_hybrid is False and (config.backbone_config is not None or config.backbone is not None):
+        if config.is_hybrid is False and config.backbone_config is not None:
             self.backbone = load_backbone(config)
         else:
             self.dpt = DPTModel(config, add_pooling_layer=False)
@@ -941,27 +940,26 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        **kwargs,
+        pixel_values: torch.Tensor,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, DPTForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large")
         >>> model = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
@@ -984,19 +982,15 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
-
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
         if self.backbone is not None:
-            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
             hidden_states = outputs.feature_maps
         else:
-            outputs = self.dpt(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.dpt(pixel_values, **kwargs)
             hidden_states = outputs.hidden_states
             # only keep certain features based on config.backbone_out_indices
             # note that the hidden_states also include the initial embeddings
@@ -1026,7 +1020,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -1090,26 +1084,24 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        **kwargs,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, DPTForSemanticSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("Intel/dpt-large-ade")
         >>> model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade")
@@ -1119,15 +1111,10 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(
-            pixel_values, output_hidden_states=True, **kwargs
-        )
+        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
 
         # only keep certain features based on config.backbone_out_indices
@@ -1170,7 +1157,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

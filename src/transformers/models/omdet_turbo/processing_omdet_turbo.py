@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,7 @@
 Processor class for OmDet-Turbo.
 """
 
-import warnings
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -26,19 +24,20 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Un
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     TensorType,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
+    logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
+
+
+logger = logging.get_logger(__name__)
 
 
 if TYPE_CHECKING:
     from .modeling_omdet_turbo import OmDetTurboObjectDetectionOutput
-
-
-class OmDetTurboTextKwargs(TextKwargs, total=False):
-    task: Optional[Union[str, list[str], TextInput, PreTokenizedInput]]
-
 
 if is_torch_available():
     import torch
@@ -48,43 +47,20 @@ if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
 
 
-class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: OmDetTurboTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 77,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-            "task": None,
-        },
-    }
+class DeprecatedOmDetTurboTextKwargs(TextKwargs, total=False):
+    """
+    task (`str`, `list[str]`, `TextInput`, or `PreTokenizedInput`, *optional*):
+        Deprecated, pass directly as `task` to [`OmDetTurboProcessor.__call__`] instead.
+        The detection task description(s) to encode. If not provided, a default task description is generated
+        from the `text` input (e.g., "Detect {text}."). Can be a single string, a list of strings (one per image),
+        or pre-tokenized input. The task description guides the model on what objects to detect in the images.
+    """
+
+    task: str | list[str] | TextInput | PreTokenizedInput | None
 
 
-class DictWithDeprecationWarning(dict):
-    message = (
-        "The `classes` key is deprecated for `OmDetTurboProcessor.post_process_grounded_object_detection` "
-        "output dict and will be removed in a 4.51.0 version. Please use `text_labels` instead."
-    )
-
-    def __getitem__(self, key):
-        if key == "classes":
-            warnings.warn(self.message, FutureWarning)
-            return super().__getitem__("text_labels")
-        return super().__getitem__(key)
-
-    def get(self, key, *args, **kwargs):
-        if key == "classes":
-            warnings.warn(self.message, FutureWarning)
-            return super().get("text_labels", *args, **kwargs)
-        return super().get(key, *args, **kwargs)
+class DeprecatedOmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: DeprecatedOmDetTurboTextKwargs
 
 
 def clip_boxes(box, box_size: tuple[int, int]):
@@ -129,7 +105,7 @@ def _post_process_boxes_for_image(
     image_size: tuple[int, int],
     threshold: float,
     nms_threshold: float,
-    max_num_det: Optional[int] = None,
+    max_num_det: int | None = None,
 ) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     """
     Filter predicted results using given thresholds and NMS.
@@ -199,56 +175,36 @@ def _post_process_boxes_for_image(
 
 
 @requires(backends=("vision", "torchvision"))
+@auto_docstring
 class OmDetTurboProcessor(ProcessorMixin):
-    r"""
-    Constructs a OmDet-Turbo processor which wraps a Deformable DETR image processor and an AutoTokenizer into a
-    single processor.
-
-    [`OmDetTurboProcessor`] offers all the functionalities of [`DetrImageProcessor`] and
-    [`AutoTokenizer`]. See the docstring of [`~OmDetTurboProcessor.__call__`] and [`~OmDetTurboProcessor.decode`]
-    for more information.
-
-    Args:
-        image_processor (`DetrImageProcessor`):
-            An instance of [`DetrImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
-    """
+    text_kwargs = {
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 77,
+        "return_token_type_ids": False,
+    }
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[list[str], list[list[str]]]] = None,
-        **kwargs: Unpack[OmDetTurboProcessorKwargs],
+        images: ImageInput | None = None,
+        text: list[str] | list[list[str]] | None = None,
+        task: str | list[str] | TextInput | PreTokenizedInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
-        """
-        This method uses [*DetrImageProcessor.__call__] method to prepare image(s) for the model, and
-        [CLIPTokenizerFast.__call__] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-
-        Args:
-            images (`ImageInput`):
-               Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            text (`Union[str, list[str], list[list[str]]]`):
-                The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
-                of list of strings. Batched classes can be of different lengths.
-                Examples: ["cat", "dog", "bird"], [["cat", "dog", "bird"], ["hat", "person"], ["car"]]
-        Kwargs:
-            task (`Union[str, list[str], TextInput, PreTokenizedInput]`):
-                The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
-                Examples: "Detect a cat, a dog, and a bird.",[ "Detect everything.", "Detect trees and flowers."]
-                When not provided, the default task is "Detect [class1], [class2], [class3]" etc.
-            ...
+        r"""
+        task (`str`, `list[str]`, `TextInput`, or `PreTokenizedInput`, *optional*):
+            The detection task description(s) to encode. If not provided, a default task description is generated
+            from the `text` input (e.g., "Detect {text}."). Can be a single string, a list of strings (one per image),
+            or pre-tokenized input. The task description guides the model on what objects to detect in the images.
         """
         if images is None or text is None:
             raise ValueError("You have to specify both `images` and `text`")
 
         output_kwargs = self._merge_kwargs(
-            OmDetTurboProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -259,9 +215,16 @@ class OmDetTurboProcessor(ProcessorMixin):
         if not (len(text) and isinstance(text[0], (list, tuple))):
             text = [text]
 
-        task = output_kwargs["text_kwargs"].pop("task", None)
+        if "task" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `task` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+
+        # "text_kwargs" has priority for backwards compatibility
+        task = output_kwargs["text_kwargs"].pop("task", task)
         if task is None:
-            task = ["Detect {}.".format(", ".join(text_single)) for text_single in text]
+            task = [f"Detect {', '.join(text_single)}." for text_single in text]
         elif not isinstance(task, (list, tuple)):
             task = [task]
 
@@ -310,11 +273,11 @@ class OmDetTurboProcessor(ProcessorMixin):
     def post_process_grounded_object_detection(
         self,
         outputs: "OmDetTurboObjectDetectionOutput",
-        text_labels: Optional[Union[list[str], list[list[str]]]] = None,
+        text_labels: list[str] | list[list[str]] | None = None,
         threshold: float = 0.3,
         nms_threshold: float = 0.5,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-        max_num_det: Optional[int] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
+        max_num_det: int | None = None,
     ):
         """
         Converts the raw output of [`OmDetTurboForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -385,9 +348,7 @@ class OmDetTurboProcessor(ProcessorMixin):
                 nms_threshold=nms_threshold,
                 max_num_det=max_num_det,
             )
-            result = DictWithDeprecationWarning(
-                {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
-            )
+            result = {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
             results.append(result)
 
         # Add text labels
@@ -397,5 +358,13 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         return results
 
+
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "OmDetTurboProcessorKwargs": (DeprecatedOmDetTurboProcessorKwargs, "5.29.0"),
+        "OmDetTurboTextKwargs": (DeprecatedOmDetTurboTextKwargs, "5.29.0"),
+    },
+)
 
 __all__ = ["OmDetTurboProcessor"]

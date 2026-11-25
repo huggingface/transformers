@@ -14,7 +14,7 @@
 """
 File utilities: utilities related to download and cache models
 
-This module should not be update anymore and is only left for backward compatibility.
+This module should not be updated anymore and is only left for backward compatibility.
 """
 
 from . import __version__
@@ -63,10 +63,8 @@ from .utils import (
     is_datasets_available,
     is_detectron2_available,
     is_faiss_available,
-    is_ftfy_available,
     is_g2p_en_available,
     is_in_notebook,
-    is_ipex_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,

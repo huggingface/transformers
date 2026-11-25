@@ -52,8 +52,6 @@ pip install torch
 | 개체명 인식      | 문자열의 각 토큰마다 알맞은 레이블 붙이기 (인물, 조직, 장소 등등)     | 자연어 처리(NLP) | pipeline(task="ner")                          |
 | 질의응답         | 주어진 문맥과 질문에 따라 올바른 대답하기                           | 자연어 처리(NLP) | pipeline(task="question-answering")           |
 | 빈칸 채우기      | 문자열의 빈칸에 알맞은 토큰 맞추기                                  | 자연어 처리(NLP) | pipeline(task="fill-mask")                    |
-| 요약             | 텍스트나 문서를 요약하기                                            | 자연어 처리(NLP) | pipeline(task="summarization")                |
-| 번역             | 텍스트를 한 언어에서 다른 언어로 번역하기                           | 자연어 처리(NLP) | pipeline(task="translation")                  |
 | 이미지 분류      | 이미지에 알맞은 레이블 붙이기                                         | 컴퓨터 비전(CV)  | pipeline(task="image-classification")         |
 | 이미지 분할      | 이미지의 픽셀마다 레이블 붙이기(시맨틱, 파놉틱 및 인스턴스 분할 포함) | 컴퓨터 비전(CV)  | pipeline(task="image-segmentation")           |
 | 객체 탐지        | 이미지 속 객체의 경계 상자를 그리고 클래스를 예측하기               | 컴퓨터 비전(CV)  | pipeline(task="object-detection")             |

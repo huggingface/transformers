@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_hgnet_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,17 +19,17 @@
 # limitations under the License.
 
 
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ...utils.backbone_utils import BackboneMixin
+from ...utils.generic import can_return_tuple
 from .configuration_hgnet_v2 import HGNetV2Config
 
 
@@ -44,6 +43,15 @@ class HGNetV2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["HGNetV2BasicLayer"]
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        # We need to check it like that as d_fine models replace the BatchNorm2d by their own
+        if "BatchNorm" in module.__class__.__name__:
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
 
 
 class HGNetV2LearnableAffineBlock(nn.Module):
@@ -127,7 +135,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[0],
             config.stem_channels[1],
             kernel_size=3,
-            stride=2,
+            stride=config.stem_strides[0],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -135,7 +143,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1],
             config.stem_channels[1] // 2,
             kernel_size=2,
-            stride=1,
+            stride=config.stem_strides[1],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -143,7 +151,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1] // 2,
             config.stem_channels[1],
             kernel_size=2,
-            stride=1,
+            stride=config.stem_strides[2],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -151,7 +159,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1] * 2,
             config.stem_channels[1],
             kernel_size=3,
-            stride=2,
+            stride=config.stem_strides[3],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -159,7 +167,7 @@ class HGNetV2Embeddings(nn.Module):
             config.stem_channels[1],
             config.stem_channels[2],
             kernel_size=1,
-            stride=1,
+            stride=config.stem_strides[4],
             activation=config.hidden_act,
             use_learnable_affine_block=config.use_learnable_affine_block,
         )
@@ -268,10 +276,11 @@ class HGNetV2Stage(nn.Module):
         light_block = config.stage_light_block[stage_index]
         kernel_size = config.stage_kernel_size[stage_index]
         use_learnable_affine_block = config.use_learnable_affine_block
+        stride = config.stage_downsample_strides[stage_index]
 
         if downsample:
             self.downsample = HGNetV2ConvLayer(
-                in_channels, in_channels, kernel_size=3, stride=2, groups=in_channels, activation=None
+                in_channels, in_channels, kernel_size=3, stride=stride, groups=in_channels, activation=None
             )
         else:
             self.downsample = nn.Identity()
@@ -331,12 +340,11 @@ class HGNetV2Encoder(nn.Module):
         )
 
 
-class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
+class HGNetV2Backbone(BackboneMixin, HGNetV2PreTrainedModel):
     has_attentions = False
 
     def __init__(self, config: HGNetV2Config):
         super().__init__(config)
-        super()._init_backbone(config)
         self.depths = config.depths
         self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = HGNetV2Embeddings(config)
@@ -345,12 +353,14 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""
@@ -372,7 +382,7 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 2048, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -426,27 +436,24 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Examples:
         ```python
         >>> import torch
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
         >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
         >>> processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")
@@ -457,7 +464,7 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         >>> outputs.logits.shape
         torch.Size([1, 2])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

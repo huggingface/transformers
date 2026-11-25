@@ -48,7 +48,6 @@ class Qwen3MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Qwen3MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = Qwen3MoeModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -208,7 +207,7 @@ class Qwen3MoeIntegrationTest(unittest.TestCase):
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
-        set_seed(0)
+        set_seed(42)
         generated_ids = model.generate(
             input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
         )

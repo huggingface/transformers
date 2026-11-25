@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
+import pytest
 
 from transformers import CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
 from transformers.testing_utils import (
@@ -29,7 +29,9 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -51,42 +53,35 @@ if is_vision_available():
     from PIL import Image
 
 
-class CLIPSegVisionModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
-        num_channels=3,
-        is_training=True,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
+class CLIPSegVisionModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "image_size": 30,
+        "patch_size": 2,
+        "num_channels": 3,
+        "is_training": True,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
 
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        values["seq_length"] = (values["image_size"] // values["patch_size"]) ** 2 + 1
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -135,6 +130,8 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = CLIPSegVisionModelTester
+
     all_model_classes = (CLIPSegVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
@@ -142,7 +139,7 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=36
         )
 
     def test_config(self):
@@ -177,24 +174,20 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -204,42 +197,30 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class CLIPSegTextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=12,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        scope=None,
-    ):
+class CLIPSegTextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 12,
+        "seq_length": 7,
+        "is_training": True,
+        "use_input_mask": True,
+        "use_labels": True,
+        "vocab_size": 99,
+        "hidden_size": 32,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "intermediate_size": 37,
+        "dropout": 0.1,
+        "attention_dropout": 0.1,
+        "max_position_embeddings": 512,
+        "initializer_range": 0.02,
+        "scope": None,
+    }
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.scope = scope
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -262,6 +243,7 @@ class CLIPSegTextModelTester:
     def get_config(self):
         return CLIPSegTextConfig(
             vocab_size=self.vocab_size,
+            eos_token_id=self.vocab_size - 1,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -291,13 +273,15 @@ class CLIPSegTextModelTester:
 
 @require_torch
 class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
+    model_tester_class = CLIPSegTextModelTester
+
     all_model_classes = (CLIPSegTextModel,) if is_torch_available() else ()
 
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = CLIPSegTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPSegTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLIPSegTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -306,24 +290,20 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="CLIPSeg does not use inputs_embeds")
@@ -337,27 +317,32 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-class CLIPSegModelTester:
-    def __init__(
-        self,
-        parent,
-        text_kwargs=None,
-        vision_kwargs=None,
-        is_training=True,
+class CLIPSegModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "is_training": True,
         # This should respect the `num_hidden_layers` in `CLIPSegVisionModelTester`
-        extract_layers=(1,),
-    ):
+        "extract_layers": (1,),
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, text_kwargs=None, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        text_values = CLIPSegTextModelTester.get_small_config_defaults(**(text_kwargs or {}))
+        values["batch_size"] = text_values["batch_size"]  # need bs for batching_equivalence test
+        return values
+
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, **kwargs):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
             vision_kwargs = {}
 
         self.parent = parent
+        for key, value in self.get_small_config_defaults(text_kwargs=text_kwargs, **kwargs).items():
+            setattr(self, key, value)
         self.text_model_tester = CLIPSegTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = CLIPSegVisionModelTester(parent, **vision_kwargs)
-        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
-        self.is_training = is_training
-        self.extract_layers = extract_layers
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -406,6 +391,12 @@ class CLIPSegModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask, pixel_values = config_and_inputs
+
+        # Ensure eos pooling uses an unmasked token
+        eos_id = config.text_config.eos_token_id
+        input_ids[input_ids == eos_id] = 3
+        input_ids[:, -2] = eos_id
+
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -416,11 +407,14 @@ class CLIPSegModelTester:
 
 @require_torch
 class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    model_tester_class = CLIPSegModelTester
+
     all_model_classes = (CLIPSegModel, CLIPSegForImageSegmentation) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": CLIPSegModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # CLIPSegForImageSegmentation requires special treatment
@@ -451,6 +445,10 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_for_image_segmentation(*config_and_inputs)
 
+    @unittest.skip(reason="ClipSeg can;t compile due to the decoder module")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -467,23 +465,23 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    @pytest.mark.xfail(
+        reason="CLIPSegForImageSegmentation does not expose input embeddings. Gradients cannot flow back to the token embeddings when using gradient checkpointing."
     )
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    @pytest.mark.xfail(
+        reason="CLIPSegForImageSegmentation does not expose input embeddings. Gradients cannot flow back to the token embeddings when using gradient checkpointing."
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(
+        reason="CLIPSegForImageSegmentation does not expose input embeddings. Gradients cannot flow back to the token embeddings when using gradient checkpointing."
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -531,8 +529,8 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    image = load_test_image(url)
     return image
 
 
@@ -566,7 +564,7 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
 
         # verify conditional and pooled output
         expected_conditional = torch.tensor([0.5601, -0.0314, 0.1980]).to(torch_device)
-        expected_pooled_output = torch.tensor([0.5036, -0.2681, -0.2644]).to(torch_device)
+        expected_pooled_output = torch.tensor([0.4986, -0.2698, -0.2631]).to(torch_device)
         torch.testing.assert_close(outputs.conditional_embeddings[0, :3], expected_conditional, rtol=1e-3, atol=1e-3)
         torch.testing.assert_close(outputs.pooled_output[0, :3], expected_pooled_output, rtol=1e-3, atol=1e-3)
 
@@ -600,7 +598,11 @@ class CLIPSegModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.1538, 0.0322, -0.3235], [0.2893, 0.1135, -0.5708], [0.0461, 0.1540, -0.6018]]
+            [
+                [-0.1552, 0.0314, -0.3233],
+                [0.2886, 0.1141, -0.5706],
+                [0.0468, 0.1569, -0.6028],
+            ]
         ).to(torch_device)
 
         torch.testing.assert_close(

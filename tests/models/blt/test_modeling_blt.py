@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Blt model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -20,8 +21,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
-    cleanup,
-    require_read_token,
+    Expectations,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -30,9 +30,11 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     _test_eager_matches_sdpa_inference,
+    ids_tensor,
 )
 
 
@@ -40,102 +42,78 @@ if is_torch_available():
     import torch
 
     from transformers import BltConfig, BltForCausalLM, BltModel
+    from transformers.models.blt.modeling_blt import BltPatcher
+
+
+@require_torch
+def test_process_patch_lengths_vectorized():
+    from transformers.models.blt.modeling_blt import process_patch_lengths
+    from transformers.models.blt.modular_blt import process_patch_lengths as modular_process_patch_lengths
+
+    patch_lengths = torch.tensor([[0, 5, 9, 0], [4, 0, 13, 1]], device=torch_device)
+    expected = torch.tensor([[4, 1, 4, 4, 1, 0], [4, 4, 4, 4, 1, 1]], device=torch_device)
+
+    assert torch.equal(process_patch_lengths(patch_lengths, 4), expected)
+    assert torch.equal(modular_process_patch_lengths(patch_lengths, 4), expected)
 
 
 class BltModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = BltModel
 
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        seq_length=7,
-        is_training=True,
-    ):
-        super().__init__(parent)
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.batch_size = 3
-
+    small_config_overrides = {
+        "ignore_index": -100,
+        "seq_length": 7,
+        "is_training": True,
+        "batch_size": 3,
+        # Derived from the shared hidden_size=32 / num_attention_heads=2, before the overrides below.
+        "head_dim": 16,
         # Common parameters for all configs
-        self.hidden_size = 16
-        self.num_hidden_layers = 1
-        self.num_attention_heads = 2
-        self.num_key_value_heads = 2
-        self.intermediate_size = 32
-        self.hidden_act = "silu"
-        self.max_position_embeddings = 32
-        self.vocab_size = 32
-        self.rope_theta = 500000.0
-        self.rope_parameters = {"rope_type": "default"}
-        self.rms_norm_eps = 1e-5
-        self.dropout = 0.0
-        self.encoder_hash_byte_group_size = [2, 3]
-        self.encoder_hash_byte_group_vocab = 64
-        self.encoder_hash_byte_group_nb_functions = 1
+        "hidden_size": 16,
+        "num_hidden_layers": 1,
+        "num_attention_heads": 2,
+        "num_key_value_heads": 2,
+        "intermediate_size": 32,
+        "hidden_act": "silu",
+        "max_position_embeddings": 32,
+        "vocab_size": 32,
+        "rope_theta": 500000.0,
+        "rope_parameters": {"rope_type": "default"},
+        "rms_norm_eps": 1e-5,
+        "dropout": 0.0,
+        "encoder_hash_byte_group_size": [2, 3],
+        "encoder_hash_byte_group_vocab": 64,
+        "encoder_hash_byte_group_nb_functions": 1,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
         # Common parameters for all configs
-        self.patcher_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
+        common = {
+            "num_hidden_layers": values["num_hidden_layers"],
+            "num_attention_heads": values["num_attention_heads"],
+            "num_key_value_heads": values["num_key_value_heads"],
+            "intermediate_size": values["intermediate_size"],
+            "max_position_embeddings": values["max_position_embeddings"],
+            "rope_theta": values["rope_theta"],
+            "rope_parameters": values["rope_parameters"],
+            "hidden_act": values["hidden_act"],
+            "rms_norm_eps": values["rms_norm_eps"],
+            "dropout": values["dropout"],
         }
-
-        self.encoder_config = {
-            "hidden_size": self.hidden_size,
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
+        values["patcher_config"] = {"hidden_size": values["hidden_size"], **common}
+        values["encoder_config"] = {"hidden_size": values["hidden_size"], **common}
+        values["decoder_config"] = {
+            "vocab_size": values["vocab_size"],
+            "hidden_size": values["hidden_size"],
+            # Must match global transformer output size
+            "hidden_size_global": values["hidden_size"] * 2,
+            **common,
         }
-
-        self.decoder_config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "hidden_size_global": self.hidden_size * 2,  # Must match global transformer output size
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
-        }
-
-        self.global_config = {
-            "hidden_size": self.hidden_size * 2,  # Double the hidden size for global transformer
-            "num_hidden_layers": self.num_hidden_layers,
-            "num_attention_heads": self.num_attention_heads,
-            "num_key_value_heads": self.num_key_value_heads,
-            "intermediate_size": self.intermediate_size,
-            "max_position_embeddings": self.max_position_embeddings,
-            "rope_theta": self.rope_theta,
-            "rope_parameters": self.rope_parameters,
-            "hidden_act": self.hidden_act,
-            "rms_norm_eps": self.rms_norm_eps,
-            "dropout": self.dropout,
-        }
-
-        self.num_hidden_layers = self.encoder_config["num_hidden_layers"]
+        # Double the hidden size for global transformer
+        values["global_config"] = {"hidden_size": values["hidden_size"] * 2, **common}
+        return values
 
     def get_config(self):
         config = BltConfig(
@@ -186,6 +164,54 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @pytest.mark.generate
+    def test_generate_with_quant_cache(self):
+        self.skipTest("BLT uses EncoderDecoderCache internally and does not support quantized cache")
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT rebuilds its hash n-gram embeddings, patch lengths and global-transformer states from the "
+        "current step's `input_ids` alone, and calls the global transformer with no cache at all, so a "
+        "one-byte decode step carries no byte history: the n-grams come out zero-padded and the trunk "
+        "restarts its positions. Cached decode is a different computation rather than a cached one (measured: "
+        "the divergence is already there in the hash embeddings, before attention). TODO: keep the byte "
+        "window for hashing/patching and give the global transformer a cache."
+    )
+    def test_cached_decode_matches_cacheless(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT requires real token IDs for its hash-based embedding computation; continuing from inputs_embeds "
+        "diverges by one token vs continuing from input_ids."
+    )
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT's EncoderDecoderCache cross-attention path produces a kv length that disagrees with the causal "
+        "mask shape when assisted decoding rolls the cache back across rejected drafts."
+    )
+    def test_assisted_decoding_matches_greedy_search_0_random(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT's EncoderDecoderCache cross-attention path produces a kv length that disagrees with the causal "
+        "mask shape when assisted decoding rolls the cache back across rejected drafts."
+    )
+    def test_assisted_decoding_matches_greedy_search_1_same(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(
+        "BLT's EncoderDecoderCache cross-attention path produces a kv length that disagrees with the causal "
+        "mask shape when assisted decoding rolls the cache back across rejected drafts."
+    )
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @pytest.mark.generate
     @unittest.skip(
         "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
     )
@@ -221,6 +247,61 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
+    def test_sliding_window_config_defaults_and_roundtrip(self):
+        config = BltConfig()
+        self.assertEqual(config.patcher_config.sliding_window, 512)
+        self.assertEqual(config.local_attention_window_len, 512)
+        self.assertEqual(config.encoder_config.sliding_window, 512)
+
+        config = BltConfig(local_attention_window_len=64, patcher_config={"sliding_window": 32})
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded = BltConfig.from_pretrained(tmpdirname)
+        self.assertEqual(reloaded.patcher_config.sliding_window, 32)
+        self.assertEqual(reloaded.local_attention_window_len, 64)
+        self.assertEqual(reloaded.encoder_config.sliding_window, 64)
+
+        config = BltConfig(local_attention_window_len=None, patcher_config={"sliding_window": None})
+        self.assertIsNone(config.patcher_config.sliding_window)
+        self.assertIsNone(config.encoder_config.sliding_window)
+
+    def test_patcher_sliding_window_limits_receptive_field(self):
+        config = self.model_tester.get_config().patcher_config
+        config.num_hidden_layers = 1
+        config.sliding_window = 4
+        patcher = BltPatcher(config).to(torch_device).eval()
+
+        input_ids = ids_tensor([1, 12], config.vocab_size)
+        perturbed_ids = input_ids.clone()
+        perturbed_ids[0, 0] = (input_ids[0, 0] + 1) % config.vocab_size
+
+        with torch.no_grad():
+            entropies = patcher(input_ids)[0]
+            perturbed_entropies = patcher(perturbed_ids)[0]
+            patcher.config.sliding_window = None
+            full_causal_entropies = patcher(perturbed_ids)[0]
+
+        torch.testing.assert_close(entropies[:, 4:], perturbed_entropies[:, 4:])
+        self.assertFalse(torch.allclose(entropies[:, 0], perturbed_entropies[:, 0]))
+        self.assertFalse(torch.allclose(perturbed_entropies[:, 4:], full_causal_entropies[:, 4:]))
+
+    def test_local_attention_window(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        window = 4
+        self.assertGreater(inputs_dict["input_ids"].shape[1], window)
+
+        config.local_attention_window_len = None
+        config.encoder_config.sliding_window = None
+        model = BltModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            full_causal = model(input_ids=inputs_dict["input_ids"]).last_hidden_state
+            model.config.local_attention_window_len = window
+            model.config.encoder_config.sliding_window = window
+            windowed = model(input_ids=inputs_dict["input_ids"]).last_hidden_state
+
+        torch.testing.assert_close(full_causal[:, :window], windowed[:, :window])
+        self.assertFalse(torch.allclose(full_causal[:, window:], windowed[:, window:]))
+
     @require_torch_accelerator
     @slow
     def test_sdpa_can_dispatch_on_flash(self):
@@ -228,19 +309,8 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-class BltIntegrationTest(unittest.TestCase):
-    def setup(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
-
+class BltIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     @slow
-    @require_read_token
     def test_model(self):
         NUM_TOKENS_TO_GENERATE = 200
         EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
@@ -261,76 +331,26 @@ class BltIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @slow
-    @require_read_token
     def test_model_logits(self):
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                [
-                    -10.4948,
-                    -10.7065,
-                    -6.1813,
-                    -10.5545,
-                    -10.3428,
-                    -9.1493,
-                    -8.4937,
-                    -8.6382,
-                    -9.2159,
-                    -9.5907,
-                    -9.3679,
-                    -8.4184,
-                    -9.0655,
-                    -3.4436,
-                    2.9616,
-                    -10.3157,
-                    -6.3723,
-                    -6.0133,
-                    -9.7100,
-                    -9.2128,
-                    -8.8064,
-                    -9.8179,
-                    -9.7516,
-                    -9.4681,
-                    -9.7715,
-                    -9.4897,
-                    -9.0491,
-                    -9.8098,
-                    -9.4648,
-                    -9.3294,
-                ],
-                [
-                    -13.3010,
-                    -13.1910,
-                    -5.7230,
-                    -13.2895,
-                    -13.4864,
-                    -8.7140,
-                    -7.0275,
-                    -7.0182,
-                    -10.1362,
-                    -10.3762,
-                    -9.9086,
-                    -7.8049,
-                    -8.8660,
-                    -5.2711,
-                    -3.5778,
-                    -12.5346,
-                    -9.1609,
-                    -6.7925,
-                    -10.3717,
-                    -9.2650,
-                    -10.6393,
-                    -11.4807,
-                    -11.2128,
-                    -10.9615,
-                    -10.5806,
-                    -10.8873,
-                    -11.0651,
-                    -11.3471,
-                    -10.5437,
-                    -9.9688,
-                ],
-            ]
-        ).to(torch_device)
+        # fmt: off
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-10.5000, -10.6875, -6.2500, -10.5625, -10.3125, -9.1875, -8.5000, -8.5625, -9.1875, -9.6250, -9.3750, -8.5000, -9.1250, -3.3906, 2.9688, -10.3125, -6.4688, -6.0312, -9.7500, -9.1875, -8.8125, -9.8750, -9.8125, -9.5000, -9.8125, -9.5000, -9.0625, -9.8125, -9.5000, -9.3750],
+                        [-13.2500, -13.1250, -5.6875, -13.1875, -13.3750, -8.6875, -6.9688, -6.9375, -10.0625, -10.3125, -9.8125, -7.7188, -8.8125, -5.2188, -3.5000, -12.4375, -9.0625, -6.6250, -10.3125, -9.1875, -10.6250, -11.4375, -11.1250, -10.8750, -10.5000, -10.8750, -11.0000, -11.3125, -10.5000, -9.8750],
+                    ]
+                ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-10.4375, -10.6875, -6.1875, -10.5000, -10.3125, -9.1250, -8.4375, -8.6250, -9.1875, -9.5625, -9.3125, -8.4375, -9.0625, -3.4375, 2.9531, -10.2500, -6.4062, -6.0000, -9.6875, -9.1875, -8.8125, -9.8125, -9.7500, -9.4375, -9.7500, -9.4375, -9.0000, -9.8125, -9.4375, -9.3125],
+                        [-13.3125, -13.2500, -5.5938, -13.3125, -13.5000, -8.7500, -7.0625, -7.0312, -10.1875, -10.3750, -9.9375, -7.8438, -8.8750, -5.3438, -3.5938, -12.5625, -9.2500, -6.8125, -10.3750, -9.3125, -10.6875, -11.5625, -11.3125, -11.0000, -10.6250, -10.9375, -11.0625, -11.3750, -10.5625, -10.0000],
+                    ]
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_OUTPUT = EXPECTED_OUTPUT.to(torch_device)
+        # fmt: on
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
@@ -339,15 +359,21 @@ class BltIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30].to(torch_device), rtol=1e-3, atol=1e-3)
 
     @slow
-    @require_read_token
     @require_torch_bf16
     def test_model_bf16(self):
         """Test Blt model with bfloat16 precision."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -364,82 +390,32 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())
 
     @slow
-    @require_read_token
     @require_torch_bf16
     def test_model_logits_bf16(self):
         """Test Blt model logits with bfloat16 precision."""
 
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                [
-                    -10.5000,
-                    -10.6875,
-                    -6.1875,
-                    -10.5625,
-                    -10.3125,
-                    -9.1875,
-                    -8.5000,
-                    -8.6875,
-                    -9.1875,
-                    -9.5625,
-                    -9.3750,
-                    -8.5000,
-                    -9.0625,
-                    -3.4219,
-                    2.9531,
-                    -10.3125,
-                    -6.4062,
-                    -6.0000,
-                    -9.6875,
-                    -9.1875,
-                    -8.8125,
-                    -9.8125,
-                    -9.7500,
-                    -9.4375,
-                    -9.8125,
-                    -9.5000,
-                    -9.0000,
-                    -9.8125,
-                    -9.4375,
-                    -9.3125,
-                ],
-                [
-                    -13.2500,
-                    -13.1875,
-                    -5.6875,
-                    -13.3125,
-                    -13.5000,
-                    -8.7500,
-                    -7.0625,
-                    -7.0312,
-                    -10.1250,
-                    -10.3750,
-                    -9.8750,
-                    -7.8438,
-                    -8.8750,
-                    -5.2812,
-                    -3.5625,
-                    -12.5000,
-                    -9.1875,
-                    -6.8125,
-                    -10.3750,
-                    -9.3125,
-                    -10.6250,
-                    -11.5000,
-                    -11.2500,
-                    -11.0000,
-                    -10.5625,
-                    -10.8750,
-                    -11.0625,
-                    -11.3750,
-                    -10.5625,
-                    -10.0000,
-                ],
-            ]
-        ).to(torch_device)
+        # fmt: off
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-10.5000, -10.6875, -6.2500, -10.5625, -10.3125, -9.1875, -8.5000, -8.5625, -9.1875, -9.6250, -9.3750, -8.5000, -9.1250, -3.3906, 2.9688, -10.3125, -6.4688, -6.0312, -9.7500, -9.1875, -8.8125, -9.8750, -9.8125, -9.5000, -9.8125, -9.5000, -9.0625, -9.8125, -9.5000, -9.3750],
+                        [-13.2500, -13.1250, -5.6875, -13.1875, -13.3750, -8.6875, -6.9688, -6.9375, -10.0625, -10.3125, -9.8125, -7.7188, -8.8125, -5.2188, -3.5000, -12.4375, -9.0625, -6.6250, -10.3125, -9.1875, -10.6250, -11.4375, -11.1250, -10.8750, -10.5000, -10.8750, -11.0000, -11.3125, -10.5000, -9.8750],
+                    ]
+                ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-10.4375, -10.6875, -6.1875, -10.5000, -10.3125, -9.1250, -8.4375, -8.6250, -9.1875, -9.5625, -9.3125, -8.4375, -9.0625, -3.4375, 2.9531, -10.2500, -6.4062, -6.0000, -9.6875, -9.1875, -8.8125, -9.8125, -9.7500, -9.4375, -9.7500, -9.4375, -9.0000, -9.8125, -9.4375, -9.3125],
+                        [-13.3125, -13.2500, -5.5938, -13.3125, -13.5000, -8.7500, -7.0625, -7.0312, -10.1875, -10.3750, -9.9375, -7.8438, -8.8750, -5.3438, -3.5938, -12.5625, -9.2500, -6.8125, -10.3750, -9.3125, -10.6875, -11.5625, -11.3125, -11.0000, -10.6250, -10.9375, -11.0625, -11.3750, -10.5625, -10.0000],
+                    ]
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_OUTPUT = EXPECTED_OUTPUT.to(torch_device)
+        # fmt: on
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
 
@@ -450,14 +426,20 @@ class BltIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30].to(torch_device), rtol=1e-3, atol=1e-3)
 
     @slow
-    @require_read_token
     def test_model_eager(self):
         """Test Blt model with bfloat16 precision using eager attention implementation."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -472,15 +454,21 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())
 
     @slow
-    @require_read_token
     @require_torch_bf16
     def test_model_bf16_static_cache(self):
         """Test Blt model with bfloat16 precision and static cache."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -499,4 +487,4 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())

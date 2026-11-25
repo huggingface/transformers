@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 WenXiang ZhongzhiCheng LedellWu LiuGuang BoWenZhang The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,23 +16,11 @@ Image/Text processor class for AltCLIP
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class AltCLIPProcessor(ProcessorMixin):
-    r"""
-    Constructs a AltCLIP processor which wraps a CLIP image processor and a XLM-Roberta tokenizer into a single
-    processor.
-
-    [`AltCLIPProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`XLMRobertaTokenizerFast`]. See
-    the [`~AltCLIPProcessor.__call__`] and [`~AltCLIPProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`XLMRobertaTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 

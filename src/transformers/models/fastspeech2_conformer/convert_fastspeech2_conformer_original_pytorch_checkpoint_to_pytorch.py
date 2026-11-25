@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -175,7 +174,7 @@ def convert_FastSpeech2ConformerModel_checkpoint(
     with TemporaryDirectory() as tempdir:
         vocab = {token: id for id, token in enumerate(vocab)}
         vocab_file = Path(tempdir) / "vocab.json"
-        with open(vocab_file, "w") as f:
+        with open(vocab_file, "w", encoding="utf-8") as f:
             json.dump(vocab, f)
         should_strip_spaces = "no_space" in tokenizer_name
         tokenizer = FastSpeech2ConformerTokenizer(str(vocab_file), should_strip_spaces=should_strip_spaces)

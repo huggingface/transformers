@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,12 @@
 import argparse
 import json
 from collections import OrderedDict
+from io import BytesIO
 from pathlib import Path
 
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -93,54 +93,92 @@ for i in range(6):
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
 
     # q, k, v projections in self/cross-attention in decoder for conditional DETR
+    # Self-attention projections moved into self_attn module
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.sa_qcontent_proj.weight", f"decoder.layers.{i}.sa_qcontent_proj.weight")
+        (
+            f"transformer.decoder.layers.{i}.sa_qcontent_proj.weight",
+            f"decoder.layers.{i}.self_attn.q_content_proj.weight",
+        )
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.sa_kcontent_proj.weight", f"decoder.layers.{i}.sa_kcontent_proj.weight")
+        (
+            f"transformer.decoder.layers.{i}.sa_kcontent_proj.weight",
+            f"decoder.layers.{i}.self_attn.k_content_proj.weight",
+        )
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.sa_qpos_proj.weight", f"decoder.layers.{i}.sa_qpos_proj.weight")
+        (f"transformer.decoder.layers.{i}.sa_qpos_proj.weight", f"decoder.layers.{i}.self_attn.q_pos_proj.weight")
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.sa_kpos_proj.weight", f"decoder.layers.{i}.sa_kpos_proj.weight")
-    )
-    rename_keys.append((f"transformer.decoder.layers.{i}.sa_v_proj.weight", f"decoder.layers.{i}.sa_v_proj.weight"))
-    rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_qcontent_proj.weight", f"decoder.layers.{i}.ca_qcontent_proj.weight")
-    )
-    # rename_keys.append((f"transformer.decoder.layers.{i}.ca_qpos_proj.weight", f"decoder.layers.{i}.ca_qpos_proj.weight"))
-    rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_kcontent_proj.weight", f"decoder.layers.{i}.ca_kcontent_proj.weight")
+        (f"transformer.decoder.layers.{i}.sa_kpos_proj.weight", f"decoder.layers.{i}.self_attn.k_pos_proj.weight")
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_kpos_proj.weight", f"decoder.layers.{i}.ca_kpos_proj.weight")
+        (f"transformer.decoder.layers.{i}.sa_v_proj.weight", f"decoder.layers.{i}.self_attn.v_proj.weight")
     )
-    rename_keys.append((f"transformer.decoder.layers.{i}.ca_v_proj.weight", f"decoder.layers.{i}.ca_v_proj.weight"))
+    # Cross-attention projections moved into encoder_attn module
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_qpos_sine_proj.weight", f"decoder.layers.{i}.ca_qpos_sine_proj.weight")
+        (
+            f"transformer.decoder.layers.{i}.ca_qcontent_proj.weight",
+            f"decoder.layers.{i}.encoder_attn.q_content_proj.weight",
+        )
+    )
+    # rename_keys.append((f"transformer.decoder.layers.{i}.ca_qpos_proj.weight", f"decoder.layers.{i}.encoder_attn.q_pos_proj.weight"))
+    rename_keys.append(
+        (
+            f"transformer.decoder.layers.{i}.ca_kcontent_proj.weight",
+            f"decoder.layers.{i}.encoder_attn.k_content_proj.weight",
+        )
+    )
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.ca_kpos_proj.weight", f"decoder.layers.{i}.encoder_attn.k_pos_proj.weight")
+    )
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.ca_v_proj.weight", f"decoder.layers.{i}.encoder_attn.v_proj.weight")
+    )
+    rename_keys.append(
+        (
+            f"transformer.decoder.layers.{i}.ca_qpos_sine_proj.weight",
+            f"decoder.layers.{i}.encoder_attn.q_pos_sine_proj.weight",
+        )
     )
 
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.sa_qcontent_proj.bias", f"decoder.layers.{i}.sa_qcontent_proj.bias")
+        (f"transformer.decoder.layers.{i}.sa_qcontent_proj.bias", f"decoder.layers.{i}.self_attn.q_content_proj.bias")
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.sa_kcontent_proj.bias", f"decoder.layers.{i}.sa_kcontent_proj.bias")
+        (f"transformer.decoder.layers.{i}.sa_kcontent_proj.bias", f"decoder.layers.{i}.self_attn.k_content_proj.bias")
     )
-    rename_keys.append((f"transformer.decoder.layers.{i}.sa_qpos_proj.bias", f"decoder.layers.{i}.sa_qpos_proj.bias"))
-    rename_keys.append((f"transformer.decoder.layers.{i}.sa_kpos_proj.bias", f"decoder.layers.{i}.sa_kpos_proj.bias"))
-    rename_keys.append((f"transformer.decoder.layers.{i}.sa_v_proj.bias", f"decoder.layers.{i}.sa_v_proj.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_qcontent_proj.bias", f"decoder.layers.{i}.ca_qcontent_proj.bias")
+        (f"transformer.decoder.layers.{i}.sa_qpos_proj.bias", f"decoder.layers.{i}.self_attn.q_pos_proj.bias")
     )
-    # rename_keys.append((f"transformer.decoder.layers.{i}.ca_qpos_proj.bias", f"decoder.layers.{i}.ca_qpos_proj.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_kcontent_proj.bias", f"decoder.layers.{i}.ca_kcontent_proj.bias")
+        (f"transformer.decoder.layers.{i}.sa_kpos_proj.bias", f"decoder.layers.{i}.self_attn.k_pos_proj.bias")
     )
-    rename_keys.append((f"transformer.decoder.layers.{i}.ca_kpos_proj.bias", f"decoder.layers.{i}.ca_kpos_proj.bias"))
-    rename_keys.append((f"transformer.decoder.layers.{i}.ca_v_proj.bias", f"decoder.layers.{i}.ca_v_proj.bias"))
+    rename_keys.append((f"transformer.decoder.layers.{i}.sa_v_proj.bias", f"decoder.layers.{i}.self_attn.v_proj.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_qpos_sine_proj.bias", f"decoder.layers.{i}.ca_qpos_sine_proj.bias")
+        (
+            f"transformer.decoder.layers.{i}.ca_qcontent_proj.bias",
+            f"decoder.layers.{i}.encoder_attn.q_content_proj.bias",
+        )
+    )
+    # rename_keys.append((f"transformer.decoder.layers.{i}.ca_qpos_proj.bias", f"decoder.layers.{i}.encoder_attn.q_pos_proj.bias"))
+    rename_keys.append(
+        (
+            f"transformer.decoder.layers.{i}.ca_kcontent_proj.bias",
+            f"decoder.layers.{i}.encoder_attn.k_content_proj.bias",
+        )
+    )
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.ca_kpos_proj.bias", f"decoder.layers.{i}.encoder_attn.k_pos_proj.bias")
+    )
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.ca_v_proj.bias", f"decoder.layers.{i}.encoder_attn.v_proj.bias")
+    )
+    rename_keys.append(
+        (
+            f"transformer.decoder.layers.{i}.ca_qpos_sine_proj.bias",
+            f"decoder.layers.{i}.encoder_attn.q_pos_sine_proj.bias",
+        )
     )
 
 # convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
@@ -168,8 +206,8 @@ rename_keys.extend(
         ("transformer.decoder.query_scale.layers.0.bias", "decoder.query_scale.layers.0.bias"),
         ("transformer.decoder.query_scale.layers.1.weight", "decoder.query_scale.layers.1.weight"),
         ("transformer.decoder.query_scale.layers.1.bias", "decoder.query_scale.layers.1.bias"),
-        ("transformer.decoder.layers.0.ca_qpos_proj.weight", "decoder.layers.0.ca_qpos_proj.weight"),
-        ("transformer.decoder.layers.0.ca_qpos_proj.bias", "decoder.layers.0.ca_qpos_proj.bias"),
+        ("transformer.decoder.layers.0.ca_qpos_proj.weight", "decoder.layers.0.encoder_attn.q_pos_proj.weight"),
+        ("transformer.decoder.layers.0.ca_qpos_proj.bias", "decoder.layers.0.encoder_attn.q_pos_proj.bias"),
     ]
 )
 
@@ -213,9 +251,10 @@ def read_in_q_k_v(state_dict, is_panoptic=False):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
-    return im
+    return image
 
 
 @torch.no_grad()
@@ -238,7 +277,7 @@ def convert_conditional_detr_checkpoint(model_name, pytorch_dump_folder_path):
         config.num_labels = 91
         repo_id = "huggingface/label-files"
         filename = "coco-detection-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

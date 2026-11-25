@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RemBert model."""
-
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -40,7 +37,7 @@ class RemBertTokenizer(TokenizersBackend):
             Whether or not to lowercase the input when tokenizing.
         remove_space (`bool`, *optional*, defaults to `True`):
             Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
-        keep_accents (`bool`, *optional*, defaults to `False`):
+        keep_accents (`bool`, *optional*, defaults to `True`):
             Whether or not to keep accents when tokenizing.
         bos_token (`str`, *optional*, defaults to `"[CLS]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
@@ -78,9 +75,9 @@ class RemBertTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        vocab: str | list[tuple[str, float]] | None = None,
         do_lower_case: bool = False,
-        keep_accents: bool = False,
+        keep_accents: bool = True,
         bos_token: str = "[CLS]",
         eos_token: str = "[SEP]",
         unk_token: str = "<unk>",
@@ -88,6 +85,7 @@ class RemBertTokenizer(TokenizersBackend):
         pad_token: str = "<pad>",
         cls_token: str = "[CLS]",
         mask_token: str = "[MASK]",
+        _spm_precompiled_charsmap: str | None = None,
         add_prefix_space: bool = True,
         remove_space: bool = True,
         **kwargs,
@@ -118,6 +116,7 @@ class RemBertTokenizer(TokenizersBackend):
         # Build normalizer matching RemBertConverter behavior
         # When loading from pretrained, this will be overridden by tokenizer.json config
         # When creating from extractor (vocab), this provides equivalent behavior
+
         list_normalizers = [
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
@@ -129,13 +128,8 @@ class RemBertTokenizer(TokenizersBackend):
         if self.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
 
-        # Add Precompiled equivalent (newline conversion + NFKC normalization)
-        list_normalizers.extend(
-            [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),  # Precompiled converts newlines/tabs to spaces
-                normalizers.NFKC(),  # Precompiled does NFKC normalization
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.extend([normalizers.Precompiled(_spm_precompiled_charsmap)])
 
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 

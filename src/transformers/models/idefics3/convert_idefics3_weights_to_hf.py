@@ -16,7 +16,6 @@ import argparse
 import json
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -120,7 +119,7 @@ def get_config(checkpoint):
 
     # download the config file
     filepath = hf_hub_download(repo_id=checkpoint, filename="config.json")
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         config_json = json.load(f)
 
     # Setup the vision config
@@ -175,7 +174,7 @@ def convert_idefics3_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     config = get_config(original_model_id)
     print(config)
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = Idefics3ForConditionalGeneration(config)
 
     model.load_state_dict(new_state_dict, strict=True, assign=True)

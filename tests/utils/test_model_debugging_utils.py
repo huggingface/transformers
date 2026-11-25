@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,7 +57,7 @@ if is_torch_available():
                 summary = Path(os.path.join(tmpdir, f"{base}_SUMMARY.json"))
                 full = Path(os.path.join(tmpdir, f"{base}_FULL_TENSORS.json"))
                 self.assertTrue(os.path.isfile(summary) and os.path.isfile(full))
-                data = json.loads(summary.read_text())
+                data = json.loads(summary.read_text(encoding="utf-8"))
                 self.assertTrue({"module_path", "inputs", "children"} <= data.keys())
                 self.assertTrue(data["children"])
 
@@ -100,7 +99,7 @@ if is_torch_available():
                     _ = self.model_with_layers(**self.dense_input)
 
                 summary_path = os.path.join(tmpdir, "ToyModelWithLayers_debug_tree_SUMMARY.json")
-                with open(summary_path) as f:
+                with open(summary_path, encoding="utf-8") as f:
                     data = json.load(f)
                 self.assertEqual(set(data.keys()), {"module_path", "inputs", "children"})
                 for layer_index in range(6):
@@ -115,7 +114,7 @@ if is_torch_available():
                     _ = self.model_with_layers(**self.dense_input)
 
                 summary_path = os.path.join(tmpdir, "ToyModelWithLayers_debug_tree_SUMMARY.json")
-                with open(summary_path) as f:
+                with open(summary_path, encoding="utf-8") as f:
                     data = json.load(f)
                 self.assertEqual(set(data.keys()), {"module_path", "inputs", "children"})
                 self.assertEqual(data["children"][1]["module_path"], "ToyModelWithLayers.layers.0")

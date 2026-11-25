@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 import copy
 import math
-import warnings
 import zlib
 from collections.abc import Callable, Iterator
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -37,6 +34,7 @@ from ...generation.logits_process import (
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import BaseModelOutput
 from ...utils import logging
+from ...utils.deprecation import deprecate_kwarg
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
 
@@ -383,34 +381,36 @@ class WhisperGenerationMixin(GenerationMixin):
 
         return timestamps
 
+    @deprecate_kwarg("past_key_values", "6.0.0", new_name="cache")
+    @deprecate_kwarg("cache_params", "6.0.0", new_name="cache")
     def generate(
         self,
-        input_features: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
+        input_features: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
         synced_gpus: bool = False,
-        return_timestamps: Optional[bool] = None,
-        task: Optional[str] = None,
-        language: Optional[Union[str, list[str]]] = None,
-        is_multilingual: Optional[bool] = None,
-        prompt_ids: Optional[torch.Tensor] = None,
-        prompt_condition_type: Optional[str] = None,  # first-segment, all-segments
-        condition_on_prev_tokens: Optional[bool] = None,
-        temperature: Optional[Union[float, tuple[float, ...]]] = None,
-        compression_ratio_threshold: Optional[float] = None,
-        logprob_threshold: Optional[float] = None,
-        no_speech_threshold: Optional[float] = None,
-        num_segment_frames: Optional[int] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        return_timestamps: bool | None = None,
+        task: str | None = None,
+        language: str | list[str] | None = None,
+        is_multilingual: bool | None = None,
+        prompt_ids: torch.Tensor | None = None,
+        prompt_condition_type: str | None = None,  # first-segment, all-segments
+        condition_on_prev_tokens: bool | None = None,
+        temperature: float | tuple[float, ...] | None = None,
+        compression_ratio_threshold: float | None = None,
+        logprob_threshold: float | None = None,
+        no_speech_threshold: float | None = None,
+        num_segment_frames: int | None = None,
+        attention_mask: torch.Tensor | None = None,
         time_precision: float = 0.02,
         time_precision_features: float = 0.01,
-        return_token_timestamps: Optional[bool] = None,
+        return_token_timestamps: bool | None = None,
         return_segments: bool = False,
-        return_dict_in_generate: Optional[bool] = None,
-        force_unique_generate_call: Optional[bool] = None,
-        monitor_progress: Optional[Callable[[torch.Tensor], None]] = None,
+        return_dict_in_generate: bool | None = None,
+        force_unique_generate_call: bool | None = None,
+        monitor_progress: Callable[[torch.Tensor], None] | None = None,
         **kwargs,
     ):
         """
@@ -433,7 +433,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`,
                 *e.g.*  via the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
                 To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel
-                features, padding and conversion into a tensor of type `torch.FloatTensor`.
+                features, padding and conversion into a tensor of type `torch.Tensor`.
                 See [`~WhisperFeatureExtractor.__call__`] for details.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
@@ -649,14 +649,6 @@ class WhisperGenerationMixin(GenerationMixin):
         ```
 
         """
-        # 0. deprecate old inputs
-        if "inputs" in kwargs:
-            input_features = kwargs.pop("inputs")
-            warnings.warn(
-                "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
-                FutureWarning,
-            )
-
         # 1. prepare generation config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
@@ -1035,6 +1027,11 @@ class WhisperGenerationMixin(GenerationMixin):
                         generate_kwargs["encoder_outputs"], (0, 0, 0, 0, 0, batch_size - cur_bsz), value=0
                     )
 
+            if attention_mask is None and generate_kwargs.get("cache") is not None:
+                # This will force slicing of decoder_input_ids = decoder_input_ids[:, cache_length:] as the first tokens
+                # are already in the cache, but we do not have an `attention_mask` to give this info to `generate`
+                generation_config._mask_length = decoder_input_ids.shape[-1]
+
             seek_outputs = super().generate(
                 segment_input,
                 generation_config=generation_config,
@@ -1044,6 +1041,15 @@ class WhisperGenerationMixin(GenerationMixin):
                 synced_gpus=synced_gpus,
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
+                # See PR #48108 for more details. This is a hacky workaround to deal with the problem from legacy model
+                # generation config.
+                # Preserve suppress_tokens/begin_suppress_tokens that were cleared by
+                # _retrieve_logit_processors(). Without this, _prepare_generation_config
+                # inside super().generate() restores them from the model generation config
+                # (defaults_only=True treats None as not set), causing duplicate/extra
+                # logits processors in the assistant model during speculative decoding.
+                suppress_tokens=generation_config.suppress_tokens,
+                begin_suppress_tokens=generation_config.begin_suppress_tokens,
                 **generate_kwargs,
             )
 
@@ -1169,16 +1175,17 @@ class WhisperGenerationMixin(GenerationMixin):
 
         def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
             if beam_indices is not None and key == "scores":
-                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_indices[batch_idx][: len(values)])]
+                beam_idxs = beam_indices[batch_idx][: len(values)].tolist()
+                return [v[beam_idx].cpu() for (v, beam_idx) in zip(values, beam_idxs)]
             if key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 return [v[batch_idx].cpu() for v in values]
             if key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
                 return tuple(tuple(w[batch_idx][None].cpu() for w in v) for v in values)
-            elif key == "past_key_values":
+            elif key == "cache":
                 if not is_shortform:
-                    # we don't save `past_key_values` as this is too costly for longform
+                    # we don't save `cache` as this is too costly for longform
                     return None
-                all_past_key_values = []
+                all_cache = []
                 for layer_idx in range(self.config.decoder_layers):
                     layer_cache = (
                         values.self_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
@@ -1186,8 +1193,8 @@ class WhisperGenerationMixin(GenerationMixin):
                         values.cross_attention_cache.layers[layer_idx].keys[batch_idx][None].cpu(),
                         values.cross_attention_cache.layers[layer_idx].values[batch_idx][None].cpu(),
                     )
-                    all_past_key_values.append(layer_cache)
-                return EncoderDecoderCache(all_past_key_values)
+                    all_cache.append(layer_cache)
+                return EncoderDecoderCache(all_cache)
 
             return values[batch_idx].cpu()
 
@@ -1222,9 +1229,9 @@ class WhisperGenerationMixin(GenerationMixin):
                     )
                     for i in range(len(seek_outputs[0][key]))
                 )
-            elif key == "past_key_values":
+            elif key == "cache":
                 if seek_outputs[0][key] is not None:
-                    all_past_key_values = []
+                    all_cache = []
                     for layer_idx in range(len(seek_outputs[0][key])):
                         self_attention_k, self_attention_v, cross_attention_k, cross_attention_v = (
                             torch.stack(
@@ -1238,10 +1245,8 @@ class WhisperGenerationMixin(GenerationMixin):
                             for sub_cache in ["self_attention_cache", "cross_attention_cache"]
                             for sub_key in ["keys", "values"]
                         )
-                        all_past_key_values.append(
-                            (self_attention_k, self_attention_v, cross_attention_k, cross_attention_v)
-                        )
-                    outputs[key] = EncoderDecoderCache(tuple(all_past_key_values))
+                        all_cache.append((self_attention_k, self_attention_v, cross_attention_k, cross_attention_v))
+                    outputs[key] = EncoderDecoderCache(tuple(all_cache))
                 else:
                     outputs[key] = None
 
@@ -1620,9 +1625,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
     def detect_language(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]] = None,
-        generation_config: Optional[GenerationConfig] = None,
+        input_features: torch.Tensor | None = None,
+        encoder_outputs: torch.Tensor | BaseModelOutput | None = None,
+        generation_config: GenerationConfig | None = None,
         num_segment_frames: int = 3000,
     ) -> torch.Tensor:
         """
@@ -1634,8 +1639,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
                 the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
                 [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-                tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
-            encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+                tensor of type `torch.Tensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
+            encoder_outputs (`tuple(tuple(torch.Tensor)`, *optional*):
                 Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
                 `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
                 hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
@@ -1702,18 +1707,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
-            if "num_frames" in kwargs:
-                generation_config.num_frames = kwargs.pop("num_frames")
-                if isinstance(generation_config.num_frames, torch.Tensor):
-                    generation_config.num_frames = generation_config.num_frames.cpu()
-                else:
-                    generation_config.num_frames = torch.tensor(generation_config.num_frames)
-
-                logger.warning_once(
-                    "`num_frames` is deprecated and will be removed in Transformers v5. Use `attention_mask` instead, as it can be used to infer the number of frames. "
-                    "You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True"
-                )
-            elif attention_mask is not None:
+            if attention_mask is not None:
                 generation_config.num_frames = attention_mask.sum(-1).cpu()
             else:
                 logger.warning_once(
@@ -1951,7 +1945,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 f"so that their combined length is less than {self.config.max_target_positions}."
             )
 
-        num_initial_tokens = min(config.max_target_positions // 2 - 1, decoder_input_ids.shape[-1] - 1)
+        num_initial_tokens = min(config.max_target_positions // 2 - 1, decoder_input_ids.shape[-1])
 
         # Make sure we don't get larger than `max_length`
         if generation_config.max_length is not None and generation_config.max_new_tokens is None:
@@ -1959,6 +1953,7 @@ class WhisperGenerationMixin(GenerationMixin):
             logger.info(
                 f"Increase max_length from {generation_config.max_length} to {max_length} since input is conditioned on previous segment."
             )
+            generation_config.max_length = max_length
         elif (
             generation_config.max_new_tokens is not None
             and generation_config.max_new_tokens + decoder_input_ids.shape[-1] > config.max_target_positions
@@ -1989,7 +1984,8 @@ class WhisperGenerationMixin(GenerationMixin):
 
         # retrieve logprob of selected tokens and sum
         # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
-        sum_logprobs = sum(logprobs[i][tokens[i]] for i in range(logprobs.shape[0]))
+        token_logprobs = logprobs.gather(-1, tokens.unsqueeze(-1)).squeeze(-1).cpu()
+        sum_logprobs = sum(token_logprobs[i] for i in range(token_logprobs.shape[0]))
 
         avg_logprobs = sum_logprobs / len(tokens)
         return avg_logprobs
@@ -2011,10 +2007,11 @@ class WhisperGenerationMixin(GenerationMixin):
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
-        timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
-        single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
-        timestamp_segment_indices = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
-        timestamp_segment_indices.add_(1)
+        timestamp_tokens = [token >= timestamp_begin for token in seek_sequence.tolist()]
+        single_timestamp_ending = timestamp_tokens[-2:] == [False, True]
+        timestamp_segment_indices = [
+            i + 1 for i in range(len(timestamp_tokens) - 1) if timestamp_tokens[i] and timestamp_tokens[i + 1]
+        ]
         token_timestamps = seek_outputs[idx]["token_timestamps"] if return_token_timestamps else []
         idx_offset = decoder_input_ids.shape[-1]
         device = seek_sequence.device
@@ -2023,7 +2020,7 @@ class WhisperGenerationMixin(GenerationMixin):
         # "end of segment" prediction and slice the decoding into segments accordingly
         if len(timestamp_segment_indices) > 0:
             # if the output contains two consecutive timestamp tokens
-            slices = timestamp_segment_indices.tolist()
+            slices = timestamp_segment_indices
             segments = []
             if single_timestamp_ending:
                 slices.append(len(seek_sequence))
@@ -2070,11 +2067,11 @@ class WhisperGenerationMixin(GenerationMixin):
         else:
             # If whisper does not predict any "end of segment" token, then
             # the whole decoding is considered a segment and we add it to the list of segments
-            timestamps = seek_sequence[timestamp_tokens.nonzero().flatten()]
+            timestamp_indices = [i for i, is_timestamp in enumerate(timestamp_tokens) if is_timestamp]
             last_timestamp_pos = int(seek_num_frames[prev_idx] * time_precision_features / time_precision)
-            if timestamps.numel() > 0 and timestamps[-1] != timestamp_begin:
+            if len(timestamp_indices) > 0 and seek_sequence[timestamp_indices[-1]] != timestamp_begin:
                 # no consecutive timestamps but it has a timestamp; use the last one.
-                last_timestamp_pos = (timestamps[-1] - timestamp_begin).to(
+                last_timestamp_pos = (seek_sequence[timestamp_indices[-1]] - timestamp_begin).to(
                     torch.float32 if device.type == "mps" else torch.float64
                 )
             segments = [

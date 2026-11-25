@@ -9,17 +9,12 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-01-19 and added to Hugging Face Transformers on 2024-01-25.*
+*This model was published in HF papers on 2024-01-19 and contributed to Hugging Face Transformers on 2024-01-25.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # Depth Anything
 
@@ -35,29 +30,30 @@ The example below demonstrates how to obtain a depth map with [`Pipeline`] or th
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-base-hf", dtype=torch.bfloat16, device=0)
+
+pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-base-hf", device=0)
 pipe("http://images.cocodataset.org/val2017/000000039769.jpg")["depth"]
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
-import numpy as np
+import torch
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 
+
 image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-base-hf")
-model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-base-hf", dtype=torch.bfloat16)
+model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-base-hf", device_map="auto")
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

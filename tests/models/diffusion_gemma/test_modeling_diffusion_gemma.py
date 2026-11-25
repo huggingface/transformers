@@ -1,0 +1,1924 @@
+# Copyright 2026 the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Testing suite for the PyTorch DiffusionGemma model."""
+
+import unittest
+from unittest.mock import patch
+
+from parameterized import parameterized
+
+from transformers import is_torch_available, logging
+from transformers.testing_utils import (
+    CaptureLogger,
+    CaptureStdout,
+    Expectations,
+    require_deterministic_for_xpu,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    tooslow,
+    torch_device,
+)
+
+from ...model_tester_config import ModelTesterConfigMixin
+from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
+
+
+if is_torch_available():
+    import torch
+
+    from transformers import (
+        AutoConfig,
+        AutoProcessor,
+        AutoTokenizer,
+        Cache,
+        DiffusionGemmaConfig,
+        DiffusionGemmaForBlockDiffusion,
+        DiffusionGemmaGenerationConfig,
+        DiffusionGemmaModel,
+        DynamicCache,
+        EntropyBoundSamplerConfig,
+        StaticCache,
+        TextDiffusionStreamer,
+        set_seed,
+    )
+
+
+class DiffusionGemmaVisionText2TextModelTester(ModelTesterConfigMixin):
+    defaults = {}
+
+    small_config_overrides = {
+        "batch_size": 3,
+        "text_config": {
+            # default text config test values
+            "vocab_size": 99,
+            "hidden_size": 32,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "intermediate_size": 32,
+            "hidden_act": "gelu",
+            "max_position_embeddings": 512,
+            "initializer_range": 0.02,
+            "pad_token_id": 0,
+            "bos_token_id": 1,
+            "eos_token_id": 2,
+            "moe_intermediate_size": 8,
+            "moe_num_shared_experts": 1,
+            "num_experts": 4,
+            "num_hidden_layers": 2,
+            # model-specific text config values
+            "layer_types": ["sliding_attention", "full_attention"],  # we want to test both types
+            # full-attention layer overrides (head_dim is hidden_size // num_attention_heads)
+            "per_layer_config": {1: {"head_dim": 16, "num_key_value_heads": 2}},
+            "top_k_experts": 2,  # key introduced by the gemma4 family
+            "use_bidirectional_attention": "vision",  # Test if bidirectional image mask path works
+        },
+        "vision_config": {
+            "use_labels": True,
+            "image_size": 20,
+            "patch_size": 5,
+            "num_channels": 3,
+            "is_training": True,
+            "hidden_size": 16,
+            "num_key_value_heads": 1,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 37,
+            "dropout": 0.1,
+            "attention_dropout": 0.1,
+            "initializer_range": 0.02,
+        },
+        "mm_tokens_per_image": 2,
+        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
+        "image_token_id": 4,
+        "boi_token_id": 5,
+        "eoi_token_id": 6,
+        "seq_length": 25,  # See: `test_generate_beyond_sliding_window` before changing this value!
+        "self_conditioning_size": 16,
+        "canvas_length": 16,
+        "is_training": False,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["pad_token_id"] = values["text_config"]["pad_token_id"]
+        values["num_hidden_layers"] = values["text_config"]["num_hidden_layers"]
+        values["vocab_size"] = values["text_config"]["vocab_size"]
+        values["hidden_size"] = values["text_config"]["hidden_size"]
+        values["num_attention_heads"] = values["text_config"]["num_attention_heads"]
+        values["num_channels"] = values["vision_config"]["num_channels"]
+        values["image_size"] = values["vision_config"]["image_size"]
+        return values
+
+    def __init__(self, parent, **kwargs):
+        self.parent = parent
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
+
+    def get_config(self):
+        return DiffusionGemmaConfig(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            image_token_id=self.image_token_id,
+            boi_token_id=self.boi_token_id,
+            eoi_token_id=self.eoi_token_id,
+            mm_tokens_per_image=self.mm_tokens_per_image,
+            self_conditioning_size=self.self_conditioning_size,
+            canvas_length=self.canvas_length,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        # 1. config preparation
+        config = self.get_config()
+        config.vision_config.pooling_kernel_size = 2
+
+        # 2. image inputs preparation
+        # (num_images, max_num_patches, patch_size * patch_size * num_channels)
+        patch_size = config.vision_config.patch_size
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                self.vision_config["image_size"],
+                patch_size * patch_size * self.vision_config["num_channels"],
+            ]
+        )
+        # (num_images, max_num_patches, 2) for height/width positions. Let it be all ones for testign
+        pixel_position_ids = torch.ones(self.vision_config["image_size"], device=torch_device, dtype=torch.long)
+        pixel_position_ids = pixel_position_ids[None, :, None].repeat(self.batch_size, 1, 2)
+
+        # 3. text input preparation
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        decoder_input_ids = ids_tensor([self.batch_size, self.canvas_length], config.text_config.vocab_size - 1) + 1
+        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
+
+        # Ensure no tokens accidentally match special token IDs
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+        input_ids[:, :1] = config.image_token_id
+
+        mm_token_type_ids = torch.zeros_like(input_ids)
+        mm_token_type_ids[input_ids == config.image_token_id] = 1
+
+        # 4. build the input dict
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_position_ids": pixel_position_ids,
+            "input_ids": input_ids,
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": attention_mask,
+            "mm_token_type_ids": mm_token_type_ids,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class DiffusionGemmaVisionText2TextModelTest(
+    ModelTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
+):
+    model_tester_class = DiffusionGemmaVisionText2TextModelTester
+
+    all_model_classes = (DiffusionGemmaModel, DiffusionGemmaForBlockDiffusion) if is_torch_available() else ()
+    all_generative_model_classes = ()  # No class inherits `GenerationMixin`
+    additional_model_inputs = ["mm_token_type_ids", "decoder_input_ids", "image_position_ids"]
+
+    def setUp(self):
+        self.model_tester = DiffusionGemmaVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=DiffusionGemmaConfig, has_text_modality=False)
+
+    # Tests adapted from `CausalLMModelTest` (when appropriate, as this is not an AR model). We can use the test
+    # name to check the original equivalent that served as inspiration.
+    def test_config(self):
+        """Tests basic config properties"""
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        """Tests that we can run a forward pass with the base model"""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaModel(config=config).to(torch_device).eval()
+        expected_shape = (self.model_tester.batch_size, self.model_tester.canvas_length, self.model_tester.hidden_size)
+
+        result = model(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])
+        self.assertEqual(result.last_hidden_state.shape, expected_shape)
+
+        result = model(inputs_dict["input_ids"], decoder_input_ids=inputs_dict["decoder_input_ids"])
+        self.assertEqual(result.last_hidden_state.shape, expected_shape)
+
+        result = model(inputs_dict["input_ids"])
+        self.assertEqual(result.last_hidden_state.shape, expected_shape)
+
+    def test_bidirectional_image_attention(self):
+        """
+        Tests that each image block in `DiffusionGemmaEncoderModel` attends to itself bidirectionally via
+        `mm_token_type_ids`, while text tokens remain causal and earlier images cannot attend to future images.
+        """
+        set_seed(42)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        model = DiffusionGemmaModel(config=config).to(torch_device).eval()
+
+        encoder_inputs = {k: v for k, v in inputs_dict.items() if k != "decoder_input_ids"}
+
+        # 1. Single image spanning the first 4 tokens: bidirectional within `:4`, causal after
+        encoder_inputs["mm_token_type_ids"] = torch.zeros_like(encoder_inputs["mm_token_type_ids"])
+        encoder_inputs["mm_token_type_ids"][:, :4] = 1
+        with torch.no_grad():
+            out = model.encoder(**encoder_inputs, output_attentions=True)
+            self.assertEqual(len(out.attentions), self.model_tester.num_hidden_layers)
+            for attention in out.attentions:
+                self.assertTrue((attention[..., :4, :4] != 0).all().item())
+                self.assertTrue((attention[..., 4:8, 4:8].triu(diagonal=1) == 0).all().item())
+
+        # 2. All-zero `mm_token_type_ids` (or `mm_token_type_ids=None`): strictly causal mask on `:4`
+        encoder_inputs["mm_token_type_ids"][:, :4] = 0
+        for mm_ids in (encoder_inputs["mm_token_type_ids"], None):
+            call_inputs = {**encoder_inputs, "mm_token_type_ids": mm_ids}
+            with torch.no_grad():
+                out = model.encoder(**call_inputs, output_attentions=True)
+                for attention in out.attentions:
+                    self.assertFalse((attention[..., :4, :4] != 0).all().item())
+                    self.assertTrue((attention[..., :4, :4].triu(diagonal=1) == 0).all().item())
+
+        # 3. Two separate images (`:4` and `7:10`): bidirectional within each image, no looking ahead to future image
+        encoder_inputs["mm_token_type_ids"][:, :4] = 1
+        encoder_inputs["mm_token_type_ids"][:, 7:10] = 1
+        with torch.no_grad():
+            out = model.encoder(**encoder_inputs, output_attentions=True)
+            for attention in out.attentions:
+                self.assertTrue((attention[..., :4, :4] != 0).all().item())
+                self.assertTrue((attention[..., 7:10, 7:10] != 0).all().item())
+                self.assertTrue((attention[..., :4, 7:10] == 0).all().item())
+
+    def test_vision_axial_rope(self):
+        # override -> uses gemma4Vision backbone which also overrides this test
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        rope_class = None
+        base_model = DiffusionGemmaModel(config)
+        for name, module in base_model.named_modules():
+            if hasattr(module, "compute_axial_rope_parameters"):
+                rope_class = type(module)
+                vision_config = module.config
+                break
+
+        if rope_class is None:
+            self.skipTest("Couldn't infer RoPE layer for this model class.")
+
+        # First make sure that validation on default config raises no rope-related warnings
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("", cl.out)
+        logger.warning_once.cache_clear()
+
+        # Axial rope type expects only `rope_theta`, otherwise raises warning
+        vision_config.rope_parameters["factor"] = 0.25
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("Unrecognized keys in `rope_parameters` for 'rope_type'='axial': {'factor'}\n", cl.out)
+        del vision_config.rope_parameters["factor"]
+        logger.warning_once.cache_clear()
+
+        inv_freq, attention_scale = rope_class.compute_axial_rope_parameters(config=vision_config)
+        rope_module = rope_class(vision_config).to(device=torch_device)
+
+        self.assertTrue(hasattr(rope_module, "inv_freq"))
+        self.assertTrue(hasattr(rope_module, "attention_scaling"))
+        self.assertEqual(attention_scale, 1.0)  # attention scale is always 1
+        torch.testing.assert_close(inv_freq, rope_module.inv_freq.cpu())
+
+        # create 2D position IDs for a single grid of one row and 10 cols `size=(10, 2)`
+        position_ids = torch.stack(
+            [
+                torch.arange(10, dtype=torch.long, device=torch_device),
+                torch.zeros(10, dtype=torch.long, device=torch_device),
+            ]
+        ).transpose(0, 1)
+        position_ids = position_ids[None, ...].repeat(3, 1, 1)  # batch size of `3`
+        # and an empty hidden states used only to infer device/dtype
+        hidden_states = torch.empty(1, dtype=torch.float32, device=torch_device)
+        cos, sin = rope_module(hidden_states, position_ids)
+        self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
+        self.assertEqual(cos.shape[0], 3)  # angles presserve batch
+
+    # Tests overwritten from `ModelTesterMixin`.
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        # Vision `mm_token_type_ids` activates `block_sequence_ids` in `create_masks_for_generate`, forcing 4D mask
+        # materialization that the Flash-only SDPA kernel rejects (same as `gemma3`/`gemma4`). Omit `mm_token_type_ids`
+        # here so Flash SDPA dispatch is still verified across the vision tower, encoder, and decoder.
+        orig_prepare = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_without_mm_token_type_ids():
+            config, inputs_dict = orig_prepare()
+            inputs_dict.pop("mm_token_type_ids", None)
+            return config, inputs_dict
+
+        with patch.object(
+            self.model_tester, "prepare_config_and_inputs_for_common", side_effect=prepare_without_mm_token_type_ids
+        ):
+            super().test_sdpa_can_dispatch_on_flash()
+
+    @unittest.skip(reason="TODO")
+    def test_attention_outputs(self):
+        # TODO(joaogante): Write a custom test for this model. The base test can't be used because
+        # the decoder has query len = canvas len and key/value shape = kv cache + canvas len.
+        # On top of this, we should also check the encoder attentions.
+        pass
+
+    @unittest.skip(reason="TODO")
+    def test_hidden_states_output(self):
+        # TODO(joaogante): Same as `test_attention_outputs`
+        pass
+
+    @unittest.skip(reason="TODO")
+    def test_can_init_all_missing_weights(self):
+        # TODO(joaogante): failing on tied weights. Explore later.
+        pass
+
+    @unittest.skip(reason="TODO")
+    def test_init_weights_can_init_buffers(self):
+        # TODO(joaogante): probably related to `test_can_init_all_missing_weights`
+        pass
+
+    @unittest.skip(reason="TODO")
+    def test_tp_plan_matches_params(self):
+        # TODO(joaogante): explore TP config after other issues are sorted
+        pass
+
+    @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    def test_gradient_checkpointing_matches_no_checkpointing(self):
+        """
+        Gradient checkpointing relies on the encoder writing its KV cache outside the checkpointed layer calls and
+        on the decoder keeping the read-only cache (`_can_checkpoint_with_cache`). Both must reproduce the exact
+        same loss and gradients as the non-checkpointed forward, including encoder gradients through the cache.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # Checkpointing only engages in train mode, so determinism requires disabling dropout instead of eval()
+        config.text_config.attention_dropout = 0.0
+        config.vision_config.dropout = 0.0
+        config.vision_config.attention_dropout = 0.0
+        model = DiffusionGemmaForBlockDiffusion(config).to(torch_device)
+        inputs = self._prepare_for_class(inputs_dict, DiffusionGemmaForBlockDiffusion)
+
+        def loss_and_grads(checkpointing):
+            model.zero_grad(set_to_none=True)
+            if checkpointing:
+                model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": False})
+            else:
+                model.activation_checkpointing_disable()
+            model.train()
+            loss = model(**inputs).logits.float().mean()
+            loss.backward()
+            return loss.detach(), {name: p.grad.clone() for name, p in model.named_parameters() if p.grad is not None}
+
+        loss_ref, grads_ref = loss_and_grads(checkpointing=False)
+        loss_checkpointed, grads_checkpointed = loss_and_grads(checkpointing=True)
+
+        # Snapshot/restore makes the recomputation bit-exact on CPU; accelerators can reorder accumulation in the
+        # backward, so relax the tolerance there.
+        rtol = atol = 0 if torch_device == "cpu" else 1e-5
+        torch.testing.assert_close(loss_checkpointed, loss_ref, rtol=rtol, atol=atol)
+        self.assertEqual(grads_checkpointed.keys(), grads_ref.keys())
+        self.assertTrue(any("encoder" in name for name in grads_checkpointed))
+        for name in grads_ref:
+            torch.testing.assert_close(grads_checkpointed[name], grads_ref[name], rtol=rtol, atol=atol)
+
+    @unittest.skip(reason="Hard to specify `self.model_split_percents` due to tied weights. Skip for now.")
+    def test_model_parallelism(self):
+        pass
+
+    # Tests designed specifically for `DiffusionGemma`, excluding generation tests.
+    def test_tied_weights(self):
+        """
+        Tests that randomly initialized models have their weights properly tied.
+
+        There are two sets of ties in DiffusionGemma:
+        1. The text encoder trainable params are the same as the decoder trainable params, if we exclude the
+           decoder self-conditioning weights
+        2. The LM Head weights are the same as the embedding weights -- in both the text encoder and in the decoder!
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # 1. text encoder trainable params == decoder trainable params (excluding decoder self-conditioning)
+        # In other words, all text encoder trainable params must be decoder trainable params.
+        decoder_trainable_params = dict(model.model.decoder.named_parameters())
+        for name, encoder_text_param in model.model.encoder.language_model.named_parameters():
+            decoder_trainable_param = decoder_trainable_params[name]
+            self.assertTrue(encoder_text_param is decoder_trainable_param)
+
+        # 2. lm head weights == text encoder embedding weights == decoder embedding weights
+        self.assertTrue(model.lm_head.weight is model.model.decoder.embed_tokens.weight)
+        self.assertTrue(model.lm_head.weight is model.model.encoder.language_model.embed_tokens.weight)
+
+    def test_use_cache_is_ignored(self):
+        """
+        DiffusionGemma's decoder never writes a cache, so the common kwarg `use_cache` is silently ignored instead
+        of raising. This keeps the model usable with gradient checkpointing, which forces `use_cache=False`.
+        """
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Either value is accepted and has no effect: no exception, and the output matches omitting the kwarg.
+        expected = model(**model_inputs).logits
+        for use_cache in (False, True):
+            logits = model(**model_inputs, use_cache=use_cache).logits
+            torch.testing.assert_close(logits, expected)
+
+    def test_diffusion_decoder_mask_no_cache_raises_exception(self):
+        """
+        DiffusionGemma has a custom function to create an attention mask for the decoder. Contrarily
+        to other mask creation functions, it requires a KV cache
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        dummy_canvas = torch.ones((2, 4), dtype=torch.int32, device=torch_device)
+        with self.assertRaises(ValueError):
+            _ = model.model.decoder.create_diffusion_decoder_attention_mask(
+                config=config.text_config,
+                inputs_embeds=dummy_canvas.unsqueeze(-1),
+                cache=None,  # this will trigger an exception
+            )
+
+    def test_diffusion_decoder_mask_dynamic_cache(self):
+        """
+        This is the simplest test: the resulting mask should be full of 1s. As a shortcut, in eager execution
+        + dynamic cache, it simply returns `None` attention masks
+        """
+
+        prefill_length = 8
+        canvas_length = 4
+        concat_kv_length = prefill_length + canvas_length
+        batch_size = 2
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (smaller than sliding window)
+        cache = DynamicCache(config=config)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
+
+        # Get the mask
+        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.bool, device=torch_device)
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config.text_config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            cache=cache,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        self.assertIsNone(mask_mapping["full_attention"])
+        self.assertIsNone(mask_mapping["sliding_attention"])
+
+        # We get the same result if we pass `attention_mask = None`
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config.text_config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            cache=cache,
+            decoder_attention_mask=None,
+        )
+        self.assertIsNone(mask_mapping["full_attention"])
+        self.assertIsNone(mask_mapping["sliding_attention"])
+
+    def test_diffusion_decoder_mask_dynamic_cache_left_padding(self):
+        """
+        This test is similar to `test_diffusion_decoder_mask_dynamic_cache`, but with left-padding on one of the
+        rows. There should be a few zeros on the final mask, corresponding to the left-padded items.
+        """
+
+        prefill_length = 8
+        canvas_length = 4
+        concat_kv_length = prefill_length + canvas_length
+        batch_size = 2
+        left_padding_length = 2  # only applied on batch item 0
+        expected_non_zero = (
+            ((concat_kv_length - left_padding_length) * canvas_length)  # batch item 0
+            + (concat_kv_length * canvas_length)  # batch item 1
+        )
+        expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (smaller than sliding window)
+        cache = DynamicCache(config=config)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
+
+        # Get the mask
+        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.bool, device=torch_device)
+        decoder_attention_mask[0, :left_padding_length] = 0
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config.text_config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            cache=cache,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape)
+        self.assertEqual(mask_mapping["full_attention"].sum(), expected_non_zero)
+        self.assertEqual(mask_mapping["full_attention"][0, 0, :, :left_padding_length].sum(), 0)
+        self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape)
+        self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero)
+        self.assertEqual(mask_mapping["sliding_attention"][0, 0, :, :left_padding_length].sum(), 0)
+
+    def test_diffusion_decoder_mask_dynamic_cache_int_padding_mask(self):
+        """
+        Same as `test_diffusion_decoder_mask_dynamic_cache_left_padding`, but the padding mask holds `1`/`0` integers,
+        the way a tokenizer returns it, instead of booleans. It must produce the same boolean mask.
+        """
+
+        prefill_length = 8
+        canvas_length = 4
+        concat_kv_length = prefill_length + canvas_length
+        batch_size = 2
+        left_padding_length = 2  # only applied on batch item 0
+        expected_non_zero = (
+            ((concat_kv_length - left_padding_length) * canvas_length)  # batch item 0
+            + (concat_kv_length * canvas_length)  # batch item 1
+        )
+        expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (smaller than sliding window)
+        cache = DynamicCache(config=config)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
+
+        # Get the mask
+        decoder_attention_mask = torch.ones((batch_size, concat_kv_length), dtype=torch.long, device=torch_device)
+        decoder_attention_mask[0, :left_padding_length] = 0
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config.text_config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            cache=cache,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        for layer_pattern in ("full_attention", "sliding_attention"):
+            self.assertEqual(mask_mapping[layer_pattern].dtype, torch.bool)
+            self.assertEqual(mask_mapping[layer_pattern].shape, expected_attention_mask_shape)
+            self.assertEqual(mask_mapping[layer_pattern].sum(), expected_non_zero)
+            self.assertEqual(mask_mapping[layer_pattern][0, 0, :, :left_padding_length].sum(), 0)
+
+    def test_diffusion_decoder_mask_dynamic_cache_beyond_sliding_window(self):
+        """
+        This tests builds upon `test_diffusion_decoder_mask_dynamic_cache_left_padding`: it tests the case with
+        left-padding AND going beyond the sliding window. The prefill length is longer than the sliding window
+        length. The short left-padding should become invisible in the sliding window layers, after prefill.
+        """
+
+        prefill_length = 16
+        sliding_window_length = 8
+        canvas_length = 4
+        concat_kv_length_full = prefill_length + canvas_length
+        # -1 -> the DYNAMIC sliding window kv cache has len=window-1
+        concat_kv_length_sliding = sliding_window_length + canvas_length - 1
+        batch_size = 2
+        left_padding_length = 2  # only applied on batch item 0
+        expected_non_zero_full = (
+            ((concat_kv_length_full - left_padding_length) * canvas_length)  # batch item 0
+            + (concat_kv_length_full * canvas_length)  # batch item 1
+        )
+        expected_attention_mask_shape_full = (batch_size, 1, canvas_length, concat_kv_length_full)
+        expected_non_zero_sliding = concat_kv_length_sliding * batch_size * canvas_length
+        expected_attention_mask_shape_sliding = (
+            batch_size,
+            1,
+            canvas_length,
+            sliding_window_length + canvas_length - 1,
+        )
+        # Double-check test assumption that left-padding should be past the sliding window
+        self.assertTrue(prefill_length - left_padding_length > sliding_window_length)
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config.sliding_window = sliding_window_length
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (LARGER than sliding window)
+        cache = DynamicCache(config=config)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
+
+        # Get the mask
+        decoder_attention_mask = torch.ones((batch_size, concat_kv_length_full), dtype=torch.bool, device=torch_device)
+        decoder_attention_mask[0, :left_padding_length] = 0
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config.text_config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            cache=cache,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape_full)
+        self.assertEqual(mask_mapping["full_attention"].sum(), expected_non_zero_full)
+        self.assertEqual(mask_mapping["full_attention"][0, 0, :, :left_padding_length].sum(), 0)
+        self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape_sliding)
+        self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero_sliding)
+        # sliding window got beyond padding, so the first tokens in the sliding window will not be masked
+        self.assertEqual(
+            mask_mapping["sliding_attention"][0, 0, :, :left_padding_length].sum(), left_padding_length * canvas_length
+        )
+
+    def test_diffusion_decoder_mask_static_cache(self):
+        """
+        Same as `test_diffusion_decoder_mask_dynamic_cache`, but with a Static Cache. Contrarily to the
+        original test, the mask is materialized (a materialized mask is needed at compile time)
+        """
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        prefill_length = 8
+        canvas_length = config.canvas_length
+        total_input_length = prefill_length + canvas_length
+
+        # More than input so we don't hit sliding window being cropped yet
+        static_cache_length = total_input_length + 20
+        concat_kv_length = static_cache_length + canvas_length
+        batch_size = 2
+        expected_non_zero = total_input_length * canvas_length * batch_size
+        expected_attention_mask_shape = (batch_size, 1, canvas_length, concat_kv_length)
+
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (smaller than sliding window)
+        cache = StaticCache(config=config, max_cache_len=static_cache_length)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
+
+        # Get the mask (correctly designed for the static cache)
+        decoder_attention_mask = torch.ones((batch_size, total_input_length), dtype=torch.bool, device=torch_device)
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            cache=cache,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape)
+        self.assertEqual(mask_mapping["full_attention"].sum(), expected_non_zero)
+        self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape)
+        self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero)
+
+    def test_diffusion_decoder_mask_static_cache_beyond_sliding_window(self):
+        """
+        Same as `test_diffusion_decoder_mask_dynamic_cache_beyond_sliding_window`, but with a Static Cache.
+        This is the most complex mask preparation test, including static caches, left-padding, and mask preparation
+        beyond the sliding window length.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        prefill_length = 16
+        sliding_window_length = 8
+        canvas_length = config.canvas_length
+        total_input_length = prefill_length + canvas_length
+
+        # Max-cache-len is less than `total_input_length` to trigger going beyond sliding window
+        concat_kv_length_sliding = sliding_window_length + canvas_length - 1
+        static_cache_length = total_input_length - 4
+        concat_kv_length_full = static_cache_length + canvas_length
+        batch_size = 2
+        left_padding_length = 2  # only applied on batch item 0
+
+        # Current query (`canvas`) attends to key (`prefill + itself`). Optionally, doesn't attend if pading present
+        expected_non_zero_full = (
+            ((total_input_length - left_padding_length) * canvas_length)  # batch item 0
+            + (total_input_length * canvas_length)  # batch item 1
+        )
+        expected_attention_mask_shape_full = (batch_size, 1, canvas_length, concat_kv_length_full)
+        expected_non_zero_sliding = concat_kv_length_sliding * batch_size * canvas_length
+        expected_attention_mask_shape_sliding = (
+            batch_size,
+            1,
+            canvas_length,
+            concat_kv_length_sliding + 1,
+        )
+        # Double-check test assumption that left-padding should be past the sliding window
+        self.assertTrue(prefill_length - left_padding_length > sliding_window_length)
+
+        config.text_config.sliding_window = sliding_window_length
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Apply prefill (LARGER than sliding window)
+        cache = StaticCache(config=config, max_cache_len=static_cache_length)
+        prefill_input_ids = torch.ones((batch_size, prefill_length), dtype=torch.int32, device=torch_device) * 50
+        cache = model.model.encoder(prefill_input_ids, cache=cache).cache
+
+        # Get the mask (correctly designed for the static cache)
+        decoder_attention_mask = torch.ones((batch_size, total_input_length), dtype=torch.bool, device=torch_device)
+        decoder_attention_mask[0, :left_padding_length] = 0
+        dummy_canvas = torch.ones((batch_size, canvas_length), dtype=torch.int32, device=torch_device)
+        mask_mapping = model.model.decoder.create_diffusion_decoder_attention_mask(
+            config=config,
+            inputs_embeds=dummy_canvas.unsqueeze(-1),
+            cache=cache,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        self.assertEqual(mask_mapping["full_attention"].shape, expected_attention_mask_shape_full)
+        self.assertEqual(mask_mapping["full_attention"].sum(), expected_non_zero_full)
+        self.assertEqual(mask_mapping["full_attention"][0, 0, :, :left_padding_length].sum(), 0)
+        self.assertEqual(mask_mapping["sliding_attention"].shape, expected_attention_mask_shape_sliding)
+        self.assertEqual(mask_mapping["sliding_attention"].sum(), expected_non_zero_sliding)
+        # sliding window got beyond padding, so the first tokens in the sliding window will not be masked
+        self.assertEqual(
+            mask_mapping["sliding_attention"][0, 0, :, :left_padding_length].sum(), left_padding_length * canvas_length
+        )
+
+    # Generation tests
+    @parameterized.expand(
+        [
+            # (sub_test_name, {generate_kwargs}),
+            # Cache interface
+            ("dynamic_cache", {}),  # default cache
+            ("static_cache", {"cache_implementation": "static"}),  # static cache -> triggers compilation
+            # Diffusion-specific common kwargs
+            ("custom_sampler", {"sampler_config": EntropyBoundSamplerConfig(0.1)}),
+            (
+                "custom_temperature",
+                {"t_min": 0.1, "t_max": 0.2},
+            ),
+            (
+                "custom_stopping",
+                {"stability_threshold": 0, "confidence_threshold": 1e-1},
+            ),
+        ]
+    )
+    def test_generate(self, name, generate_kwargs):
+        """Tests `generate` calls with common flags"""
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
+
+        generation_outputs = model.generate(
+            **model_inputs, max_new_tokens=16, max_denoising_steps=2, **generate_kwargs
+        )
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
+        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+
+    def test_generate_text_only(self):
+        """Same as `test_generate`, but only with text inputs (no images)"""
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
+
+        generation_outputs = model.generate(model_inputs["input_ids"], max_new_tokens=16, max_denoising_steps=2)
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
+        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+
+    def test_generate_without_return_dict(self):
+        """Same as `test_generate_text_only`, but return_dict_in_generate=False"""
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
+        model.generation_config.return_dict_in_generate = False
+
+        generation_outputs = model.generate(model_inputs["input_ids"], max_new_tokens=16, max_denoising_steps=2)
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
+        self.assertEqual(generation_outputs.shape, expected_shape)
+
+    def test_generate_from_generation_config(self):
+        """
+        Same as the base case in `test_generate`, but we parameterize the generation call with a
+        `DiffusionGemmaGenerationConfig`
+        """
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # force `eos_token_id = None` to not stop before reaching `max_new_tokens`
+        generation_config = DiffusionGemmaGenerationConfig(eos_token_id=None, max_new_tokens=16, max_denoising_steps=2)
+        generation_outputs = model.generate(**model_inputs, generation_config=generation_config)
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
+        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+
+    def test_generate_kwarg_overrides(self):
+        """
+        Same as `test_generate_from_generation_config`, but we override some parameters with kwargs in the
+        `generate` call. Remember: kwargs > generation config
+        """
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # force `eos_token_id = None` to not stop before reaching `max_new_tokens`
+        generation_config = DiffusionGemmaGenerationConfig(eos_token_id=None, max_new_tokens=16, max_denoising_steps=2)
+        generation_outputs = model.generate(**model_inputs, generation_config=generation_config, max_new_tokens=32)
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 32)
+        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+
+    def test_generate_with_cache(self):
+        """
+        Tests that we can pass in cache outputted from a previous `generate` into a subsequent call.
+        This pattern is used in chat sessions.
+        """
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
+
+        # 1st generate call, without KV cache
+        generation_1_outputs = model.generate(**model_inputs, max_new_tokens=16, max_denoising_steps=2)
+        self.assertIsInstance(generation_1_outputs.cache, Cache)
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
+        self.assertEqual(generation_1_outputs.sequences.shape, expected_shape)
+
+        # 2nd generate call, with KV cache from previous call
+        # NOTE: `input_ids` in `generate` can only contain **unprocessed** tokens
+        new_input_ids = torch.cat((generation_1_outputs.sequences, model_inputs["input_ids"]), dim=-1)
+        generation_2_outputs = model.generate(
+            input_ids=new_input_ids,
+            cache=generation_1_outputs.cache,
+            max_new_tokens=16,
+            max_diffusion_steps=2,
+        )
+
+        # in total, we feed in `model_inputs["input_ids"]` twice, and get 16 new tokens twice
+        expected_shape = (model_inputs["input_ids"].shape[0], (model_inputs["input_ids"].shape[1] + 16) * 2)
+        self.assertEqual(generation_2_outputs.sequences.shape, expected_shape)
+
+    @parameterized.expand(
+        [
+            ("dynamic_cache", None),  # default cache
+            ("static_cache", "static"),  # static cache -> triggers compilation under the hood
+        ]
+    )
+    @slow
+    def test_generate_beyond_sliding_window(self, name, cache_implementation):
+        """Tests that generate can run beyond the sliding window length"""
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        # Canvas length has to be much smaller than sliding window to correctly check the mask
+        # and input-length has to be smaller than sliding length! We will check three cases:
+        # 1) input/mask is smaller than window
+        # 2) input length approaching full cache length
+        # 3) input length goes beyond window length
+        # Input length is 25 in model tester, so we will set sliding window to 48 tokens
+        # After generating `max_new_tokens=32`, the final length will go beyond sliding window
+        config.text_config.sliding_window = 48
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
+
+        generation_outputs = model.generate(
+            **model_inputs,
+            max_new_tokens=32,
+            max_denoising_steps=2,
+            disable_compile=True,
+            cache_implementation=cache_implementation,
+        )
+        self.assertTrue(generation_outputs.sequences.shape[1] > config.text_config.sliding_window)
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 32)
+        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+
+    @unittest.skip(reason="TODO(joaogante): red in CI, fix me")
+    def test_diffusion_streaming(self):
+        """Tests `TextDiffusionStreamer`"""
+        # TODO(huggingface team): after a tiny diffusion model is created, this test can be moved into
+        # its right place, i.e. tests/generation/test_streamers.py
+
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = model_inputs["input_ids"][:1, :]  # streaming requires bsz=1
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+
+        # Any tokenizer will do, as long as it has the same vocab size.
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        with CaptureStdout() as cs:
+            streamer = TextDiffusionStreamer(tokenizer)
+            model_out = model.generate(input_ids, max_new_tokens=16, max_denoising_steps=2, streamer=streamer)
+        streamer_text = cs.out
+        generate_text = tokenizer.decode(model_out.sequences[0])
+
+        # the streamer ends with a `\n`
+        self.assertTrue(streamer_text.endswith("\n"))
+        # Important for this test: max_new_tokens==canvas_length. The last piece of text thrown by the streamer
+        # is the finalized canvas.
+        self.assertEqual(streamer_text[-(len(generate_text) + 1) : -1], generate_text)
+        # `\x1b7` = save cursor position; `\x1b8` = restore cursor position;
+        # Used to overwrite draft tokens while streaming.
+        self.assertIn("\x1b7", streamer_text)
+        self.assertIn("\x1b8", streamer_text)
+
+
+@require_torch
+class DiffusionGemmaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    _model_path = "google/diffusiongemma-26B-A4B-it"
+
+    @slow
+    def test_diffusion_gemma_chat_template(self):
+        # fmt: off
+        expected_input_ids = [
+            [
+                2,    105,   2364,    107,   6974,    496,   1440,  20494,   1003,
+                23613, 236761,    106,    107,    105,   4368,    107
+            ]
+        ]
+        # fmt: on
+        expected_decoded_tokens = ["<bos><|turn>user\nWrite a long essay about Portugal.<turn|>\n<|turn>model\n"]
+
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            {"role": "user", "content": "Write a long essay about Portugal."},
+        ]
+        input_ids = processor.apply_chat_template(chat, tokenize=True, return_tensors="pt", add_generation_prompt=True)
+        self.assertEqual(input_ids.tolist(), expected_input_ids)
+
+        decoded_tokens = processor.decode(input_ids)
+        self.assertIn("<|turn>", decoded_tokens[0])
+        self.assertIn("<turn|>", decoded_tokens[0])
+        self.assertNotIn("<|channel>", decoded_tokens[0])
+        self.assertNotIn("<channel|>", decoded_tokens[0])
+        self.assertNotIn("<|think|>", decoded_tokens[0])  # shouldn't have the think token
+        self.assertEqual(decoded_tokens, expected_decoded_tokens)
+
+    @slow
+    def test_diffusion_gemma_chat_template_image(self):
+        image_tokens = [255999, 258880, 258882]  # These tokens must be present in the `input_ids`
+        # TODO(joao): this should be 280! Something is wrong with processing?
+        image_token_count = 260
+
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
+                    },
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            }
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        )
+        for token in image_tokens:
+            self.assertIn(token, model_inputs["input_ids"])
+        self.assertEqual((model_inputs["input_ids"] == 258880).sum().item(), image_token_count)
+
+        for expected_model_input in ("attention_mask", "pixel_values", "image_position_ids", "mm_token_type_ids"):
+            self.assertIn(expected_model_input, model_inputs)
+
+    @slow
+    def test_diffusion_gemma_chat_template_with_thinking(self):
+        # fmt: off
+        expected_input_ids = [
+            [
+                2,    105,   9731,    107,     98,    107,    106,    107,    105,
+                2364,    107,   6974,    496,   1440,  20494,   1003,  23613, 236761,
+                106,    107,    105,   4368,    107
+            ]
+        ]
+        # fmt: on
+        expected_decoded_tokens = [
+            "<bos><|turn>system\n<|think|>\n<turn|>\n<|turn>user\nWrite a long essay about Portugal.<turn|>\n<|turn>model\n"
+        ]
+
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            {"role": "user", "content": "Write a long essay about Portugal."},
+        ]
+        input_ids = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, enable_thinking=True
+        )
+        self.assertEqual(input_ids.tolist(), expected_input_ids)
+
+        decoded_tokens = processor.decode(input_ids)
+        self.assertIn("<|turn>", decoded_tokens[0])
+        self.assertIn("<turn|>", decoded_tokens[0])
+        self.assertIn("<|think|>", decoded_tokens[0])  # must have the think token
+        self.assertEqual(decoded_tokens, expected_decoded_tokens)
+
+    # Only 1 checkpoint got released: the 26B MoE. At release time, MoE quantization was not working properly,
+    # and the HF CI didn't have 80GB GPUs. As such, tests against the original model are tagged with `@tooslow`.
+    # Meaning: these tests won't run in the `py.test` command, and you have to uncomment the line. These tests
+    # exist to keep track of the model's original numerics.
+    def _load_model(self, minified=False):
+        if minified:
+            config = AutoConfig.from_pretrained(self._model_path)
+            config.text_config.num_hidden_layers = 6  # loaded model requires ~12.7 GB
+            config.text_config.layer_types = config.text_config.layer_types[:6]
+            model = DiffusionGemmaForBlockDiffusion.from_pretrained(
+                self._model_path,
+                config=config,
+                dtype=torch.bfloat16,
+                device_map="auto",
+            )
+        else:
+            model = DiffusionGemmaForBlockDiffusion.from_pretrained(
+                self._model_path,
+                dtype=torch.bfloat16,
+                device_map="auto",
+            )
+        return model
+
+    @tooslow
+    def test_diffusion_gemma_forward_text_only(self):
+        """bsz=1, no image"""
+        # fmt: off
+        # print(model_out.logits[:, :10, :12])
+        # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        [ 4.12986183, 20.66659164,  6.75712347,  4.16051483, 13.11566544,  3.59206009,  3.46879172,
+                        3.86895919,  3.14465618,  2.47871161,  4.43598938,  4.77164030],
+                        [ 3.20645595, 22.52679825,  7.78647614,  2.71133161, 14.73279667,  4.55818033,  4.16051483,
+                        3.03644228,  3.91504526,  1.58446193,  4.52764702,  4.46655130],
+                        [ 4.77164030, 23.55075455,  5.80103159,  3.65364885, 15.66178513,  4.19115925,  5.01498747,
+                        2.92814803,  4.55818033,  2.92814803,  5.28794241,  7.87383986],
+                        [ 4.64972258, 24.27903175,  6.01130199,  3.66904116, 15.57065392,  3.17555952,  5.25765753,
+                        3.40711212,  4.95421267,  4.28303957,  5.71073294,  8.10610390],
+                        [ 5.16673803, 24.27903175,  6.42998266,  3.36083388, 16.89584923,  4.49710369,  5.77094412,
+                        4.40541792,  5.22736216,  4.12986183,  7.05306482,  8.68214703],
+                        [ 5.28794241, 24.36471176,  7.58207989,  3.53044105, 17.31759644,  4.49710369,  5.31821585,
+                        4.40541792,  4.98460531,  3.88432312,  7.46494198,  8.33732700],
+                        [ 5.10607004, 24.27903175,  7.17103910,  3.34540391, 16.55123901,  3.96111226,  4.09919930,
+                        4.25242186,  4.34424734,  4.46655130,  5.71073294,  8.27962112],
+                        [ 6.81642532, 24.19219208,  8.56747913,  5.37872887, 17.15010071,  5.80103159,  5.86117029,
+                        4.25242186,  6.34047985,  4.49710369,  7.61132526,  9.36425304],
+                        [ 6.99399042, 24.44923782,  8.96760273,  5.34847832, 16.81029892,  5.77094412,  4.95421267,
+                        4.49710369,  5.68060923,  4.68021679,  6.93485880,  8.85363007],
+                        [ 7.93200207, 23.83295822,  7.81561375,  6.51936626, 17.72932053,  5.98130083,  5.83110666,
+                        5.43919706,  6.60862780,  5.28794241,  7.66977119,  9.86893463]
+                    ]
+                ]
+            }
+        )
+        # fmt: on
+
+        model = self._load_model()
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            {"role": "user", "content": "Write a long essay about Portugal."},
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)
+
+        # hardcodes input canvas to avoid depending on random canvas sampling
+        decoder_input_ids = torch.arange(model.config.canvas_length, dtype=torch.int32, device=model.device).unsqueeze(
+            0
+        )
+        model_inputs["decoder_input_ids"] = decoder_input_ids
+
+        with torch.no_grad():
+            model_out = model(**model_inputs)
+        self.assertEqual(
+            list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
+        )
+        torch.testing.assert_close(
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
+        )
+
+    @tooslow
+    def test_diffusion_gemma_forward_with_image(self):
+        """bsz=1, with image"""
+        # fmt: off
+        # print(model_out.logits[:, :10, :12])
+        # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        [ 6.93485880, 20.60072327,  3.89968514,  7.49424887,  6.99399042, -0.03344725,  0.44332713,
+                        -0.53900456,  2.18363142,  0.35545215,  1.24927723,  3.53044105],
+                        [ 6.81642532, 19.92110252,  4.92381001,  5.74084425, 10.31235313,  4.83253860,  0.94890219,
+                        1.05425322,  0.87475199,  0.16503741,  0.06933582,  2.74232340],
+                        [ 6.40016174, 22.63516045,  2.88171268,  6.75712347, 12.08642769,  5.25765753,  2.60281467,
+                        2.60281467,  5.55999660,  2.66483307,  2.05925679,  5.98130083],
+                        [ 9.86893463, 21.78874207,  2.35452294,  7.78647614, 15.01560497,  7.11208105,  5.07571983,
+                        5.80103159,  4.68021679,  4.86297274,  3.45337439,  7.78647614],
+                        [ 5.01498747, 21.18004990,  1.31166339,  4.95421267, 11.13002872,  2.54077387,  0.40427244,
+                        2.40110350,  0.42770541,  1.23367894, -0.29100651,  1.06205606],
+                        [ 5.74084425, 21.42788887,  2.12145352,  4.77164030, 11.82355690,  3.12920213,  3.66904116,
+                        3.43795562,  2.64933062,  2.88171268,  2.71133161,  4.89339685],
+                        [ 6.28074551, 22.30597687,  4.16051483,  4.52764702, 12.08642769,  4.64972258,  4.31364775,
+                        5.89122152,  1.52212954,  3.74597287,  2.13699985,  6.31061935],
+                        [ 6.37032795, 23.92457008,  9.02448273,  3.28366685, 10.64161205,  3.22190189,  3.00550938,
+                        4.83253860,  0.88255781,  1.63899159,  1.81808197,  5.49961996],
+                        [ 7.46494198, 25.78687286,  9.36425304,  3.63825440, 13.06506538,  2.02815175,  3.23734570,
+                        5.37872887,  3.02097654,  2.27686334,  2.16808867,  6.63835430],
+                        [ 6.16112089, 26.16215897,  5.71073294,  3.34540391, 11.92896748,  1.55329728,  4.77164030,
+                        4.12986183,  1.02304065,  3.49961996,  1.73244548,  6.45979071]
+                ]
+                ]
+            }
+        )
+        # fmt: on
+
+        model = self._load_model()
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
+                    },
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            }
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)
+
+        # hardcodes input canvas to avoid depending on random canvas sampling
+        decoder_input_ids = torch.arange(model.config.canvas_length, dtype=torch.int32, device=model.device).unsqueeze(
+            0
+        )
+        model_inputs["decoder_input_ids"] = decoder_input_ids
+
+        # sanity check: has image inputs
+        self.assertIn("pixel_values", model_inputs)
+
+        with torch.no_grad():
+            model_out = model(**model_inputs)
+        self.assertEqual(
+            list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
+        )
+        torch.testing.assert_close(
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
+        )
+
+    @tooslow
+    def test_diffusion_gemma_forward_batched(self):
+        """bsz>1, no image"""
+        # fmt: off
+        # print(model_out.logits[:, :5, :12])
+        # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        [-1.56108880e+00,  1.99211025e+01,  1.60004282e+00,  1.01073846e-01,  7.58207989e+00,
+                        -5.98130083e+00, -4.40541792e+00, -1.73244548e+00, -1.42860627e+00, -5.97577214e-01,
+                        -1.81808197e+00,  8.74021053e-02],
+                        [-1.02304065e+00,  2.26888294e+01,  9.53315258e+00, -3.37876350e-01,  8.91065121e+00,
+                        1.29394531e-02,  5.35099506e-01, -2.52526045e+00, -7.91013837e-02, -2.02815175e+00,
+                        2.27686334e+00,  8.86460662e-01],
+                        [-2.33393744e-01,  2.34054356e+01,  5.04535866e+00, -4.94095922e-01,  1.10760899e+01,
+                        1.23367894e+00,  9.56706762e-01, -1.94259071e+00,  1.51433694e+00,  1.03864717e+00,
+                        2.61832142e+00,  5.65047359e+00],
+                        [-1.21808004e+00,  2.25267982e+01,  4.43598938e+00, -1.23367894e+00,  8.62484741e+00,
+                        6.79571211e-01,  7.10804522e-01, -2.02815175e+00, -4.82380331e-01,  7.57651389e-01,
+                        2.01259756e+00,  4.92381001e+00],
+                        [ 4.56995904e-01,  2.34541931e+01,  4.09919930e+00, -5.39550222e-02,  1.30143728e+01,
+                        7.14708507e-01,  1.21028030e+00,  5.11669159e-01,  1.81029797e+00,  1.63120234e+00,
+                        4.68021679e+00,  7.72815514e+00]
+                    ],
+                    [
+                        [ 1.15722090e-01,  2.06007233e+01,  3.12920213e+00, -2.12145352e+00,  5.37872887e+00,
+                        -3.46879172e+00, -5.80103159e+00, -4.12986183e+00, -2.47871161e+00, -5.52981424e+00,
+                        -5.01498747e+00, -8.16204786e-01],
+                        [ 2.88171268e+00,  2.27421646e+01,  8.62484741e+00,  5.11669159e-01,  8.51004219e+00,
+                        2.41662765e+00,  5.89767814e-01,  2.88171268e+00, -5.19479334e-01, -2.66483307e+00,
+                        -2.52526045e+00,  2.33899355e+00],
+                        [ 5.37872887e+00,  2.53779068e+01,  8.96760273e+00,  1.32725811e+00,  1.13449488e+01,
+                        1.28826988e+00, -6.79571211e-01,  3.45337439e+00,  3.66904116e+00, -2.52526045e+00,
+                        -1.18688023e+00,  2.61832142e+00],
+                        [ 5.04535866e+00,  2.42790318e+01,  8.68214703e+00,  4.43598938e+00,  9.47692776e+00,
+                        3.78886133e-01, -4.61921787e+00,  6.28814161e-01,  4.99953747e-01, -3.69981956e+00,
+                        -6.49413019e-02,  3.63825440e+00],
+                        [ 6.13118267e+00,  2.50096397e+01,  8.68214703e+00,  4.52764702e+00,  1.17707224e+01,
+                        -9.52148531e-03, -3.34540391e+00,  2.16808867e+00,  3.08282948e+00, -3.32997227e+00,
+                        -6.32718682e-01,  3.26822829e+00]
+                    ]
+                ]
+            }
+        )
+        # fmt: on
+
+        model = self._load_model()
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            [
+                {"role": "user", "content": "Write a long essay about Portugal."},
+            ],
+            [
+                {"role": "user", "content": "Why is 6 affraid of 7?"},
+            ],
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)
+
+        # hardcodes input canvas to avoid depending on random canvas sampling
+        decoder_input_ids = torch.arange(model.config.canvas_length, dtype=torch.int32, device=model.device)
+        decoder_input_ids = (
+            torch.ones((2, model.config.canvas_length), dtype=torch.int32, device=model.device) * decoder_input_ids
+        )
+        model_inputs["decoder_input_ids"] = decoder_input_ids
+
+        # sanity check: the input has bsz=2
+        self.assertEqual(model_inputs["input_ids"].shape[0], 2)
+        # sanity check: has padding, and it is left-padding
+        self.assertIn(model.config.text_config.pad_token_id, model_inputs["input_ids"])
+        self.assertFalse((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, -1]).any())
+        self.assertTrue((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, 0]).any())
+
+        with torch.no_grad():
+            model_out = model(**model_inputs)
+        self.assertEqual(
+            list(model_out.logits.shape), [2, model.config.canvas_length, model.config.text_config.vocab_size]
+        )
+        torch.testing.assert_close(model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits.get_expectation()))
+
+    @tooslow
+    def test_diffusion_gemma_generate_with_image_batched(self):
+        """
+        bsz>1, with image, calling `generate`.
+
+        This test has a LOT of non-determinism (sampling canvases, sampling tokens), so it is normal
+        if different platforms need to set different expected outcomes.
+        """
+        # fmt: off
+        # print(generated_tokens)
+        # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
+        expected_sequences = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        1018,    818,  21065,  41025, 236787,    562,  61774,  77985,    529,  23613,   1018,
+                        108,   5141,   3059,    580,    506,  16425,   3374,   7377,    529,  49566,   3879,
+                        236764,   1298,    506, 211050,   2601,   6861,  15741,    531,    506,  12529,  21065,
+                        18414, 236764,  23613,    563,    496,   7097,   5221,    684,   1061,   4191,    607,
+                        506,   5442, 236761,   1701,  24744, 236764,    625,    815,   7779,    618,    496,
+                        44701,   1534,    506,  10687,   4109,    532,    506,   1799, 236764,    496,  11825,
+                        1534,  20117,    532,  70548, 236761,   2282,   3050,  23613,    563,    531,   3050,
+                        496,   3996, 105362,    529,  49094,  27877, 236764,  44040,  11858,  24637, 236764,
+                        532,    496,   4709,   9226,  78729,   3224,    618,    808,   4834,    689,   1007,
+                        236829, 237028, 236746,   5268, 236764,  85539,   7833,  86508,    573,   2613,   5745,
+                        653,   8229,   2752,   1765, 236761,    108,  10354,    562,  34641,  84181, 236787,
+                        4934, 117838,    576,   4848,    531,  41254,    108,    818,   4083,    529,  23613,
+                        563,    886,    529,  35691,    532,  10534, 236761,  42251,    618,    496,  21880,
+                        528,    506, 236743, 236770, 236778,    594,   7691,   1913,    506, 117838,    576,
+                        4848,    699,  78763,   1044,   6157, 236764,  23613,   5452,    886,    529,    506,
+                        24625,   7097, 236772,  26582,    528,   3879, 236761,   5978,   1061,  23789,    964,
+                        3187, 204045,    528,   6145,  77486,  42469, 236764,  23613,   6976,  44630, 236761,
+                        236743,    108,    818, 236743, 236770, 236810,    594,    532, 236743, 236770, 236825,
+                        594,  24744,  11373,   1061,  16522,  17884, 236764,    506,  17884,    529,  41254,
+                        236761,   8382,    506,  91295,    529,   9732,   1133,  18934,  12297,    506,  60137,
+                        236764,  41082,   2556,  41516,  19482,   6998,    506,    623,  46811,    529, 106819,
+                        2098,  15468,    506,   9992,   9383,    532,  17154,   4673, 236761, 125620,   1776,
+                        150225,  11788,    506,   5442,   9116,    531,   4673,    528, 236743, 236770, 236812,
+                        236819, 236828, 236764
+                    ],
+                    [
+                        2094,   2471,   3831,    506,  16522,  26010,  17936,    528,   5054,  14322, 236764,
+                        7151, 236761,    669,   4429,    563,   3523,    699,    506,  15891,   2678, 236764,
+                        18482,   9975,  10654,    528,    506,  44529,    532,    506,  69480,  10901,   6615,
+                        528,    506,   1695, 236761,    106,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0
+                    ]
+                ]
+            }
+        )
+        # fmt: on
+
+        model = self._load_model()
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            [
+                {"role": "user", "content": "Write a long essay about Portugal."},
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
+                        },
+                        {"type": "text", "text": "What is shown in this image?"},
+                    ],
+                }
+            ],
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)
+
+        # sanity check: the input has bsz=2
+        self.assertEqual(model_inputs["input_ids"].shape[0], 2)
+        # sanity check: the input has an image component
+        self.assertIn("pixel_values", model_inputs)
+        # sanity check: has padding, and it is left-padding
+        self.assertIn(model.config.text_config.pad_token_id, model_inputs["input_ids"])
+        self.assertFalse((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, -1]).any())
+        self.assertTrue((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, 0]).any())
+
+        set_seed(42)
+        gen_out = model.generate(**model_inputs, max_new_tokens=256)
+        generated_tokens = gen_out.sequences[:, -256:]
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
+
+    @tooslow
+    def test_diffusion_gemma_generate_with_image_batched_long(self):
+        """
+        Ultimate test: bsz>1, with image, with thinking on, calling `generate` with
+        max_new_tokens > sliding attention length.
+
+        This test has a LOT of non-determinism (sampling canvases, sampling tokens), so it is normal
+        if different platforms need to set different expected outcomes.
+        """
+        # fmt: off
+        # print(generated_tokens)
+        # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
+        expected_sequences = Expectations(
+            {
+                ("cuda", None): [
+                    [
+                        21042,   2846, 236764,  23613,    691,    506,   3988,    529,    506,   1902, 236764,
+                        614,  38613,    600,  39349,    699,  14600,    531, 126382, 236764,    532,  73420,
+                        531,  72449, 236761,   1174,   6933,   6111,  36628,  12821,    532,   9226,   8770,
+                        236764, 175676,    528,    506,  94079,  37704,    688,  31035,   3117, 236764,  17202,
+                        684,   1061,  82647,  59491,   1133,  70186, 236764,  35809, 236764,    532,  83798,
+                        47397, 236761,  16961, 236764,    506,   3825,    529,  38613,  10734,   5378,    531,
+                        16670, 236764,   6641,    684,   1440,  13443,    529,   6658,  23049,    532,    506,
+                        56845,    808,  66856, 107130, 236829, 102708,   1208, 187920,    569,  81237, 118882,
+                        236761,   1030,    691,    711,   3097,    506,  33275,    567,  24817,    529, 236743,
+                        236770, 236819, 236832, 236812, 237028, 236746,  73887, 236764,    569, 236772,  18377,
+                        236748,   4806,   1933,   7820,  28622,   1298,  11838,   7006,  37067,    847,    528,
+                        506,    520, 204532,    529,  18187, 236789,  79689, 237028,   7705,  23613, 130661,
+                        1131,    506,  28239, 236764,  29810,   6693,   8927, 236772,  14531,   7097,    625,
+                        563,   3124, 236761,    108,   8551,  69565, 236764,  23613,    563,  33887,  12801,
+                        9785,   1061,  30997,   2425, 236761,    669,   4695,    563,  52803,    532,   3826,
+                        236764,   2033,    531,    506, 176165,  15706,    530,  11849, 236764,    506,   1902,
+                        236858, 236751,  24625, 115368,    774,  10135,   4128, 236764,   1298,   6944,   3776,
+                        81026, 103534,    531,  25465,  26607,   1949, 236761,    669,   3988,    563,  27222,
+                        684,    506,   1429,   3194,   5400, 236764,    496,  12529, 236764,  13935, 152990,
+                        529,  26012, 154863,    532,  64192,  32049,  24599,   1298,   1972,  12489,    657,
+                        496,  31878,  17723, 236761,   2282,    506,   8710, 236764,    506, 201172,   5469,
+                        20997,  62260, 236764,  11497,   5442,    505,  21294, 236764,    532,    496,   6962,
+                        32920,  10022, 236761,  43725,    506,   2891, 236764,    506,  21065,  18414,   7474,
+                        506,   4512,  61102
+                    ],
+                    [
+                        563,  88076,    580,   1903,    529,    672,   5441, 236761,    108,    902,    506,
+                        1695, 236764,   3418,    506,   1813, 236764,    506,  19519, 236764, 127150, 236772,
+                        30497,  26607,    529,    506,  69480,  10901,   6615,    659,  11325,   1208,    506,
+                        6425,   1933,   7217, 236761,    669,  15408,    563,   7804,    532,   1982, 236764,
+                        22169,    496,  17635,   1719, 236764,  30439,   3538,  37676,    580,    506,  31035,
+                        4065,    529,    506,  11825,    532,    506,   7845, 236761,    106,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0,      0,      0,      0,      0,      0,      0,      0,      0,
+                        0,      0,      0
+                    ]
+                ]
+            }
+        )
+        # fmt: on
+
+        model = self._load_model()
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            [
+                {"role": "user", "content": "Write a long essay about Portugal."},
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
+                        },
+                        {"type": "text", "text": "Describe the image in detail."},
+                    ],
+                }
+            ],
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat,
+            tokenize=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+            return_dict=True,
+            enable_thinking=True,
+        ).to(model.device)
+
+        # sanity check: the input has bsz=2
+        self.assertEqual(model_inputs["input_ids"].shape[0], 2)
+        # sanity check: the input has an image component
+        self.assertIn("pixel_values", model_inputs)
+        # sanity check: has padding, and it is left-padding
+        self.assertIn(model.config.text_config.pad_token_id, model_inputs["input_ids"])
+        self.assertFalse((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, -1]).any())
+        self.assertTrue((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, 0]).any())
+
+        set_seed(42)
+        gen_out = model.generate(**model_inputs, max_new_tokens=1280)
+
+        # sanity check: we went beyond the sliding window length
+        self.assertTrue(gen_out.sequences.shape[1] > model.config.text_config.sliding_window)
+        generated_tokens = gen_out.sequences[:, -256:]
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
+
+    # The tests below use a botched model, using the first six layers, to respect memory constraints of HF's CI.
+    # Six layers = minimum number of layers to have both sliding window attention and full attention.
+    @slow
+    def test_minified_diffusion_gemma_forward_text_only(self):
+        """[Minified (6 first layers)] bsz=1, no image"""
+        # fmt: off
+        # print(model_out.logits[:, :10, :12])
+        # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 22.95215607, -29.84662819, -12.29514503,  29.40289116,  29.99932861,  22.63516045,
+                       19.85102844, -11.82355690, -17.06575012, -29.86572838, -13.26691246, -18.59990692],
+                     [ 29.11355782, -28.55237961,  19.49482346,  29.69194222,  29.99987221,  -9.13802910,
+                      -27.89977074, -21.96432686, -22.36169815, -28.24126625, -29.42227936, -29.99154091],
+                     [ -0.24218227, -29.99761581, -29.99393845,  27.53452492,  26.28017807, -20.79719925,
+                       14.82745647,  -6.84605455, -27.28695297, -29.91287804, -19.70971489, -29.77148056],
+                     [-17.81046486, -29.67082214,  -1.25707602,  19.56684494,  29.74754906,  12.50244045,
+                       22.52679825, -20.79719925, -28.42986679, -28.77006149,   0.89036345, -26.66704369],
+                     [ 24.53262520, -29.02185059,  18.36726570,  29.61150932,  29.85164261,  19.92110252,
+                       27.49481583,  -1.98148620, -19.34960938, -29.00568390,  23.64606285, -23.00382233],
+                     [  2.85074806, -29.91848946, -16.55123901,  27.68740082,  29.94712830, -14.73279667,
+                       26.33790970, -14.73279667, -28.42986679, -28.72925377,   6.48958492, -27.10892868],
+                     [ 11.66479301, -25.65441132, -18.97969818,  19.99079323,  21.30470467,  -1.55329728,
+                        9.53315258, -23.30696678, -29.49378586, -27.68740082,  26.66704369,  -0.22362867],
+                     [ 16.28858566, -29.51024628,  17.23404694,  29.34078217,  29.81889534, -10.75072193,
+                       27.32979774,  -6.84605455, -29.08397102, -29.62416458,   4.80209446, -20.86193848],
+                     [  3.34540391, -29.83608246,  20.26569748,  28.68712234,  29.72112274, -16.63799286,
+                       29.29586983,  -4.49710369, -26.66704369, -29.77148056,  -2.60281467, -16.72434616],
+                     [ 12.34710312, -29.99351883,  29.19678497,  28.98925400,  29.45920181, -25.08536720,
+                        8.68214703, -28.21258926, -29.16993713, -29.94886017, -26.33790970, -27.15444756]]
+                    ],
+                ("xpu", 5): [
+                    [[ 21.18004799, -29.92373848,  -3.05190611,  29.14220428,  29.96082115,  28.18346024,
+                    27.83115768,   0.69128382, -27.28695488, -28.98925400,  -0.99962980, -17.81046677],
+                    [ 29.47677803,  17.40074348,  25.85169601,  29.87012291,  29.99976730, -16.98100090,
+                    -29.91848755, -18.97970009, -14.15672588, -28.78997993, -29.76376724, -29.99829102],
+                    [ -2.10590601, -29.99708939, -29.98819351,  26.50611115,  14.20525932, -24.77605629,
+                    -4.55818033, -17.81046677, -29.42227936, -29.94157028, -25.37790871, -29.89002419],
+                    [ -1.60004294, -29.42227936,  16.46408844,  26.77043152,  29.86119080,  14.59008121,
+                    22.02214432, -10.96796513, -29.24793625, -28.24126434,   2.33899355, -24.10417557],
+                    [ 28.06227303, -28.97256088,  27.15444565,  29.90688133,  29.90992928,  18.52275848,
+                    27.86572647,   4.64972305, -24.69602013, -28.92082787,  24.36471176, -22.36170006],
+                    [  2.86623120, -29.89710236,   5.16673756,  28.57573891,  29.90688133, -13.76502132,
+                    21.11716843, -18.82897186, -29.38286209, -29.12799644,   4.98460531, -27.57362747],
+                    [ 22.07961273, -24.93285179, -22.47210693,  27.19928551,  27.49481773,  -9.58930302,
+                        5.13640928, -16.81029701, -29.71171188, -25.30630493,  24.77605438,   1.87256217],
+                    [ 20.86193848, -29.44104195,  17.72932243,  29.67082405,  29.83608246,  -9.13802814,
+                    26.82098389, -13.41732407, -29.42227936, -29.44104195,   5.34847832, -22.13672447],
+                    [  8.73937702, -29.52617455,  14.54231644,  29.24793625,  29.36216545, -16.72434616,
+                    28.72925377, -11.98154259, -28.32464409, -29.70199013,  -5.98130035, -17.72932053],
+                    [ 17.89120865, -29.98819351,  29.29587173,  29.31869316,  29.69194031, -25.00963974,
+                        7.55281830, -28.15386772, -29.51024628, -29.92865372, -25.58675194, -26.71912193]]
+                    ]
+            }
+        )
+        # fmt: on
+
+        model = self._load_model(minified=True)
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            {"role": "user", "content": "Write a long essay about Portugal."},
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)
+
+        # hardcodes input canvas to avoid depending on random canvas sampling
+        decoder_input_ids = torch.arange(model.config.canvas_length, dtype=torch.int32, device=model.device).unsqueeze(
+            0
+        )
+        model_inputs["decoder_input_ids"] = decoder_input_ids
+
+        with torch.no_grad():
+            model_out = model(**model_inputs)
+        self.assertEqual(
+            list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
+        )
+        torch.testing.assert_close(
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
+        )
+
+    @slow
+    @require_deterministic_for_xpu
+    def test_minified_diffusion_gemma_forward_with_image(self):
+        """[Minified (6 first layers)] bsz=1, with image"""
+        # fmt: off
+        # print(model_out.logits[:, :10, :12])
+        # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [[
+                    [ 22.63516045, -29.93754959, -21.78874207,  28.24126625,  29.99957848,  13.36728001,
+                     -11.98154259, -11.92896748, -17.64777756, -29.70199203, -15.75251865, -26.61419106],
+                    [ 28.26949692,  -7.66977119,  17.72932053,  28.97255898,  29.99991417,   7.46494198,
+                     -29.02185059, -23.92457008, -14.10809517, -28.62135887, -29.81889534, -29.99593735],
+                    [ 15.75251865, -29.96454811, -29.80644989,  26.71912193,  28.21258926, -16.02234268,
+                     -18.59990692,  -9.98025513, -27.93328857, -29.29586983, -25.44850922, -29.88630295],
+                    [ -8.79653835, -26.04065895, -25.44850922,  23.40543556,  29.91572952,  16.28858566,
+                       9.75730991, -14.44649506, -26.96818924, -15.29489803,  -5.07571983, -24.93285370],
+                    [ 27.86572838, -29.69194222,  27.10892868,  29.72112274,  29.94712830,  19.12884521,
+                      26.04065895, -12.60555077, -13.31714249, -24.69602203,  27.49481583, -20.60072327],
+                    [  2.86623120, -29.80644989,  -7.40628147,  23.92457008,  29.55650711, -14.92172623,
+                      -2.91267133, -18.28892136, -28.77006149, -26.66704369,   2.41662765, -28.29728889],
+                    [-10.64161205, -27.45450211, -26.10184860,  15.47912979,  11.66479301, -21.42788887,
+                     -19.05447006, -22.58115005, -29.38286209,  -9.98025513,  21.78874207, -21.72950172],
+                    [  7.93200207, -29.45920181,  11.61169815,  28.40418053,  28.62135887, -18.28892136,
+                       9.13802910, -23.40543556, -29.45920181, -29.52617455,  -6.51936626, -26.96818924],
+                    [ -6.75712347, -29.40289116,  -1.18688023,  26.91985321,  26.82098389, -11.13002872,
+                      16.20023537, -17.06575012, -28.12381363, -29.29586983,  -6.01130199, -27.24345016],
+                    [  6.78678131, -29.97776413,  27.10892868,  28.66555023,  26.82098389, -26.28017807,
+                     -13.11566544, -28.42986679, -28.82887459, -29.82481384, -27.10892868, -28.48003769]
+                    ]],
+                ("xpu", 5): [[
+                    [ 18.97970009, -29.96791840, -26.61419106,  27.76038742,  29.54159164,  24.27903175,
+                        8.22184658,   8.04813480, -18.97970009, -22.74216461,  -1.06205606, -24.36471176],
+                    [ 28.35157585,  27.45450211,  28.68712234,  29.65972710,  29.99992943,  -9.02448273,
+                    -29.89710236, -25.23368645,   0.80449456, -29.29587173, -29.90688324, -29.99850464],
+                    [ -3.60746002, -29.76376724, -29.95053482,  24.01497269,   3.29910398, -26.22159958,
+                    -19.49482346, -27.19928741, -28.90302277, -29.94886017, -27.72417450, -29.98458862],
+                    [ -7.81561375, -26.96819115, -25.85169601,  26.16215897,  29.90688133,  -3.36083364,
+                        3.63825440,  -3.60746002, -27.83115768,  -9.02448273, -11.02206802, -25.65441132],
+                    [ 28.70835495, -29.78616714,  29.05341339,  29.90992928,  29.98179245,   9.58930302,
+                    27.57362556,  -8.96760178, -13.01437187, -26.82098389,  28.55237770, -22.36170006],
+                    [  0.66395408, -29.73022270,  -1.74023187,  26.50611115,  29.76376534, -19.05447006,
+                        0.96841347, -21.78874397, -29.47677803, -27.68740082,   1.40522099, -28.55237961],
+                    [-17.15010071, -26.28017807, -28.86654472,  17.48348999,  -6.93485880, -26.50610924,
+                    -17.81046677, -24.85499382, -29.47677803,  -6.81642532,  27.53452492,  -3.60746002],
+                    [  3.59206033, -29.29587173,  14.05937004,  28.59873009,  26.71912193, -24.10417557,
+                        4.19115925, -23.59856415, -29.74754906, -29.62416267,  -5.25765705, -26.71912193],
+                    [-13.76502132, -29.19678307,  10.58693695,  27.10892868,  26.16215897, -23.45419121,
+                    14.01054859, -16.63799286, -28.57573891, -29.36216545,  -8.68214703, -27.57362747],
+                    [  6.87567043, -29.98605347,  28.42986679,  29.00568199,  26.82098389, -28.06227493,
+                    -15.57065392, -28.40418053, -29.15618324, -29.77894592, -26.71912193, -28.40418053]
+                    ]]
+            }
+        )
+        # fmt: on
+
+        model = self._load_model(minified=True)
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
+                    },
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            }
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)
+
+        # hardcodes input canvas to avoid depending on random canvas sampling
+        decoder_input_ids = torch.arange(model.config.canvas_length, dtype=torch.int32, device=model.device).unsqueeze(
+            0
+        )
+        model_inputs["decoder_input_ids"] = decoder_input_ids
+
+        # sanity check: has image inputs
+        self.assertIn("pixel_values", model_inputs)
+
+        with torch.no_grad():
+            model_out = model(**model_inputs)
+        self.assertEqual(
+            list(model_out.logits.shape), [1, model.config.canvas_length, model.config.text_config.vocab_size]
+        )
+        torch.testing.assert_close(
+            model_out.logits[:, :10, :12].cpu(), torch.tensor(expected_logits.get_expectation())
+        )
+
+    @slow
+    @require_deterministic_for_xpu
+    def test_minified_diffusion_gemma_forward_batched(self):
+        """[Minified (6 first layers)] bsz>1, no image"""
+        # print(model_out.logits[:, :5, :12])
+        # Printed after running `torch.set_printoptions(precision=8, threshold=200, linewidth=100)`
+        expected_logits = Expectations(
+            {
+                ("cuda", None): [
+                    [[ 22.90015602, -29.86118889, -17.48348808,  29.31869316,  29.99923325,  22.41707611,
+                       18.36726570, -12.50244045, -16.72434616, -29.86118889, -13.61657238, -17.97154999],
+                     [ 29.24793625, -29.19678497,  12.24309826,  29.71171379,  29.99984360,  -5.89122152,
+                      -27.53452492, -21.05392075, -23.40543556, -28.35157776, -29.14220428, -29.99154091],
+                     [  4.00716066, -29.99804688, -29.99535561,  27.49481583,  27.53452492, -16.37653542,
+                       12.55404091,  -0.51166916, -26.50611114, -29.87012291, -19.42241287, -29.68155670],
+                     [-15.66178513, -29.64826202,  -3.96111226,  20.06009483,  29.81889534,  14.73279667,
+                       20.46785545, -17.56583405, -28.35157776, -28.42986679,   4.43598938, -27.01581001],
+                     [ 25.37790680, -29.24793625,  19.78056526,  29.70199203,  29.88245583,  20.46785545,
+                       26.82098389,  -0.71080452, -20.99029922, -28.78997803,  24.61488152, -23.45419312]],
+
+                    [[ 23.10617256, -29.88630295, -20.12901306,  29.24793625,  29.99969864,  22.36169815,
+                       13.36728001, -10.42242527, -20.40085030, -29.82481384, -17.31759644, -20.53447914],
+                     [ 28.86654282, -27.61213493,   8.91065121,  29.82481384,  29.99987221,  -9.02448273,
+                      -27.79604530, -23.05516243, -24.69602203, -28.26949692, -29.44104195, -29.99432945],
+                     [  9.81315899, -29.99593735, -29.95053482,  28.93834877,  20.53447914, -21.24255943,
+                        6.81642532,   0.63662314, -29.06881332, -29.78616714, -18.82897186, -29.73022270],
+                     [-18.21017647, -29.31869316,   8.39496517,  22.30597687,  26.39480209,   8.91065121,
+                       18.44520950, -19.27641296, -28.84785843, -28.40418053,  -1.56108880, -25.00963974],
+                     [ 21.48893547, -29.64826202,  17.89120674,  29.74754906,  28.86654282,  13.01437283,
+                       23.64606285,  -1.98926437, -25.37790680, -28.90302277,  17.23404694, -26.33790970]]
+                ],
+                ("xpu", 5): [
+                    [[ 21.96432686, -29.94348526,  -9.53315163,  29.14220428,  29.96683502,  28.37808609,
+                    27.45450211,   6.10123110, -26.50610924, -28.70835495,   0.21093403, -18.36726570],
+                    [ 29.54159164,  12.39897156,  25.08536530,  29.88630295,  29.99973488, -18.05149078,
+                    -29.91848755, -21.18004990, -16.63799286, -29.15618324, -29.74754906, -29.99850464],
+                    [ -0.82791477, -29.99761581, -29.99153900,  26.50611115,  17.72932243, -23.92457008,
+                    -6.54913378, -17.81046677, -29.24793625, -29.93543434, -25.08536720, -29.87012291],
+                    [  1.48316491, -29.42227936,  14.10809517,  27.01580811,  29.90688133,  16.02234268,
+                    21.30470467,  -9.64538002, -29.16993713, -27.93329048,   4.34424686, -24.19219208],
+                    [ 28.06227303, -28.84785843,  27.06271935,  29.91287804,  29.92623711,  18.21017647,
+                    27.65005684,   4.16051531, -24.19219208, -28.77005959,  25.30630302, -22.95215416]],
+
+                    [[ 20.86193848, -29.81277466, -14.30204105,  29.42228127,  29.85649490,  27.65005684,
+                    23.05516243,   9.81316090, -28.26949692, -28.06227493,  -0.92158508, -25.08536720],
+                    [ 29.11355782,  20.79719925,  20.73208427,  29.89710236,  29.99983406, -17.81046677,
+                    -29.87012291, -15.01560688, -17.72932053, -28.42986488, -29.73022270, -29.99791336],
+                    [ 11.61169815, -29.97701073, -29.97623253,  28.88492966,  18.28891945, -20.19754601,
+                        4.12986183, -11.18388557, -29.52617455, -29.87437248, -22.79516220, -29.73022270],
+                    [-10.42242527, -28.57573891,  15.57065582,  26.91985321,  29.70199203,  15.38721275,
+                    16.46408844, -14.82745552, -29.47677803, -27.76038551,  -4.00716066, -24.19219208],
+                    [ 25.44850922, -29.49378586,  27.41356277,  29.89710236,  29.64826012,  13.46727657,
+                    24.19219208,   4.40541744, -27.10892868, -28.50453377,  19.42241287, -24.36471176]]
+                ],
+            }
+        )  # fmt: skip
+
+        model = self._load_model(minified=True)
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            [
+                {"role": "user", "content": "Write a long essay about Portugal."},
+            ],
+            [
+                {"role": "user", "content": "Why is 6 affraid of 7?"},
+            ],
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)
+
+        # hardcodes input canvas to avoid depending on random canvas sampling
+        decoder_input_ids = torch.arange(model.config.canvas_length, dtype=torch.int32, device=model.device)
+        decoder_input_ids = (
+            torch.ones((2, model.config.canvas_length), dtype=torch.int32, device=model.device) * decoder_input_ids
+        )
+        model_inputs["decoder_input_ids"] = decoder_input_ids
+
+        # sanity check: the input has bsz=2
+        self.assertEqual(model_inputs["input_ids"].shape[0], 2)
+        # sanity check: has padding, and it is left-padding
+        self.assertIn(model.config.text_config.pad_token_id, model_inputs["input_ids"])
+        self.assertFalse((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, -1]).any())
+        self.assertTrue((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, 0]).any())
+
+        with torch.no_grad():
+            model_out = model(**model_inputs)
+        self.assertEqual(
+            list(model_out.logits.shape), [2, model.config.canvas_length, model.config.text_config.vocab_size]
+        )
+        torch.testing.assert_close(model_out.logits[:, :5, :12].cpu(), torch.tensor(expected_logits.get_expectation()))
+
+    @slow
+    @require_deterministic_for_xpu
+    def test_minified_diffusion_gemma_generate_with_image_batched(self):
+        """
+        [Minified (6 first layers)] bsz>1, with image, calling `generate`.
+
+        This test has a LOT of non-determinism (sampling canvases, sampling tokens), so it is normal
+        if different platforms need to set different expected outcomes.
+        """
+        # print(generated_tokens)
+        # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
+        expected_sequences = Expectations(
+            {
+                (None, None): [
+                    [48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 516, 48, 48, 48,
+                     48, 48, 371, 48, 48, 48, 48, 48, 957, 371, 516, 598, 371, 516, 48, 567, 48, 405, 516, 595, 48,
+                     379, 371, 595, 516, 841, 516, 379, 48, 48, 48, 48, 371, 371, 48, 516, 48, 832, 371, 48, 371, 48,
+                     516, 173, 405, 371, 48, 371, 48, 516, 832, 371, 516, 516, 48, 371, 371, 371, 48, 499, 48, 371,
+                     516, 48, 516, 48, 841, 371, 516, 516, 48, 371, 48, 48, 48, 371, 48, 371, 48, 48, 48, 48, 48, 371,
+                     516, 48, 379, 371, 48, 48, 371, 48, 48, 48, 371, 48, 48, 48, 516, 48, 48, 48, 172, 48, 48, 48, 48,
+                     371, 516, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 832, 48, 48,
+                     48, 48, 48, 48, 48, 48, 48, 48, 516, 48, 48, 516, 48, 371, 48, 48, 173, 48, 371, 371, 48, 371, 48,
+                     379, 48, 371, 48, 371, 595, 371, 516, 371, 48, 405, 48, 48, 48, 48, 48, 371, 48, 48, 48, 379, 48,
+                     48, 371, 371, 48, 405, 48, 48, 48, 48, 48, 48, 371, 48, 48, 48, 48, 48, 48, 371, 48, 371, 48, 48,
+                     516, 371, 516, 48, 48, 48, 516, 516, 48, 48, 48, 173, 48, 48, 48, 516, 48, 516, 48, 160, 516, 48,
+                     516, 48, 48, 48, 48, 516, 48, 48, 48, 48, 516],
+                    [48, 48, 627, 48, 48, 371, 48, 48, 379, 371, 371, 371, 48, 48, 48, 371, 371, 48, 48, 379, 516, 595,
+                     371, 841, 48, 48, 48, 48, 371, 595, 48, 48, 371, 832, 832, 595, 841, 48, 379, 48, 48, 48, 48, 48,
+                     48, 48, 48, 595, 595, 841, 841, 371, 48, 841, 371, 595, 595, 48, 516, 371, 371, 48, 48, 371, 48,
+                     371, 371, 371, 595, 371, 595, 48, 48, 379, 841, 841, 832, 48, 48, 371, 598, 634, 48, 379, 48, 48,
+                     516, 48, 48, 983, 371, 983, 48, 48, 48, 371, 48, 48, 48, 371, 516, 48, 48, 48, 48, 595, 48, 48,
+                     595, 516, 371, 516, 48, 371, 48, 48, 371, 48, 841, 595, 841, 516, 48, 48, 48, 983, 48, 48, 371,
+                     48, 48, 48, 48, 48, 48, 48, 48, 48, 977, 371, 48, 48, 634, 48, 48, 728, 379, 371, 371, 841, 371,
+                     48, 371, 371, 48, 48, 371, 48, 48, 371, 48, 48, 595, 48, 841, 48, 48, 48, 48, 48, 371, 634, 48,
+                     48, 516, 48, 516, 48, 48, 379, 48, 48, 598, 48, 48, 371, 48, 48, 371, 48, 48, 371, 48, 832, 48,
+                     371, 48, 48, 371, 516, 48, 48, 48, 371, 48, 48, 634, 48, 48, 48, 371, 48, 841, 595, 48, 379, 48,
+                     48, 48, 48, 4, 48, 48, 48, 48, 841, 379, 48, 371, 48, 371, 841, 841, 48, 379, 841, 48, 516, 48,
+                     48, 499, 371, 516, 48, 516, 48, 634, 371, 172, 371, 516, 48, 516, 48, 832, 371],
+                ],
+            }
+        )  # fmt: skip
+
+        model = self._load_model(minified=True)
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            [
+                {"role": "user", "content": "Write a long essay about Portugal."},
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
+                        },
+                        {"type": "text", "text": "What is shown in this image?"},
+                    ],
+                }
+            ],
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat, tokenize=True, return_tensors="pt", add_generation_prompt=True, return_dict=True
+        ).to(model.device)
+
+        # sanity check: the input has bsz=2
+        self.assertEqual(model_inputs["input_ids"].shape[0], 2)
+        # sanity check: the input has an image component
+        self.assertIn("pixel_values", model_inputs)
+        # sanity check: has padding, and it is left-padding
+        self.assertIn(model.config.text_config.pad_token_id, model_inputs["input_ids"])
+        self.assertFalse((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, -1]).any())
+        self.assertTrue((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, 0]).any())
+
+        set_seed(42)
+        gen_out = model.generate(**model_inputs, max_new_tokens=256)
+        generated_tokens = gen_out.sequences[:, -256:]
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())
+
+    @slow
+    @require_deterministic_for_xpu
+    def test_minified_diffusion_gemma_generate_with_image_batched_long(self):
+        """
+        [Minified (6 first layers)] Ultimate test: bsz>1, with image, with thinking on, calling `generate` with
+        max_new_tokens > sliding attention length.
+
+        This test has a LOT of non-determinism (sampling canvases, sampling tokens), so it is normal
+        if different platforms need to set different expected outcomes.
+        """
+        # print(generated_tokens)
+        # Printed after running `torch.set_printoptions(threshold=10000, linewidth=100)`
+        expected_sequences = Expectations(
+            {
+                (None, None): [
+                    [48, 48, 48, 567, 48, 405, 48, 48, 379, 48, 379, 48, 379, 379, 379, 379, 48, 48, 48, 48, 48, 379,
+                     379, 379, 379, 48, 48, 379, 48, 48, 379, 379, 379, 379, 379, 379, 379, 379, 379, 379, 48, 595, 48,
+                     48, 379, 48, 379, 48, 48, 379, 48, 379, 379, 48, 48, 48, 379, 379, 48, 516, 48, 418, 379, 379,
+                     379, 379, 418, 379, 379, 379, 48, 48, 48, 48, 379, 48, 48, 379, 48, 379, 379, 379, 48, 379, 48,
+                     48, 379, 48, 48, 48, 379, 379, 48, 48, 48, 48, 48, 48, 379, 379, 48, 48, 379, 48, 48, 921, 48, 48,
+                     379, 48, 379, 48, 48, 48, 48, 841, 48, 48, 379, 379, 48, 379, 48, 48, 379, 379, 48, 48, 48, 48,
+                     48, 48, 48, 379, 48, 48, 48, 379, 48, 48, 379, 48, 379, 48, 48, 379, 48, 48, 48, 379, 48, 48, 48,
+                     379, 516, 48, 379, 48, 48, 48, 379, 379, 379, 48, 48, 48, 48, 48, 379, 379, 379, 48, 48, 48, 48,
+                     48, 48, 48, 48, 48, 379, 379, 516, 48, 379, 379, 48, 48, 48, 48, 48, 379, 48, 48, 48, 48, 48, 48,
+                     48, 516, 379, 48, 48, 379, 48, 48, 48, 516, 48, 379, 48, 48, 48, 48, 379, 48, 48, 48, 48, 379, 48,
+                     48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379, 516, 48, 48, 48, 379, 379, 48, 379, 48, 371, 48,
+                     379, 48, 48, 379, 48, 48, 379, 48, 48, 48, 48, 48],
+                    [48, 48, 48, 379, 48, 379, 379, 48, 48, 379, 379, 516, 595, 379, 48, 48, 379, 379, 379, 379, 379,
+                     379, 379, 379, 48, 379, 379, 379, 379, 48, 48, 48, 379, 379, 379, 595, 379, 379, 379, 379, 379,
+                     48, 48, 516, 48, 48, 379, 379, 379, 379, 48, 379, 595, 48, 379, 379, 379, 48, 379, 379, 379, 48,
+                     379, 48, 516, 379, 379, 48, 379, 379, 379, 499, 379, 379, 379, 379, 48, 48, 48, 379, 48, 379, 48,
+                     48, 379, 379, 48, 48, 379, 379, 379, 379, 379, 379, 379, 379, 379, 516, 379, 379, 48, 656, 499,
+                     379, 48, 48, 516, 379, 516, 48, 379, 48, 379, 379, 48, 48, 379, 379, 48, 379, 379, 379, 379, 48,
+                     379, 516, 379, 379, 379, 379, 379, 48, 379, 379, 379, 379, 371, 48, 516, 48, 48, 371, 48, 48, 48,
+                     48, 379, 379, 379, 379, 48, 379, 379, 48, 48, 48, 379, 48, 379, 48, 48, 379, 595, 379, 48, 379,
+                     48, 379, 379, 379, 48, 379, 48, 841, 48, 379, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 379,
+                     499, 379, 48, 841, 48, 48, 48, 48, 48, 379, 379, 379, 48, 48, 379, 379, 379, 48, 379, 371, 379,
+                     379, 48, 379, 516, 48, 48, 516, 379, 379, 48, 379, 379, 379, 48, 379, 48, 379, 48, 48, 48, 48,
+                     379, 48, 379, 379, 48, 48, 48, 379, 379, 48, 48, 379, 371, 48, 48, 371, 48, 379, 371, 48, 48, 371,
+                     48, 48, 48, 48],
+                ],
+            }
+        )  # fmt: skip
+
+        model = self._load_model(minified=True)
+        processor = AutoProcessor.from_pretrained(self._model_path)
+        chat = [
+            [
+                {"role": "user", "content": "Write a long essay about Portugal."},
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg",
+                        },
+                        {"type": "text", "text": "Describe the image in detail."},
+                    ],
+                }
+            ],
+        ]
+        model_inputs = processor.apply_chat_template(
+            chat,
+            tokenize=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+            return_dict=True,
+            enable_thinking=True,
+        ).to(model.device)
+
+        # sanity check: the input has bsz=2
+        self.assertEqual(model_inputs["input_ids"].shape[0], 2)
+        # sanity check: the input has an image component
+        self.assertIn("pixel_values", model_inputs)
+        # sanity check: has padding, and it is left-padding
+        self.assertIn(model.config.text_config.pad_token_id, model_inputs["input_ids"])
+        self.assertFalse((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, -1]).any())
+        self.assertTrue((model.config.text_config.pad_token_id == model_inputs["input_ids"][:, 0]).any())
+
+        set_seed(42)
+        gen_out = model.generate(**model_inputs, max_new_tokens=1280)
+
+        # sanity check: we went beyond the sliding window length
+        self.assertTrue(gen_out.sequences.shape[1] > model.config.text_config.sliding_window)
+        generated_tokens = gen_out.sequences[:, -256:]
+        self.assertEqual(generated_tokens.tolist(), expected_sequences.get_expectation())

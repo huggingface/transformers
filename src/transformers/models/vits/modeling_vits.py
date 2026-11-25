@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Kakao Enterprise Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -26,63 +25,62 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, torch_compilable_check
 from .configuration_vits import VitsConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Describes the outputs for the VITS model, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VitsModelOutput(ModelOutput):
     r"""
-    waveform (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+    waveform (`torch.Tensor` of shape `(batch_size, sequence_length)`):
         The final audio waveform predicted by the model.
-    sequence_lengths (`torch.FloatTensor` of shape `(batch_size,)`):
+    sequence_lengths (`torch.Tensor` of shape `(batch_size,)`):
         The length in samples of each element in the `waveform` batch.
-    spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
+    spectrogram (`torch.Tensor` of shape `(batch_size, sequence_length, num_bins)`):
         The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
         GAN decoder model to obtain the final audio waveform.
     """
 
-    waveform: Optional[torch.FloatTensor] = None
-    sequence_lengths: Optional[torch.FloatTensor] = None
-    spectrogram: Optional[tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    waveform: torch.Tensor | None = None
+    sequence_lengths: torch.Tensor | None = None
+    spectrogram: tuple[torch.Tensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Describes the outputs for the VITS text encoder model, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VitsTextEncoderOutput(ModelOutput):
     r"""
-    prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    prior_means (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The predicted mean values of the prior distribution for the latent text variables.
-    prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    prior_log_variances (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         The predicted log-variance values of the prior distribution for the latent text variables.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    prior_means: Optional[torch.FloatTensor] = None
-    prior_log_variances: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.Tensor | None = None
+    prior_means: torch.Tensor | None = None
+    prior_log_variances: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
-@torch.jit.script
 def fused_add_tanh_sigmoid_multiply(input_a, input_b, num_channels):
     in_act = input_a + input_b
     t_act = torch.tanh(in_act[:, :num_channels, :])
@@ -107,15 +105,15 @@ def _unconstrained_rational_quadratic_spline(
     `tail_bound`, the transform behaves as an identity function.
 
     Args:
-        inputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        inputs (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Second half of the hidden-states input to the Vits convolutional flow module.
-        unnormalized_widths (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_widths (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             First `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
-        unnormalized_heights (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_heights (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             Second `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
-        unnormalized_derivatives (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_derivatives (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             Third `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
         reverse (`bool`, *optional*, defaults to `False`):
@@ -130,10 +128,10 @@ def _unconstrained_rational_quadratic_spline(
         min_derivative (`float`, *optional*, defaults to 1e-3):
             Minimum bin value across the derivatives for the piecewise rational quadratic function.
     Returns:
-        outputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        outputs (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Hidden-states as transformed by the piecewise rational quadratic function with the `tail_bound` limits
             applied.
-        log_abs_det (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        log_abs_det (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Logarithm of the absolute value of the determinants corresponding to the `outputs` with the `tail_bound`
             limits applied.
     """
@@ -181,15 +179,15 @@ def _rational_quadratic_spline(
     function `_unconstrained_rational_quadratic_spline`, the function behaves the same across the `tail_bound`.
 
     Args:
-        inputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        inputs (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Second half of the hidden-states input to the Vits convolutional flow module.
-        unnormalized_widths (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_widths (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             First `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
-        unnormalized_heights (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_heights (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             Second `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
-        unnormalized_derivatives (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+        unnormalized_derivatives (`torch.Tensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
             Third `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
             layer in the convolutional flow module
         reverse (`bool`):
@@ -204,17 +202,17 @@ def _rational_quadratic_spline(
         min_derivative (`float`):
             Minimum bin value across the derivatives for the piecewise rational quadratic function.
     Returns:
-        outputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        outputs (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Hidden-states as transformed by the piecewise rational quadratic function.
-        log_abs_det (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+        log_abs_det (`torch.Tensor` of shape `(batch_size, channels, seq_len)`:
             Logarithm of the absolute value of the determinants corresponding to the `outputs`.
     """
     upper_bound = tail_bound
     lower_bound = -tail_bound
-
-    if torch.min(inputs) < lower_bound or torch.max(inputs) > upper_bound:
-        raise ValueError("Input to a transform is not within its domain")
-
+    torch_compilable_check(
+        (inputs.min() >= lower_bound) & (inputs.max() <= upper_bound),
+        f"Inputs are outside the range [{lower_bound}, {upper_bound}]",
+    )
     num_bins = unnormalized_widths.shape[-1]
 
     if min_bin_width * num_bins > 1.0:
@@ -284,8 +282,10 @@ def _rational_quadratic_spline(
         c = -input_delta * intermediate2
 
         discriminant = b.pow(2) - 4 * a * c
-        if not (discriminant >= 0).all():
-            raise RuntimeError(f"invalid discriminant {discriminant}")
+        torch_compilable_check(
+            torch.all(discriminant >= 0),
+            f"Discriminant has negative values {discriminant}",
+        )
 
         root = (2 * c) / (-b - torch.sqrt(discriminant))
         outputs = root * input_bin_widths + input_cumwidths
@@ -515,20 +515,18 @@ class VitsHifiGan(nn.Module):
         for layer in self.resblocks:
             layer.remove_weight_norm()
 
-    def forward(
-        self, spectrogram: torch.FloatTensor, global_conditioning: Optional[torch.FloatTensor] = None
-    ) -> torch.FloatTensor:
+    def forward(self, spectrogram: torch.Tensor, global_conditioning: torch.Tensor | None = None) -> torch.Tensor:
         r"""
         Converts a spectrogram into a speech waveform.
 
         Args:
-            spectrogram (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`):
+            spectrogram (`torch.Tensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`):
                 Tensor containing the spectrograms.
-            global_conditioning (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_size, 1)`, *optional*):
+            global_conditioning (`torch.Tensor` of shape `(batch_size, config.speaker_embedding_size, 1)`, *optional*):
                 Tensor containing speaker embeddings, for multispeaker models.
 
         Returns:
-            `torch.FloatTensor`: Tensor of shape shape `(batch_size, 1, num_frames)` containing the speech waveform.
+            `torch.Tensor`: Tensor of shape shape `(batch_size, 1, num_frames)` containing the speech waveform.
         """
         hidden_states = self.conv_pre(spectrogram)
 
@@ -874,10 +872,10 @@ class VitsAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1050,8 +1048,8 @@ class VitsEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        padding_mask: torch.FloatTensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
     ):
         residual = hidden_states
@@ -1087,20 +1085,21 @@ class VitsEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        padding_mask: torch.FloatTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        hidden_states: torch.Tensor,
+        padding_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
 
         hidden_states = hidden_states * padding_mask
 
@@ -1160,12 +1159,12 @@ class VitsTextEncoder(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        padding_mask: torch.FloatTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = True,
-    ) -> Union[tuple[torch.Tensor], VitsTextEncoderOutput]:
+        padding_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = True,
+    ) -> tuple[torch.Tensor] | VitsTextEncoderOutput:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
 
         encoder_outputs = self.encoder(
@@ -1202,27 +1201,14 @@ class VitsPreTrainedModel(PreTrainedModel):
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
 
-    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
+        super()._init_weights(module)
+        if isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
             init.kaiming_normal_(module.weight)
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, VitsAttention):
             if self.config.window_size:
                 head_dim = self.config.hidden_size // self.config.num_attention_heads
@@ -1268,21 +1254,24 @@ class VitsModel(VitsPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        speaker_id: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.FloatTensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        speaker_id: int | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.Tensor | None = None,
+        speaking_rate: float | None = None,
         **kwargs,
-    ) -> Union[tuple[Any], VitsModelOutput]:
+    ) -> tuple[Any] | VitsModelOutput:
         r"""
         speaker_id (`int`, *optional*):
             Which speaker embedding to use. Only used for multispeaker models.
-        labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation.
+        speaking_rate (`float`, *optional*):
+            Speaking rate.
 
         Example:
 
@@ -1307,7 +1296,7 @@ class VitsModel(VitsPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             raise NotImplementedError("Training of VITS is not supported yet.")
@@ -1352,7 +1341,9 @@ class VitsModel(VitsPreTrainedModel):
         else:
             log_duration = self.duration_predictor(hidden_states, input_padding_mask, speaker_embeddings)
 
-        length_scale = 1.0 / self.speaking_rate
+        if speaking_rate is None:
+            speaking_rate = self.speaking_rate
+        length_scale = 1.0 / speaking_rate
         duration = torch.ceil(torch.exp(log_duration) * input_padding_mask * length_scale)
         predicted_lengths = torch.clamp_min(torch.sum(duration, [1, 2]), 1).long()
 

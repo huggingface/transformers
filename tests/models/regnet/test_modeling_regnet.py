@@ -20,6 +20,7 @@ from transformers import RegNetConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import Expectations, is_flaky, require_torch, require_vision, slow, torch_device
 
+from ...model_tester_config import ModelTesterConfigMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -37,35 +38,32 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class RegNetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        image_size=32,
-        num_channels=3,
-        embeddings_size=10,
-        hidden_sizes=[10, 20, 30, 40],
-        depths=[1, 1, 2, 1],
-        is_training=True,
-        use_labels=True,
-        hidden_act="relu",
-        num_labels=3,
-        scope=None,
-    ):
+class RegNetModelTester(ModelTesterConfigMixin):
+    defaults = {}
+    small_config_overrides = {
+        "batch_size": 3,
+        "image_size": 32,
+        "num_channels": 3,
+        "embeddings_size": 10,
+        "hidden_sizes": [10, 20, 30, 40],
+        "depths": [1, 1, 2, 1],
+        "is_training": True,
+        "use_labels": True,
+        "hidden_act": "relu",
+        "num_labels": 3,
+        "scope": None,
+    }
+
+    @classmethod
+    def get_small_config_defaults(cls, **kwargs):
+        values = super().get_small_config_defaults(**kwargs)
+        values["num_stages"] = len(values["hidden_sizes"])
+        return values
+
+    def __init__(self, parent, **kwargs):
         self.parent = parent
-        self.batch_size = batch_size
-        self.image_size = image_size
-        self.num_channels = num_channels
-        self.embeddings_size = embeddings_size
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.is_training = is_training
-        self.use_labels = use_labels
-        self.hidden_act = hidden_act
-        self.num_labels = num_labels
-        self.scope = scope
-        self.num_stages = len(hidden_sizes)
+        for key, value in self.get_small_config_defaults(**kwargs).items():
+            setattr(self, key, value)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -121,6 +119,8 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    model_tester_class = RegNetModelTester
+
     all_model_classes = (RegNetModel, RegNetForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-feature-extraction": RegNetModel, "image-classification": RegNetForImageClassification}
@@ -130,7 +130,6 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = RegNetModelTester(self)
@@ -236,8 +235,8 @@ class RegNetModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [-0.4180, -1.5051, -3.4836],
-                ("cuda", 8): [-0.4180, -1.5051, -3.4836],
+                (None, None): [-0.4246, -1.5155, -3.4862],
+                ("cuda", 8): [-0.4246, -1.5155, -3.4862],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

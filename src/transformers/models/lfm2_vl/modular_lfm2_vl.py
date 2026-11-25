@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,16 @@
 # limitations under the License.
 """PyTorch Lfm2-VL model."""
 
-from typing import Optional, Union
-
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -41,7 +41,8 @@ class Lfm2VlMultiModalProjector(nn.Module):
         super().__init__()
         in_channels = config.vision_config.hidden_size * (config.downsample_factor**2)
         self.factor = config.downsample_factor
-        self.layer_norm = nn.LayerNorm(in_channels)
+        self.use_layer_norm = config.projector_use_layernorm
+        self.layer_norm = nn.LayerNorm(in_channels) if config.projector_use_layernorm else None
         self.linear_1 = nn.Linear(
             in_channels,
             config.projector_hidden_size,
@@ -56,7 +57,8 @@ class Lfm2VlMultiModalProjector(nn.Module):
 
     def forward(self, image_features: torch.Tensor):
         image_features = self.pixel_unshuffle(image_features)
-        image_features = self.layer_norm(image_features)
+        if self.use_layer_norm:
+            image_features = self.layer_norm(image_features)
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
@@ -87,60 +89,64 @@ class Lfm2VlModelOutputWithPast(LlavaModelOutputWithPast):
 
 
 class Lfm2VlModel(LlavaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Lfm2VlConfig):
         super().__init__(config)
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        **kwargs,
-    ) -> list[torch.Tensor]:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
-                The spatial shapes of the input images.
-            pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
-                The pixel attention mask of the input images.
-        Returns:
-            image_features (`list[torch.Tensor]`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
+            The spatial shapes of the input images.
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
+            The pixel attention mask of the input images.
         """
         image_outputs = self.vision_tower(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
             pixel_attention_mask=pixel_attention_mask,
-        ).last_hidden_state
+            return_dict=True,
+            **kwargs,
+        )
+        last_hidden_state = image_outputs.last_hidden_state
+        num_images, num_patches, _ = last_hidden_state.shape
+        factor = self.config.downsample_factor
 
-        img_feature_lengths = pixel_attention_mask.sum(dim=1)
-        image_features = []
+        # Each image's tokens, padded to the most an image can have: its `factor x factor` block of patch rows
+        widths = spatial_shapes[:, 1, None]
+        blocks_per_row = widths // factor
+        num_tokens = (spatial_shapes[:, 0, None] // factor) * blocks_per_row
+        token = torch.arange(num_patches // factor**2, device=last_hidden_state.device)[None]
+        block_offset = torch.arange(factor, device=last_hidden_state.device)
+        rows = (token // blocks_per_row * factor)[..., None, None] + block_offset[:, None]
+        columns = (token % blocks_per_row * factor)[..., None, None] + block_offset
+        image_offset = torch.arange(num_images, device=last_hidden_state.device)[:, None, None, None] * num_patches
+        patch_index = image_offset + rows * widths[..., None, None] + columns
 
-        for img_idx in range(image_outputs.size(0)):
-            feature = image_outputs[img_idx]
-            # unpad the image representation
-            feature = feature[: img_feature_lengths[img_idx], :].unsqueeze(0)
-
-            # reshape to original height and width
-            feature_org_h, feature_org_w = spatial_shapes[img_idx]
-            feature = feature.reshape(1, feature_org_h, feature_org_w, -1)
-
-            # project the image representation
-            img_embedding = self.multi_modal_projector(feature)
-
-            # flatten here to handle variable length in naflex
-            img_embedding = img_embedding.reshape(-1, img_embedding.size(-1))
-            image_features.append(img_embedding)
-
-        return image_features
+        # Every image's token slots side by side in one patch grid, which the projector unshuffles as one image. Padding
+        # slots read the first patch and are dropped after, so the projector's shape doesn't depend on the image sizes
+        is_token = token < num_tokens
+        patch_index = patch_index.masked_fill(~is_token[..., None, None], 0)
+        patch_index = patch_index.flatten(0, 1).permute(1, 0, 2).reshape(factor, -1)
+        patch_grid = last_hidden_state.reshape(-1, last_hidden_state.shape[-1])[patch_index]
+        image_features = self.multi_modal_projector(patch_grid.unsqueeze(0))
+        image_features = image_features.reshape(-1, image_features.shape[-1])[is_token.flatten()]
+        split_sizes = (spatial_shapes // factor).prod(-1).tolist()
+        image_outputs.pooler_output = list(torch.split(image_features, split_sizes))
+        return image_outputs
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -148,37 +154,38 @@ class Lfm2VlModel(LlavaModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         n_image_features = image_features.shape[0]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
-        pixel_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Lfm2VlModelOutputWithPast]:
+    ) -> tuple | Lfm2VlModelOutputWithPast:
         r"""
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
             The spatial shapes of the input images.
@@ -189,16 +196,25 @@ class Lfm2VlModel(LlavaModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values,
                 spatial_shapes=spatial_shapes,
                 pixel_attention_mask=pixel_attention_mask,
+                return_dict=True,
             )
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             special_image_mask = self.get_placeholder_mask(
                 input_ids=input_ids,
                 inputs_embeds=inputs_embeds,
@@ -209,32 +225,32 @@ class Lfm2VlModel(LlavaModel):
         outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
-        return Lfm2VlModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-        )
+        return Lfm2VlModelOutputWithPast(**outputs, image_outputs=mm_encoder_outputs.get("image"))
 
 
 class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
+    @auto_docstring
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
-        **kwargs,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
+            The spatial shapes of the input images.
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
+            The pixel attention mask of the input images.
+        """
         return self.model.get_image_features(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
@@ -243,24 +259,25 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
     @can_return_tuple
+    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
-        pixel_attention_mask: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Lfm2VlCausalLMOutputWithPast]:
+    ) -> tuple | Lfm2VlCausalLMOutputWithPast:
         r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`, *optional*):
+        pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`, *optional*):
             The input image tensors.
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
             The spatial shapes of the input images.
@@ -275,7 +292,8 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> from transformers.image_utils import load_image
 
@@ -319,17 +337,16 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
             pixel_attention_mask=pixel_attention_mask,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
+            cache=cache,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -343,10 +360,10 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         return Lfm2VlCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
+            cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            image_outputs=outputs.image_outputs,
         )
 
 

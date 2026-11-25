@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,11 +19,12 @@ URL: https://github.com/facebookresearch/segment-anything-2.
 
 import argparse
 import re
+from io import BytesIO
 
 import numpy as np
-import requests
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import (
@@ -33,7 +33,7 @@ from transformers import (
     EdgeTamVideoModel,
     EdgeTamVideoPromptEncoderConfig,
     EdgeTamVisionConfig,
-    Sam2ImageProcessorFast,
+    Sam2ImageProcessor,
     Sam2VideoProcessor,
     Sam2VideoVideoProcessor,
     TimmWrapperConfig,
@@ -238,7 +238,7 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     state_dict = replace_keys(state_dict)
 
-    image_processor = Sam2ImageProcessorFast()
+    image_processor = Sam2ImageProcessor()
     video_processor = Sam2VideoVideoProcessor()
     processor = Sam2VideoProcessor(image_processor=image_processor, video_processor=video_processor)
     hf_model = EdgeTamVideoModel(config)
@@ -252,8 +252,9 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
     print("Unexpected keys:", unexpected_keys)
 
     if run_sanity_check:
-        img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-        raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+        with httpx.stream("GET", url) as response:
+            raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
         input_points = [[[[1000, 600]]]]
         input_labels = [[[1]]]
