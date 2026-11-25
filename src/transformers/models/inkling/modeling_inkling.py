@@ -218,8 +218,8 @@ class InklingAttention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states)
-        key_states = self.k_sconv(self.k_proj(hidden_states), cache=cache, conv_mask=conv_mask)
-        value_states = self.v_sconv(self.v_proj(hidden_states), cache=cache, conv_mask=conv_mask)
+        key_states = self.k_sconv(self.k_proj(hidden_states), cache=cache, conv_mask=conv_mask, **kwargs)
+        value_states = self.v_sconv(self.v_proj(hidden_states), cache=cache, conv_mask=conv_mask, **kwargs)
         relative_states = self.r_proj(hidden_states)
 
         query_states = self.q_norm(query_states.view(hidden_shape)).transpose(1, 2)
@@ -576,13 +576,13 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
             cache=cache,
             **kwargs,
         )
-        hidden_states = self.attn_sconv(hidden_states, cache=cache, conv_mask=conv_mask)
+        hidden_states = self.attn_sconv(hidden_states, cache=cache, conv_mask=conv_mask, **kwargs)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = self.mlp_sconv(hidden_states, cache=cache, conv_mask=conv_mask)
+        hidden_states = self.mlp_sconv(hidden_states, cache=cache, conv_mask=conv_mask, **kwargs)
         hidden_states = residual + hidden_states
         return hidden_states
 
