@@ -30,6 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.deprecation import deprecate_kwarg
+from ...utils.generic import no_inherit_decorator
 from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
@@ -86,15 +87,14 @@ class Olmo2Config(OlmoConfig):
     clip_qkv = AttributeError()
 
 
-# OLMo2 RMS norm is identical to Llama RMS norm except:
-# - Weight and hidden states are multiplied before converting back to the input dtype, rather than after.
+@no_inherit_decorator
 class Olmo2RMSNorm(LlamaRMSNorm):
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
 
 class Olmo2RotaryEmbedding(OlmoRotaryEmbedding):

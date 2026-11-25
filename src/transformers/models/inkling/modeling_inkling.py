@@ -97,11 +97,10 @@ class InklingRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        # Don't pass the weight to rms_norm: scaling after the cast to the input dtype (autocast runs rms_norm in
+        # fp32) keeps the rounding and output dtype of the original implementations, fusing it shifts the logits
+        normalized = nn.functional.rms_norm(hidden_states, hidden_states.shape[-1:], eps=self.variance_epsilon)
+        return self.weight * normalized.to(hidden_states.dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -1007,6 +1006,8 @@ class InklingVisionModel(InklingPreTrainedModel):
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         num_patches = pixel_values.shape[0]
         hidden_states = pixel_values
+        if (target_dtype := self.encoder_layers[0].projection.weight.dtype).is_floating_point:
+            hidden_states = hidden_states.to(target_dtype)
         for layer in self.encoder_layers:
             hidden_states = layer(hidden_states=hidden_states)
 

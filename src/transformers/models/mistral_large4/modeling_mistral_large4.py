@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -40,7 +39,7 @@ from ...modeling_outputs import (
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, yarn_apply_mscale
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
@@ -65,11 +64,10 @@ class MistralLarge4RMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        # Don't pass the weight to rms_norm: scaling after the cast to the input dtype (autocast runs rms_norm in
+        # fp32) keeps the rounding and output dtype of the original implementations, fusing it shifts the logits
+        normalized = nn.functional.rms_norm(hidden_states, hidden_states.shape[-1:], eps=self.variance_epsilon)
+        return self.weight * normalized.to(hidden_states.dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -315,21 +313,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-def yarn_get_mscale(scale=1, mscale=1):
-    if scale <= 1:
-        return 1.0
-    return 0.1 * mscale * math.log(scale) + 1.0
-
-
-def yarn_apply_mscale(rope_parameters, scaling):
-    if rope_parameters.get("rope_type", "default") != "default":
-        mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        if mscale_all_dim:
-            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
-            scaling = scaling * mscale * mscale
-    return scaling
 
 
 class MistralLarge4TextAttention(nn.Module):

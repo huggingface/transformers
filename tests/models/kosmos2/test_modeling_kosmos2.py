@@ -387,13 +387,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
         pass
 
-    @unittest.skip(
-        "TODO: when `generate` is called with `mm_encoder_outputs` (instead of `pixel_values`/`image_embeds`), "
-        "`Kosmos2ForConditionalGeneration.generate` ignores it and the image is silently dropped"
-    )
-    def test_generate_from_multimodal_encoder_outputs(self):
-        pass
-
     @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass

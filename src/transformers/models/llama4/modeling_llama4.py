@@ -103,19 +103,23 @@ class Llama4TextMLP(nn.Module):
         return self.down_proj(down_proj)
 
 
-class Llama4TextL2Norm(torch.nn.Module):
+class Llama4TextWeightlessRMSNorm(torch.nn.Module):
     def __init__(self, eps: float = 1e-6):
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         return self._norm(x.float()).type_as(x)
 
     def extra_repr(self):
-        return f"eps={self.eps}"
+        return f"eps={self.variance_epsilon}"
+
+
+# Deprecated alias, kept for BC
+Llama4TextL2Norm = Llama4TextWeightlessRMSNorm
 
 
 class Llama4TextRMSNorm(nn.Module):
@@ -124,18 +128,18 @@ class Llama4TextRMSNorm(nn.Module):
         Llama4RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
-        self.eps = eps
+        self.variance_epsilon = eps
         self.weight = nn.Parameter(torch.ones(hidden_size))
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
 
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Llama4Router(nn.Linear):
@@ -329,7 +333,7 @@ class Llama4TextAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         if self.config.use_qk_norm and self.use_rope:
-            self.qk_norm = Llama4TextL2Norm(config.rms_norm_eps)
+            self.qk_norm = Llama4TextWeightlessRMSNorm(config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -661,6 +665,8 @@ class Llama4CausalLMOutputWithPast(MultimodalCausalLMOutputWithPast):
             "`image_hidden_states` is deprecated and will return a list of all hidden "
             "states per layer from v5.30; Use `out.image_outputs.pooler_output` to obtain pooled features."
         )
+        if self.image_outputs is None:
+            return None
         return self.image_outputs.pooler_output
 
 
@@ -1315,7 +1321,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_outputs=outputs.image_outputs,
+            image_outputs=mm_encoder_outputs.get("image"),
             router_logits=outputs.router_logits,
         )
 
