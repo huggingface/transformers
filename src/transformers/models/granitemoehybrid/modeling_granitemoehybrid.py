@@ -585,6 +585,45 @@ class GraniteMoeHybridMambaLayer(nn.Module):
             ((self.num_heads, self.head_dim, self.ssm_state_size), self.conv1d.weight.dtype),
         ]
 
+    def _paged_recurrent(self, states, x, dt, A, B, C):
+        """[scratch] One token per sequence: `states` [n, heads, head_dim, state] updated in place, outputs [n, heads,
+        head_dim]."""
+        n = states.shape[0]
+        heads, head_dim, groups, state = self.num_heads, self.head_dim, self.n_groups, self.ssm_state_size
+        return mamba2_selective_state_update(
+            states, x.view(n, heads, head_dim), dt[:, :, None].expand(-1, -1, head_dim),
+            A[:, None, None].expand(-1, head_dim, state), B.view(n, groups, state), C.view(n, groups, state),
+            self.D[:, None].expand(-1, head_dim), z=None, dt_bias=self.dt_bias[:, None].expand(-1, head_dim),
+            dt_softplus=True,
+        ).view(n, heads, head_dim)  # fmt: skip
+
+    @torch.compiler.disable  # reads the sequence lengths on the host: compiled, it recompiled for every new batch
+    def _paged_varlen_scan(self, x, dt, A, B, C, ssm_state, cu_seqlens, out):
+        """[scratch] A step with prompt tokens: single-token sequences take the recurrent update together, longer ones
+        the chunked scan one at a time, from (and into) their states in `ssm_state`. Writes the outputs into `out`."""
+        heads, head_dim, groups, state = self.num_heads, self.head_dim, self.n_groups, self.ssm_state_size
+        bounds = cu_seqlens.tolist()
+        lengths = [end - start for start, end in zip(bounds[:-1], bounds[1:])]
+        singles = [i for i, length in enumerate(lengths) if length == 1]
+        if singles:
+            seqs = torch.tensor(singles, device=x.device)
+            tokens = torch.tensor([bounds[i] for i in singles], device=x.device)
+            states = ssm_state[seqs]
+            out[tokens] = self._paged_recurrent(states, x[tokens], dt[tokens], A, B[tokens], C[tokens])
+            ssm_state[seqs] = states
+        for i, length in enumerate(lengths):
+            if length < 2:
+                continue
+            start, end = bounds[i], bounds[i + 1]
+            scan, final = mamba2_chunk_scan(
+                x[start:end].view(1, length, heads, head_dim), dt[None, start:end], A,
+                B[start:end].view(1, length, groups, state), C[start:end].view(1, length, groups, state),
+                chunk_size=self.chunk_size, D=self.D, z=None, dt_bias=self.dt_bias, dt_softplus=True,
+                initial_states=ssm_state[i : i + 1], dt_limit=self.time_step_limit, return_final_states=True,
+            )  # fmt: skip
+            out[start:end] = scan.view(length, heads, head_dim)
+            ssm_state[i] = final[0].to(ssm_state.dtype)
+
     def _paged_forward(self, hidden_states: torch.Tensor, cache: PagedAttentionCache, kwargs) -> torch.Tensor:
         """[scratch] Continuous batching: the batch is one row of packed sequences, each continuing from the states its
         request left in the paged cache. Single-token sequences take the recurrent update together, longer ones the
@@ -606,46 +645,14 @@ class GraniteMoeHybridMambaLayer(nn.Module):
         )
         dt = dt[0]
         num_tokens, num_sequences = x.shape[0], ssm_state.shape[0]
-        heads, head_dim, groups, state = self.num_heads, self.head_dim, self.n_groups, self.ssm_state_size
         A = -torch.exp(self.A_log.float())
-        out = torch.zeros(num_tokens, heads, head_dim, dtype=x.dtype, device=x.device)
-
-        def recurrent(states, tokens):
-            """One token per sequence: `states` [n, heads, head_dim, state] updated in place, at `tokens`."""
-            n = states.shape[0]
-            return mamba2_selective_state_update(
-                states, x[tokens].view(n, heads, head_dim), dt[tokens][:, :, None].expand(-1, -1, head_dim),
-                A[:, None, None].expand(-1, head_dim, state), B[tokens].view(n, groups, state),
-                C[tokens].view(n, groups, state), self.D[:, None].expand(-1, head_dim), z=None,
-                dt_bias=self.dt_bias[:, None].expand(-1, head_dim), dt_softplus=True,
-            ).view(n, heads, head_dim)  # fmt: skip
+        out = torch.zeros(num_tokens, self.num_heads, self.head_dim, dtype=x.dtype, device=x.device)
 
         if kwargs["max_length_q"] == 1:  # decode: token i is the one token of sequence i
             n = min(num_tokens, num_sequences)
-            states = ssm_state[:n]
-            out[:n] = recurrent(states, slice(0, n))
+            out[:n] = self._paged_recurrent(ssm_state[:n], x[:n], dt[:n], A, B[:n], C[:n])
         else:
-            bounds = cu_seqlens.tolist()
-            lengths = [end - start for start, end in zip(bounds[:-1], bounds[1:])]
-            singles = [i for i, length in enumerate(lengths) if length == 1]
-            if singles:
-                seqs = torch.tensor(singles, device=x.device)
-                tokens = torch.tensor([bounds[i] for i in singles], device=x.device)
-                states = ssm_state[seqs]
-                out[tokens] = recurrent(states, tokens)
-                ssm_state[seqs] = states
-            for i, length in enumerate(lengths):
-                if length < 2:
-                    continue
-                start, end = bounds[i], bounds[i + 1]
-                scan, final = mamba2_chunk_scan(
-                    x[start:end].view(1, length, heads, head_dim), dt[None, start:end], A,
-                    B[start:end].view(1, length, groups, state), C[start:end].view(1, length, groups, state),
-                    chunk_size=self.chunk_size, D=self.D, z=None, dt_bias=self.dt_bias, dt_softplus=True,
-                    initial_states=ssm_state[i : i + 1], dt_limit=self.time_step_limit, return_final_states=True,
-                )  # fmt: skip
-                out[start:end] = scan.view(length, heads, head_dim)
-                ssm_state[i] = final[0].to(ssm_state.dtype)
+            self._paged_varlen_scan(x, dt, A, B, C, ssm_state, cu_seqlens, out)
         cache.write_cache_states(self.layer_idx, (conv_state, ssm_state), kwargs)
         scan_output = self.norm(out.view(1, num_tokens, -1), gate)
         return self.out_proj(scan_output.to(dtype))
