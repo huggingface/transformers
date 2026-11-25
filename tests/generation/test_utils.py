@@ -1637,6 +1637,29 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             model.generate(**inputs_dict_with_encoded_outputs, **generation_kwargs)
 
     @pytest.mark.generate
+    @require_torch_accelerator
+    def test_expand_multimodal_encoder_outputs_across_devices(self):
+        """Tests that beam expansion handles `mm_encoder_outputs` on another device than the text, as with `device_map`."""
+        for model_class in self.all_generative_model_classes:
+            if not any(hasattr(model_class, f"get_{modality}_embeddings") for modality in ["image", "video"]):
+                self.skipTest("Model has no flat multimodal getters")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if config.is_encoder_decoder or "input_ids" not in inputs_dict:
+                self.skipTest(reason="Placeholders are counted on decoder-only `input_ids`")
+
+            model = model_class(config).to(torch_device).eval()
+            with torch.no_grad():
+                inputs_dict = model._prepare_multimodal_encoder_kwargs_for_generation(inputs_dict)
+            if not inputs_dict["mm_encoder_outputs"]:
+                self.skipTest(reason="The tester's inputs give no multimodal outputs")
+            model._expand_inputs_for_generation(
+                expand_size=2,
+                input_ids=inputs_dict["input_ids"].cpu(),
+                mm_encoder_outputs=inputs_dict["mm_encoder_outputs"],
+            )
+
+    @pytest.mark.generate
     def test_generate_with_static_cache(self):
         """
         Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
