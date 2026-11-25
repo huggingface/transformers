@@ -70,7 +70,7 @@ def mla_varlen_attention(q, kv, read_index, cu_seqlens_q, cu_seqlens_k, max_seql
     num_tokens, num_heads, d_qk = q.shape
     out = torch.empty(num_tokens, num_heads, d_latent, dtype=q.dtype, device=q.device)
     num_seqs = cu_seqlens_q.shape[0] - 1
-    block_m, block_n = 16, 32
+    block_m, block_n = 64, 32
     grid = (num_seqs, triton.cdiv(max_seqlen_q * num_heads, block_m))
     _mla_varlen_kernel[grid](
         q, kv, kv if read_index is None else read_index, out, cu_seqlens_q, cu_seqlens_k, scale,
