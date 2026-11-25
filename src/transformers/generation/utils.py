@@ -1185,7 +1185,9 @@ class GenerationMixin(ContinuousMixin):
 
             # Flat outputs from `get_*_embeddings`: each sample's rows are contiguous, one gather repeats them
             if is_flat:
-                rows = repeat_groups(num_image_tokens_in_text.to(features.device), features.shape[0])
+                # The encoder may sit on another device than the text (`device_map`)
+                num_image_tokens_in_text = num_image_tokens_in_text.to(features.device)
+                rows = repeat_groups(num_image_tokens_in_text, features.shape[0])
                 map_features(modality_outputs, lambda features: features[rows.to(features.device)])
                 # The items follow their rows: find each item's sample from where its rows start, then repeat them
                 split_sizes = cast(torch.LongTensor, modality_outputs.split_sizes).to(features.device)
