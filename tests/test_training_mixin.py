@@ -220,7 +220,7 @@ class TrainingTesterMixin(ABC):
             batch = self._create_text_training_batch(
                 batch_size=self.training_overfit_batch_size,
                 seq_length=self.training_overfit_seq_length,
-                vocab_size=config.get_text_config().vocab_size,
+                vocab_size=config.vocab_size,
             )
             logger.info(f"{Colors.CYAN}Training pattern:{Colors.RESET} Repeating token sequence (1-19)")
         else:
