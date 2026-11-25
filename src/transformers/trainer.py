@@ -2692,6 +2692,13 @@ class Trainer:
             and not getattr(model, "is_loaded_in_8bit", False)
             and not getattr(model, "is_loaded_in_4bit", False)
         ):
+            # A kernel is bound to the layer it was set on, so the replicas would all run the layers of the first device
+            if getattr(model, "use_kernels", False):
+                logger.warning_once(
+                    "Kernels are not supported with `nn.DataParallel`, disabling them. To use them on several GPUs, "
+                    "launch the training with `torchrun` or `accelerate launch`."
+                )
+                model.use_kernels = False
             model = nn.DataParallel(model)
 
         # Note: in torch.distributed mode, there's no point in wrapping the model
