@@ -260,6 +260,12 @@ class PagedAttentionCache:
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
         self.use_varlen_block_table = self._infer_use_varlen_block_table()
+        # The new tokens of a step are all written to the pages before attention: a sliding window ring then also holds
+        # a step's worth of tokens, so none of them overwrites a key that an earlier token of the step still attends to
+        if self.use_varlen_block_table and SLIDING_ATTENTION in self.cache_allocators:
+            sliding = self.cache_allocators[SLIDING_ATTENTION]
+            sliding.ring_size = ceil((sliding.sliding_window + self.max_batch_tokens) / sliding.tokens_per_page)
+            sliding.ring_size *= sliding.tokens_per_page
         # FA3 checks the new tokens of a whole step against the width of the block table, so it spans max_batch_tokens
         if self.use_varlen_block_table:
             min_blocks = max(ceil(self.max_batch_tokens / ca.tokens_per_page) for ca in self.cache_allocators.values())
@@ -315,13 +321,8 @@ class PagedAttentionCache:
     def _infer_use_varlen_block_table(self) -> bool:
         """Every step (prefill, mixed, decode) goes through the block table when the paged kernels take varlen queries:
         FA3's `flash_attn_with_kvcache` does (`cu_seqlens_q`), and FA2's and FA4's `flash_attn_varlen_func` do with a
-        block table, once the new K/V are in the pages. Not with sliding window layers: a step with several new tokens
-        per sequence would overwrite, in their ring of pages, keys that its first tokens still attend to."""
-        return (
-            self.max_decode_fast_path_length > 0
-            and is_flash_attention_requested(self.config, version=[2, 3, 4])
-            and SLIDING_ATTENTION not in self.cache_allocators
-        )
+        block table, once the new K/V are in the pages."""
+        return self.max_decode_fast_path_length > 0 and is_flash_attention_requested(self.config, version=[2, 3, 4])
 
     def can_store_request_tokens(self, state: RequestState, request_len: int, dry_run: bool = False) -> bool:
         """Checks if the new tokens for a request can be stored in the cache. If they can, actual cache allocation is

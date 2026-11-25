@@ -834,6 +834,10 @@ def _flash_attention_forward(
     # padded tail of the queries belongs to no sequence (cu_seq_lens_q plateaus) and max_length_q is the padded size
     if is_fa_with_paged_kwargs and cache_seqlens is not None:
         q, k, v = (x.reshape(-1, *x.shape[-2:]) for x in (query_states, key_states, value_states))
+        # The keys span every page the block table addresses, so a sliding window layer gets its window
+        flash_kwargs_fn = partial(
+            flash_kwargs_fn.func, **{**flash_kwargs_fn.keywords, "key_length": block_table.size(1) * k_cache.size(1)}
+        )
         # FA4 has no paged call: the new K/V are written to the pages, then its varlen call reads them through the table
         if is_flash_attention_requested(requested_attention_implementation=attn_implementation, version=4):
             from .integrations._proto_paged_kv_write import paged_kv_write

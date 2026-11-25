@@ -21,9 +21,10 @@ from .full_attention import FullAttentionCacheAllocator
 
 class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
     """Cache allocator for a group of sliding attention layers.
-    The physical cache of a request is a ring buffer over `ceil(sliding_window / tokens_per_page)` pages per layer:
-    the token at absolute position `position` lives in the slot `position % ring_size`, where `ring_size` is the
-    number of slots of these pages, so a new token overwrites the cache of a token that already slid out of the window.
+    The physical cache of a request is a ring buffer over `ceil(sliding_window / tokens_per_page)` pages per layer
+    (more when every step goes through the block table, see `PagedAttentionCache`): the token at absolute position
+    `position` lives in the slot `position % ring_size`, where `ring_size` is the number of slots of these pages, so a
+    new token overwrites the cache of a token that already slid out of the window.
     As `ring_size` is a whole number of pages, the token at `position` is also at the offset `position % tokens_per_page`
     of the page `(position // tokens_per_page) % num_ring_pages`: decode steps read the ring through a block table.
     """
@@ -72,7 +73,7 @@ class SlidingAttentionCacheAllocator(FullAttentionCacheAllocator):
 
     def _compute_blocks_needed(self, allocated_blocks: int, past_length: int, query_length: int) -> int:
         """Computes the number of blocks needed to store the new tokens for a given request."""
-        total_length = min(past_length + query_length, self.sliding_window)
+        total_length = min(past_length + query_length, self.ring_size)
         total_blocks = (total_length + self.tokens_per_page - 1) // self.tokens_per_page
         return max(0, total_blocks - allocated_blocks)
 

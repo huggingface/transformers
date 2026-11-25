@@ -26,7 +26,6 @@ from ...modeling_flash_attention_utils import lazy_import_flash_attention
 from ...utils import is_torch_xpu_available
 from ...utils.generic import is_flash_attention_requested
 from .cache import ATTN_TYPE_TO_ALLOCATOR, group_layers_by_attn_type
-from .cache_allocators import SLIDING_ATTENTION
 from .cache_allocators.compressed_latents import _PROTO_MLA_BLOCK_TABLE
 from .utils import WorkloadHints, get_accelerator_graph_name, logger, proto_no_mask
 
@@ -161,12 +160,9 @@ def ensure_decode_fast_path_is_available(
         # XPU support is given through its kernel variation `kernels-community/flash-attn2`
         xpu_available = is_torch_xpu_available()
         fa_xpu = is_flash_attention_requested(config, version=2) and xpu_available
-        # FA4 reads the pages through its varlen function (`page_table`), it has no `flash_attn_with_kvcache`: the
-        # block table path needs every step to be a varlen one, which sliding window layers rule out
-        if is_flash_attention_requested(config, version=4) and cuda_available:
-            if SLIDING_ATTENTION in group_layers_by_attn_type(config):
-                cb_config.max_blocks_per_request = 0
-        elif fa_cuda or fa_xpu:  # Block table is only supported on these
+        # FA4 reads the pages through its varlen function (`page_table`), it has no `flash_attn_with_kvcache` to check
+        fa4_cuda = is_flash_attention_requested(config, version=4) and cuda_available
+        if fa_cuda or fa_xpu:  # Block table is only supported on these
             flash_attn_with_kvcache = lazy_import_flash_attention(config._attn_implementation)[0][2]
             # Throw a warning only if the decode fast path was requested by the user
             if flash_attn_with_kvcache is None:
@@ -177,7 +173,7 @@ def ensure_decode_fast_path_is_available(
                     )
                 cb_config.max_blocks_per_request = 0
         # Specific warning for unsupported attention implementation/device combinations
-        else:
+        elif not fa4_cuda:
             if user_requested:
                 logger.warning(
                     f"Although {cb_config.max_blocks_per_request = }, the decode fast path is not available "
