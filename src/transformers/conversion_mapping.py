@@ -1512,7 +1512,7 @@ def _build_checkpoint_conversion_mapping():
             ),
             WeightRenaming(source_patterns=r"^decoder\.lin\.", target_patterns="decoder.head.linear."),
             WeightRenaming(source_patterns=r"^decoder\.istft\.window", target_patterns="decoder.head.window"),
-            WeightRenaming(source_patterns=r"^from_quantizer\.", target_patterns="decoder.input_proj."),
+            WeightRenaming(source_patterns=r"^from_quantizer\.", target_patterns="decoder.embedder.proj."),
             WeightRenaming(source_patterns=r"\.self_attn\.gate_proj\.", target_patterns=".self_attn.g_proj."),
         ],
         "ernie4_5_vl_moe": [

@@ -28,8 +28,7 @@ inverse STFT. The decoder is causal, so audio can be synthesized frame by frame 
 ## Usage
 
 [`LiquidCodecFeatureExtractor`] computes the spectrogram the codec encodes, [`~LiquidCodecModel.encode`] turns it into
-audio codes, and [`~LiquidCodecModel.decode`] turns the codes back into audio. The LFM3-Audio processor loads the
-codec as `processor.audio_tokenizer`.
+audio codes, and [`~LiquidCodecModel.decode`] turns the codes back into audio.
 
 ```python
 from transformers import AutoFeatureExtractor, AutoModel
@@ -64,6 +63,10 @@ audio_values = model_output.audio_values
 Clips of different lengths are padded to the longest one. Pass the masks along: `encode` returns the
 `audio_codes_mask` of the valid frames of each clip, and `decode` the `audio_values_mask` of its valid samples. The
 encoder and the decoder are causal, so each clip is coded exactly as it would be alone.
+
+> [!NOTE]
+> Only right padding is supported: the masks must hold the valid frames of each clip first, as
+> [`LiquidCodecFeatureExtractor`] returns them.
 
 ```python
 from transformers import AutoFeatureExtractor, AutoModel

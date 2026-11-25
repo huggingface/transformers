@@ -66,15 +66,15 @@ class LiquidCodecFeatureExtractor(SequenceFeatureExtractor):
     ):
         # derived from `n_fft`: a saved config carries it back
         kwargs.pop("feature_size", None)
-        super().__init__(
-            feature_size=3 * (n_fft // 2 + 1), sampling_rate=sampling_rate, padding_value=padding_value, **kwargs
-        )
+        # log-magnitude, cos(phase) and sin(phase) per frequency bin
+        feature_size = 3 * (n_fft // 2 + 1)
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.win_length = win_length
         self.frame_stack = frame_stack
 
-    def _torch_extract_spectrogram(self, waveform: torch.Tensor, device: str = "cpu") -> torch.Tensor:
+    def _torch_extract_fbank_features(self, waveform: torch.Tensor, device: str = "cpu") -> torch.Tensor:
         window = torch.hann_window(self.win_length, device=device)
         stft = torch.stft(
             waveform.to(device),
@@ -128,7 +128,7 @@ class LiquidCodecFeatureExtractor(SequenceFeatureExtractor):
                 `sampling_rate` at the forward call to prevent silent errors.
             device (`str`, *optional*, defaults to `'cpu'`):
                 Specifies the device for computation of the spectrogram of audio signals in the
-                `_torch_extract_spectrogram` method. (e.g., "cpu", "cuda")
+                `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
 
         Returns:
             [`BatchFeature`]: `input_features` of shape `(batch_size, feature_size, num_frames)`, right-padded to
@@ -197,7 +197,7 @@ class LiquidCodecFeatureExtractor(SequenceFeatureExtractor):
             padded_length = max_length + (-max_length % frame_size) + total_pad
             waveform = F.pad(waveform, (0, max(0, padded_length - waveform.shape[-1])))
 
-        input_features = self._torch_extract_spectrogram(waveform, device)
+        input_features = self._torch_extract_fbank_features(waveform, device)
         input_features_mask = (
             torch.arange(input_features.shape[-1], device=device)[None, :] < num_frames.to(device)[:, None]
         )

@@ -203,8 +203,6 @@ class LiquidCodecConfig(PreTrainedConfig):
     """
 
     model_type = "liquid_codec"
-    # released config keys (LiquidAI/Liquid-Codec)
-    attribute_map = {"fsq_levels": "quantization_levels", "quantizer_dim": "quantization_dim", "n_q": "num_quantizers"}
     sub_configs_defaults = {
         "encoder_config": SubConfigSpec(config_class=LiquidCodecEncoderConfig, optional=True),
         "decoder_config": SubConfigSpec(config_class=LiquidCodecDecoderConfig, optional=True),
@@ -219,6 +217,8 @@ class LiquidCodecConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     def validate_architecture(self):
+        if self.encoder_config is None and self.decoder_config is None:
+            raise ValueError("The codec needs at least one of `encoder_config` and `decoder_config`.")
         for half in (self.encoder_config, self.decoder_config):
             if isinstance(half, PreTrainedConfig) and half.quantization_dim != self.quantization_dim:
                 raise ValueError(

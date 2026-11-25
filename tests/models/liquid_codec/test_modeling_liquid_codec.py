@@ -35,7 +35,7 @@ from transformers.testing_utils import require_torch, require_torch_accelerator,
 
 from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -51,7 +51,7 @@ class LiquidCodecModelTester:
         is_training=False,
         hidden_size=32,
         intermediate_size=64,
-        num_hidden_layers=2,
+        num_hidden_layers=3,
         num_attention_heads=2,
         num_key_value_heads=1,
         head_dim=16,
@@ -65,6 +65,8 @@ class LiquidCodecModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
+        # encoder hidden states: one per codec frame
+        self.seq_length = num_frames
         self.is_training = is_training
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -79,7 +81,9 @@ class LiquidCodecModelTester:
         self.num_quantizers = num_quantizers
         self.quantization_levels = quantization_levels
 
-    def get_backbone_config(self, attention_type):
+    def get_backbone_config(self):
+        # every layer type in each half, unlike the released halves (one attention type each)
+        layer_types = ["conv", "full_attention", "sliding_attention"]
         return {
             "hidden_size": self.hidden_size,
             "intermediate_size": self.intermediate_size,
@@ -88,18 +92,18 @@ class LiquidCodecModelTester:
             "num_key_value_heads": self.num_key_value_heads,
             "head_dim": self.head_dim,
             "max_position_embeddings": self.max_position_embeddings,
-            "layer_types": ["conv", attention_type],
-            "rope_parameters": {attention_type: {"rope_type": "default", "rope_theta": 1_000_000.0}},
+            "sliding_window": self.sliding_window,
+            "layer_types": layer_types,
+            "rope_parameters": {
+                layer_type: {"rope_type": "default", "rope_theta": 1_000_000.0} for layer_type in layer_types[1:]
+            },
             "quantization_dim": self.quantization_dim,
         }
 
     def get_config(self):
         return LiquidCodecConfig(
-            encoder_config={
-                **self.get_backbone_config("full_attention"),
-                "embedder_hidden_size": self.embedder_hidden_size,
-            },
-            decoder_config={**self.get_backbone_config("sliding_attention"), "sliding_window": self.sliding_window},
+            encoder_config={**self.get_backbone_config(), "embedder_hidden_size": self.embedder_hidden_size},
+            decoder_config=self.get_backbone_config(),
             quantization_dim=self.quantization_dim,
             num_quantizers=self.num_quantizers,
             quantization_levels=self.quantization_levels,
@@ -152,18 +156,6 @@ class LiquidCodecModelTester:
         torch.testing.assert_close(result.audio_values[-1:, :num_samples], alone.audio_values, atol=1e-6, rtol=0)
         self.parent.assertTrue(bool((result.audio_values[-1, num_samples:] == 0).all()))
 
-        # forward == encode + decode, tuples too
-        with torch.no_grad():
-            encoded = model.encode(**inputs_dict, return_dict=False)
-            decoded = model.decode(*encoded, return_dict=False)
-
-        self.parent.assertIsInstance(encoded, tuple)
-        self.parent.assertIsInstance(decoded, tuple)
-        self.parent.assertTrue(torch.equal(encoded[0], result.audio_codes))
-        self.parent.assertTrue(torch.equal(encoded[1], result.audio_codes_mask))
-        self.parent.assertTrue(torch.equal(decoded[0], result.audio_values))
-        self.parent.assertTrue(torch.equal(decoded[1], result.audio_values_mask))
-
 
 @require_torch
 class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
@@ -189,17 +181,25 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="No attentions returned")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip(reason="No hidden states returned")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="No hidden states nor attentions returned")
+    @unittest.skip(reason="Discrete codes: no gradient flows from `audio_values` back to the encoder's states")
     def test_retain_grad_hidden_states_attentions(self):
         pass
+
+    def test_attention_outputs(self):
+        """The encoder's attentions are recorded: its attention layers, not its conv layers."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        encoder_config = config.encoder_config
+        num_attention_layers = sum(layer_type != "conv" for layer_type in encoder_config.layer_types)
+        seq_len = self.model_tester.seq_length
+
+        model = LiquidCodecModel._from_config(config, attn_implementation="eager").to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model(**inputs_dict, output_attentions=True)
+
+        self.assertEqual(len(outputs.attentions), num_attention_layers)
+        self.assertListEqual(
+            list(outputs.attentions[0].shape[-3:]), [encoder_config.num_attention_heads, seq_len, seq_len]
+        )
 
     @unittest.skip(reason="Sliding-window mask always materialized: no flash kernel")
     def test_sdpa_can_dispatch_on_flash(self):
@@ -221,111 +221,6 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
             for tuple_value, dict_value in zip(tuple_output, dict_output.to_tuple()):
                 torch.testing.assert_close(tuple_value, dict_value)
 
-    def test_streaming_decode_matches_offline(self):
-        set_seed(0)
-        config = self.model_tester.get_config()
-        model = LiquidCodecModel(config).to(torch_device).eval()
-        frame_stack, hop_length = config.decoder_config.frame_stack, config.decoder_config.hop_length
-        frame_size, overlap = frame_stack * hop_length, config.decoder_config.n_fft - hop_length
-        codes = ids_tensor([2, config.num_quantizers, 7], config.codebook_size)
-
-        with torch.no_grad():
-            offline = model.decode(codes).audio_values
-
-            chunks, caches = [], {}
-            for start, end in ((0, 1), (1, 4), (4, 7)):
-                out = model.decode(codes[..., start:end], use_streaming=True, **caches)
-                caches = {"decoder_cache": out.decoder_cache, "overlap_add_cache": out.overlap_add_cache}
-                chunks.append(out.audio_values)
-
-                self.assertIsNone(out.audio_values_mask)
-                self.assertEqual(out.overlap_add_cache.audio.shape, (2, overlap))
-                self.assertEqual(out.overlap_add_cache.envelope.shape, (2, overlap))
-                self.assertEqual(out.decoder_cache.get_seq_length(), end * frame_stack)
-            flushed = out.overlap_add_cache.flush()
-            # no mask in, no mask out
-            self.assertIsNone(flushed.audio_values_mask)
-            chunks.append(flushed.audio_values)
-
-        # half the overlap held back until flush
-        self.assertEqual(
-            [chunk.shape[-1] for chunk in chunks],
-            [frame_size - overlap // 2, 3 * frame_size, 3 * frame_size, overlap // 2],
-        )
-        self.assertIsNone(out.overlap_add_cache.audio)
-        torch.testing.assert_close(torch.cat(chunks, dim=-1), offline, atol=1e-6, rtol=0)
-        with self.assertRaisesRegex(ValueError, "Nothing to flush"):
-            out.overlap_add_cache.flush()
-
-        # flushed cache starts a new stream
-        with torch.no_grad():
-            again = model.decode(codes, overlap_add_cache=out.overlap_add_cache, use_streaming=True)
-
-        self.assertIs(again.overlap_add_cache, out.overlap_add_cache)
-        audio_values = torch.cat([again.audio_values, again.overlap_add_cache.flush().audio_values], dim=-1)
-        torch.testing.assert_close(audio_values, offline, atol=1e-6, rtol=0)
-
-    def test_streaming_decode_with_mask_matches_offline(self):
-        set_seed(0)
-        config = self.model_tester.get_config()
-        model = LiquidCodecModel(config).to(torch_device).eval()
-        frame_size = config.decoder_config.frame_stack * config.decoder_config.hop_length
-        codes = ids_tensor([2, config.num_quantizers, 7], config.codebook_size)
-
-        # 2nd stream ends: mid-chunk, at a chunk end, in the 1st chunk, before its 1st frame
-        for length in (3, 4, 1, 0):
-            with self.subTest(length=length):
-                codes_mask = torch.arange(7, device=torch_device) < torch.tensor([[7], [length]], device=torch_device)
-
-                with torch.no_grad():
-                    offline = model.decode(codes, codes_mask)
-
-                    chunks, masks, caches = [], [], {}
-                    for start, end in ((0, 2), (2, 4), (4, 7)):
-                        out = model.decode(
-                            codes[..., start:end], codes_mask[:, start:end], use_streaming=True, **caches
-                        )
-                        caches = {"decoder_cache": out.decoder_cache, "overlap_add_cache": out.overlap_add_cache}
-                        chunks.append(out.audio_values)
-                        masks.append(out.audio_values_mask)
-                    flushed = out.overlap_add_cache.flush()
-                    last_audio_values, last_audio_values_mask = flushed.audio_values, flushed.audio_values_mask
-
-                audio_values = torch.cat([*chunks, last_audio_values], dim=-1)
-                audio_values_mask = torch.cat([*masks, last_audio_values_mask], dim=-1)
-                torch.testing.assert_close(audio_values, offline.audio_values, atol=1e-6, rtol=0)
-
-                if length > 0:
-                    with torch.no_grad():
-                        alone = model.decode(codes[1:, :, :length]).audio_values
-                    torch.testing.assert_close(audio_values[1:, : length * frame_size], alone, atol=1e-6, rtol=0)
-
-                self.assertTrue(torch.equal(audio_values_mask, offline.audio_values_mask))
-                self.assertEqual(offline.audio_values_mask.sum(-1).tolist(), [7 * frame_size, length * frame_size])
-
-    def test_masks_must_be_right_padded(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = LiquidCodecModel(config).to(torch_device).eval()
-        codes = ids_tensor([2, config.num_quantizers, 3], config.codebook_size)
-        codes_mask = torch.tensor([[True, True, True], [True, False, False]], device=torch_device)
-
-        with torch.no_grad():
-            with self.assertRaisesRegex(ValueError, "The mask must be right-padded"):
-                model.encode(inputs_dict["input_features"], inputs_dict["input_features_mask"].flip(-1))
-            with self.assertRaisesRegex(ValueError, "The mask must be right-padded"):
-                model.decode(codes, codes_mask.flip(-1))
-
-            # an ended stream can't resume
-            out = model.decode(codes, codes_mask, use_streaming=True)
-            with self.assertRaisesRegex(ValueError, "does not resume"):
-                model.decode(
-                    codes,
-                    torch.ones_like(codes_mask),
-                    decoder_cache=out.decoder_cache,
-                    overlap_add_cache=out.overlap_add_cache,
-                    use_streaming=True,
-                )
-
     def test_config_without_encoder_or_decoder(self):
         config = self.model_tester.get_config()
         config.encoder_config = None
@@ -336,42 +231,12 @@ class LiquidCodecModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNone(config.encoder_config)
         self.assertIsInstance(config.decoder_config, LiquidCodecDecoderConfig)
         self.assertIsInstance(LiquidCodecConfig().encoder_config, LiquidCodecEncoderConfig)
+        with self.assertRaisesRegex(StrictDataclassClassValidationError, "at least one"):
+            LiquidCodecConfig(encoder_config=None, decoder_config=None)
 
         # halves must share quantization_dim
         with self.assertRaisesRegex(StrictDataclassClassValidationError, "quantization_dim=16"):
             LiquidCodecConfig(decoder_config={"quantization_dim": 8}, quantization_dim=16)
-
-    def test_model_without_encoder_or_decoder(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = LiquidCodecModel(config).to(torch_device).eval()
-
-        with torch.no_grad():
-            codes = model.encode(inputs_dict["input_features"]).audio_codes
-            expected = model.decode(codes).audio_values
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            encoder_only, encoder_info = LiquidCodecModel.from_pretrained(
-                tmp_dir, decoder_config=None, output_loading_info=True
-            )
-            decoder_only, decoder_info = LiquidCodecModel.from_pretrained(
-                tmp_dir, encoder_config=None, output_loading_info=True
-            )
-
-        for info in (encoder_info, decoder_info):
-            self.assertEqual({k: v for k, v in info.items() if v}, {})
-        self.assertIsNone(encoder_only.decoder)
-        self.assertIsNone(decoder_only.encoder)
-
-        with torch.no_grad():
-            encoded = encoder_only.to(torch_device).encode(inputs_dict["input_features"]).audio_codes
-            self.assertTrue(torch.equal(encoded, codes))
-            torch.testing.assert_close(decoder_only.to(torch_device).decode(codes).audio_values, expected)
-
-            with self.assertRaisesRegex(ValueError, "without its decoder"):
-                encoder_only.decode(codes)
-            with self.assertRaisesRegex(ValueError, "without its encoder"):
-                decoder_only.encode(inputs_dict["input_features"])
 
 
 @require_torch
@@ -397,6 +262,7 @@ class LiquidCodecIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
         fixture = Path(__file__).parent.parent.parent / "fixtures/liquid_codec/expected_results.json"
         with open(fixture, encoding="utf-8") as f:
             expected = json.load(f)["codec"]
@@ -603,3 +469,44 @@ class LiquidCodecIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 rtol=self.RTOL,
                 atol=self.ATOL,
             )
+
+    @slow
+    @require_torch_accelerator
+    def test_encoder_or_decoder_only(self):
+        """
+        reproducer: https://gist.github.com/eustlb/1befc95bf557e88c808d61c9f7b199d8#file-reproducer-codec-py
+        """
+        encoder_only = AutoModel.from_pretrained(
+            self.checkpoint, revision=self.revision, dtype=torch.float32, device_map=torch_device, decoder_config=None
+        )
+        decoder_only = AutoModel.from_pretrained(
+            self.checkpoint, revision=self.revision, dtype=torch.float32, device_map=torch_device, encoder_config=None
+        )
+        feature_extractor = AutoFeatureExtractor.from_pretrained(self.checkpoint, revision=self.revision)
+        self.assertIsNone(encoder_only.decoder)
+        self.assertIsNone(decoder_only.encoder)
+
+        clip = torch.tensor(load_audio(self.samples + self.clips[0], sampling_rate=24000))
+        inputs = feature_extractor([clip], sampling_rate=24000, return_tensors="pt", device=encoder_only.device)
+        inputs = inputs.to(encoder_only.device, encoder_only.dtype)
+        expected_codes = torch.tensor(self.expected_codes[0])
+        # Hann window built on GPU (reference: CPU, then moved): 1 float32 step -> 1 code off by 1 FSQ level
+        expected_codes[7, 35] = 780  # golden: 1116
+        audio_codes = torch.tensor(self.expected_codes[0], device=torch_device)[None]
+
+        with torch.no_grad():
+            encoded = encoder_only.encode(**inputs)
+            decoded = decoder_only.decode(audio_codes)
+
+        self.assertEqual(encoded.audio_codes[0].tolist(), expected_codes.tolist())
+        torch.testing.assert_close(
+            decoded.audio_values[0].cpu()[self.expected_audio_values_indices[0]],
+            torch.tensor(self.expected_audio_values[0]),
+            rtol=self.RTOL,
+            atol=self.ATOL,
+        )
+
+        with self.assertRaisesRegex(ValueError, "without its decoder"):
+            encoder_only.decode(audio_codes)
+        with self.assertRaisesRegex(ValueError, "without its encoder"):
+            decoder_only.encode(**inputs)

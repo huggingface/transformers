@@ -36,9 +36,10 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_tracing
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_liquid_codec import LiquidCodecConfig, LiquidCodecDecoderConfig, LiquidCodecEncoderConfig
 
@@ -49,8 +50,8 @@ class LiquidCodecOverlapAddCache:
     samples of a chunk until the next one completes them. [`~LiquidCodecOverlapAddCache.flush`] ends the stream.
     """
 
-    def __init__(self, n_fft: int, hop_length: int):
-        self.overlap = n_fft - hop_length
+    def __init__(self, config: LiquidCodecDecoderConfig):
+        self.overlap = config.n_fft - config.hop_length
         self.padding = self.overlap // 2
         self.reset()
 
@@ -116,10 +117,16 @@ class LiquidCodecEncoderModelOutput(ModelOutput):
     latents_mask (`torch.BoolTensor` of shape `(batch_size, num_frames)`, *optional*, returned with an
     `input_features_mask`):
         Valid frames of each clip.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the encoder at the output of each layer plus its input.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each attention layer of the encoder.
     """
 
     latents: torch.FloatTensor | None = None
     latents_mask: torch.BoolTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -131,10 +138,16 @@ class LiquidCodecEncoderOutput(ModelOutput):
     audio_codes_mask (`torch.BoolTensor` of shape `(batch_size, num_frames)`, *optional*, returned with an
     `input_features_mask`):
         Valid frames of each clip.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the encoder at the output of each layer plus its input.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each attention layer of the encoder.
     """
 
     audio_codes: torch.LongTensor | None = None
     audio_codes_mask: torch.BoolTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -150,12 +163,18 @@ class LiquidCodecDecoderOutput(ModelOutput):
         Decoder cache, to pass with the next chunk.
     overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*, returned when streaming):
         Overlap-add cache, to pass with the next chunk; `flush()` ends the stream.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the decoder at the output of each layer plus its input.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each attention layer of the decoder.
     """
 
     audio_values: torch.FloatTensor | None = None
     audio_values_mask: torch.BoolTensor | None = None
     decoder_cache: Cache | None = None
     overlap_add_cache: LiquidCodecOverlapAddCache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -172,12 +191,18 @@ class LiquidCodecOutput(ModelOutput):
     audio_codes_mask (`torch.BoolTensor` of shape `(batch_size, num_frames)`, *optional*, returned with an
     `input_features_mask`):
         Valid frames of each clip.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
+        Hidden states of the encoder at the output of each layer plus its input.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True`):
+        Attention weights of each attention layer of the encoder.
     """
 
     audio_values: torch.FloatTensor | None = None
     audio_values_mask: torch.BoolTensor | None = None
     audio_codes: torch.LongTensor | None = None
     audio_codes_mask: torch.BoolTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class LiquidCodecEncoderEmbedder(nn.Module):
@@ -196,6 +221,18 @@ class LiquidCodecEncoderEmbedder(nn.Module):
         hidden_states = self.act(self.in_proj(input_features))
         hidden_states = self.act(self.conv(hidden_states)[:, :, : hidden_states.shape[-1]])
         return self.out_proj(hidden_states).transpose(1, 2)
+
+
+class LiquidCodecDecoderEmbedder(nn.Module):
+    def __init__(self, config: LiquidCodecDecoderConfig):
+        super().__init__()
+        self.frame_stack = config.frame_stack
+        self.proj = nn.Linear(config.quantization_dim, config.hidden_size)
+
+    def forward(self, latents: torch.Tensor) -> torch.Tensor:
+        embeddings = self.proj(latents.transpose(1, 2).to(self.proj.weight.dtype))
+        embeddings = F.interpolate(embeddings.transpose(1, 2), scale_factor=self.frame_stack, mode="nearest-exact")
+        return embeddings.transpose(1, 2)
 
 
 class LiquidCodecFiniteScalarQuantization(nn.Module):
@@ -814,7 +851,7 @@ class LiquidCodecDecoderLayer(GradientCheckpointingLayer):
 @auto_docstring
 class LiquidCodecPreTrainedModel(PreTrainedModel):
     config: LiquidCodecConfig
-    base_model_prefix = "codec"
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LiquidCodecDecoderLayer"]
     _supports_flash_attn = False
@@ -851,20 +888,6 @@ class LiquidCodecPreTrainedModel(PreTrainedModel):
             init.copy_(module.basis, basis)
             init.copy_(module.codebook, codebook)
 
-    @staticmethod
-    def _validate_right_padded_mask(mask: torch.Tensor, previous_mask: torch.Tensor | None = None):
-        # causal halves: only right padding leaves a clip as alone
-        if is_tracing(mask):
-            return
-        mask = mask.bool()
-        if previous_mask is not None:
-            mask = torch.cat([previous_mask.bool().to(mask.device), mask], dim=1)
-        if (mask[:, 1:] & ~mask[:, :-1]).any():
-            raise ValueError(
-                "The mask must be right-padded: the valid frames of each clip come first, and a clip that ended "
-                "does not resume in a later chunk of a stream."
-            )
-
 
 @auto_docstring(
     custom_intro="""
@@ -892,7 +915,7 @@ class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -945,14 +968,10 @@ class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
 
         latents_mask = None
         if input_features_mask is not None:
-            self._validate_right_padded_mask(input_features_mask)
             num_frames = input_features_mask.sum(-1, keepdim=True) // self.config.frame_stack
             latents_mask = torch.arange(latents.shape[-1], device=latents.device) < num_frames.to(latents.device)
 
         return LiquidCodecEncoderModelOutput(latents=latents, latents_mask=latents_mask)
-
-    def get_input_embeddings(self):
-        return None
 
 
 @auto_docstring(
@@ -976,19 +995,19 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
         self.rotary_emb = LiquidCodecRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.embedding_norm = LiquidCodecRMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.input_proj = nn.Linear(config.quantization_dim, config.hidden_size)
+        self.embedder = LiquidCodecDecoderEmbedder(config)
         self.head = LiquidCodecISTFTHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    @capture_outputs
     @auto_docstring
-    @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
         self,
         latents: torch.FloatTensor,
         latents_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         cache: Cache | None = None,
         overlap_add_cache: LiquidCodecOverlapAddCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -1001,13 +1020,13 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
         overlap_add_cache ([`LiquidCodecOverlapAddCache`], *optional*):
             Overlap-add cache from the previous chunk.
         """
-        frame_stack = self.config.frame_stack
-        embeddings = self.input_proj(latents.transpose(1, 2).to(self.input_proj.weight.dtype))
-        embeddings = F.interpolate(embeddings.transpose(1, 2), scale_factor=frame_stack, mode="nearest-exact")
-        hidden_states = embeddings.transpose(1, 2)
+        hidden_states = self.embedder(latents)
 
-        past_seen_tokens = cache.get_seq_length() if cache is not None else 0
-        position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None] + past_seen_tokens
+        if position_ids is None:
+            past_seen_tokens = cache.get_seq_length() if cache is not None else 0
+            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
         mask_kwargs = {
             "config": self.config,
             "inputs_embeds": hidden_states,
@@ -1043,16 +1062,9 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
 
         hidden_states = self.embedding_norm(hidden_states)
 
-        # a clip ended in a previous chunk can't resume, mask or not
-        previous_mask = overlap_add_cache.mask if overlap_add_cache is not None else None
-        if latents_mask is not None or previous_mask is not None:
-            mask = latents_mask if latents_mask is not None else latents.new_ones(latents.shape[0], latents.shape[-1])
-            # the cached mask starts with the last frame of the previous chunk
-            self._validate_right_padded_mask(mask, previous_mask[:, :1] if previous_mask is not None else None)
-
         frames_mask = None
         if latents_mask is not None:
-            frames_mask = latents_mask.repeat_interleave(frame_stack, dim=-1)
+            frames_mask = latents_mask.repeat_interleave(self.config.frame_stack, dim=-1)
         audio_values, audio_values_mask = self.head(
             hidden_states, frames_mask=frames_mask, overlap_add_cache=overlap_add_cache
         )
@@ -1063,9 +1075,6 @@ class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
             decoder_cache=cache,
             overlap_add_cache=overlap_add_cache,
         )
-
-    def get_input_embeddings(self):
-        return None
 
 
 @auto_docstring(custom_intro="The Liquid Codec audio tokenizer.")
@@ -1098,14 +1107,21 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
         if self.encoder is None:
             raise ValueError("Audio encoding was requested, but the codec was loaded without its encoder.")
 
-        encoder_outputs = self.encoder(input_features, input_features_mask=input_features_mask, **kwargs)
+        encoder_outputs = self.encoder(
+            input_features, input_features_mask=input_features_mask, return_dict=True, **kwargs
+        )
         audio_codes = self.quantizer.encode(encoder_outputs.latents)
 
         audio_codes_mask = encoder_outputs.latents_mask
         if audio_codes_mask is not None:
             audio_codes_mask = audio_codes_mask.to(audio_codes.device)
 
-        return LiquidCodecEncoderOutput(audio_codes=audio_codes, audio_codes_mask=audio_codes_mask)
+        return LiquidCodecEncoderOutput(
+            audio_codes=audio_codes,
+            audio_codes_mask=audio_codes_mask,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -1138,8 +1154,7 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
         if use_streaming and decoder_cache is None:
             decoder_cache = DynamicCache(config=self.config.decoder_config)
         if use_streaming and overlap_add_cache is None:
-            decoder_config = self.config.decoder_config
-            overlap_add_cache = LiquidCodecOverlapAddCache(decoder_config.n_fft, decoder_config.hop_length)
+            overlap_add_cache = LiquidCodecOverlapAddCache(config=self.config.decoder_config)
 
         latents = self.quantizer.decode(audio_codes)
 
@@ -1148,6 +1163,7 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
             latents_mask=audio_codes_mask,
             cache=decoder_cache,
             overlap_add_cache=overlap_add_cache,
+            return_dict=True,
             **kwargs,
         )
 
@@ -1165,14 +1181,17 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
         input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Valid spectrogram frames of each clip (right-padded): each clip decoded as alone.
         """
-        encoded = self.encode(input_features, input_features_mask, **kwargs)
-        decoded = self.decode(encoded.audio_codes, encoded.audio_codes_mask, **kwargs)
+        # the recorded hidden states and attentions are the encoder's, as for an encoder-decoder model's encoder outputs
+        encoded = self.encode(input_features, input_features_mask, return_dict=True, **kwargs)
+        decoded = self.decode(encoded.audio_codes, encoded.audio_codes_mask, return_dict=True)
 
         return LiquidCodecOutput(
             audio_values=decoded.audio_values,
             audio_values_mask=decoded.audio_values_mask,
             audio_codes=encoded.audio_codes,
             audio_codes_mask=encoded.audio_codes_mask,
+            hidden_states=encoded.hidden_states,
+            attentions=encoded.attentions,
         )
 
 
