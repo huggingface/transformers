@@ -178,7 +178,12 @@ class PI05Attention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if cache is not None:
-            key_states, value_states = cache.update(key_states, value_states, self.layer_idx, kwargs=kwargs)
+            # the VLM layer that filled this cache layer can be on another GPU than this expert layer (which has no cache itself)
+            cache_device = cache.layers[self.layer_idx].keys.device
+            key_states, value_states = cache.update(
+                key_states.to(cache_device), value_states.to(cache_device), self.layer_idx, kwargs=kwargs
+            )
+            key_states, value_states = key_states.to(query_states.device), value_states.to(query_states.device)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -621,7 +626,9 @@ class PI05ForConditionalGeneration(PI05PreTrainedModel):
 
         loss = None
         if actions is not None:
-            loss = F.mse_loss(target_velocity, predicted_velocity, reduction=self.config.loss_reduction)
+            loss = F.mse_loss(
+                target_velocity.to(predicted_velocity.device), predicted_velocity, reduction=self.config.loss_reduction
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
