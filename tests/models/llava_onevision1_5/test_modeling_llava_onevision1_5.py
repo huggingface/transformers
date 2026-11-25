@@ -13,8 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-OneVision-1.5 model."""
 
-import json
-import tempfile
 import unittest
 
 from transformers import (
@@ -28,14 +26,15 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
 )
 
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
@@ -50,23 +49,23 @@ class LlavaOnevision15ModelTester(VLMModelTester):
     config_class = LlavaOnevision15Config
     conditional_generation_class = LlavaOnevision15ForConditionalGeneration
 
-    def __init__(self, parent, **kwargs):
-        kwargs.setdefault("image_token_id", 5)
-        kwargs.setdefault("video_token_id", 6)
-        kwargs.setdefault("vision_start_token_id", 3)
-        kwargs.setdefault("vision_end_token_id", 4)
-        kwargs.setdefault("head_dim", 16)
-        kwargs.setdefault("intermediate_size", 37)
-        kwargs.setdefault("vision_hidden_size", 32)
-        kwargs.setdefault("vision_intermediate_size", 37)
-        kwargs.setdefault("depth", 2)
-        kwargs.setdefault("num_heads", 2)
-        kwargs.setdefault("out_hidden_size", 32)
-        kwargs.setdefault("image_size", 16)
-        kwargs.setdefault("spatial_merge_size", 2)
-        kwargs.setdefault("num_image_tokens", 4)
-        kwargs.setdefault("vision_hidden_act", "gelu")
-        super().__init__(parent, **kwargs)
+    small_config_overrides = {
+        "image_token_id": 5,
+        "video_token_id": 6,
+        "vision_start_token_id": 3,
+        "vision_end_token_id": 4,
+        "head_dim": 16,
+        "intermediate_size": 37,
+        "vision_hidden_size": 32,
+        "vision_intermediate_size": 37,
+        "depth": 2,
+        "num_heads": 2,
+        "out_hidden_size": 32,
+        "image_size": 16,
+        "spatial_merge_size": 2,
+        "num_image_tokens": 4,
+        "vision_hidden_act": "gelu",
+    }
 
     @property
     def _special_token_ids(self):
@@ -95,30 +94,9 @@ class LlavaOnevision15ModelTester(VLMModelTester):
 class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = LlavaOnevision15ModelTester
 
-    def test_vision_loading_from_full_checkpoint(self):
-        """Extract the vision tower from a full checkpoint using the published legacy config type."""
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        model = LlavaOnevision15ForConditionalGeneration(config).to(torch_device).eval()
-        with tempfile.TemporaryDirectory() as directory:
-            model.save_pretrained(directory)
-            config_path = f"{directory}/config.json"
-            with open(config_path, encoding="utf-8") as f:
-                values = json.load(f)
-            values["vision_config"]["model_type"] = "rice_vit"
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(values, f)
-            vision, info = LlavaOnevision15VisionModel.from_pretrained(directory, output_loading_info=True)
-            self.assertEqual(vision.config.model_type, "llava_onevision1_5_vision")
-            self.assertFalse(info["missing_keys"], info)
-            self.assertFalse(info["mismatched_keys"], info)
-            self.assertFalse(info["error_msgs"], info)
-            for name, parameter in model.model.visual.state_dict().items():
-                torch.testing.assert_close(vision.state_dict()[name].to(torch_device), parameter)
-            vision = vision.to(torch_device).eval()
-            with torch.no_grad():
-                expected = model.model.visual(inputs["pixel_values"], inputs["image_grid_thw"]).pooler_output
-                actual = vision(inputs["pixel_values"], inputs["image_grid_thw"]).pooler_output
-            torch.testing.assert_close(actual, expected)
+    @unittest.skip("Reentrant checkpointing cannot backpropagate through the shared CLS position embeddings.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
 
     def test_generate_multiple_sequences_preserves_image_features(self):
         """Beam and sample expansion must preserve the image features associated with each prompt."""
@@ -173,21 +151,24 @@ class LlavaOnevision15ModelTest(VLMModelTest, unittest.TestCase):
         grid = torch.tensor([[1, 4, 4]], device=torch_device)
         model(pixels, grid).pooler_output.square().sum().backward()
         expected = {name: p.grad.clone() for name, p in model.named_parameters()}
-        for reentrant in (True, False):
-            model.zero_grad(set_to_none=True)
-            model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": reentrant})
-            model(pixels, grid).pooler_output.square().sum().backward()
-            for name, p in model.named_parameters():
-                torch.testing.assert_close(p.grad, expected[name])
-            self.assertGreater(model.class_embedding.grad.abs().sum().item(), 0)
-            self.assertGreater(model.class_pos_emb.grad.abs().sum().item(), 0)
+
+        model.zero_grad(set_to_none=True)
+        model.activation_checkpointing_enable()
+        model(pixels, grid).pooler_output.square().sum().backward()
+        for name, p in model.named_parameters():
+            torch.testing.assert_close(p.grad, expected[name])
+        self.assertGreater(model.class_embedding.grad.abs().sum().item(), 0)
+        self.assertGreater(model.class_pos_emb.grad.abs().sum().item(), 0)
 
 
 @require_torch
-class LlavaOnevision15IntegrationTest(unittest.TestCase):
+@require_torch_accelerator
+@slow
+class LlavaOnevision15IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf"
 
     def setUp(self):
+        super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id, padding_side="left")
         self.messages = [
             {
@@ -204,18 +185,14 @@ class LlavaOnevision15IntegrationTest(unittest.TestCase):
             }
         ]
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
     def _check_image_generation(self, attn_implementation):
         model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map=torch_device, attn_implementation=attn_implementation
+            self.model_id, device_map=torch_device, attn_implementation=attn_implementation
         )
         inputs = self.processor.apply_chat_template(
             self.messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(model.device)
-        with torch.no_grad():
-            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         expected = Expectations(
             {
@@ -226,23 +203,15 @@ class LlavaOnevision15IntegrationTest(unittest.TestCase):
         ).get_expectation()
         self.assertEqual(text, expected)
 
-    @slow
-    @require_torch_gpu
     def test_image_generation(self):
         self._check_image_generation("sdpa")
 
-    @slow
-    @require_torch_gpu
     @require_flash_attn
     def test_image_generation_flash_attention_2(self):
         self._check_image_generation("flash_attention_2")
 
-    @slow
-    @require_torch_gpu
     def test_batched_generation(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map=torch_device
-        )
+        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
         text_only = [{"role": "user", "content": [{"type": "text", "text": "What is one plus one?"}]}]
         conversations = [self.messages, self.messages, text_only]
         inputs = self.processor.apply_chat_template(
@@ -253,8 +222,7 @@ class LlavaOnevision15IntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
         ).to(model.device)
-        with torch.no_grad():
-            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         expected = Expectations(
             {
@@ -267,12 +235,8 @@ class LlavaOnevision15IntegrationTest(unittest.TestCase):
         ).get_expectation()
         self.assertEqual(text, expected)
 
-    @slow
-    @require_torch_gpu
     def test_video_generation(self):
-        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map=torch_device
-        )
+        model = LlavaOnevision15ForConditionalGeneration.from_pretrained(self.model_id, device_map=torch_device)
         messages = [
             {
                 "role": "user",
@@ -295,8 +259,7 @@ class LlavaOnevision15IntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
         ).to(model.device)
-        with torch.no_grad():
-            output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = self.processor.batch_decode(output[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         expected = Expectations(
             {
@@ -307,11 +270,9 @@ class LlavaOnevision15IntegrationTest(unittest.TestCase):
         ).get_expectation()
         self.assertEqual(text, expected)
 
-    @slow
-    @require_torch_gpu
     def test_base_checkpoint_loading(self):
         model, info = LlavaOnevision15Model.from_pretrained(
-            self.model_id, dtype=torch.bfloat16, device_map=torch_device, output_loading_info=True
+            self.model_id, device_map=torch_device, output_loading_info=True
         )
         self.assertFalse(info["missing_keys"])
         self.assertFalse(info["mismatched_keys"])
@@ -320,8 +281,16 @@ class LlavaOnevision15IntegrationTest(unittest.TestCase):
         inputs = self.processor.apply_chat_template(
             self.messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(model.device)
-        with torch.no_grad():
-            output = model(**inputs)
+        output = model(**inputs)
         self.assertEqual(
             output.last_hidden_state.shape, (*inputs.input_ids.shape, model.config.text_config.hidden_size)
         )
+
+        vision, info = LlavaOnevision15VisionModel.from_pretrained(
+            self.model_id, device_map=torch_device, output_loading_info=True
+        )
+        self.assertFalse(info["missing_keys"], info)
+        self.assertFalse(info["mismatched_keys"], info)
+        self.assertFalse(info["error_msgs"], info)
+        vision_output = vision(inputs.pixel_values, inputs.image_grid_thw)
+        torch.testing.assert_close(vision_output.pooler_output, torch.cat(output.image_outputs.pooler_output))

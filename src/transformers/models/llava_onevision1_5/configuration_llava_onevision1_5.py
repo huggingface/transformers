@@ -87,7 +87,6 @@ class LlavaOnevision15Config(PreTrainedConfig):
         "vision_config": LlavaOnevision15VisionConfig,
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3"),
     }
-    keys_to_ignore_at_inference = ["cache"]
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -98,10 +97,7 @@ class LlavaOnevision15Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict) and self.text_config.get("model_type") == "LLaVAOneVision1_5_text":
-            self.text_config = {**self.text_config, "model_type": "qwen3"}
         super().__post_init__(**kwargs)
-        self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 
     def validate_architecture(self):
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:

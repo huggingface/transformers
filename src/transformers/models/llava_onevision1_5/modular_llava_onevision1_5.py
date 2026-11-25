@@ -98,10 +98,7 @@ class LlavaOnevision15Config(Qwen2_5_VLConfig):
     }
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict) and self.text_config.get("model_type") == "LLaVAOneVision1_5_text":
-            self.text_config = {**self.text_config, "model_type": "qwen3"}
         PreTrainedConfig.__post_init__(self, **kwargs)
-        self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 
     def validate_architecture(self):
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:
@@ -144,11 +141,7 @@ class LlavaOnevision15VisionAttention(Qwen2_5_VLVisionAttention):
 
 
 class LlavaOnevision15VisionBlock(GlmImageVisionBlock):
-    def forward(self, hidden_states, cu_seqlens, position_embeddings, **kwargs):
-        # Keep this input positional to preserve gradients to class_pos_emb under reentrant checkpointing.
-        # The GLM block expects position_embeddings in kwargs.
-        kwargs["position_embeddings"] = position_embeddings
-        return super().forward(hidden_states, cu_seqlens, **kwargs)
+    pass
 
 
 @auto_docstring
@@ -212,24 +205,28 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         if max_seqlen is not None:
             max_seqlen += 1
 
-        cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
-        hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], frame_lengths)
-        cos = self.prepend_cls(cos, cls_freqs.cos(), frame_lengths)
-        sin = self.prepend_cls(sin, cls_freqs.sin(), frame_lengths)
-        position_embeddings = (cos, sin)
-        if self.training and self.is_activation_checkpointing:
-            # Reentrant checkpointing only tracks tensors passed as positional inputs, not nested tuples.
-            position_embeddings = torch.stack(position_embeddings)
+        hidden_states, position_embeddings = self._prepare_cls_tokens(hidden_states, cos, sin, frame_lengths)
 
         hidden_states = self.pre_layernorm(hidden_states)
         for block in self.blocks:
-            hidden_states = block(hidden_states, cu_seqlens, position_embeddings, max_seqlen=max_seqlen, **kwargs)
+            hidden_states = block(
+                hidden_states, cu_seqlens, position_embeddings=position_embeddings, max_seqlen=max_seqlen, **kwargs
+            )
 
         hidden_states = torch.cat(
             [frame[1:] for frame in torch.split(hidden_states, [length + 1 for length in frame_lengths])], dim=0
         )
         pooled_states = self.merger(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_states)
+
+    def _prepare_cls_tokens(
+        self, hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, frame_lengths: list[int]
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
+        hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], frame_lengths)
+        cos = self.prepend_cls(cos, cls_freqs.cos(), frame_lengths)
+        sin = self.prepend_cls(sin, cls_freqs.sin(), frame_lengths)
+        return hidden_states, (cos, sin)
 
     @staticmethod
     def prepend_cls(hidden_states: torch.Tensor, cls_states: torch.Tensor, frame_lengths: list[int]) -> torch.Tensor:

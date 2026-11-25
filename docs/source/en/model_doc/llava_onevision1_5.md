@@ -17,13 +17,16 @@ rendered properly in your Markdown viewer.
 LLaVA-OneVision-1.5 was introduced in [LLaVA-OneVision-1.5: Fully Open Framework for Democratized Multimodal Training](https://huggingface.co/papers/2509.23661).
 It combines a native resolution vision encoder with a Qwen3 language backbone. The vision encoder adds a learned class token to each image, applies full attention, removes the class token, and merges spatial patches into visual features for the language model. The language backbone uses ordinary one dimensional rotary positions for the combined image and text sequence.
 
-Transformers supports the [4B checkpoint](https://huggingface.co/Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf). Use left padding for batched generation.
+Transformers supports the [4B checkpoint](https://huggingface.co/Deep-VLM/LLaVA-OneVision-1.5-4B-Instruct-hf).
 
 The paper describes the work as follows:
 
-*The [paper's abstract](https://arxiv.org/abs/2509.23661) describes an open framework for training vision-language models from scratch at a reduced cost. Its release includes a concept-balanced collection of 85 million pretraining examples, a curated instruction dataset containing 22 million examples, and a training system that uses offline parallel packing. The authors report a training budget of $16,000. In their evaluation, the 8B model exceeds Qwen2.5-VL-7B on 18 out of 27 benchmarks, while the 4B model exceeds Qwen2.5-VL-3B on all 27. The report also describes a lightweight reinforcement learning stage that improves multimodal reasoning through chain-of-thought responses.*
+*The [paper's abstract](https://huggingface.co/papers/2509.23661) describes an open framework for training vision-language models from scratch at a reduced cost. The [latest revision](https://arxiv.org/abs/2509.23661v3) reports 85 million pretraining examples, 22 million instruction examples, and a training budget of $16,000 using offline parallel packing. In their evaluation, the 8B model exceeds Qwen2.5-VL-7B on 18 out of 27 benchmarks, while the 4B model exceeds Qwen2.5-VL-3B on all 27. The latest revision also describes a lightweight reinforcement learning stage that improves multimodal reasoning.*
 
 ## Usage
+
+> [!NOTE]
+> For batched generation, set `processor.tokenizer.padding_side = "left"` before preparing the inputs.
 
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor

@@ -28,7 +28,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    MultimodalBaseModelOutputWithPast,
+    MultimodalCausalLMOutputWithPast,
+)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -135,7 +139,6 @@ class LlavaOnevision15VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
         return inv_freq.to(device), attention_factor
 
-    @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
@@ -305,14 +308,16 @@ class LlavaOnevision15VisionBlock(GradientCheckpointingLayer):
         self.mlp = LlavaOnevision15VisionMLP(config)
 
     @auto_docstring
-    def forward(self, hidden_states, cu_seqlens, position_embeddings, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         r"""
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
         """
-        # Keep this input positional to preserve gradients to class_pos_emb under reentrant checkpointing.
-        # The GLM block expects position_embeddings in kwargs.
-        kwargs["position_embeddings"] = position_embeddings
         residual = hidden_states
 
         hidden_states = self.norm1(hidden_states)
@@ -338,7 +343,6 @@ class LlavaOnevision15PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlavaOnevision15VisionBlock"]
-    _skip_keys_device_placement = ["cache"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -409,24 +413,28 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
         if max_seqlen is not None:
             max_seqlen += 1
 
-        cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
-        hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], frame_lengths)
-        cos = self.prepend_cls(cos, cls_freqs.cos(), frame_lengths)
-        sin = self.prepend_cls(sin, cls_freqs.sin(), frame_lengths)
-        position_embeddings = (cos, sin)
-        if self.training and self.is_activation_checkpointing:
-            # Reentrant checkpointing only tracks tensors passed as positional inputs, not nested tuples.
-            position_embeddings = torch.stack(position_embeddings)
+        hidden_states, position_embeddings = self._prepare_cls_tokens(hidden_states, cos, sin, frame_lengths)
 
         hidden_states = self.pre_layernorm(hidden_states)
         for block in self.blocks:
-            hidden_states = block(hidden_states, cu_seqlens, position_embeddings, max_seqlen=max_seqlen, **kwargs)
+            hidden_states = block(
+                hidden_states, cu_seqlens, position_embeddings=position_embeddings, max_seqlen=max_seqlen, **kwargs
+            )
 
         hidden_states = torch.cat(
             [frame[1:] for frame in torch.split(hidden_states, [length + 1 for length in frame_lengths])], dim=0
         )
         pooled_states = self.merger(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=pooled_states)
+
+    def _prepare_cls_tokens(
+        self, hidden_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, frame_lengths: list[int]
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
+        hidden_states = self.prepend_cls(hidden_states, self.class_embedding[None, :], frame_lengths)
+        cos = self.prepend_cls(cos, cls_freqs.cos(), frame_lengths)
+        sin = self.prepend_cls(sin, cls_freqs.sin(), frame_lengths)
+        return hidden_states, (cos, sin)
 
     @staticmethod
     def prepend_cls(hidden_states: torch.Tensor, cls_states: torch.Tensor, frame_lengths: list[int]) -> torch.Tensor:
@@ -538,7 +546,7 @@ class LlavaOnevision15Model(LlavaOnevision15PreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MultimodalBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -595,11 +603,8 @@ class LlavaOnevision15Model(LlavaOnevision15PreTrainedModel):
             **kwargs,
         )
 
-        return BaseModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            cache=outputs.cache,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+        return MultimodalBaseModelOutputWithPast(
+            **outputs, image_outputs=mm_encoder_outputs.get("image"), video_outputs=mm_encoder_outputs.get("video")
         )
 
 
@@ -662,7 +667,7 @@ class LlavaOnevision15ForConditionalGeneration(LlavaOnevision15PreTrainedModel, 
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MultimodalCausalLMOutputWithPast:
         r"""
         second_per_grid_ts (`torch.Tensor`, *optional*):
             Video timing metadata accepted from the shared processor. Text positions remain one-dimensional.
@@ -727,12 +732,14 @@ class LlavaOnevision15ForConditionalGeneration(LlavaOnevision15PreTrainedModel, 
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return CausalLMOutputWithPast(
+        return MultimodalCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             cache=outputs.cache,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_outputs=outputs.image_outputs,
+            video_outputs=outputs.video_outputs,
         )
 
 
