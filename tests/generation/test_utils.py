@@ -1572,6 +1572,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 self.skipTest(reason="This model is encoder-decoder VLM which is usually different per model arch")
 
             model = model_class(config).to(torch_device).eval()
+            if not model._supports_mm_encoder_outputs():
+                self.skipTest(reason=f"{model_class.__name__}.forward does not accept `mm_encoder_outputs`")
             model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
 
             generation_kwargs = {
