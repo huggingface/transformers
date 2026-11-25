@@ -139,10 +139,9 @@ MiniCPM-V 4.6 provides two image processing backends:
 To use the PIL backend:
 
 ```python
-from transformers import AutoProcessor, AutoImageProcessor
+from transformers import AutoProcessor
 
-processor = AutoProcessor.from_pretrained(model_checkpoint)
-processor.image_processor = AutoImageProcessor.from_pretrained(model_checkpoint, backend="pil")
+processor = AutoProcessor.from_pretrained(model_checkpoint, image_processor_kwargs={"backend": "pil"})
 ```
 
 ### Video inference

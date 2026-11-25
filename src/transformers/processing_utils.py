@@ -177,6 +177,19 @@ def _get_modality_for_attribute(attribute_name: str) -> str:
     )
 
 
+def _pop_sub_processor_kwargs(kwargs: dict, names) -> dict[str, dict]:
+    """
+    Pop each `<name>_kwargs` from `kwargs`: options for that sub-processor only, beside the shared `kwargs`.
+    """
+    sub_processor_kwargs = {name: kwargs.pop(f"{name}_kwargs", {}) for name in names}
+    for name, own_kwargs in sub_processor_kwargs.items():
+        if own_kwargs and kwargs.get(name) is not None:
+            raise ValueError(f"Pass either `{name}` or `{name}_kwargs`, not both.")
+        if duplicated_keys := sorted(set(own_kwargs) & set(kwargs)):
+            raise ValueError(f"Pass {duplicated_keys} either as shared kwargs or in `{name}_kwargs`, not both.")
+    return sub_processor_kwargs
+
+
 class TextKwargs(TypedDict, total=False):
     """
     Keyword arguments for text processing. For extended documentation, check out tokenization_utils_base methods and
@@ -1834,7 +1847,9 @@ class ProcessorMixin(PushToHubMixin):
             **kwargs
                 Additional keyword arguments passed along to both
                 [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] and
-                [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`].
+                [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`]. Keyword arguments for a single
+                sub-processor go in `<attribute>_kwargs`, such as `image_processor_kwargs={"backend": "pil"}`. A
+                key can't be passed both ways in one call.
         """
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
@@ -1963,9 +1978,13 @@ class ProcessorMixin(PushToHubMixin):
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
+
+        sub_processor_kwargs = _pop_sub_processor_kwargs(kwargs, sub_processors)
+
         for sub_processor_type in sub_processors:
             modality = _get_modality_for_attribute(sub_processor_type)
             is_primary = sub_processor_type == modality
+            loading_kwargs = {**kwargs, **sub_processor_kwargs[sub_processor_type]}
 
             if (
                 "tokenizer" in sub_processor_type
@@ -1975,11 +1994,11 @@ class ProcessorMixin(PushToHubMixin):
                     from .tokenization_utils_tokenizers import TokenizersBackend
 
                     tokenizer = TokenizersBackend.from_pretrained(
-                        pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                        pretrained_model_name_or_path, subfolder=subfolder, **loading_kwargs
                     )
                 else:
                     tokenizer = cls._load_tokenizer_from_pretrained(
-                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **loading_kwargs
                     )
                 args.append(tokenizer)
             elif is_primary:
@@ -1994,7 +2013,7 @@ class ProcessorMixin(PushToHubMixin):
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
                 sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    pretrained_model_name_or_path, subfolder=subfolder, **loading_kwargs
                 )
                 args.append(sub_processor)
 

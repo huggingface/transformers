@@ -39,6 +39,9 @@ from transformers import (
     FeatureExtractionMixin,
     ImageProcessingMixin,
     LlamaTokenizer,
+    LlavaOnevisionImageProcessor,
+    LlavaOnevisionImageProcessorPil,
+    LlavaOnevisionProcessor,
     LlavaOnevisionVideoProcessor,
     LlavaProcessor,
     ProcessorMixin,
@@ -58,6 +61,8 @@ from transformers.testing_utils import (
     is_staging_test,
     require_scipy,
     require_tokenizers,
+    require_torchvision,
+    require_vision,
 )
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
@@ -505,6 +510,16 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
         self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
 
+        # With no processor class, the bare image processor still gets its `image_processor_kwargs`
+        processor = AutoProcessor.from_pretrained(
+            "hf-internal-testing/tiny-random-convnext", image_processor_kwargs={"backend": "pil"}
+        )
+        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessorPil")
+        with self.assertRaisesRegex(ValueError, r"\['backend'\] either as shared kwargs"):
+            AutoProcessor.from_pretrained(
+                "hf-internal-testing/tiny-random-convnext", backend="pil", image_processor_kwargs={"backend": "pil"}
+            )
+
     def test_auto_processor_save_load(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -620,6 +635,34 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # Verify they are different types
             self.assertIsInstance(loaded_processor.image_processor, SiglipImageProcessor)
             self.assertIsInstance(loaded_processor.encoder_image_processor, CLIPImageProcessor)
+
+    @require_torchvision
+    @require_vision
+    def test_processor_from_pretrained_with_sub_processor_kwargs(self):
+        # LlavaOnevisionVideoProcessor has no PIL backend, so `backend="pil"` has to reach the image processor only
+        processor = LlavaOnevisionProcessor(
+            image_processor=LlavaOnevisionImageProcessor(),
+            tokenizer=LlamaTokenizer.from_pretrained(SAMPLE_VOCAB_LLAMA),
+            video_processor=LlavaOnevisionVideoProcessor(),
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            processor.save_pretrained(tmp_dir)
+
+            loaded_processor = AutoProcessor.from_pretrained(tmp_dir, image_processor_kwargs={"backend": "pil"})
+            self.assertIsInstance(loaded_processor.image_processor, LlavaOnevisionImageProcessorPil)
+            self.assertIsInstance(loaded_processor.video_processor, LlavaOnevisionVideoProcessor)
+
+            # One way only: a key given both flat and nested is refused rather than resolved
+            with self.assertRaisesRegex(
+                ValueError, r"\['backend'\] either as shared kwargs or in `image_processor_kwargs`"
+            ):
+                AutoProcessor.from_pretrained(
+                    tmp_dir, backend="torchvision", image_processor_kwargs={"backend": "pil"}
+                )
+            with self.assertRaisesRegex(ValueError, "image_processor_kwargs"):
+                AutoProcessor.from_pretrained(
+                    tmp_dir, image_processor=processor.image_processor, image_processor_kwargs={"backend": "pil"}
+                )
 
 
 @is_staging_test
