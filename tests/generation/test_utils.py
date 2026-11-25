@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
@@ -2290,6 +2291,8 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
         max_new_tokens = 30
         support_flag = {
             "sdpa": "_supports_sdpa",
+            # SDPA, with torch's varlen kernel for packed rows
+            "varlen_attention": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
             "flash_attention_4": "_supports_flash_attn",
@@ -2416,6 +2419,11 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
 
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="sdpa")
+
+    @require_torch_accelerator
+    @require_torch_greater_or_equal("2.11")
+    def test_varlen_attention_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="varlen_attention")
 
     @require_flash_attn
     @require_torch_accelerator

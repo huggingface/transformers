@@ -35,7 +35,7 @@ from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
+from ...vision_utils import get_packed_sequences_inputs, get_vision_cu_seqlens, get_vision_position_ids
 from ..aria.modeling_aria import AriaCausalLMOutputWithPast, AriaModelOutputWithPast
 from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
@@ -866,9 +866,8 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
             The temporal, height and width of feature shape of each image.
         """
         embeds = self.embeddings(pixel_values).to(self.pre_layrnorm.weight.dtype)
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(
-            grid_thw, self.config, merge_temporal=self.merge_temporal, kwargs=kwargs
-        )
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=self.merge_temporal, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
         position_ids = get_vision_position_ids(
             grid_thw, self.spatial_merge_size, include_temporal=self.include_temporal, kwargs=kwargs
         )
@@ -880,6 +879,8 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
                 position_embeddings=position_embeddings,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 **kwargs,
             )
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states[:, 0])

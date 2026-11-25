@@ -45,7 +45,8 @@ from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
 from ...vision_utils import (
-    get_vision_attention_seqlens,
+    get_packed_sequences_inputs,
+    get_vision_cu_seqlens,
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
@@ -451,7 +452,8 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             kwargs=kwargs,
         )
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(interp_indices) * interp_weights[:, :, None]).sum(1)
@@ -467,6 +469,8 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

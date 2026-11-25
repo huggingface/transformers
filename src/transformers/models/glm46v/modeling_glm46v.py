@@ -54,6 +54,8 @@ class Glm46VPreTrainedModel(PreTrainedModel):
     _no_split_modules = None
     _supports_flash_attn = True
     _supports_sdpa = True
+    # Inductor can't lower its flex attention (`NoValidChoicesError`)
+    _supports_flex_attn = False
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True

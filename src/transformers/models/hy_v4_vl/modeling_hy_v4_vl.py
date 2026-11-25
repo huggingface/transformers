@@ -49,15 +49,9 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import (
-    accepts_precomputed_kwargs,
-    get_max_seqlen,
-    is_flash_attention_requested,
-    maybe_autocast,
-    merge_with_config_defaults,
-)
+from ...utils.generic import accepts_precomputed_kwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import get_vision_attention_seqlens
+from ...vision_utils import get_packed_sequences_inputs, get_vision_cu_seqlens, packed_sequences_attention_forward
 from .configuration_hy_v4_vl import HYV4VLConfig, HYV4VLTextConfig, HYV4VLVisionConfig
 
 
@@ -892,44 +886,18 @@ class HYV4VLVisionAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if is_flash_attention_requested(self.config):
-            # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
-            attn_output, attn_weights = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                scaling=self.scaling,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-
-            attn_outputs = [
-                attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    scaling=self.scaling,
-                    is_causal=False,
-                    **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
-            attn_output = torch.cat(attn_outputs, dim=1)
-            attn_weights = None
-
+        attn_output, attn_weights = packed_sequences_attention_forward(
+            self,
+            attention_interface,
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens,
+            max_seqlen,
+            scaling=self.scaling,
+            is_causal=False,
+            **kwargs,
+        )
         attn_output = attn_output.reshape(batch_size, seq_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -1029,13 +997,16 @@ class HYV4VLVisionModel(HYV4VLPreTrainedModel):
             The temporal, height and width dimensions for each image. Each row contains `[t, h, w]` patch counts.
         """
         hidden_states = self.embeddings(pixel_values, grid_thw)
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 attention_mask=None,
                 **kwargs,
             )

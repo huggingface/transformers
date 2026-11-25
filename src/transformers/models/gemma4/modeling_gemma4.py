@@ -1816,9 +1816,13 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         # Flash cannot slice mask
         elif is_flash_attention_requested(self.config):
             can_optimize = False
+        # Packed rows' cumulative lengths (`varlen_attention`) cannot be sliced either
+        elif any(mask is not None and mask.ndim == 1 for mask in causal_mask_mapping.values()):
+            can_optimize = False
         # In those 2 cases, we cannot rely on the `is_causal` attribute, as dropping some query tokens will make us loose causality
+        # (`varlen_attention` is SDPA outside packed rows)
         elif (
-            self.config._attn_implementation == "sdpa"  # trf-ignore: TRF051
+            self.config._attn_implementation in ("sdpa", "varlen_attention")  # trf-ignore: TRF051
             and (logits_to_keep > 1 or getattr(cache, "is_compileable", False))
             and any(mask is None for mask in causal_mask_mapping.values())
         ):

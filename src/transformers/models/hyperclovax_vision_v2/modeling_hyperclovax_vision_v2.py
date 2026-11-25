@@ -47,6 +47,7 @@ class HyperCLOVAXVisionV2PreTrainedModel(PreTrainedModel):
     _no_split_modules = []
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True

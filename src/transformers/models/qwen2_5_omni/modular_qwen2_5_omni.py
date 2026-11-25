@@ -51,16 +51,17 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import (
     accepts_precomputed_kwargs,
-    get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
-    get_vision_attention_seqlens,
+    get_packed_sequences_inputs,
+    get_vision_cu_seqlens,
     get_vision_position_ids,
     get_vision_window_index,
+    packed_sequences_attention_forward,
 )
 from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
@@ -1140,46 +1141,19 @@ class Qwen2_5OmniAudioAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if is_flash_attention_requested(self.config):
-            # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
-            attn_output, _ = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=None,
-                scaling=self.scaling,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-            attn_outputs = [
-                attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    attention_mask=None,
-                    scaling=self.scaling,
-                    dropout=0.0 if not self.training else self.attention_dropout,
-                    is_causal=False,
-                    **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
-            attn_output = torch.cat(attn_outputs, dim=1)
-
+        attn_output, _ = packed_sequences_attention_forward(
+            self,
+            attention_interface,
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens,
+            max_seqlen,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            is_causal=False,
+            **kwargs,
+        )
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
@@ -1309,7 +1283,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         valid_indices = get_valid_indices(chunk_lengths, kwargs=kwargs)
         pool_indices = get_pool_indices(feature_lens, kwargs=kwargs)
         cu_seqlens = get_audio_cu_seqlens(chunk_lengths, kwargs=kwargs)
-        max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
 
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
         padded_feature = padded_feature.to(self.conv1.weight.dtype)
@@ -1330,6 +1304,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens,
                 max_seqlen=max_seqlen,
+                packed_block_mask=block_mask,
+                sequence_lengths=sequence_lengths,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -1399,47 +1375,19 @@ class Qwen2_5OmniVisionAttention(nn.Module):
             self.config._attn_implementation, eager_attention_forward
         )
 
-        if is_flash_attention_requested(self.config):
-            # Flash Attention 2: Use cu_seqlens for variable length attention
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs={"max_seqlen": max_seqlen})
-            attn_output, _ = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=None,
-                scaling=self.scaling,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-
-            attn_outputs = [
-                attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    attention_mask=None,
-                    scaling=self.scaling,
-                    dropout=0.0 if not self.training else self.attention_dropout,
-                    is_causal=False,
-                    **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
-            attn_output = torch.cat(attn_outputs, dim=1)
-
+        attn_output, _ = packed_sequences_attention_forward(
+            self,
+            attention_interface,
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens,
+            max_seqlen,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            is_causal=False,
+            **kwargs,
+        )
         attn_output = attn_output.reshape(seq_length, -1).contiguous()
         attn_output = self.proj(attn_output)
         return attn_output
@@ -1503,7 +1451,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
             `torch.Tensor`: hidden_states.
         """
         position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
-        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        max_seqlen, block_mask, sequence_lengths = get_packed_sequences_inputs(cu_seqlens, self.config, kwargs=kwargs)
         window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
             spatial_merge_size=self.spatial_merge_size,
@@ -1511,8 +1460,8 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
             patch_size=self.patch_size,
             kwargs=kwargs,
         )
-        max_window_seqlen = get_max_seqlen(
-            cu_window_seqlens, self.config, kwargs=kwargs, kwarg_name="max_window_seqlen"
+        max_window_seqlen, window_block_mask, window_sequence_lengths = get_packed_sequences_inputs(
+            cu_window_seqlens, self.config, kwargs=kwargs, window=True
         )
 
         hidden_states = self.patch_embed(hidden_states)
@@ -1531,14 +1480,20 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
             if layer_num in self.fullatt_block_indexes:
                 cu_seqlens_now = cu_seqlens
                 max_seqlen_now = max_seqlen
+                block_mask_now = block_mask
+                sequence_lengths_now = sequence_lengths
             else:
                 cu_seqlens_now = cu_window_seqlens
                 max_seqlen_now = max_window_seqlen
+                block_mask_now = window_block_mask
+                sequence_lengths_now = window_sequence_lengths
 
             hidden_states = blk(
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
+                packed_block_mask=block_mask_now,
+                sequence_lengths=sequence_lengths_now,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )

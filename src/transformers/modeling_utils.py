@@ -81,6 +81,7 @@ from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel, kerneliz
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.varlen_attention import varlen_attention_forward
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
@@ -130,6 +131,7 @@ from .utils.import_utils import (
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,
+    is_torch_greater_or_equal,
     is_tracing,
 )
 from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
@@ -1671,6 +1673,17 @@ class PreTrainedModel(
 
         return True
 
+    def _varlen_attn_can_dispatch(self, is_init_check: bool = False) -> bool:
+        """
+        Check the availability of `varlen_attention` for a given model: SDPA, with torch's varlen kernel (torch>=2.11) for
+        sequences packed along the length.
+        """
+        if not is_torch_greater_or_equal("2.11", accept_dev=True):
+            raise ImportError(
+                f"`varlen_attention` requires torch>=2.11 for `torch.nn.attention.varlen`, but found {torch.__version__}."
+            )
+        return self._sdpa_can_dispatch(is_init_check)
+
     def _grouped_mm_can_dispatch(self) -> bool:
         """
         Check the availability of Grouped MM for a given model.
@@ -1879,6 +1892,8 @@ class PreTrainedModel(
             self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
         elif "flex_attention" in applicable_attention:
             self._flex_attn_can_dispatch(is_init_check)
+        elif applicable_attention == "varlen_attention":
+            self._varlen_attn_can_dispatch(is_init_check)
         elif "sdpa" in applicable_attention:
             # Sdpa is the default, so we try it and fallback to eager otherwise when not possible
             try:
@@ -4002,6 +4017,7 @@ class PreTrainedModel(
                     - `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention))
                     - `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper))
                     - `"flash_attention_4"` (using [Dao-AILab/flash-attention/flash_attn/cute](https://github.com/Dao-AILab/flash-attention/tree/main/flash_attn/cute)).
+                    - `"varlen_attention"` (SDPA, with torch's [varlen attention](https://docs.pytorch.org/docs/stable/nn.attention.varlen.html) for sequences packed along the length).
                 By default, if available, SDPA will be used. The default is otherwise the manual `"eager"` implementation.
 
                 Accept HF kernel references in the form:
@@ -5255,6 +5271,7 @@ class AttentionInterface(GeneralInterface):
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "varlen_attention": varlen_attention_forward,
         "paged|eager": eager_paged_attention_forward,
     }
 

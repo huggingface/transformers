@@ -28,12 +28,21 @@ removed from the caller's kwargs as a side-effect of the pop.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING, cast
+
 import torch
 import torch.nn.functional as F
 
 from .configuration_utils import PreTrainedConfig
+from .integrations.sdpa_attention import per_sequence_attention_forward
 from .utils import logging
-from .utils.generic import get_max_seqlen
+from .utils.generic import get_max_seqlen, is_flash_attention_requested
+from .utils.import_utils import is_tracing
+
+
+if TYPE_CHECKING:
+    from torch.nn.attention.flex_attention import BlockMask
 
 
 logger = logging.get_logger(__name__)
@@ -65,6 +74,51 @@ def get_vision_cu_seqlens(
     return F.pad(seqlens.cumsum(dim=0, dtype=dtype), (1, 0), value=0)
 
 
+def get_packed_sequences_inputs(
+    cu_seqlens: torch.Tensor,
+    config: PreTrainedConfig,
+    kwargs: dict | None = None,
+    window: bool = False,
+) -> tuple[int | None, BlockMask | None, list[int] | None]:
+    """Get what the attention implementation needs besides `cu_seqlens` to attend within each packed sequence.
+
+    Built once per forward for all the layers, rather than in each. Outside of tracing, the sequence lengths are read on
+    the host here, once: Flash Attention takes its maximum length from them, and eager and SDPA's fallback split the
+    sequences with them instead of reading them in each layer. Each value can also be precomputed (e.g. by
+    `get_data_dependent_inputs`) and is then popped from `kwargs`, which keeps the host syncs out of the forward.
+
+    Args:
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        config: model configuration used to determine the attention implementation.
+        kwargs: optional caller kwargs containing precomputed values.
+        window: whether `cu_seqlens` delimits the windows of window attention, whose precomputed values are popped
+            from `max_window_seqlen`, `packed_window_block_mask` and `window_sequence_lengths` instead.
+
+    Returns:
+        Flash Attention's maximum sequence length, Flex Attention's block mask (each `None` for other attention
+        implementations), and the sequence lengths on the host (`None` when tracing).
+    """
+    prefix = "window_" if window else ""
+    kwargs = {} if kwargs is None else kwargs
+    sequence_lengths = kwargs.pop(f"{prefix}sequence_lengths", None)
+    if sequence_lengths is None and not is_tracing(cu_seqlens):
+        sequence_lengths = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
+
+    max_seqlen = kwargs.pop(f"max_{prefix}seqlen", None)
+    if max_seqlen is None and sequence_lengths is not None and is_flash_attention_requested(config):
+        max_seqlen = max(sequence_lengths)
+    elif max_seqlen is None:
+        max_seqlen = get_max_seqlen(cu_seqlens, config)
+
+    block_mask = kwargs.pop(f"packed_{prefix}block_mask", None)
+    if block_mask is None and config._attn_implementation == "flex_attention":
+        from .integrations.flex_attention import create_packed_block_mask
+
+        length = sum(sequence_lengths) if sequence_lengths is not None else int(cu_seqlens[-1])
+        block_mask = create_packed_block_mask(cu_seqlens, None, length, length)
+    return max_seqlen, block_mask, sequence_lengths
+
+
 def get_vision_attention_seqlens(
     grid_thw: torch.Tensor,
     config: PreTrainedConfig,
@@ -76,6 +130,78 @@ def get_vision_attention_seqlens(
     cu_seqlens = get_vision_cu_seqlens(grid_thw, merge_temporal=merge_temporal, kwargs=kwargs)
     max_seqlen = get_max_seqlen(cu_seqlens, config, kwargs=kwargs)
     return cu_seqlens, max_seqlen
+
+
+def packed_sequences_attention_forward(
+    module: torch.nn.Module,
+    attention_interface: Callable,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    cu_seqlens: torch.Tensor,
+    max_seqlen: int | None = None,
+    packed_block_mask: BlockMask | None = None,
+    sequence_lengths: list[int] | None = None,
+    return_attention_weights: bool = False,
+    **kwargs,
+) -> tuple[torch.Tensor, tuple[torch.Tensor, ...] | torch.Tensor | None]:
+    """Attend within each of the sequences packed along the length of `query`, `key` and `value`.
+
+    Flash Attention and `varlen_attention` (varlen kernels) and Flex Attention (a block mask) attend over all the packed
+    sequences in one call. SDPA and eager attend over each sequence separately.
+
+    Args:
+        module: the attention module, passed to `attention_interface`.
+        attention_interface: the attention function of the module's attention implementation.
+        query: `(1, num_heads, total_length, head_dim)` queries of all the packed sequences.
+        key: `(1, num_key_value_heads, total_length, head_dim)` keys of all the packed sequences.
+        value: `(1, num_key_value_heads, total_length, head_dim)` values of all the packed sequences.
+        cu_seqlens: `(num_sequences + 1,)` cumulative sequence boundaries.
+        max_seqlen, packed_block_mask, sequence_lengths: as returned by [`get_packed_sequences_inputs`].
+        return_attention_weights: whether eager keeps each sequence's attention weights. They are otherwise freed as it
+            goes, as they add up to the score matrices of all the sequences.
+        kwargs: passed to `attention_interface` (e.g. `scaling`, `dropout`, `is_causal`).
+
+    Returns:
+        The `(1, total_length, num_heads, head_dim)` attention output, and the attention weights: those of the
+        single call, or for eager one tensor per sequence if `return_attention_weights`, `None` otherwise.
+    """
+    # Packed sequences are delimited by `cu_seqlens`: drop the `attention_mask=None` some layers pass down
+    kwargs.pop("attention_mask", None)
+    config = cast(PreTrainedConfig, module.config)
+    if is_flash_attention_requested(config) or config._attn_implementation in (
+        "sdpa",
+        "flex_attention",
+        "varlen_attention",
+    ):
+        return attention_interface(
+            module,
+            query,
+            key,
+            value,
+            attention_mask=None,
+            cu_seq_lens_q=cu_seqlens,
+            cu_seq_lens_k=cu_seqlens,
+            max_length_q=max_seqlen,
+            max_length_k=max_seqlen,
+            packed_block_mask=packed_block_mask,
+            sequence_lengths=sequence_lengths,
+            **kwargs,
+        )
+
+    attn_output, attn_weights = per_sequence_attention_forward(
+        attention_interface,
+        module,
+        query,
+        key,
+        value,
+        cu_seqlens,
+        sequence_lengths=sequence_lengths,
+        is_causal=kwargs.pop("is_causal", False),
+        return_attention_weights=return_attention_weights,
+        **kwargs,
+    )
+    return attn_output, tuple(attn_weights) if attn_weights and attn_weights[0] is not None else None
 
 
 def get_vision_position_ids(

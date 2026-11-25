@@ -215,6 +215,7 @@ class Qwen3_5MoeDecoderLayer(Qwen3NextDecoderLayer):
 
 
 class Qwen3_5MoePreTrainedModel(Qwen3NextPreTrainedModel):
+    _supports_flex_attn = True
     _no_split_modules = ["Qwen3_5MoeDecoderLayer", "Qwen3_5MoeVisionBlock"]
 
     def _init_weights(self, module):

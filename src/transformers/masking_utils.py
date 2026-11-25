@@ -725,6 +725,7 @@ class AttentionMaskInterface(GeneralInterface):
         "flash_attention_3": flash_attention_mask,
         "flash_attention_4": flash_attention_mask,
         "flex_attention": flex_attention_mask,
+        "varlen_attention": sdpa_mask,
     }
 
 
@@ -762,6 +763,38 @@ def find_packed_sequence_indices(position_ids: torch.Tensor) -> torch.Tensor | N
         return None
 
     return packed_sequence_mask
+
+
+def packed_sequences_cu_seq_lens(
+    config: PreTrainedConfig,
+    packed_sequence_mask: torch.Tensor | None,
+    allow_is_causal_skip: bool,
+    mask_overlays: tuple,
+) -> torch.Tensor | None:
+    """
+    Packed rows are attended over by `varlen_attention` with one varlen kernel call, which takes the cumulative lengths
+    of the sequences over the flattened batch instead of a dense mask. Returns them, or `None` when the dense mask is
+    needed (and for every other attention implementation, which keep it).
+
+    The attention layers pass their own `sliding_window`, as for flash attention.
+    """
+    if (
+        packed_sequence_mask is None
+        or config._attn_implementation != "varlen_attention"
+        # A mask the caller needs materialized, or that combines other masks
+        or not allow_is_causal_skip
+        or any(overlay is not None for overlay in mask_overlays)
+        # Sparse-attention indexers (`index_topk`) select their keys on the dense mask
+        or getattr(config, "index_topk", None) is not None
+        # The number of sequences is data-dependent
+        or is_tracing(packed_sequence_mask)
+    ):
+        return None
+    # Sequence ids continue from one row to the next
+    sequences_per_row = packed_sequence_mask[:, -1] + 1
+    row_offsets = F.pad(sequences_per_row.cumsum(0)[:-1], (1, 0))
+    sequence_ids = (packed_sequence_mask + row_offsets[:, None]).flatten()
+    return F.pad(torch.bincount(sequence_ids).cumsum(0), (1, 0)).to(torch.int32)
 
 
 def _preprocess_mask_arguments(
@@ -814,8 +847,9 @@ def _preprocess_mask_arguments(
         kv_offset (`int`):
             An offset to indicate at which first position the key and values states will refer to.
     """
-    # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom)
-    if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) == 4:
+    # If the mask is already 4D, simply return as-is (it was already prepared, or it is custom). So are the 1D
+    # cumulative lengths of packed rows (`packed_sequences_cu_seq_lens`), already prepared too
+    if isinstance(attention_mask, (torch.Tensor, BlockMask)) and len(attention_mask.shape) in (1, 4):
         return True, attention_mask, None, None, None, None, None
 
     # If the cache is from CB, immediate exit as well, we don't need any mask
@@ -961,6 +995,11 @@ def create_causal_mask(
     )
     if early_exit:
         return attention_mask
+
+    overlays = (or_mask_function, and_mask_function, block_sequence_ids)
+    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, allow_is_causal_skip, overlays)
+    if cu_seq_lens is not None:
+        return cu_seq_lens
 
     batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
     mask_factory_function = causal_mask_function
@@ -1192,6 +1231,11 @@ def create_sliding_window_causal_mask(
     )
     if early_exit:
         return attention_mask
+
+    overlays = (or_mask_function, and_mask_function, block_sequence_ids)
+    cu_seq_lens = packed_sequences_cu_seq_lens(config, packed_sequence_mask, allow_is_causal_skip, overlays)
+    if cu_seq_lens is not None:
+        return cu_seq_lens
 
     sliding_window = getattr(config, "sliding_window", None)
     if sliding_window is None:

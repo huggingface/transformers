@@ -32,8 +32,9 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_packed_sequences_inputs, packed_sequences_attention_forward
 from .configuration_radio import RadioConfig
 
 
@@ -256,41 +257,27 @@ class RadioAttention(nn.Module):
             attn_output, attn_weights = attention_interface(
                 self, query_states, key_states, value_states, attention_mask, **attention_kwargs, **kwargs
             )
-        elif is_flash_attention_requested(self.config):
-            max_seqlen = get_max_seqlen(cu_seqlens, self.config, kwargs)
-            attn_output, attn_weights = attention_interface(
+        else:
+            attn_output, attn_weights = packed_sequences_attention_forward(
                 self,
+                attention_interface,
                 query_states,
                 key_states,
                 value_states,
-                attention_mask=None,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
+                cu_seqlens,
+                return_attention_weights=True,
                 **attention_kwargs,
                 **kwargs,
             )
-        else:
-            # without a varlen kernel, attend within each image separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-            outputs = [
-                attention_interface(self, query, key, value, attention_mask=None, **attention_kwargs, **kwargs)
-                for query, key, value in zip(*splits)
-            ]
-            attn_output = torch.cat([output[0] for output in outputs], dim=1)
-            attn_weights = None
             # eager returns per-image probabilities; lay them out block-diagonally over the packed sequence
-            if outputs[0][1] is not None:
+            if isinstance(attn_weights, tuple):
                 total_length = query_states.shape[2]
+                per_image_weights = attn_weights
                 attn_weights = query_states.new_zeros(
                     query_states.shape[0], self.num_attention_heads, total_length, total_length
                 )
                 start = 0
-                for _, weights in outputs:
+                for weights in per_image_weights:
                     end = start + weights.shape[-1]
                     attn_weights[..., start:end, start:end] = weights
                     start = end
@@ -385,6 +372,7 @@ class RadioPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["RadioLayer"]
     _keys_to_ignore_on_load_missing = [r"layer_scale\d+\.lambda1"]
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_flash_attn = True
     _can_record_outputs = {
         "hidden_states": RadioLayer,
@@ -497,9 +485,18 @@ class RadioModel(RadioPreTrainedModel):
         sequence_lengths = image_grid_hw.prod(-1) + num_prefix_tokens
         cu_seqlens = F.pad(sequence_lengths.cumsum(0), (1, 0)).to(torch.int32)
         # a single image is a plain dense sequence and needs no packed attention
-        encoder_outputs: BaseModelOutput = self.encoder(
-            hidden_states, cu_seqlens=cu_seqlens if len(sequence_lengths) > 1 else None, **kwargs
-        )
+        packed_kwargs = {"cu_seqlens": None}
+        if len(sequence_lengths) > 1:
+            max_seqlen, block_mask, packed_lengths = get_packed_sequences_inputs(
+                cu_seqlens, self.config, kwargs=kwargs
+            )
+            packed_kwargs = {
+                "cu_seqlens": cu_seqlens,
+                "max_seqlen": max_seqlen,
+                "packed_block_mask": block_mask,
+                "sequence_lengths": packed_lengths,
+            }
+        encoder_outputs: BaseModelOutput = self.encoder(hidden_states, **packed_kwargs, **kwargs)
         last_hidden_state = encoder_outputs.last_hidden_state[0]
 
         starts = cu_seqlens[:-1].long()

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import itertools
 import unittest
 
 from transformers.testing_utils import (
@@ -113,6 +114,29 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
 
         min_dtype = torch.finfo(torch.float16).min
         self.assertTrue((causal_mask == torch.where(EXPECTED_PACKED_MASK, 0.0, min_dtype)).all())
+
+    def test_packed_sequence_mask_varlen_attention(self):
+        # Packed rows of 4, 2, 4 and 6, 4 tokens: `varlen_attention` gets the cumulative lengths over the flattened
+        # batch for its varlen kernel, with or without a sliding window (passed by the attention layers). The other
+        # implementations keep the dense mask
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
+        for attn_implementation, mask_function in itertools.product(
+            ("varlen_attention", "sdpa", "eager"), (create_causal_mask, create_sliding_window_causal_mask)
+        ):
+            config = LlamaConfig(sliding_window=3)
+            config._attn_implementation = attn_implementation
+            mask = mask_function(
+                config=config,
+                inputs_embeds=torch.empty((2, 10), dtype=torch.float16),
+                attention_mask=None,
+                cache=None,
+                position_ids=position_ids,
+            )
+            if attn_implementation == "varlen_attention":
+                self.assertEqual(mask.tolist(), [0, 4, 6, 10, 16, 20])
+                self.assertEqual(mask.dtype, torch.int32)
+            else:
+                self.assertEqual(mask.ndim, 4)
 
     def test_packed_sequence_mask_flex_attention(self):
         config = LlamaConfig()

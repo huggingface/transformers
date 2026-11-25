@@ -255,6 +255,26 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+def create_packed_block_mask(
+    cu_seq_lens_q: torch.Tensor, cu_seq_lens_k: torch.Tensor | None, q_length: int, kv_length: int
+) -> "BlockMask":
+    """Block mask letting each sequence packed along the length attend to itself only, from their cumulative lengths.
+    Blocks across sequences are skipped, and the mask is built block by block, never densely."""
+    cu_seq_lens_k = cu_seq_lens_q if cu_seq_lens_k is None else cu_seq_lens_k
+    device = cu_seq_lens_q.device
+    q_sequence = torch.searchsorted(cu_seq_lens_q[1:], torch.arange(q_length, device=device), right=True)
+    kv_sequence = torch.searchsorted(cu_seq_lens_k[1:], torch.arange(kv_length, device=device), right=True)
+    return create_block_mask(
+        lambda batch_idx, head_idx, q_idx, kv_idx: q_sequence[q_idx] == kv_sequence[kv_idx],
+        None,
+        None,
+        q_length,
+        kv_length,
+        device=device,
+        _compile=True,
+    )
+
+
 def flex_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -272,6 +292,15 @@ def flex_attention_forward(
             "`flex_attention` does not support `dropout`. Please use it with inference"
             " only (`model.eval()`) or turn off the attention dropout in the respective config."
         )
+
+    # Sequences packed along the length, delimited by `cu_seq_lens_q` rather than by a mask: use the block mask the
+    # model built once for all its layers, or build one for this call
+    if (cu_seq_lens_q := kwargs.get("cu_seq_lens_q")) is not None and attention_mask is None:
+        attention_mask = kwargs.get("packed_block_mask")
+        if attention_mask is None:
+            attention_mask = create_packed_block_mask(
+                cu_seq_lens_q, kwargs.get("cu_seq_lens_k"), query.shape[2], key.shape[2]
+            )
 
     block_mask = None
     score_mask = None
