@@ -5899,6 +5899,31 @@ class ModelTesterMixin(ExportTesterMixin):
             set_value_subconfigs(config, "output_attentions", True)
             check_attentions_output(inputs_dict, config, model_class)
 
+    def test_get_audio_embeddings_one_row_per_audio_token(self):
+        # The flat audio embeddings fill the audio placeholder tokens of the text: one row per token, without padding
+        for model_class in self.all_model_classes:
+            if "audio" not in model_class.input_modalities or not hasattr(model_class, "get_audio_embeddings"):
+                continue
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            audio_token_id = getattr(config, "audio_token_id", None)
+            if audio_token_id is None or inputs_dict.get("input_ids") is None:
+                continue
+            model = model_class(config).to(torch_device).eval()
+            getter_parameters = inspect.signature(model.get_audio_embeddings).parameters
+            audio_inputs = {key: value for key, value in inputs_dict.items() if key in getter_parameters}
+            if not audio_inputs:
+                continue
+            with torch.no_grad():
+                outputs = model.get_audio_embeddings(**audio_inputs, return_dict=True)
+            num_audio_tokens = (inputs_dict["input_ids"] == audio_token_id).sum().item()
+            self.assertEqual(
+                outputs.pooler_output.shape[0],
+                num_audio_tokens,
+                f"`get_audio_embeddings` should return one row per audio token: {outputs.pooler_output.shape[0]} != "
+                f"{num_audio_tokens}",
+            )
+            self.assertEqual(outputs.split_sizes.sum().item(), num_audio_tokens)
+
     @parameterized.expand([True, False, None])
     def test_get_audio_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:

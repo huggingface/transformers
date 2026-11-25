@@ -880,11 +880,9 @@ class ChameleonModel(ChameleonPreTrainedModel, MultimodalMixin):
         batch_size = pixel_values.shape[0]
         vqmodel_outputs: ChameleonVQVAEModelOutput = self.vqmodel.encode(pixel_values, return_dict=True, **kwargs)
         bpe_tokens = self.vocabulary_mapping.convert_img2bpe(vqmodel_outputs.image_tokens).view(batch_size, -1)
-        vqmodel_outputs.pooler_output = self.get_input_embeddings()(bpe_tokens)
-        vqmodel_outputs.split_sizes = vqmodel_outputs.pooler_output.new_full(
-            (vqmodel_outputs.pooler_output.shape[0],), vqmodel_outputs.pooler_output.shape[1], dtype=torch.long
-        )
-        vqmodel_outputs.pooler_output = vqmodel_outputs.pooler_output.flatten(0, 1)
+        features = self.get_input_embeddings()(bpe_tokens)
+        vqmodel_outputs.split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        vqmodel_outputs.pooler_output = features.flatten(0, 1)
         return vqmodel_outputs
 
     def get_placeholder_mask(

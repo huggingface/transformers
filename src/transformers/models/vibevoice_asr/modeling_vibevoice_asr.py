@@ -375,8 +375,8 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel, MultimodalMixin):
             padding_mask = (positions < num_audio_tokens[:, None]).cpu()
             combined_features, split_sizes = combined_features[padding_mask], num_audio_tokens
         else:
-            split_sizes = combined_features.new_full(
-                (combined_features.shape[0],), combined_features.shape[1], dtype=torch.long
+            split_sizes = torch.full(
+                combined_features.shape[:1], combined_features.shape[1], device=combined_features.device
             )
             combined_features = combined_features.flatten(0, 1)
         return BaseModelOutputWithSplitSizes(

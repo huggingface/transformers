@@ -473,7 +473,7 @@ class OmniASRModel(OmniASRPreTrainedModel, MultimodalMixin):
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
         frames_mask = audio_output.attention_mask
         if frames_mask is None:
-            split_sizes = audio_embeds.new_full((audio_embeds.shape[0],), audio_embeds.shape[1], dtype=torch.long)
+            split_sizes = torch.full(audio_embeds.shape[:1], audio_embeds.shape[1], device=audio_embeds.device)
             audio_embeds = audio_embeds.flatten(0, 1)
         else:
             frames_mask = frames_mask.to(audio_embeds.device).bool()

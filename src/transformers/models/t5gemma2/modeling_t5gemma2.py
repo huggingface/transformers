@@ -55,10 +55,10 @@ from .configuration_t5gemma2 import T5Gemma2Config, T5Gemma2DecoderConfig, T5Gem
 
 
 class T5Gemma2RMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
@@ -264,8 +264,8 @@ class T5Gemma2SelfAttention(nn.Module):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.is_sliding = self.layer_type == "sliding_attention"
 
-        self.q_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = T5Gemma2RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = T5Gemma2RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -344,8 +344,8 @@ class T5Gemma2MergedAttention(nn.Module):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.is_sliding = self.layer_type == "sliding_attention"
 
-        self.q_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = T5Gemma2RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = T5Gemma2RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = T5Gemma2RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(
@@ -861,14 +861,9 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel, MultimodalMixin):
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         image_features = self.multi_modal_projector(last_hidden_state)
-        vision_outputs.pooler_output = image_features
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs,
-            split_sizes=vision_outputs.pooler_output.new_full(
-                (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
+        vision_outputs.pooler_output = image_features.flatten(0, 1)
         return vision_outputs
 
     def get_image_placeholder_mask(

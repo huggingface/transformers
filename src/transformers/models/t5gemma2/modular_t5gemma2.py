@@ -51,13 +51,13 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
     Gemma3MLP,
     Gemma3MultiModalProjector,
     Gemma3PreTrainedModel,
-    Gemma3RMSNorm,
     Gemma3RotaryEmbedding,
     Gemma3TextScaledWordEmbedding,
     apply_rotary_pos_emb,
@@ -209,7 +209,7 @@ class T5Gemma2Config(PreTrainedConfig):
             )
 
 
-class T5Gemma2RMSNorm(Gemma3RMSNorm):
+class T5Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 
@@ -640,14 +640,9 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel, MultimodalMixin):
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         image_features = self.multi_modal_projector(last_hidden_state)
-        vision_outputs.pooler_output = image_features
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs,
-            split_sizes=vision_outputs.pooler_output.new_full(
-                (vision_outputs.pooler_output.shape[0],), vision_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        vision_outputs.pooler_output = vision_outputs.pooler_output.flatten(0, 1)
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
+        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
+        vision_outputs.pooler_output = image_features.flatten(0, 1)
         return vision_outputs
 
     def get_image_placeholder_mask(

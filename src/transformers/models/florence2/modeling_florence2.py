@@ -689,14 +689,10 @@ class Florence2Model(Florence2PreTrainedModel, MultimodalMixin):
             The tensors corresponding to the input images.
         """
         image_outputs = self.vision_tower(pixel_values, **kwargs)
-        image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=image_outputs.pooler_output.new_full(
-                (image_outputs.pooler_output.shape[0],), image_outputs.pooler_output.shape[1], dtype=torch.long
-            ),
-        )
-        image_outputs.pooler_output = image_outputs.pooler_output.flatten(0, 1)
+        features = self.multi_modal_projector(image_outputs.last_hidden_state)
+        split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
+        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
+        image_outputs.pooler_output = features.flatten(0, 1)
         return image_outputs
 
     def get_placeholder_mask(
