@@ -78,7 +78,9 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 
 [[autodoc]] Glm46VModel
     - forward
+    - get_video_embeddings
     - get_video_features
+    - get_image_embeddings
     - get_image_features
 
 ## Glm46VForConditionalGeneration

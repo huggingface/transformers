@@ -178,7 +178,9 @@ print(decoded_output)
 
 [[autodoc]] MiniCPMV4_7Model
     - forward
+    - get_image_embeddings
     - get_image_features
+    - get_video_embeddings
     - get_video_features
 
 ## MiniCPMV4_7ForConditionalGeneration

@@ -131,6 +131,7 @@ print(outputs)
 
 [[autodoc]] Cohere2VisionModel
     - forward
+    - get_image_embeddings
     - get_image_features
 
 ## Cohere2VisionImageProcessor

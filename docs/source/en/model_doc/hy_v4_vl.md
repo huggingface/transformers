@@ -199,7 +199,9 @@ if torch.distributed.get_rank() == 0:
 
 [[autodoc]] HYV4VLModel
     - forward
+    - get_image_embeddings
     - get_image_features
+    - get_video_embeddings
     - get_video_features
 
 ## HYV4VLForConditionalGeneration

@@ -221,7 +221,9 @@ print(output_text)
 
 [[autodoc]] Glm4vModel
     - forward
+    - get_video_embeddings
     - get_video_features
+    - get_image_embeddings
     - get_image_features
 
 ## Glm4vForConditionalGeneration

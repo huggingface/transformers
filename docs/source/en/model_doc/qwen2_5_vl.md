@@ -262,7 +262,9 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5_VLModel
     - forward
+    - get_video_embeddings
     - get_video_features
+    - get_image_embeddings
     - get_image_features
 
 ## Qwen2_5_VLForConditionalGeneration

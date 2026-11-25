@@ -950,7 +950,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
             attentions=outputs.attentions,
         )
 
-    def get_audio_features(self, *args, **kwargs):
+    def get_audio_embeddings(self, *args, **kwargs):
         raise NotImplementedError("DiffusionGemma does not support audio inputs.")
 
     def get_video_embeddings(self, *args, **kwargs):
