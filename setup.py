@@ -144,7 +144,7 @@ _deps = [
     "torchaudio",
     "torchvision",
     "tqdm>=4.60",
-    "transformers-mic[runtime]>=0.1.3",
+    "transformers-mic[runtime]>=0.1.4",
     "typer",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",

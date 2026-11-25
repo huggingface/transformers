@@ -76,7 +76,7 @@ run-mic: export JOBS := $(JOBS)
 run-mic:
 	@python utils/checkers.py mic
 
-# Publish the MIC expected values this PR's contracts job recorded for the cases its gate would block,
+# Publish the MIC expected values this PR's contracts job recorded for the cases its gate marks blocked,
 # for this PR only (MODEL="gptj codegen", PR=<number>, default: the PR of the current branch). Needs
 # write access; same as commenting `record-mic: <models>` on the PR. The values are posted on the PR
 # and go live when it merges.
