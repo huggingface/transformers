@@ -20,7 +20,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import (
     MultiModalData,
@@ -240,19 +240,16 @@ class LightOnOcrModel(Mistral3Model):
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor | list,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
         image_outputs.pooler_output = self.vision_projection(
             image_outputs.last_hidden_state.squeeze(0), image_sizes, **kwargs
         )
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=(
-                torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
-            ).prod(dim=-1),
-        )
-        return image_outputs
+        split_sizes = (
+            torch.as_tensor(image_sizes, device=image_outputs.pooler_output.device) // downsample_ratio
+        ).prod(dim=-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring

@@ -28,7 +28,7 @@ from ...audio_utils import (
 from ...cache_utils import Cache
 from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -677,7 +677,7 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         input_features_mask: torch.Tensor,
         padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
@@ -706,8 +706,8 @@ class MossTranscribeDiarizeModel(AudioFlamingo3Model):
         hidden_size = valid_frames.shape[-1]
         merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
         audio_outputs.pooler_output = self.multi_modal_projector(merged_features)
-        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=padded_lengths // merge_size)
-        return audio_outputs
+        split_sizes = padded_lengths // merge_size
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring

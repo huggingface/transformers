@@ -26,7 +26,11 @@ from transformers.models.llava.modeling_llava import (
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndSplitSizes,
+)
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -88,7 +92,7 @@ class VipLlavaModel(LlavaModel):
         pixel_values: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -111,9 +115,8 @@ class VipLlavaModel(LlavaModel):
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
         split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = image_features.flatten(0, 1)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @deprecate_kwarg("vision_feature_layers", version="v5.25", new_name="vision_feature_layer")
     @can_return_tuple

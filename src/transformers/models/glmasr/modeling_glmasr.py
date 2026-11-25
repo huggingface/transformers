@@ -29,7 +29,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
     ModelOutput,
 )
@@ -373,7 +373,7 @@ class GlmAsrModel(GlmAsrPreTrainedModel, MultimodalMixin):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor`):
             Float values of mel features extracted from the raw speech waveform.
@@ -395,9 +395,7 @@ class GlmAsrModel(GlmAsrPreTrainedModel, MultimodalMixin):
 
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
         audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
-        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=post_lengths)
-
-        return audio_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=post_lengths)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor

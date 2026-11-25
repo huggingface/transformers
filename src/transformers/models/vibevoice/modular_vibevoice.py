@@ -21,7 +21,10 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPoolingAndSplitSizes,
+)
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -211,7 +214,7 @@ class VibeVoiceModel(VoxtralModel):
         padding_mask: torch.Tensor,
         sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_values (`torch.Tensor`):
             Float values of (normalized) audio waveform.
@@ -237,9 +240,10 @@ class VibeVoiceModel(VoxtralModel):
         padding_mask = (positions < num_audio_tokens[:, None]).cpu()
 
         pooler_output = self.multi_modal_projector(acoustic_features)
-        return BaseModelOutputWithSplitSizes(
+        pooler_output = pooler_output[padding_mask]
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=acoustic_features[padding_mask],
-            pooler_output=pooler_output[padding_mask],
+            pooler_output=pooler_output,
             split_sizes=num_audio_tokens,
         )
 

@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes, ModelOutput
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
@@ -1016,7 +1016,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -1031,8 +1031,8 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Flatten valid patches: keep only non-padding patches across the batch
         # The final output shape is (total_valid_patches, text_hidden_size)
         vision_outputs.pooler_output = vision_outputs.pooler_output[non_pad_mask]
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=non_pad_mask.sum(dim=-1))
-        return vision_outputs
+        split_sizes = non_pad_mask.sum(dim=-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
@@ -1042,7 +1042,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         video_position_ids: torch.LongTensor | None = None,
         num_frames_per_video: torch.LongTensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
             The frames of every video in the batch, concatenated along the frame axis rather than stacked
@@ -1071,8 +1071,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         # Each video's tokens are the sum of its frames', read at each video's last frame
         video_ends = non_pad_mask.sum(dim=-1).cumsum(0)[num_frames_per_video.to(non_pad_mask.device).cumsum(0) - 1]
         split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(

@@ -75,9 +75,9 @@ documented on their corresponding model page.
 
 [[autodoc]] modeling_outputs.BaseModelOutputWithPooling
 
-## BaseModelOutputWithSplitSizes
+## BaseModelOutputWithPoolingAndSplitSizes
 
-[[autodoc]] modeling_outputs.BaseModelOutputWithSplitSizes
+[[autodoc]] modeling_outputs.BaseModelOutputWithPoolingAndSplitSizes
 
 ## BaseModelOutputWithCrossAttentions
 

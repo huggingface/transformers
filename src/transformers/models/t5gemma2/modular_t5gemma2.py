@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     SequenceClassifierOutput,
@@ -634,16 +634,15 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel, MultimodalMixin):
     @auto_docstring
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         # pixel_values: (batch_size, channels, height, width)
         # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         image_features = self.multi_modal_projector(last_hidden_state)
         split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         vision_outputs.pooler_output = image_features.flatten(0, 1)
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_image_placeholder_mask(
         self,
@@ -974,7 +973,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, MultimodalMixin,
     @auto_docstring
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         return self.get_encoder().get_image_embeddings(pixel_values, return_dict=True, **kwargs)
 
     @property

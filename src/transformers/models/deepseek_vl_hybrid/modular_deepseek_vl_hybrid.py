@@ -34,7 +34,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
 from ...utils import (
@@ -105,7 +105,7 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithSplitSizes):
+class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     high_res_vision_last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the high resolution vision model.

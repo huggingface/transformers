@@ -36,7 +36,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -547,7 +547,7 @@ class InternVLModel(InternVLPreTrainedModel, MultimodalMixin):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -582,9 +582,8 @@ class InternVLModel(InternVLPreTrainedModel, MultimodalMixin):
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
         split_sizes = torch.full(vision_features.shape[:1], vision_features.shape[1], device=vision_features.device)
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         vision_outputs.pooler_output = vision_features.flatten(0, 1)
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
@@ -704,7 +703,7 @@ class InternVLModel(InternVLPreTrainedModel, MultimodalMixin):
         self,
         pixel_values_videos: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(num_frames, channels, height, width)`):
             The frames of the input videos, encoded like images.

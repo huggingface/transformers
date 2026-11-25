@@ -33,7 +33,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -755,16 +755,14 @@ class PaddleOCRVLModel(Qwen2VLModel):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
         vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
-        )
-        return vision_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.config.vision_config.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

@@ -27,7 +27,7 @@ from transformers.models.llava.modeling_llava import (
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -116,7 +116,7 @@ class AyaVisionModel(LlavaModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(
             pixel_values,
             return_dict=True,
@@ -139,9 +139,8 @@ class AyaVisionModel(LlavaModel):
         pooler_output = self.multi_modal_projector(selected_image_feature)
         features = pooler_output.reshape(selected_image_feature.shape[0], -1, self.config.text_config.hidden_size)
         split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
-        image_outputs = BaseModelOutputWithSplitSizes(**image_outputs, split_sizes=split_sizes)
         image_outputs.pooler_output = features.flatten(0, 1)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring

@@ -46,7 +46,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -1545,7 +1545,7 @@ class Molmo2Model(LlavaModel):
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_shape = None
         if pixel_values.dim() == 4:
             image_shape = pixel_values.shape[:3]
@@ -1567,10 +1567,8 @@ class Molmo2Model(LlavaModel):
             image_features, image_token_pooling, valid_token_index=valid_token_index
         ).last_hidden_state
         image_outputs.pooler_output = pooled_features
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs, split_sizes=image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
-        )
-        return image_outputs
+        split_sizes = image_grids[:, 0] * image_grids[:, 1] + image_grids[:, 2] * image_grids[:, 3]
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @accepts_precomputed_kwargs(modality="video")
@@ -1584,7 +1582,7 @@ class Molmo2Model(LlavaModel):
         video_token_pooling: torch.Tensor,
         video_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
         num_frames, rows, cols = video_grids.unbind(-1)
         image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)

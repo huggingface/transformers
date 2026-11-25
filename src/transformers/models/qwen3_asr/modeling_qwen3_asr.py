@@ -37,7 +37,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     ModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -541,7 +541,7 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel, MultimodalMixin):
         input_features: torch.Tensor,
         input_features_mask: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
             1 for valid mel frames and 0 for padding.
@@ -552,11 +552,8 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel, MultimodalMixin):
             **kwargs,
         )
         audio_output.pooler_output = self.multi_modal_projector(audio_output.last_hidden_state)
-        audio_output = BaseModelOutputWithSplitSizes(
-            **audio_output,
-            split_sizes=_get_feat_extract_output_lengths(input_features_mask.sum(-1), self.audio_tower.n_window),
-        )
-        return audio_output
+        split_sizes = _get_feat_extract_output_lengths(input_features_mask.sum(-1), self.audio_tower.n_window)
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_output, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor

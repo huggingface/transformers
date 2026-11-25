@@ -33,7 +33,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
 )
@@ -628,15 +628,13 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output).squeeze(1)
         vision_outputs.pooler_output = image_embeds
         merge_kernel_size = self.vision_tower.merge_kernel_size[0] * self.vision_tower.merge_kernel_size[1]
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=image_grid_thw[:, 1:].prod(-1) // merge_kernel_size
-        )
-        return vision_outputs
+        split_sizes = image_grid_thw[:, 1:].prod(-1) // merge_kernel_size
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -646,7 +644,7 @@ class Kimi_K25Model(Kimi_K25PreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.

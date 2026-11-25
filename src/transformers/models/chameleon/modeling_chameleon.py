@@ -31,7 +31,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -55,7 +55,7 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 @dataclass
-class ChameleonVQVAEModelOutput(BaseModelOutputWithSplitSizes):
+class ChameleonVQVAEModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     quantized_last_hidden_state (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
         Quantized last hidden state from the VQ-VAE model.
@@ -872,7 +872,7 @@ class ChameleonModel(ChameleonPreTrainedModel, MultimodalMixin):
     )
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.

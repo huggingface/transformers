@@ -33,7 +33,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -557,14 +557,12 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         image_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_features = self.multi_modal_projector(image_outputs.last_hidden_state)
         image_outputs.pooler_output = image_features
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
-        )
-        return image_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -574,7 +572,7 @@ class Lfm3VlModel(Lfm3VlPreTrainedModel, MultimodalMixin):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         return self.get_image_embeddings(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
 
     def get_placeholder_mask(

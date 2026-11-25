@@ -31,7 +31,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, can_return_tuple, logging
@@ -506,7 +506,7 @@ class VideoLlama3Model(Qwen2VLModel):
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
@@ -525,7 +525,7 @@ class VideoLlama3Model(Qwen2VLModel):
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
@@ -540,10 +540,8 @@ class VideoLlama3Model(Qwen2VLModel):
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
-        )
-        return vision_outputs
+        split_sizes = image_grid_thw.prod(dim=1) // (image_merge_sizes**2)
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
     def forward(

@@ -31,7 +31,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -838,7 +838,7 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         pixel_attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -858,12 +858,9 @@ class Idefics2Model(Idefics2PreTrainedModel, MultimodalMixin):
 
         # Modality projection & resampling
         image_features = self.connector(image_hidden_states, attention_mask=patch_attention_mask.flatten(1))
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs,
-            split_sizes=torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device),
-        )
+        split_sizes = torch.full(image_features.shape[:1], image_features.shape[1], device=image_features.device)
         image_outputs.pooler_output = image_features.flatten(0, 1)
-        return image_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @can_return_tuple
     @auto_docstring(

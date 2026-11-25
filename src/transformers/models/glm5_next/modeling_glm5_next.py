@@ -45,7 +45,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MoeModelOutputWithPast,
     MultimodalMoeBaseModelOutputWithPast,
     MultimodalMoeCausalLMOutputWithPast,
@@ -1921,13 +1921,11 @@ class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         pixel_values = pixel_values.type(self.visual.dtype)
         image_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        image_outputs = BaseModelOutputWithSplitSizes(
-            **image_outputs, split_sizes=image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
-        )
-        return image_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**image_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -1949,10 +1947,8 @@ class Glm5NextModel(Glm5NextPreTrainedModel, MultimodalMixin):
 
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
-        )
-        return vision_outputs
+        split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -2294,7 +2290,7 @@ class Glm5NextForConditionalGeneration(Glm5NextPreTrainedModel, MultimodalMixin,
             router_logits=outputs.router_logits,
         )
 
-    def _placeholder_token_id(self, modality: str) -> int:
+    def _modality_token_id(self, modality: str) -> int:
         # Video placeholders reuse the image token
         return self.config.image_token_id
 

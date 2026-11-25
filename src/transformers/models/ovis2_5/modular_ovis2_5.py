@@ -27,7 +27,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
@@ -550,7 +550,7 @@ class Ovis2_5Model(PerceptionLMModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithSplitSizes:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or -1
         vision_outputs = self.vision_tower(
             pixel_values=pixel_values,
@@ -560,9 +560,8 @@ class Ovis2_5Model(PerceptionLMModel):
         )
         visual_features = self.multi_modal_projector(vision_outputs.hidden_states[-1])
         split_sizes = image_grid_thw.prod(dim=1) // self.vision_tower.config.spatial_merge_size**2
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         vision_outputs.pooler_output = visual_features
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -572,7 +571,7 @@ class Ovis2_5Model(PerceptionLMModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithSplitSizes:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         return self.get_image_embeddings(
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
@@ -584,7 +583,7 @@ class Ovis2_5Model(PerceptionLMModel):
         self,
         input_ids: torch.LongTensor | None,
         inputs_embeds: torch.Tensor,
-        visual_outputs: BaseModelOutputWithSplitSizes,
+        visual_outputs: BaseModelOutputWithPoolingAndSplitSizes,
         is_video: bool,
     ) -> torch.Tensor:
         """Replace visual placeholders and start/end tokens with their visual embeddings."""

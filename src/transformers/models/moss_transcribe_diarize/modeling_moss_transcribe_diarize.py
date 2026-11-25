@@ -32,7 +32,7 @@ from ...modeling_multimodal_utils import MultimodalMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     ModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
@@ -407,7 +407,7 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel, Multimoda
         input_features_mask: torch.Tensor,
         padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
@@ -436,8 +436,8 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel, Multimoda
         hidden_size = valid_frames.shape[-1]
         merged_features = valid_frames.reshape(-1, merge_size * hidden_size)
         audio_outputs.pooler_output = self.multi_modal_projector(merged_features)
-        audio_outputs = BaseModelOutputWithSplitSizes(**audio_outputs, split_sizes=padded_lengths // merge_size)
-        return audio_outputs
+        split_sizes = padded_lengths // merge_size
+        return BaseModelOutputWithPoolingAndSplitSizes(**audio_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, audio_features: torch.Tensor

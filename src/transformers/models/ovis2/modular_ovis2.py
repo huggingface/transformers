@@ -22,7 +22,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import merge_mm_encoder_outputs
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -50,7 +50,7 @@ def hard_softmax(logits: torch.Tensor, dim: int):
 
 @auto_docstring
 @dataclass
-class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithSplitSizes):
+class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     visual_indicator_features (`torch.Tensor` of shape `(batch_size, visual_indicator_size)`):
         Visual indicator features extracted from the model, which can be used for auxiliary tasks or further processing.

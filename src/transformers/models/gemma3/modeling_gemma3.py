@@ -44,7 +44,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -763,14 +763,13 @@ class Gemma3Model(Gemma3PreTrainedModel, MultimodalMixin):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_embeddings(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         features = self.multi_modal_projector(last_hidden_state)
         split_sizes = torch.full(features.shape[:1], features.shape[1], device=features.device)
-        vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         vision_outputs.pooler_output = features.flatten(0, 1)
-        return vision_outputs
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor

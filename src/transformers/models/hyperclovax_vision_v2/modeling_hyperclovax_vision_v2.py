@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outputs
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -78,7 +78,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, MultimodalMix
         pixel_values: torch.Tensor,
         image_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -86,10 +86,8 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, MultimodalMix
         vision_outputs = self.vision_model(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         image_embeds = self.projector(vision_outputs.pooler_output)
         vision_outputs.pooler_output = image_embeds
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=image_grid_thw.prod(-1) // self.vision_model.spatial_merge_size**2
-        )
-        return vision_outputs
+        split_sizes = image_grid_thw.prod(-1) // self.vision_model.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -99,7 +97,7 @@ class HyperCLOVAXVisionV2Model(HyperCLOVAXVisionV2PreTrainedModel, MultimodalMix
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         pixel_values_videos (`torch.Tensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.

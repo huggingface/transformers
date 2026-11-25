@@ -30,7 +30,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
 )
@@ -770,7 +770,7 @@ class Glm4vModel(Qwen2VLModel):
         pixel_values_videos: torch.Tensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         t = video_grid_thw[:, 0]
@@ -782,10 +782,8 @@ class Glm4vModel(Qwen2VLModel):
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
-        )
-        return vision_outputs
+        split_sizes = video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self,
@@ -1027,7 +1025,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             video_outputs=outputs.video_outputs,
         )
 
-    def _placeholder_token_id(self, modality: str) -> int:
+    def _modality_token_id(self, modality: str) -> int:
         # Video placeholders reuse the image token
         return self.config.image_token_id
 

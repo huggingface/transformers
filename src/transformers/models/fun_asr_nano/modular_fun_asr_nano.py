@@ -26,7 +26,7 @@ from ...audio_utils import (
 )
 from ...feature_extraction_utils import BatchFeature
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithSplitSizes
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPoolingAndSplitSizes
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -508,7 +508,7 @@ class FunAsrNanoModel(AudioFlamingo3Model):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_features (`torch.Tensor`):
             Audio features `(batch, time, feature_dim)` produced by the feature extractor (after LFR stacking).
@@ -531,12 +531,13 @@ class FunAsrNanoModel(AudioFlamingo3Model):
         audio_embeds = self.multi_modal_projector(encoder_out, input_features_mask, **kwargs)
         pooler_output = audio_embeds[input_features_mask.to(device=audio_embeds.device, dtype=torch.bool)]
 
-        return BaseModelOutputWithSplitSizes(
+        split_sizes = input_features_mask.sum(-1)
+        return BaseModelOutputWithPoolingAndSplitSizes(
             last_hidden_state=encoder_out,
             pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            split_sizes=input_features_mask.sum(-1),
+            split_sizes=split_sizes,
         )
 
 

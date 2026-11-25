@@ -33,7 +33,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
     MultimodalBaseModelOutputWithPast,
     MultimodalCausalLMOutputWithPast,
@@ -370,7 +370,7 @@ class Apertus1p5VisionTokenizerEncoderOutput(ModelOutput):
 
 @auto_docstring
 @dataclass
-class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithSplitSizes):
+class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(num_image_tokens, hidden_size)`):
         The embedded image tokens of every input image, concatenated.
@@ -380,13 +380,12 @@ class Apertus1p5VisionTokenizerModelOutput(BaseModelOutputWithSplitSizes):
         `spatial_scale_factor` (16 by default).
     """
 
-    pooler_output: torch.Tensor | tuple[torch.Tensor] | None = None
     image_tokens: list[torch.LongTensor] | None = None
 
 
 @auto_docstring
 @dataclass
-class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithSplitSizes):
+class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     pooler_output (`torch.Tensor` of shape `(num_audio_tokens, hidden_size)`):
         The embedded audio tokens of every input clip, concatenated.
@@ -395,7 +394,6 @@ class Apertus1p5AudioTokenizerModelOutput(BaseModelOutputWithSplitSizes):
         `config.audio_token_offset`.
     """
 
-    pooler_output: torch.Tensor | tuple[torch.Tensor] | None = None
     audio_tokens: list[torch.LongTensor] | None = None
 
 

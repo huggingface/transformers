@@ -40,7 +40,7 @@ from ...modeling_multimodal_utils import MultimodalMixin, merge_mm_encoder_outpu
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -55,7 +55,7 @@ from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 
 @auto_docstring
 @dataclass
-class Emu3VQVAEModelOutput(BaseModelOutputWithSplitSizes):
+class Emu3VQVAEModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     image_tokens (`torch.LongTensor` of shape `(batch_size, config.vocab_size`):
         Indices of the image tokens predicted by the VQ-VAE model.

@@ -22,8 +22,7 @@ from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...processing_utils import Unpack
@@ -140,12 +139,12 @@ class OmniASRPreTrainedModel(ParakeetPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Extends [~modeling_outputs.BaseModelOutputWithSplitSizes] to include the output attention mask since sequence
+    Extends [~modeling_outputs.BaseModelOutputWithPoolingAndSplitSizes] to include the output attention mask since sequence
     length is not preserved in the model's forward.
     """
 )
 @dataclass
-class OmniASREncoderModelOutput(BaseModelOutputWithSplitSizes):
+class OmniASREncoderModelOutput(BaseModelOutputWithPoolingAndSplitSizes):
     r"""
     attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
         Mask to avoid performing attention on padding token indices after sequence compression. Returned because the
@@ -272,7 +271,7 @@ class OmniASRModel(VoxtralModel):
         input_values: torch.FloatTensor,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, 1, num_samples)`):
             Float values of the raw audio waveform, as produced by [`OmniASRFeatureExtractor`].

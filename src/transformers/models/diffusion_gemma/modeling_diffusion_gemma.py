@@ -44,7 +44,7 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    BaseModelOutputWithSplitSizes,
+    BaseModelOutputWithPoolingAndSplitSizes,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -1026,7 +1026,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
         pixel_values: torch.Tensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPoolingAndSplitSizes:
         r"""
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             The patch positions as (x, y) coordinates in the image. Padding patches are indicated by (-1, -1).
@@ -1040,10 +1040,8 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, MultimodalMixin)
         vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
         output_length = pixel_values.shape[-2] // (self.config.vision_config.pooling_kernel_size**2)
         k_squared = math.isqrt(image_position_ids.shape[1] // output_length) ** 2
-        vision_outputs = BaseModelOutputWithSplitSizes(
-            **vision_outputs, split_sizes=(image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
-        )
-        return vision_outputs
+        split_sizes = (image_position_ids != -1).all(dim=-1).sum(dim=-1) // k_squared
+        return BaseModelOutputWithPoolingAndSplitSizes(**vision_outputs, split_sizes=split_sizes)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_features: torch.Tensor
