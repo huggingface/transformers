@@ -30,7 +30,7 @@ from ...modeling_outputs import (
     MultimodalCausalLMOutputWithPast,
 )
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessorMixin, Unpack, VideosKwargs
 from ...utils import TensorType, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple
@@ -46,7 +46,7 @@ from ..minicpmv2_6.modeling_minicpmv2_6 import (
     MiniCPMV2_6VisionTransformer,
 )
 from ..minicpmv2_6.processing_minicpmv2_6 import MiniCPMV2_6Processor
-from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, ensure_divide
+from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4_5")
@@ -108,7 +108,8 @@ class MiniCPMV4_5Config(MiniCPMV2_6Config):
 class MiniCPMV4_5VideoProcessorKwargs(VideosKwargs, total=False):
     r"""
     max_num_frames (`int`, *optional*, defaults to 180):
-        Maximum number of frame groups per video; up to `max_num_frames * max_num_packing` frames are sampled.
+        Frame budget per video: longer videos are packed into groups of consecutive frames, and up to
+        `max_num_frames * max_num_packing` frames are sampled.
     max_num_packing (`int`, *optional*, defaults to 3):
         Maximum number of consecutive frames packed into one group, which the resampler turns into one set of tokens.
     max_slice_nums (`int`, *optional*, defaults to 1):
@@ -155,19 +156,8 @@ class MiniCPMV4_5VideoProcessor(MiniCPMV4_6VideoProcessor):
     def concat_frames_as_image(self, video):
         raise AttributeError("Not needed for MiniCPM-V 4.5")
 
-    def find_best_resize(self, image_size, scale_resolution, patch_size, allow_upscale=False, **kwargs):
-        return find_best_resize(image_size, scale_resolution, patch_size, allow_upscale)
-
-    def get_refine_size(self, image_size, grid, scale_resolution, patch_size, allow_upscale=False, **kwargs):
-        height, width = image_size
-        grid_y, grid_x = grid
-        best_height, best_width = self.find_best_resize(
-            (ensure_divide(height, grid_y) / grid_y, ensure_divide(width, grid_x) / grid_x),
-            scale_resolution,
-            patch_size,
-            allow_upscale,
-        )
-        return best_height * grid_y, best_width * grid_x
+    def find_best_resize(self, video_size, scale_resolution, patch_size, allow_upscale=False, **kwargs):
+        return find_best_resize(video_size, scale_resolution, patch_size, allow_upscale)
 
     def get_num_packing(self, duration: float, fps: float, max_num_frames: int, max_num_packing: int) -> int:
         """Number of consecutive frames packed into one group, as chosen by the original `encode_video`."""
@@ -193,7 +183,7 @@ class MiniCPMV4_5VideoProcessor(MiniCPMV4_6VideoProcessor):
             fps (`float`, *optional*):
                 Frames per second to sample.
             max_num_frames (`int`, *optional*):
-                Maximum number of frame groups; up to `max_num_frames * max_num_packing` frames are sampled.
+                Frame budget; longer videos are packed, and up to `max_num_frames * max_num_packing` frames are sampled.
             max_num_packing (`int`, *optional*):
                 Maximum number of frames packed into one group.
         Returns:
@@ -250,11 +240,15 @@ class MiniCPMV4_5VideoProcessor(MiniCPMV4_6VideoProcessor):
             )
             num_packing = self.get_num_packing(duration, fps, max_num_frames, max_num_packing)
 
-            frames, grid, _ = self.resize_and_split_patches(
-                video[None], resample, slice_mode, max_slice_nums, scale_resolution, patch_size
-            )
-            frames = [frame[0] for frame in frames[0]]  # num_frames * (overview + slices), frame-major
-            num_slices = (grid[0][0][0] * grid[0][0][1]) + 1
+            if do_resize:
+                frames, frame_grids, _ = self.resize_and_split_patches(
+                    video[None], resample, slice_mode, max_slice_nums, scale_resolution, patch_size
+                )
+                # num_frames * (overview + slices), frame-major
+                frames, grid = [frame[0] for frame in frames[0]], frame_grids[0][0]
+            else:
+                frames, grid = list(video), (0, 0)
+            num_slices = grid[0] * grid[1] + 1
             grouped, grouped_index = group_images_by_shape(frames, disable_grouping=False)
             processed = {
                 shape: self.rescale_and_normalize(
@@ -271,7 +265,7 @@ class MiniCPMV4_5VideoProcessor(MiniCPMV4_6VideoProcessor):
                     for frame_idx in range(start, start + len(group_ids)):
                         slices.append(frames[frame_idx * num_slices + slice_idx])
                     temporal_ids.append(group_ids)
-            grids.append(list(grid[0][0]))
+            grids.append(list(grid))
             num_groups.append(math.ceil(len(frame_ids) / num_packing))
 
         # One row of patches per frame slice, padded to the longest, as for images
@@ -354,6 +348,56 @@ class MiniCPMV4_5Processor(MiniCPMV2_6Processor):
         rows = [(self.slice_start_token + video_tokens + self.slice_end_token) * num_cols for _ in range(num_rows)]
         group = self.image_start_token + video_tokens + self.image_end_token + "\n".join(rows)
         return "\n".join([group] * video_inputs["num_groups_per_video"][video_idx])
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video, with the frames taken as
+                sampled at `fps`.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        output_kwargs = self._merge_kwargs(**kwargs)
+        if image_sizes is not None:
+            images_kwargs = output_kwargs["images_kwargs"]
+            max_slice_nums = images_kwargs.get("max_slice_nums") or self.image_processor.max_slice_nums
+            scale_resolution = images_kwargs.get("scale_resolution") or self.image_processor.scale_resolution
+            slice_mode = images_kwargs.get("slice_mode", self.image_processor.slice_mode)
+
+            num_image_patches = []
+            for image_size in image_sizes:
+                grid = self.image_processor.get_sliced_grid(image_size, max_slice_nums, scale_resolution)
+                num_image_patches.append(1 + grid[0] * grid[1] if slice_mode and grid is not None else 1)
+            num_image_tokens = [self.num_image_tokens * num_patches for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = output_kwargs["videos_kwargs"]
+            video_processor = self.video_processor
+            fps = videos_kwargs.get("fps") or video_processor.fps
+            max_num_frames = videos_kwargs.get("max_num_frames") or video_processor.max_num_frames
+            max_num_packing = videos_kwargs.get("max_num_packing") or video_processor.max_num_packing
+            max_slice_nums = videos_kwargs.get("max_slice_nums") or video_processor.max_slice_nums
+            scale_resolution = videos_kwargs.get("scale_resolution") or video_processor.scale_resolution
+            slice_mode = videos_kwargs.get("slice_mode", video_processor.slice_mode)
+
+            num_video_tokens = []
+            for num_frames, height, width in video_sizes:
+                num_packing = video_processor.get_num_packing(num_frames / fps, fps, max_num_frames, max_num_packing)
+                grid = video_processor.get_sliced_grid((height, width), max_slice_nums, scale_resolution)
+                num_slices = 1 + grid[0] * grid[1] if slice_mode and grid is not None else 1
+                num_video_tokens.append(math.ceil(num_frames / num_packing) * num_slices * self.num_image_tokens)
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
 
     @property
     def unused_input_names(self) -> list[str]:

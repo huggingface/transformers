@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 from ...processing_utils import MultiModalData, ProcessorMixin
 from ...utils import auto_docstring
 
@@ -77,21 +79,25 @@ class MiniCPMV4_5Processor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["grids", "grids_videos", "num_groups_per_video"]
 
-    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
+            video_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video, with the frames taken as
+                sampled at `fps`.
 
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
         vision_data = {}
+        output_kwargs = self._merge_kwargs(**kwargs)
         if image_sizes is not None:
-            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
+            images_kwargs = output_kwargs["images_kwargs"]
             max_slice_nums = images_kwargs.get("max_slice_nums") or self.image_processor.max_slice_nums
             scale_resolution = images_kwargs.get("scale_resolution") or self.image_processor.scale_resolution
             slice_mode = images_kwargs.get("slice_mode", self.image_processor.slice_mode)
@@ -102,6 +108,24 @@ class MiniCPMV4_5Processor(ProcessorMixin):
                 num_image_patches.append(1 + grid[0] * grid[1] if slice_mode and grid is not None else 1)
             num_image_tokens = [self.num_image_tokens * num_patches for num_patches in num_image_patches]
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = output_kwargs["videos_kwargs"]
+            video_processor = self.video_processor
+            fps = videos_kwargs.get("fps") or video_processor.fps
+            max_num_frames = videos_kwargs.get("max_num_frames") or video_processor.max_num_frames
+            max_num_packing = videos_kwargs.get("max_num_packing") or video_processor.max_num_packing
+            max_slice_nums = videos_kwargs.get("max_slice_nums") or video_processor.max_slice_nums
+            scale_resolution = videos_kwargs.get("scale_resolution") or video_processor.scale_resolution
+            slice_mode = videos_kwargs.get("slice_mode", video_processor.slice_mode)
+
+            num_video_tokens = []
+            for num_frames, height, width in video_sizes:
+                num_packing = video_processor.get_num_packing(num_frames / fps, fps, max_num_frames, max_num_packing)
+                grid = video_processor.get_sliced_grid((height, width), max_slice_nums, scale_resolution)
+                num_slices = 1 + grid[0] * grid[1] if slice_mode and grid is not None else 1
+                num_video_tokens.append(math.ceil(num_frames / num_packing) * num_slices * self.num_image_tokens)
+            vision_data["num_video_tokens"] = num_video_tokens
 
         return MultiModalData(**vision_data)
 

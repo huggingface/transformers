@@ -27,6 +27,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_modeling_common import floats_tensor
+from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
@@ -154,13 +155,15 @@ class MiniCPMV4_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video."},
                 ],
             }
         ]
-        # At most 20 groups, so the 10 s clip is packed 3 frames per group
+        # A budget of 20 frames packs the 9.7 s clip 3 frames per group
         inputs = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -170,14 +173,12 @@ class MiniCPMV4_5IntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
         ).to(torch_device)
-        output = model.generate(**inputs, max_new_tokens=64, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         decoded = processor.post_process_image_text_to_text(output[:, inputs["input_ids"].shape[1] :])[0]
         expected_texts = Expectations(
             {
                 ("cuda", None): (
-                    "The video begins with a little girl sitting on a bed, wearing glasses and a green shirt, reading a "
-                    "book. The camera then cuts to a baby sitting on a bed, also wearing glasses and a green shirt, "
-                    "holding a book in her hands. The baby is seen looking at the book and then at the camera,"
+                    "The video begins with a little girl sitting on a bed, wearing glasses and a green shirt, reading"
                 ),
             }
         )

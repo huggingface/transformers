@@ -73,7 +73,7 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 
 ## Notes
 
-- Frames are sampled at `fps` (5 by default), as in the original `encode_video`. Videos longer than `max_num_frames / fps` seconds (36 s by default) are packed `ceil(duration * fps / max_num_frames)` frames per group, at most `max_num_packing` (3), so at most `max_num_frames * max_num_packing` frames (540) are sampled. Each group is placed as `<image>` + 64 × `<|video_pad|>` + `</image>`, one line per group.
+- Frames are sampled at `fps` (5 by default), as in the original `encode_video`. Videos with `fps * int(duration) > max_num_frames` (37 s and longer by default) are packed `ceil(duration * fps / max_num_frames)` frames per group, at most `max_num_packing` (3), so at most `max_num_frames * max_num_packing` frames (540) are sampled. Each group is placed as `<image>` + 64 × `<|video_pad|>` + `</image>`, one line per group.
 - With `do_sample_frames=False` and no video metadata, the frames are taken as sampled at `fps`.
 
 ## MiniCPMV4_5Config

@@ -38,7 +38,8 @@ from ...video_utils import VideoInput, VideoMetadata
 class MiniCPMV4_5VideoProcessorKwargs(VideosKwargs, total=False):
     r"""
     max_num_frames (`int`, *optional*, defaults to 180):
-        Maximum number of frame groups per video; up to `max_num_frames * max_num_packing` frames are sampled.
+        Frame budget per video: longer videos are packed into groups of consecutive frames, and up to
+        `max_num_frames * max_num_packing` frames are sampled.
     max_num_packing (`int`, *optional*, defaults to 3):
         Maximum number of consecutive frames packed into one group, which the resampler turns into one set of tokens.
     max_slice_nums (`int`, *optional*, defaults to 1):
@@ -132,7 +133,7 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
             fps (`float`, *optional*):
                 Frames per second to sample.
             max_num_frames (`int`, *optional*):
-                Maximum number of frame groups; up to `max_num_frames * max_num_packing` frames are sampled.
+                Frame budget; longer videos are packed, and up to `max_num_frames * max_num_packing` frames are sampled.
             max_num_packing (`int`, *optional*):
                 Maximum number of frames packed into one group.
         Returns:
@@ -156,20 +157,30 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
         return [int(i * gap + gap / 2) for i in range(num_frames)]
 
     def find_best_resize(
-        self, image_size, scale_resolution, patch_size, allow_upscale=False, **kwargs
+        self, video_size, scale_resolution, patch_size, allow_upscale=False, **kwargs
     ) -> tuple[int, int]:
-        return find_best_resize(image_size, scale_resolution, patch_size, allow_upscale)
+        return find_best_resize(video_size, scale_resolution, patch_size, allow_upscale)
 
     def get_refine_size(
-        self, image_size, grid, scale_resolution, patch_size, allow_upscale=False, **kwargs
+        self,
+        video_size: tuple[int, int],
+        grid: list[int],
+        scale_resolution: int,
+        patch_size: int,
+        allow_upscale: bool = False,
+        downsample_mode: str = "16x",
     ) -> tuple[int, int]:
-        height, width = image_size
+        height, width = video_size
         grid_y, grid_x = grid
+        refine_width = ensure_divide(width, grid_x)
+        refine_height = ensure_divide(height, grid_y)
+
         best_height, best_width = self.find_best_resize(
-            (ensure_divide(height, grid_y) / grid_y, ensure_divide(width, grid_x) / grid_x),
-            scale_resolution,
-            patch_size,
-            allow_upscale,
+            video_size=(refine_height / grid_y, refine_width / grid_x),
+            scale_resolution=scale_resolution,
+            patch_size=patch_size,
+            downsample_mode=downsample_mode,
+            allow_upscale=allow_upscale,
         )
         return best_height * grid_y, best_width * grid_x
 
@@ -368,11 +379,15 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
             )
             num_packing = self.get_num_packing(duration, fps, max_num_frames, max_num_packing)
 
-            frames, grid, _ = self.resize_and_split_patches(
-                video[None], resample, slice_mode, max_slice_nums, scale_resolution, patch_size
-            )
-            frames = [frame[0] for frame in frames[0]]  # num_frames * (overview + slices), frame-major
-            num_slices = (grid[0][0][0] * grid[0][0][1]) + 1
+            if do_resize:
+                frames, frame_grids, _ = self.resize_and_split_patches(
+                    video[None], resample, slice_mode, max_slice_nums, scale_resolution, patch_size
+                )
+                # num_frames * (overview + slices), frame-major
+                frames, grid = [frame[0] for frame in frames[0]], frame_grids[0][0]
+            else:
+                frames, grid = list(video), (0, 0)
+            num_slices = grid[0] * grid[1] + 1
             grouped, grouped_index = group_images_by_shape(frames, disable_grouping=False)
             processed = {
                 shape: self.rescale_and_normalize(
@@ -389,7 +404,7 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
                     for frame_idx in range(start, start + len(group_ids)):
                         slices.append(frames[frame_idx * num_slices + slice_idx])
                     temporal_ids.append(group_ids)
-            grids.append(list(grid[0][0]))
+            grids.append(list(grid))
             num_groups.append(math.ceil(len(frame_ids) / num_packing))
 
         # One row of patches per frame slice, padded to the longest, as for images
