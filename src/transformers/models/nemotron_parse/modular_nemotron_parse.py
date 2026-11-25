@@ -29,7 +29,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_to
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig, AutoModel
-from ..donut.image_processing_donut import DonutImageProcessor
+from ..donut.image_processing_donut import DonutImageProcessor, DonutImageProcessorKwargs
 from ..mbart.configuration_mbart import MBartConfig
 from ..pp_formulanet.modeling_pp_formulanet import (
     PPFormulaNetForConditionalGeneration,
@@ -107,6 +107,10 @@ class NemotronParseConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
+class NemotronParseImageProcessorKwargs(DonutImageProcessorKwargs):
+    pass
+
+
 @auto_docstring
 class NemotronParseImageProcessor(DonutImageProcessor):
     image_mean = OPENAI_CLIP_MEAN
@@ -115,7 +119,7 @@ class NemotronParseImageProcessor(DonutImageProcessor):
     do_resize = False
     do_convert_rgb = True
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Unpack[NemotronParseImageProcessorKwargs]):
         # the released `preprocessor_config.json` files also store the size as a redundant `longest_edge`
         if isinstance(size := kwargs.get("size"), dict):
             kwargs["size"] = {key: value for key, value in size.items() if key != "longest_edge"}

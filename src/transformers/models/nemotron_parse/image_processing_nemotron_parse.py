@@ -59,7 +59,7 @@ class NemotronParseImageProcessor(TorchvisionBackend):
     do_pad = True
     do_convert_rgb = True
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Unpack[NemotronParseImageProcessorKwargs]):
         # the released `preprocessor_config.json` files also store the size as a redundant `longest_edge`
         if isinstance(size := kwargs.get("size"), dict):
             kwargs["size"] = {key: value for key, value in size.items() if key != "longest_edge"}
