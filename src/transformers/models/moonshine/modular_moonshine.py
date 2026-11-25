@@ -603,6 +603,9 @@ class MoonshineDecoder(LlamaModel):
 
 
 class MoonshineModel(WhisperModel):
+    def freeze_encoder(self):
+        self.encoder.requires_grad_(False)
+
     def _mask_input_features(self):
         raise AttributeError("Not needed for Moonshine")
 

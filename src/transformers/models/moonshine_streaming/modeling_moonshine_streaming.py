@@ -891,14 +891,7 @@ class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
         Calling this function will disable the gradient computation for the MoonshineStreaming encoder so that its parameters will
         not be updated during training.
         """
-        self.encoder._freeze_parameters()
-
-    def _mask_input_features(self):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://huggingface.co/papers/1904.08779).
-        """
-        raise AttributeError("Not needed for MoonshineStreaming")
+        self.encoder.requires_grad_(False)
 
     @can_return_tuple
     @auto_docstring
