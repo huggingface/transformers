@@ -906,6 +906,13 @@ class ContinuousBatchProcessor:
         self.model_runner.warmup(model)
 
 
+
+def _rms_norm_dispatch_forward(self, *args, **kwargs):
+    """[scratch] An RMSNorm under compiled continuous batching: its own forward when traced, the hub kernel otherwise."""
+    if torch.compiler.is_compiling() or "_cb_hub_forward" not in self.__dict__:
+        return self._cb_own_forward(*args, **kwargs)
+    return self._cb_hub_forward(*args, **kwargs)
+
 # Manager Class (User Interface)
 class ContinuousBatchingManager:
     """Manager for handling continuous batching of generation requests. It provides a user interface for submitting
@@ -992,21 +999,21 @@ class ContinuousBatchingManager:
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
         # [scratch] When the steps are compiled, inductor fuses each RMSNorm with the residual add before it: the hub
         # RMSNorm kernel (`use_kernels`) is opaque to it, and slower than the fused code (Qwen3-8B on a B300, 64 x
-        # 1,024: 11,857 -> 12,572 tok/s without it). The modules get their own forward back
+        # 1,024: 11,857 -> 12,572 tok/s without it). But many steps run eagerly: the mixed steps of linear attention
+        # models, the layers past the recompile limit, and the steps whose variant the warmup did not compile (the
+        # generation thread keeps dynamo's limit of 8, its config overrides being thread-local), where the hub kernel
+        # is the faster RMSNorm (Qwen3-30B-A3B-FP8 H100 rolling: 5,874 / 5,903 with it, 4,893 / 4,840 without). So the
+        # modules take their own forward inside compiled code and the hub kernel outside
         cb_config = self.continuous_batching_config
-        # Not for FP8 checkpoints: the model runner keeps their recompile limit low (see `ModelRunner.warmup`), so many
-        # of their layers run eagerly, where the hub kernel is the faster RMSNorm (Qwen3-30B-A3B-FP8 H100 rolling:
-        # 5,874 / 5,903 with it, 4,893 / 4,840 without)
-        quantization = getattr(self.model.config, "quantization_config", None)
-        quant_method = quantization.get("quant_method") if isinstance(quantization, dict) else None
-        quant_method = quant_method or getattr(quantization, "quant_method", None)
-        keep_hub_rms_norm = str(quant_method) in ("fp8", "QuantizationMethod.FP8")
-        keep_hub_rms_norm |= os.environ.get("PROTO_KEEP_HUB_RMSNORM", "0") == "1"  # dev knob: the A/B baseline
         compiled = cb_config.decode_compile_config is not None or cb_config.varlen_compile_config is not None
-        if compiled and not keep_hub_rms_norm:
+        if compiled and os.environ.get("PROTO_KEEP_HUB_RMSNORM", "0") != "1":  # dev knob: the A/B baseline
             for module in self.model.modules():
                 if type(module).__name__.endswith("RMSNorm") and "forward" in module.__dict__:
-                    del module.forward
+                    module._cb_hub_forward = module.__dict__.pop("forward")
+                    cls = type(module)
+                    if "_cb_own_forward" not in cls.__dict__:  # the class dispatches: no per-module guard for dynamo
+                        cls._cb_own_forward = cls.forward
+                        cls.forward = _rms_norm_dispatch_forward
 
         # For MPS, warn if the torch version is old enough to cause performance issues
         if self.model.device.type == "mps" and not is_torch_greater_or_equal("2.14", accept_dev=True):
