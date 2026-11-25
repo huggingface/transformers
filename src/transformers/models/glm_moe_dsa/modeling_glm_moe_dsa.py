@@ -54,10 +54,11 @@ class GlmMoeDsaRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # Don't pass the weight to rms_norm: scaling after the cast to the input dtype (autocast runs rms_norm in
-        # fp32) keeps the rounding and output dtype of the original implementations, fusing it shifts the logits
-        normalized = nn.functional.rms_norm(hidden_states, hidden_states.shape[-1:], eps=self.variance_epsilon)
-        return self.weight * normalized.to(hidden_states.dtype)
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
