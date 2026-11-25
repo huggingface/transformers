@@ -511,7 +511,21 @@ class AutoImageProcessor:
 
     @classmethod
     @replace_list_option_in_docstrings(IMAGE_PROCESSOR_MAPPING_NAMES)
-    def from_pretrained(cls, pretrained_model_name_or_path, *inputs, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        *inputs,
+        config: PreTrainedConfig | str | os.PathLike | None = None,
+        cache_dir: str | os.PathLike | None = None,
+        ignore_mismatched_sizes: bool = False,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str | None = None,
+        proxies: dict[str, str] | None = None,
+        subfolder: str = "",
+        **kwargs,
+    ):
         r"""
         Instantiate one of the image processor classes of the library from a pretrained model vocabulary.
 
@@ -592,37 +606,31 @@ class AutoImageProcessor:
         >>> # If image processor files are in a directory (e.g. image processor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # image_processor = AutoImageProcessor.from_pretrained("./test/saved_model/")
         ```"""
-        config = kwargs.pop("config", None)
         config_dict = kwargs.pop("processor_config", None)
         use_fast = kwargs.pop("use_fast", None)
         backend_kwarg = kwargs.pop("backend", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
-        hub_kwargs_names = [
-            "cache_dir",
-            "force_download",
-            "local_files_only",
-            "proxies",
-            "revision",
-            "subfolder",
-            "token",
-        ]
-        hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
-        hub_kwargs["_from_auto"] = True
+        hub_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "local_files_only": local_files_only,
+            "proxies": proxies,
+            "subfolder": subfolder,
+            "_from_auto": True,
+        }
         code_revision = kwargs.pop("code_revision", None)
         kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
-        token = hub_kwargs.pop("token", None)
         if token is not None:
             hub_kwargs["token"] = token
 
         # Resolve the revision once, so that all the files below come from the same repository state
-        requested_revision = hub_kwargs.get("revision")
         hub_kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
-            requested_revision,
+            revision,
             token=token,
-            local_files_only=hub_kwargs.get("local_files_only", False),
-            cache_dir=hub_kwargs.get("cache_dir"),
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
         )
 
         # Resolve the image processor config filename
@@ -720,7 +728,6 @@ class AutoImageProcessor:
             image_processor_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
-            _ = hub_kwargs.pop("code_revision", None)
             image_processor_class.register_for_auto_class()
             return image_processor_class.from_dict(config_dict, *inputs, **kwargs)
         elif image_processor_class is not None:

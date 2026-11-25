@@ -245,7 +245,20 @@ class AutoFeatureExtractor:
 
     @classmethod
     @replace_list_option_in_docstrings(FEATURE_EXTRACTOR_MAPPING_NAMES)
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        config: PreTrainedConfig | str | os.PathLike | None = None,
+        cache_dir: str | os.PathLike | None = None,
+        ignore_mismatched_sizes: bool = False,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str | None = None,
+        proxies: dict[str, str] | None = None,
+        subfolder: str = "",
+        **kwargs,
+    ):
         r"""
         Instantiate one of the feature extractor classes of the library from a pretrained model vocabulary.
 
@@ -313,35 +326,29 @@ class AutoFeatureExtractor:
         >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
         >>> # feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
-        config = kwargs.pop("config", None)
         config_dict = kwargs.pop("processor_config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
-        hub_kwargs_names = [
-            "cache_dir",
-            "force_download",
-            "local_files_only",
-            "proxies",
-            "revision",
-            "subfolder",
-            "token",
-        ]
-        hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
-        hub_kwargs["_from_auto"] = True
+        hub_kwargs = {
+            "cache_dir": cache_dir,
+            "force_download": force_download,
+            "local_files_only": local_files_only,
+            "proxies": proxies,
+            "subfolder": subfolder,
+            "_from_auto": True,
+        }
         code_revision = kwargs.pop("code_revision", None)
         kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
-        token = hub_kwargs.pop("token", None)
         if token is not None:
             hub_kwargs["token"] = token
 
         # Resolve the revision once, so that all the files below come from the same repository state
-        requested_revision = hub_kwargs.get("revision")
         hub_kwargs["revision"] = resolve_revision(
             pretrained_model_name_or_path,
-            requested_revision,
+            revision,
             token=token,
-            local_files_only=hub_kwargs.get("local_files_only", False),
-            cache_dir=hub_kwargs.get("cache_dir"),
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
         )
 
         if config_dict is None:
