@@ -74,16 +74,10 @@ class NanbeigeModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class NanbeigeIntegrationTest(unittest.TestCase):
     checkpoint = "Nanbeige/Nanbeige4.2-3B"
-    revision = "b82e54bd609793562a75cbf9337970a93369eab5"
 
     def test_bf16_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint, revision=self.revision)
-        model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint,
-            revision=self.revision,
-            dtype=torch.bfloat16,
-            device_map=torch_device,
-        )
+        tokenizer = AutoTokenizer.from_pretrained(self.checkpoint)
+        model = AutoModelForCausalLM.from_pretrained(self.checkpoint, dtype=torch.bfloat16, device_map=torch_device)
         self.assertIsInstance(model, NanbeigeForCausalLM)
         inputs = tokenizer.apply_chat_template(
             [{"role": "user", "content": "What is the capital of France? Answer with the city name."}],
