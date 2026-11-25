@@ -1084,8 +1084,8 @@ class OmoikaneForCausalLM(OmoikanePreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, OmoikaneForCausalLM
 
-        >>> model = OmoikaneForCausalLM.from_pretrained("meta-omoikane/Omoikane-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-omoikane/Omoikane-2-7b-hf")
+        >>> model = OmoikaneForCausalLM.from_pretrained("Goekdeniz-Guelmez/Omoikane-50M-A27M-Base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Goekdeniz-Guelmez/Omoikane-50M-A27M-Base")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
