@@ -103,6 +103,8 @@ class Scheduler(ABC):
                 # Invariant: a request is never in both queues; state_a or state_w picks the one it was in
                 state = state_a or state_w
                 if state is not None:
+                    # In async mode the request can still be in the in-flight batch: FINISHED makes its update skip it
+                    state.status = RequestStatus.FINISHED
                     cancelled_states.append(state)
                 if request_id in self.waiting_requests_order:
                     self.waiting_requests_order.remove(request_id)
