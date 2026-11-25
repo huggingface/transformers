@@ -129,7 +129,8 @@ def sdpa_packed_sequences_attention_forward(
         sliding_window=sliding_window,
         **kwargs,
     )
-    return attn_output.view(batch_size, -1, num_heads, head_dim), None
+    # Values may have their own head size (MLA)
+    return attn_output.view(batch_size, -1, num_heads, attn_output.shape[-1]), None
 
 
 def per_sequence_attention_forward(
@@ -143,15 +144,13 @@ def per_sequence_attention_forward(
     sequence_lengths: list[int] | None = None,
     is_causal: bool = True,
     sliding_window: int | None = None,
-    causal_needs_mask: bool = False,
     return_attention_weights: bool = False,
     **kwargs,
 ) -> tuple[torch.Tensor, list[torch.Tensor] | None]:
     """
-    Calls `attention_fn` on each of the sequences packed along the length of a batch of one, with a mask only where
-    the attention needs it: a (causal) window narrower than the sequence, or causal attention itself when
-    `causal_needs_mask` (eager has no causal flag). Returns the outputs concatenated along the length, `(1, length,
-    heads, head_dim)`, and each sequence's weights if `return_attention_weights` (otherwise freed as it goes).
+    Calls `attention_fn` on each of the sequences packed along the length of a batch of one, with a mask only for a
+    (causal) window narrower than the sequence. Returns the outputs concatenated along the length, `(1, length, heads,
+    head_dim)`, and each sequence's weights if `return_attention_weights` (otherwise freed as it goes).
     """
     # Splitting needs the lengths on the host: read once per forward when the model passes them (shared by queries
     # and keys), here otherwise
@@ -164,10 +163,9 @@ def per_sequence_attention_forward(
     attn_outputs, attn_weights = [], []
     for q, k, v in zip(query.split(lengths_q, dim=2), key.split(lengths_k, dim=2), value.split(lengths_k, dim=2)):
         mask = None
-        if (is_causal and causal_needs_mask) or (sliding_window is not None and k.shape[2] > sliding_window):
+        if sliding_window is not None and k.shape[2] > sliding_window:
             visible = torch.ones(q.shape[2], k.shape[2], dtype=torch.bool, device=q.device)
-            visible = visible.tril() if is_causal else visible
-            visible = visible.triu(1 - sliding_window) if sliding_window is not None else visible
+            visible = (visible.tril() if is_causal else visible).triu(1 - sliding_window)
             mask = torch.zeros(visible.shape, dtype=q.dtype, device=q.device)
             mask = mask.masked_fill(~visible, torch.finfo(q.dtype).min)[None, None]
         attn_output, weights = attention_fn(module, q, k, v, mask, is_causal=is_causal, **kwargs)
@@ -176,59 +174,6 @@ def per_sequence_attention_forward(
             attn_weights.append(weights)
         del weights
     return torch.cat(attn_outputs, dim=1), attn_weights if return_attention_weights else None
-
-
-def eager_packed_sequences_attention_forward(
-    eager_attention_forward: Callable,
-    module: torch.nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    sliding_window: int | None = None,
-    **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor | None]:
-    """
-    A model's `eager_attention_forward`, attending over each sequence of packed rows separately when the mask is their
-    cumulative lengths over the flattened batch (from `create_causal_mask`): small per-sequence masks instead of a
-    dense one over the whole rows. The weights are block-diagonal, kept only when attentions are recorded.
-    """
-    if attention_mask is None or attention_mask.ndim != 1:
-        return eager_attention_forward(
-            module, query, key, value, attention_mask, sliding_window=sliding_window, **kwargs
-        )
-    batch_size, num_heads, length, head_dim = query.shape
-    is_causal = kwargs.pop("is_causal", None)
-    is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)
-    record_attentions = kwargs.get(
-        "output_attentions", getattr(getattr(module, "config", None), "output_attentions", False)
-    )
-    # One packed row of all the sequences: a view for a batch of one
-    query, key, value = (states.transpose(0, 1).flatten(1, 2)[None] for states in (query, key, value))
-    attn_output, sequence_weights = per_sequence_attention_forward(
-        eager_attention_forward,
-        module,
-        query,
-        key,
-        value,
-        attention_mask,
-        attention_mask,
-        is_causal=is_causal,
-        sliding_window=sliding_window,
-        causal_needs_mask=True,
-        return_attention_weights=record_attentions,
-        **kwargs,
-    )
-    attn_weights = None
-    if sequence_weights is not None:
-        attn_weights = query.new_zeros(batch_size, num_heads, length, length)
-        start = 0
-        for weights in sequence_weights:
-            row, offset = divmod(start, length)
-            end = offset + weights.shape[-1]
-            attn_weights[row, :, offset:end, offset:end] = weights[0]
-            start += weights.shape[-1]
-    return attn_output.view(batch_size, length, num_heads, head_dim), attn_weights
 
 
 def sdpa_attention_forward(

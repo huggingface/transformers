@@ -72,12 +72,56 @@ EXPECTED_PACKED_MASK = torch.tensor([[[
 
 @require_torch
 class MaskTest(MemoryCleanupMixin, unittest.TestCase):
-    def test_packed_sequence_mask_sdpa_and_eager(self):
-        # Packed rows of 4, 2, 4 and 6, 4 tokens: SDPA and eager get the cumulative lengths over the flattened batch,
-        # and attend over each sequence separately, with or without a sliding window (passed by the attention layers)
+    def test_packed_sequence_mask_sdpa(self):
+        config = LlamaConfig()
+        config._attn_implementation = "sdpa"
+
+        batch_size = 2
+        sequence_length = 10
+
+        # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
+
+        causal_mask = create_causal_mask(
+            config=config,
+            # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            attention_mask=None,
+            cache=None,
+            position_ids=position_ids,
+        )
+
+        self.assertTrue((causal_mask == EXPECTED_PACKED_MASK).all())
+
+    def test_packed_sequence_mask_eager(self):
+        config = LlamaConfig()
+        config._attn_implementation = "eager"
+
+        batch_size = 2
+        sequence_length = 10
+
+        # First batch has 3 packed sequences of 4, 2 and 4 tokens respectively, second has 2 of 6 and 4 tokens
+        position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
+
+        causal_mask = create_causal_mask(
+            config=config,
+            # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+            inputs_embeds=torch.empty((batch_size, sequence_length), dtype=torch.float16),
+            attention_mask=None,
+            cache=None,
+            position_ids=position_ids,
+        )
+
+        min_dtype = torch.finfo(torch.float16).min
+        self.assertTrue((causal_mask == torch.where(EXPECTED_PACKED_MASK, 0.0, min_dtype)).all())
+
+    def test_packed_sequence_mask_varlen_attention(self):
+        # Packed rows of 4, 2, 4 and 6, 4 tokens: `varlen_attention` gets the cumulative lengths over the flattened
+        # batch for its varlen kernel, with or without a sliding window (passed by the attention layers). The other
+        # implementations keep the dense mask
         position_ids = torch.tensor([[0, 1, 2, 3, 0, 1, 0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 0, 1, 2, 3]])
         for attn_implementation, mask_function in itertools.product(
-            ("sdpa", "eager"), (create_causal_mask, create_sliding_window_causal_mask)
+            ("varlen_attention", "sdpa", "eager"), (create_causal_mask, create_sliding_window_causal_mask)
         ):
             config = LlamaConfig(sliding_window=3)
             config._attn_implementation = attn_implementation
@@ -88,8 +132,11 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
                 cache=None,
                 position_ids=position_ids,
             )
-            self.assertEqual(mask.tolist(), [0, 4, 6, 10, 16, 20])
-            self.assertEqual(mask.dtype, torch.int32)
+            if attn_implementation == "varlen_attention":
+                self.assertEqual(mask.tolist(), [0, 4, 6, 10, 16, 20])
+                self.assertEqual(mask.dtype, torch.int32)
+            else:
+                self.assertEqual(mask.ndim, 4)
 
     def test_packed_sequence_mask_flex_attention(self):
         config = LlamaConfig()

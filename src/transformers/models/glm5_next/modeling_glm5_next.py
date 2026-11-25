@@ -1266,8 +1266,8 @@ class Glm5NextTextAttention(nn.Module):
         # Final mask 0 == False (not visible), 1 == True (visible)
         mask = selected_counts.ne(0).unsqueeze(1)
 
-        # SDPA
-        if self.config._attn_implementation == "sdpa":
+        # SDPA (and `varlen_attention`, SDPA outside packed rows)
+        if self.config._attn_implementation in ("sdpa", "varlen_attention"):
             return mask
 
         # Eager

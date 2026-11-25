@@ -460,8 +460,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             attention_mask=attention_mask,
             cache=cache,
             position_ids=position_ids,
-            # Its attention applies the mask itself
-            allow_is_causal_skip=False,
         )
 
         position_embeds = self.wpe(position_ids)

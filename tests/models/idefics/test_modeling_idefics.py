@@ -682,6 +682,10 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip("Idefics can't do text-only inference (test filters non-text inputs)")
+    def test_varlen_attention_padding_matches_padding_free_with_position_ids(self):
+        pass
+
 
 @require_torch
 class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):

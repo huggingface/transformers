@@ -771,15 +771,15 @@ def packed_sequences_cu_seq_lens(
     needs_dense_mask: bool,
 ) -> torch.Tensor | None:
     """
-    Packed rows are attended over by torch's varlen kernel (`varlen_attention`), and by SDPA and eager one sequence at a
-    time, which take the cumulative lengths of the sequences over the flattened batch instead of a dense mask. Returns them, or `None` when
-    the dense mask is needed.
+    Packed rows are attended over by `varlen_attention` with one varlen kernel call, which takes the cumulative lengths
+    of the sequences over the flattened batch instead of a dense mask. Returns them, or `None` when the dense mask is
+    needed (and for every other attention implementation, which keep it).
 
     The attention layers pass their own `sliding_window`, as for flash attention.
     """
     if (
         packed_sequence_mask is None
-        or config._attn_implementation not in ("sdpa", "eager", "varlen_attention")
+        or config._attn_implementation != "varlen_attention"
         or needs_dense_mask
         # Sparse-attention indexers (`index_topk`) select their keys on the dense mask
         or getattr(config, "index_topk", None) is not None
