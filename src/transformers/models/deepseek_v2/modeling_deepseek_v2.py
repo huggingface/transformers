@@ -383,14 +383,13 @@ class DeepseekV2Attention(nn.Module):
 
         q_pe, k_pe = apply_rotary_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
+        # [scratch] PROTO_MLA_ABSORB=1: a continuous batching step attends on the cached latents, never expanded
+        if _PROTO_MLA_ABSORB and cache is not None and kwargs.get("cu_seq_lens_q") is not None:
+            return self.o_proj(absorbed_mla_forward(self, q_nope, q_pe, k_nope, k_pe, cache, kwargs)), None
+
         # Cache read / write is performed while the latent KV is still compressed
         if cache is not None:
             k_nope, k_pe = cache.update(k_nope, k_pe, self.layer_idx, kwargs=kwargs)
-
-        # [scratch] PROTO_MLA_ABSORB=1: a continuous batching step attends on the cached latents, never expanded
-        if _PROTO_MLA_ABSORB and cache is not None and kwargs.get("cu_seq_lens_q") is not None:
-            attn_output = absorbed_mla_forward(self, q_nope, q_pe, k_nope, k_pe, kwargs)
-            return self.o_proj(attn_output), None
 
         query_states = torch.cat((q_nope, q_pe), dim=-1)
 
