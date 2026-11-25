@@ -118,7 +118,7 @@ if is_torch_available():
     )
     from transformers.generation.utils import ALL_CACHE_NAMES, DeferredStopCheck, _speculative_sampling
     from transformers.modeling_layers import MtpModel
-    from transformers.modeling_multimodal_utils import split_modality_outputs
+    from transformers.modeling_multimodal_utils import placeholder_features, split_modality_outputs
 
 from unittest.mock import patch
 
@@ -1658,7 +1658,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                 flat = inputs_dict.pop("mm_encoder_outputs")
                 if not flat:
                     self.skipTest(reason="The tester's inputs give no multimodal outputs")
-                if any(getattr(outputs, "split_sizes", None) is None for outputs in flat.values()):
+                if any(not isinstance(placeholder_features(outputs), torch.Tensor) for outputs in flat.values()):
                     self.skipTest(reason="The model has no flat getter (e.g. GLM-Image)")
                 per_item = {modality: split_modality_outputs(outputs) for modality, outputs in flat.items()}
                 expected = model(**inputs_dict, mm_encoder_outputs=flat).logits
