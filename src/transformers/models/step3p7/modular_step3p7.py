@@ -37,7 +37,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
-    no_inherit_decorator,
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -834,10 +833,7 @@ class Step3p7MLP(DeepseekV4MLP):
         return self.down_proj(gate * up)
 
 
-@no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
-    _fp8_experts_clamp_after_activation = True
-
     def __init__(self, config, swiglu_limit=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size
