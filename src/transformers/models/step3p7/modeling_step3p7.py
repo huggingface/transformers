@@ -29,6 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -538,6 +539,7 @@ class Step3p7MLP(nn.Module):
         return self.down_proj(gate * up)
 
 
+@use_experts_implementation
 class Step3p7Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -550,7 +552,6 @@ class Step3p7Experts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
         self.limit = (config.swiglu_limits[layer_idx] if config.swiglu_limits else None) or float("inf")
-        self.config = config
         self.layer_idx = layer_idx
         self.limit_after_act = config.limit_after_act
 

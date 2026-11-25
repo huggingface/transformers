@@ -25,7 +25,6 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations.accelerate import force_accelerate_hooks
-from ...integrations.moe import use_experts_implementation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
@@ -224,7 +223,6 @@ class BailingHybridRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-@use_experts_implementation
 class BailingHybridExperts(Step3p7Experts):
     pass
 

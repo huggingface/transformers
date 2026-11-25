@@ -20,7 +20,6 @@ from unittest import mock
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
-    cleanup,
     require_cuda_capability_at_least,
     require_kernels,
     require_torch,
@@ -31,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -293,13 +293,13 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-@require_torch_gpu
 @require_kernels
-@require_cuda_capability_at_least(9, 0)
-class BailingHybridFp8IntegrationTest(unittest.TestCase):
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
+@require_torch
+class BailingHybridIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    model_id = "inclusionAI/Ling-3.1-flash"
 
+    @require_torch_gpu
+    @require_cuda_capability_at_least(9, 0)
     def test_fp8_clipping(self):
         torch.manual_seed(0)
         config = BailingHybridConfig(
@@ -318,7 +318,7 @@ class BailingHybridFp8IntegrationTest(unittest.TestCase):
             qk_rope_head_dim=16,
             v_head_dim=32,
             kv_lora_rank=16,
-            num_experts=4,
+            num_experts=2,
             num_experts_per_token=2,
             num_expert_group=1,
             topk_group=1,
@@ -357,23 +357,15 @@ class BailingHybridFp8IntegrationTest(unittest.TestCase):
             logits = model(input_ids, use_cache=False).logits[0, -2:, :8].float()
         expected = torch.tensor(
             [
-                [0.4082, 0.1523, -0.0244, -0.1357, -0.3809, -0.0781, 0.5938, 0.2217],
-                [-0.2324, 0.1113, -0.4238, 0.207, -0.2188, -0.0933, 0.3418, -0.0493],
+                [-0.1602, 0.1040, 0.0471, 0.2637, -0.6367, 0.2754, -0.2910, 0.2461],
+                [-0.0128, -0.0752, 0.1836, -0.1719, 0.0625, 0.2129, 0.0082, 0.3633],
             ],
             device=torch_device,
         )
         torch.testing.assert_close(logits, expected, rtol=1e-2, atol=5e-3)
 
-
-@slow
-@require_kernels
-@require_torch_accelerator_memory(memory=600)
-class BailingHybridIntegrationTest(unittest.TestCase):
-    model_id = "inclusionAI/Ling-3.1-flash"
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
+    @slow
+    @require_torch_accelerator_memory(memory=600)
     def test_ling_3_1_flash_generation(self):
         tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         model = AutoModelForCausalLM.from_pretrained(

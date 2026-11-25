@@ -37,7 +37,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
-    no_inherit_decorator,
     torch_int,
 )
 from ...utils.deprecation import deprecate_kwarg
@@ -843,11 +842,9 @@ class Step3p7MLP(DeepseekV4MLP):
         return self.down_proj(gate * up)
 
 
-@no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
     def __init__(self, config, layer_idx):
         super().__init__(config)
-        self.config = config
         self.layer_idx = layer_idx
         self.intermediate_dim = config.moe_intermediate_size
         self.limit = (config.swiglu_limits[layer_idx] if config.swiglu_limits else None) or float("inf")

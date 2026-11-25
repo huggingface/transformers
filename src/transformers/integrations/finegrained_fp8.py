@@ -711,6 +711,8 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
+    """FP8 experts supporting scalar or per-layer clipping limits, before or after activation."""
+
     # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
 
@@ -740,18 +742,14 @@ class FP8Experts(nn.Module):
         self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
-        self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
-        # swiglu_limit is a scalar shared across layers; swiglu_limits is a per-layer list.
-        # Post-activation clipping prefers the list, falling back to the scalar if absent.
-        # Zero/None disables clipping in this path; other gate formulas keep their scalar semantics.
         self.limit_after_act = getattr(config, "limit_after_act", False)
-        self.limit = None
+        limits = getattr(config, "swiglu_limits", None)
+        if limits is not None and layer_idx is None:
+            raise ValueError("Per-layer SwiGLU limits require a layer index.")
+        self.limit = limits[layer_idx] if limits is not None else getattr(config, "swiglu_limit", None)
         if self.limit_after_act:
-            limits = getattr(config, "swiglu_limits", None)
-            if limits is not None and layer_idx is None:
-                raise ValueError("Per-layer SwiGLU limits require a layer index.")
-            self.limit = (limits[layer_idx] if limits is not None else self.swiglu_limit) or float("inf")
+            self.limit = self.limit or float("inf")
         self.gate_softcap = getattr(config, "mlp_gate_softcap", None)
         self.up_softcap = getattr(config, "mlp_up_softcap", None)
 
@@ -808,17 +806,17 @@ class FP8Experts(nn.Module):
             return (gate_factor * torch.sigmoid(gate) * up).to(input_dtype)
         if self.swiglu_alpha is not None:
             # Clamped SwiGLU-OAI gate (same math as the model's non-quantized experts).
-            gate = gate.clamp(max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
             glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
             return (up + 1.0) * glu
         elif self.limit_after_act:
             gate = self.act_fn(gate).clamp(max=self.limit)
             up = up.clamp(min=-self.limit, max=self.limit)
             return gate * up
-        elif self.swiglu_limit is not None:
-            gate = gate.clamp(max=self.swiglu_limit)
-            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        elif self.limit is not None:
+            gate = gate.clamp(max=self.limit)
+            up = up.clamp(min=-self.limit, max=self.limit)
         return self.act_fn(gate) * up
 
     def forward(
