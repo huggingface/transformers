@@ -260,12 +260,16 @@ class PagedAttentionCache:
         self.read_cache_limit = self._infer_read_cache_limit()
         self.max_decode_fast_path_length = self._infer_max_decode_fast_path_length()
         self.use_varlen_block_table = self._infer_use_varlen_block_table()
+        # The most new tokens a request brings to a step: a longer prompt is split over several steps
+        self.max_request_step_tokens = self.max_batch_tokens
         # The new tokens of a step are all written to the pages before attention: a sliding window ring then also holds
-        # a step's worth of tokens, so none of them overwrites a key that an earlier token of the step still attends to
+        # the new tokens of a request, so none of them overwrites a key that an earlier token of the step attends to.
+        # Requests bring at most 1024 tokens to a step, so the ring holds the window plus 1024 tokens
         if self.use_varlen_block_table and SLIDING_ATTENTION in self.cache_allocators:
+            self.max_request_step_tokens = min(self.max_batch_tokens, 1024)
             sliding = self.cache_allocators[SLIDING_ATTENTION]
-            sliding.ring_size = ceil((sliding.sliding_window + self.max_batch_tokens) / sliding.tokens_per_page)
-            sliding.ring_size *= sliding.tokens_per_page
+            ring_tokens = sliding.sliding_window + self.max_request_step_tokens
+            sliding.ring_size = ceil(ring_tokens / sliding.tokens_per_page) * sliding.tokens_per_page
         # FA3 checks the new tokens of a whole step against the width of the block table, so it spans max_batch_tokens
         if self.use_varlen_block_table:
             min_blocks = max(ceil(self.max_batch_tokens / ca.tokens_per_page) for ca in self.cache_allocators.values())

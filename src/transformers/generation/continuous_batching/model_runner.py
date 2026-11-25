@@ -867,7 +867,9 @@ class ModelRunner:
             logger.debug(f"Warming up decode fast path for {num_requests = }.")
         elif use_decode_fast_path:
             # Prefills of num_q_tokens tokens in all through the block table, as few requests as it allows
-            num_requests = ceil(num_q_tokens / self.cache.max_decode_fast_path_length)
+            num_requests = ceil(
+                num_q_tokens / min(self.cache.max_decode_fast_path_length, self.cache.max_request_step_tokens)
+            )
             num_q_tokens = num_q_tokens // num_requests
             status = RequestStatus.PREFILLING
             logger.debug(f"Warming up varlen block table path for {num_requests = }, {num_q_tokens = }.")

@@ -302,8 +302,9 @@ class Scheduler(ABC):
             # gap2-mtp prototype: a decoding request that carries a draft takes its two tokens together or waits
             if state.status == RequestStatus.DECODING and len(request_tokens) > token_budget:
                 continue
-            # Account for token budget
-            request_len = min(len(request_tokens), token_budget)
+            # Account for token budget, and for the most tokens a request brings to a step
+            request_token_budget = min(token_budget, self.cache.max_request_step_tokens)
+            request_len = min(len(request_tokens), request_token_budget)
 
             # This block checks cache budget: decode batches have infinite budget, but varlen batches don't, because KV
             # cache is read through a fixed-sized index tensor. We keep track of the current budget in case the batch
@@ -330,7 +331,7 @@ class Scheduler(ABC):
 
             # If this point is reached, it means we can safely schedule the request
             was_prefilling = state.status != RequestStatus.DECODING  # scheduling may switch it to DECODING
-            self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
+            self._schedule_request(state, request_tokens, request_token_budget, request_ids_to_remove_from_waiting)
             request_len = len(state.tokens_to_process)  # it may change after scheduling
 
             # The block table path is only used if every request of the batch fits in it
