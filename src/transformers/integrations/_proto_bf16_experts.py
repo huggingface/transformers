@@ -156,7 +156,9 @@ def proto_decode_experts(hidden_states, top_k_index, top_k_weights, gate_up, dow
 
 
 def proto_decode_experts_forward(self, hidden_states, top_k_index, top_k_weights):
-    """`experts_implementation="proto_decode"`: the fused path for decode-sized batches, `grouped_mm` above."""
+    """`experts_implementation="proto_decode"`: the fused path for decode-sized batches, `grouped_mm` above. Under
+    expert parallelism, the routes to other ranks' experts (local id `num_experts`) are skipped by the routing and the
+    top-k sum."""
     from .moe import _default_apply_gate, grouped_mm_experts_forward
 
     usable = (
@@ -166,7 +168,6 @@ def proto_decode_experts_forward(self, hidden_states, top_k_index, top_k_weights
         and not self.has_post_expert_norm
         and not self.has_bias
         and not self.is_transposed
-        and not self._is_expert_parallel
         and hidden_states.dtype in (torch.bfloat16, torch.float16)
         and self.gate_up_proj.dtype == hidden_states.dtype
     )
