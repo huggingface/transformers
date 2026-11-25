@@ -481,4 +481,4 @@ class NanbeigeForCausalLM(NanbeigePreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["NanbeigeForCausalLM", "NanbeigeModel", "NanbeigePreTrainedModel"]
+__all__ = ["NanbeigePreTrainedModel", "NanbeigeModel", "NanbeigeForCausalLM"]

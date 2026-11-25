@@ -276,9 +276,4 @@ class NanbeigeForCausalLM(LlamaForCausalLM):
         )
 
 
-__all__ = [
-    "NanbeigeConfig",
-    "NanbeigeForCausalLM",
-    "NanbeigeModel",
-    "NanbeigePreTrainedModel",
-]
+__all__ = ["NanbeigeConfig", "NanbeigePreTrainedModel", "NanbeigeModel", "NanbeigeForCausalLM"]
