@@ -17,9 +17,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
+from typing import Any
+
 import numpy as np
 
-from ...processing_utils import MultiModalData, ProcessorMixin
+from ...processing_utils import _UNMARKED, MultiModalData, ProcessorMixin
 from ...utils import auto_docstring, logging
 
 
@@ -163,6 +166,70 @@ class Lfm3VlProcessor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+
+    def get_text_with_replacements(
+        self,
+        text: list[str],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
+    ) -> tuple[list[str], list[dict[str, Any]]]:
+        """
+        Same as [`~ProcessorMixin.get_text_with_replacements`], except that the chat template's full video wrapper
+        (`<|vision_start|><|video_pad|><|vision_end|>`) is matched and replaced as one unit.
+
+        `replace_video_token` already wraps every frame in its own `<|vision_start|>...<|vision_end|>` pair, so
+        replacing only `<|video_pad|>` would leave an extra outer vision wrapper around all frames. A bare
+        `<|video_pad|>` (e.g. a prompt written without the chat template) is still replaced as is.
+        """
+        if not self.all_special_multimodal_tokens:
+            return text, []
+
+        token_groups = []
+        if len(images_replacements) > 0:
+            token_groups.append(f"(?P<image>{_UNMARKED}{re.escape(self.image_token)})")
+        if len(videos_replacements) > 0:
+            video_wrapper = re.escape(self.vision_start_token + self.video_token + self.vision_end_token)
+            token_groups.append(f"(?P<video>{_UNMARKED}(?:{video_wrapper}|{re.escape(self.video_token)}))")
+        if len(audio_replacements) > 0 and (audio_token := getattr(self, "audio_token", None)) is not None:
+            token_groups.append(f"(?P<audio>{_UNMARKED}{re.escape(audio_token)})")
+
+        regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
+        replacements_iters = {
+            "image": iter(images_replacements),
+            "video": iter(videos_replacements),
+            "audio": iter(audio_replacements),
+        }
+        batch_replacement_offsets = []
+        for batch_idx in range(len(text)):
+            last = 0
+            offset = 0
+            replacement_offsets = []
+            expanded_sample = []
+            for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
+                start, end = m.span()
+                expanded_sample.append(text[batch_idx][last:start])
+                start_with_offset = start + offset
+
+                mm_type = m.lastgroup
+                replacement_text = next(replacements_iters[mm_type])
+                replacement_offsets.append(
+                    {
+                        "type": mm_type,
+                        "span": (start, end),
+                        "new_span": (start_with_offset, start_with_offset + len(replacement_text)),
+                        "text": m.group(),
+                        "replacement": replacement_text,
+                    }
+                )
+                expanded_sample.append(replacement_text)
+                offset += len(replacement_text) - (end - start)
+                last = end
+
+            expanded_sample.append(text[batch_idx][last:])
+            text[batch_idx] = "".join(expanded_sample)
+            batch_replacement_offsets.append(replacement_offsets)
+        return text, batch_replacement_offsets
 
     def _calculate_timestamps(self, indices: list[int] | np.ndarray, video_fps: float, merge_size: int = 2):
         if not isinstance(indices, list):

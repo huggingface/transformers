@@ -694,6 +694,9 @@ class VideoLlama3Processor(Qwen3VLProcessor):
     def _calculate_timestamps(self):
         raise AttributeError("VideoLlama doesn't need this method")
 
+    def get_text_with_replacements(self):
+        raise AttributeError("VideoLlama has no per-frame vision wrappers, so it uses the default replacement")
+
 
 class VideoLlama3ImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     r"""

@@ -67,6 +67,27 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "return_metadata=False"):
             processor(text=text, videos=[video], do_sample_frames=False, return_metadata=False)
 
+    def test_video_chat_template_wrapper_is_replaced(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/51132: the chat template's
+        # `<|vision_start|><|video_pad|><|vision_end|>` must be replaced as a whole, so the expanded video
+        # has exactly one vision start/end pair per frame and no extra outer pair
+        processor = self.get_processor()
+        messages = [{"role": "user", "content": [{"type": "video"}, {"type": "text", "text": "Describe this video."}]}]
+        prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
+        self.assertIn(processor.vision_start_token + processor.video_token + processor.vision_end_token, prompt)
+
+        inputs = processor(
+            text=prompt, videos=[self.prepare_videos_inputs()], do_sample_frames=False, return_tensors="pt"
+        )
+        num_frames = inputs["video_grid_thw"][0][0].item()
+        input_ids = inputs["input_ids"][0].tolist()
+        self.assertEqual(input_ids.count(processor.vision_start_token_id), num_frames)
+        self.assertEqual(input_ids.count(processor.vision_end_token_id), num_frames)
+
+        # The first frame's timestamp directly follows the user turn, not an outer `<|vision_start|>`
+        decoded = processor.decode(input_ids)
+        self.assertRegex(decoded, r"^<\|im_start\|>user\n<\d+\.\d seconds><\|vision_start\|>")
+
     def test_model_input_names(self):
         processor = self.get_processor()
 
