@@ -339,7 +339,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         return candidate_ids, candidate_logits
 
     @property
-    def number_of_drafting_tokens(self):
+    def num_drafting_tokens(self):
         return self.num_assistant_tokens
 
 
@@ -1158,7 +1158,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         return candidate_input_ids, None
 
     @property
-    def number_of_drafting_tokens(self):
+    def num_drafting_tokens(self):
         return self.num_output_tokens
 
 
@@ -1367,7 +1367,7 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
         return candidate_ids, candidate_logits
 
     @property
-    def number_of_drafting_tokens(self):
+    def num_drafting_tokens(self):
         return self.num_assistant_tokens
 
 
@@ -1404,7 +1404,7 @@ class MTPCandidateGenerator(CandidateGenerator):
 
         # Create the mtp cache and allow it to keep its past before we crop it
         self.mtp_cache = MtpCache(config=main_model.config.get_mtp_config())
-        self.mtp_cache.activate_past_recording(recurrent_states_to_keep=self.number_of_drafting_tokens)
+        self.mtp_cache.activate_past_recording(recurrent_states_to_keep=self.num_drafting_tokens)
 
         # Save those to know how to decode mtp tokens
         self.do_sample = generation_config.do_sample
@@ -1503,7 +1503,7 @@ class MTPCandidateGenerator(CandidateGenerator):
         return candidate_ids, candidate_logits
 
     @property
-    def number_of_drafting_tokens(self):
+    def num_drafting_tokens(self):
         return self.num_mtp_layers
 
 
@@ -1557,7 +1557,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         # Prepare a cache for the assistant, and activate the past recording
         self.cache = DFlashCache(config=self.assistant_model.config)
-        self.cache.activate_past_recording(recurrent_states_to_keep=self.number_of_drafting_tokens)
+        self.cache.activate_past_recording(recurrent_states_to_keep=self.num_drafting_tokens)
 
         # Save those to allow logits manipulations
         self.do_sample = generation_config.do_sample
@@ -1693,7 +1693,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         return candidate_ids, candidate_logits
 
     @property
-    def number_of_drafting_tokens(self):
+    def num_drafting_tokens(self):
         return self.block_size
 
 

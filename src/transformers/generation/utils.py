@@ -3998,7 +3998,7 @@ class GenerationMixin(ContinuousMixin):
         )
 
         # Make sure we can record past on the cache
-        cache.activate_past_recording(recurrent_states_to_keep=candidate_generator.number_of_drafting_tokens)
+        cache.activate_past_recording(recurrent_states_to_keep=candidate_generator.num_drafting_tokens)
 
         # init values
         do_sample = generation_config.do_sample
