@@ -32,13 +32,9 @@ class MiniCPMV4_5Processor(ProcessorMixin):
         video_processor=None,
         tokenizer=None,
         chat_template=None,
-        image_token: str = "<unk>",
-        video_token: str = "<|video_pad|>",
-        image_start_token: str = "<image>",
-        image_end_token: str = "</image>",
-        slice_start_token: str = "<slice>",
-        slice_end_token: str = "</slice>",
-        num_image_tokens: int = 64,
+        image_token="<unk>",
+        video_token="<|video_pad|>",
+        num_image_tokens=64,
         **kwargs,
     ):
         r"""
@@ -46,27 +42,19 @@ class MiniCPMV4_5Processor(ProcessorMixin):
             Marks an image in the text, and is repeated `num_image_tokens` times per image slice.
         video_token (`str`, *optional*, defaults to `"<|video_pad|>"`):
             Marks a video in the text, and is repeated `num_image_tokens` times per slice of each group of frames.
-        image_start_token (`str`, *optional*, defaults to `"<image>"`):
-            Opens the image tokens of the overview image.
-        image_end_token (`str`, *optional*, defaults to `"</image>"`):
-            Closes the image tokens of the overview image.
-        slice_start_token (`str`, *optional*, defaults to `"<slice>"`):
-            Opens the image tokens of one slice.
-        slice_end_token (`str`, *optional*, defaults to `"</slice>"`):
-            Closes the image tokens of one slice.
         num_image_tokens (`int`, *optional*, defaults to 64):
             Number of image tokens per slice (the resampler's number of latents).
         """
-        self.image_token = image_token
-        self.video_token = video_token
-        self.image_start_token = image_start_token
-        self.image_end_token = image_end_token
-        self.slice_start_token = slice_start_token
-        self.slice_end_token = slice_end_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_start_token = getattr(tokenizer, "image_start_token", "<image>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "</image>")
+        self.slice_start_token = getattr(tokenizer, "slice_start_token", "<slice>")
+        self.slice_end_token = getattr(tokenizer, "slice_end_token", "</slice>")
         self.num_image_tokens = num_image_tokens
-        super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
+        super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         # Overview image, then each slice in its own <slice>...</slice>, one line per row of slices

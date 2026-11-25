@@ -302,13 +302,9 @@ class MiniCPMV4_5Processor(MiniCPMV2_6Processor):
         video_processor=None,
         tokenizer=None,
         chat_template=None,
-        image_token: str = "<unk>",
-        video_token: str = "<|video_pad|>",
-        image_start_token: str = "<image>",
-        image_end_token: str = "</image>",
-        slice_start_token: str = "<slice>",
-        slice_end_token: str = "</slice>",
-        num_image_tokens: int = 64,
+        image_token="<unk>",
+        video_token="<|video_pad|>",
+        num_image_tokens=64,
         **kwargs,
     ):
         r"""
@@ -316,29 +312,21 @@ class MiniCPMV4_5Processor(MiniCPMV2_6Processor):
             Marks an image in the text, and is repeated `num_image_tokens` times per image slice.
         video_token (`str`, *optional*, defaults to `"<|video_pad|>"`):
             Marks a video in the text, and is repeated `num_image_tokens` times per slice of each group of frames.
-        image_start_token (`str`, *optional*, defaults to `"<image>"`):
-            Opens the image tokens of the overview image.
-        image_end_token (`str`, *optional*, defaults to `"</image>"`):
-            Closes the image tokens of the overview image.
-        slice_start_token (`str`, *optional*, defaults to `"<slice>"`):
-            Opens the image tokens of one slice.
-        slice_end_token (`str`, *optional*, defaults to `"</slice>"`):
-            Closes the image tokens of one slice.
         num_image_tokens (`int`, *optional*, defaults to 64):
             Number of image tokens per slice (the resampler's number of latents).
         """
-        self.image_token = image_token
-        self.video_token = video_token
-        self.image_start_token = image_start_token
-        self.image_end_token = image_end_token
-        self.slice_start_token = slice_start_token
-        self.slice_end_token = slice_end_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
+        self.image_start_token = getattr(tokenizer, "image_start_token", "<image>")
+        self.image_end_token = getattr(tokenizer, "image_end_token", "</image>")
+        self.slice_start_token = getattr(tokenizer, "slice_start_token", "<slice>")
+        self.slice_end_token = getattr(tokenizer, "slice_end_token", "</slice>")
         self.num_image_tokens = num_image_tokens
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
         ProcessorMixin.__init__(
             self, image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs
         )
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         # One placeholder per group of frames, laid out like an image, one line per group
@@ -432,23 +420,28 @@ class MiniCPMV4_5Resampler(MiniCPMV2_6Resampler):
         temporal_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        kv = self.ln_kv(self.kv_proj(vision_features))
-        pos_embed = self.get_2d_pos_embed(patch_position_ids)
+        key_value_states = self.ln_kv(self.kv_proj(vision_features))
+        position_embeddings = self.position_embedding(patch_position_ids)
         if temporal_ids is not None:
             temporal = self.get_temporal_pos_embed(temporal_ids)
-            pos_embed = (pos_embed.unflatten(1, (temporal_ids.shape[1], -1)) + temporal[:, :, None]).flatten(1, 2)
-        pos_embed = (pos_embed * pixel_attention_mask[..., None]).to(kv.dtype)
-        queries = self.ln_q(self.query).unsqueeze(0).expand(kv.shape[0], -1, -1)
+            position_embeddings = position_embeddings.unflatten(1, (temporal_ids.shape[1], -1)) + temporal[:, :, None]
+            position_embeddings = position_embeddings.flatten(1, 2)
+        position_embeddings = position_embeddings * pixel_attention_mask[..., None]
+        query_states = self.ln_q(self.query).unsqueeze(0).expand(key_value_states.shape[0], -1, -1)
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            inputs_embeds=queries,
+            inputs_embeds=query_states,
             attention_mask=pixel_attention_mask,
-            encoder_hidden_states=kv,
+            encoder_hidden_states=key_value_states,
         )
-        attn_output, _ = self.attn(
-            queries, kv, attention_mask=attention_mask, encoder_position_embeddings=pos_embed, **kwargs
+        attention_output, _ = self.attn(
+            query_states,
+            key_value_states,
+            attention_mask=attention_mask,
+            encoder_position_embeddings=position_embeddings.to(key_value_states.dtype),
+            **kwargs,
         )
-        return self.ln_post(attn_output) @ self.proj
+        return self.ln_post(attention_output) @ self.proj
 
 
 class MiniCPMV4_5Model(MiniCPMV2_6Model):
