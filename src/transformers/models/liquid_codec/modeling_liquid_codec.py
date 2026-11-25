@@ -331,21 +331,14 @@ class LiquidCodecQuantizer(nn.Module):
         self.project_in = nn.Linear(config.quantization_dim, self.num_codebooks * self.codebook_dim)
         self.project_out = nn.Linear(self.num_codebooks * self.codebook_dim, config.quantization_dim)
 
-    def _to_weight_device(self, tensor: torch.Tensor) -> torch.Tensor:
-        # not `forward`: no `device_map` hook moves the inputs; an offloaded weight is on `meta` until its hook runs
-        weight = self.project_in.weight
-        device = weight.device if weight.device.type != "meta" else tensor.device
-        return tensor.to(device, weight.dtype) if tensor.is_floating_point() else tensor.to(device)
-
     def encode(self, latents: torch.Tensor) -> torch.Tensor:
-        latents = self.project_in(self._to_weight_device(latents.movedim(1, -1)).contiguous())
+        latents = self.project_in(latents.movedim(1, -1))
 
         _, indices = self.quantizer(latents.reshape(*latents.shape[:-1], self.num_codebooks, self.codebook_dim))
         return indices.long().transpose(1, 2)
 
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         # from integer levels: half precision rounds the `codebook` buffer
-        codes = self._to_weight_device(codes)
         latents = self.quantizer._indices_to_codes(codes.transpose(1, 2)).to(self.project_out.weight.dtype)
         latents = latents.reshape(*latents.shape[:-2], self.num_codebooks * self.codebook_dim)
 
@@ -898,7 +891,8 @@ class LiquidCodecPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Liquid Codec encoder.
+    The encoder half of Liquid Codec: embedder, LFM3 layers and output projection, from spectrogram to continuous
+    latents.
     """
 )
 class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
@@ -983,7 +977,7 @@ class LiquidCodecEncoderModel(LiquidCodecPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The Liquid Codec decoder.
+    The decoder half of Liquid Codec: upsampler, LFM3 layers and ISTFT head, from continuous latents to audio.
     """
 )
 class LiquidCodecDecoderModel(LiquidCodecPreTrainedModel):
@@ -1110,9 +1104,14 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
             Spectrogram from [`LiquidCodecFeatureExtractor`].
         input_features_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Valid spectrogram frames of each clip (right-padded); returns `audio_codes_mask`.
+
+        Encodes the spectrogram into discrete codes of shape `(batch_size, num_codebooks, num_frames)`: the latents of
+        [`LiquidCodecEncoderModel.forward`], quantized.
         """
         if self.encoder is None:
-            raise ValueError("Audio encoding was requested, but the codec was loaded without its encoder.")
+            raise ValueError(
+                "Audio encoding was requested, but the model was initialized without an encoder (`encoder_config=None`)."
+            )
 
         encoder_outputs = self.encoder(
             input_features, input_features_mask=input_features_mask, return_dict=True, **kwargs
@@ -1154,9 +1153,13 @@ class LiquidCodecModel(LiquidCodecPreTrainedModel, PreTrainedAudioTokenizerBase)
         use_streaming (`bool`, *optional*, defaults to `False`):
             Decode chunk by chunk: caches created on the first chunk, returned with each. Trailing samples stay
             in `overlap_add_cache` until `overlap_add_cache.flush()`.
+
+        Decodes the codes into audio: the codes are dequantized into the latents of [`LiquidCodecDecoderModel.forward`].
         """
         if self.decoder is None:
-            raise ValueError("Audio decoding was requested, but the codec was loaded without its decoder.")
+            raise ValueError(
+                "Audio decoding was requested, but the model was initialized without a decoder (`decoder_config=None`)."
+            )
 
         if use_streaming and decoder_cache is None:
             decoder_cache = DynamicCache(config=self.config.decoder_config)
