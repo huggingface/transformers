@@ -689,12 +689,14 @@ class FP8GroupedLinear(FP8Linear):
 # [gap prototype] HF_FP8_FUSED_EXPERTS=1: at inference, `grouped_mm` and `batched_mm` call the hub kernel's fused MoE
 # entry points (routing, gate_up + SiLU + requant, down + weighting, top-k sum in 8 and 3 kernels) instead of doing
 # the routing and the combine in torch around two matmul kernels.
-_FP8_FUSED_EXPERTS = os.environ.get("HF_FP8_FUSED_EXPERTS", "0") == "1"
+# [scratch] on by default above 16 rows per expert: Qwen3-30B-A3B-FP8 H100 long prompts 538 -> 763 tok/s (an 8,192-token
+# step's experts 5.7 -> 1.7 ms per layer: the decode kernels re-read every weight tile once per 16 or 64 routed rows)
+_FP8_FUSED_EXPERTS = os.environ.get("HF_FP8_FUSED_EXPERTS", "1") == "1"
 # WP prefill (bench only): fused entry points only above this many routed rows per expert on average
 # (tokens * top_k > rows * num_experts, the criterion of WP experts' decode schedule, so the two cannot overlap). The
 # fused grouped kernel (one persistent program per SM) is 2.3x today's path at ~150 rows per expert (prefill) and no
 # better at 2 rows per expert (decode)
-_FP8_FUSED_EXPERTS_MIN_ROWS = int(os.environ.get("HF_FP8_FUSED_EXPERTS_MIN_ROWS", "0"))
+_FP8_FUSED_EXPERTS_MIN_ROWS = int(os.environ.get("HF_FP8_FUSED_EXPERTS_MIN_ROWS", "16"))
 
 
 def _fp8_fused_experts_forward(self, hidden_states, top_k_index, top_k_weights, grouped: bool):
