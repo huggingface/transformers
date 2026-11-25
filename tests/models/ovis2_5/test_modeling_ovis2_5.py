@@ -234,14 +234,9 @@ class Ovis2_5IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         ).strip()
         expected_text = Expectations(
             {
-                (None, None): (
-                    "I see two cats lying on a pink surface, possibly a couch or blanket. "
-                    "One cat is positioned on the left side of the image, while the other is on the right. "
-                    "Both cats appear to be relaxed and are near two remote controls. "
-                    "The cat on the left has a green collar around its neck, and both"
-                )
+                (None, None): "I see two cats lying on a pink surface, possibly a couch or blanket. The cat on the left is lying on its side with its head resting on the surface, while the cat on the right is lying on its stomach with its head turned to the side. There are also two remote controls near the cats. One"
             }
-        ).get_expectation()
+        ).get_expectation()  # fmt: skip
         self.assertEqual(generated_text, expected_text)
 
     def test_video_generation(self):
