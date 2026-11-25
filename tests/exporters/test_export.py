@@ -506,6 +506,10 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "HieraForImageClassification": "Same OpenVINO all-dynamic-axes Hiera-backbone guard as `HieraModel`.",
         "HieraForPreTraining": "Same OpenVINO all-dynamic-axes Hiera-backbone guard as `HieraModel`.",
     },
+    # Every backend, static-cache generate variants only (a `generation_config` requesting a static cache).
+    "static-cache": {
+        "NanbeigeForCausalLM": "Copying the cache layers for additional decoder passes fails on fake tensors.",
+    },
     # OpenVINO, static-cache generate variants only (a `generation_config` requesting a static cache).
     "openvino.static-cache": {
         "MiniMaxM3SparseForConditionalGeneration": (

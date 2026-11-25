@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Nanbeige model."""
 
+import copy
 import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
@@ -32,8 +33,11 @@ class NanbeigeModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = NanbeigeModel
 
-    # Shared tests expect one cache slot per layer; multiple loops are tested below.
-    small_config_overrides = {"num_loops": 1}
+    small_config_overrides = {
+        "num_loops": 2,
+        # Two layers run twice, and the recorder includes the input embeddings.
+        "expected_num_hidden_layers": 2 * 2 + 1,
+    }
 
 
 @require_torch
@@ -43,6 +47,18 @@ class NanbeigeModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("New model: `cache` only, no `past_key_values` BC")
     def test_bc_cache_name_forward(self):
         pass
+
+    @unittest.skip("The shared test expects one attention map per layer, and Nanbeige records every layer call")
+    def test_attention_outputs(self):
+        pass
+
+    def _check_cache_for_generate(self, batch_size, cache, seq_length, config):
+        self.assertEqual(len(cache), config.total_num_hidden_layers)
+        num_layers = config.num_hidden_layers
+        for start in range(0, len(cache), num_layers):
+            loop_cache = copy.copy(cache)
+            loop_cache.layers = cache.layers[start : start + num_layers]
+            super()._check_cache_for_generate(batch_size, loop_cache, seq_length, config)
 
     def test_two_loop_chunked_prefill_and_decode_match_full_forward(self):
         tester = self.model_tester_class(self, batch_size=2, num_loops=2)
@@ -54,8 +70,9 @@ class NanbeigeModelTest(CausalLMModelTest, unittest.TestCase):
 
         with torch.no_grad():
             expected_logits = model(input_ids, use_cache=False).logits
-            outputs = model(input_ids[:, :2], use_cache=True)
+            outputs = model(input_ids[:, :2], use_cache=True, output_attentions=True)
             logits = [outputs.logits]
+            self.assertEqual(len(outputs.attentions), num_cache_layers)
             self.assertEqual(len(outputs.cache.layers), num_cache_layers)
             for layer_idx in range(num_cache_layers):
                 self.assertEqual(outputs.cache.get_seq_length(layer_idx), 2)
