@@ -58,6 +58,7 @@ print(processor.post_process_image_text_to_text(generated[:, inputs["input_ids"]
 - Images are marked with `<unk>` and expanded as in [MiniCPM-V 2.6](minicpmv2_6); the chat template adds `<image_id>N</image_id>` before each image.
 - When the conversation contains audio, the chat template drops the default system prompt and opens the assistant turn with `<|spk_bos|><|spk|><|spk_eos|><|tts_bos|>`, as the original `chat()` does. The model then ends its answer with `<|tts_eos|>`, a special token.
 - Every audio is encoded on its own. When one message holds several audios (in omni mode, one 1 s clip per video frame), the original code concatenates them before encoding, so later clips see the earlier ones; here they don't.
+- `generate()` is greedy by default. The original `chat()` samples with `top_p=0.8`, `top_k=100`, `temperature=0.7` and `repetition_penalty=1.05`.
 
 ## MiniCPMO2_6Config
 
