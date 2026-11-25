@@ -111,5 +111,15 @@ class NanbeigeConfig(PreTrainedConfig):
                 f"heads ({self.num_attention_heads})."
             )
 
+    @property
+    def _effective_num_loops(self) -> int:
+        loop_loss_weights = self.loop_loss_weights
+        return len(loop_loss_weights) + 1 if loop_loss_weights else self.num_loops
+
+    @property
+    def total_num_hidden_layers(self) -> int:
+        """Number of decoder layer calls per forward pass."""
+        return self._effective_num_loops * self.num_hidden_layers
+
 
 __all__ = ["NanbeigeConfig"]

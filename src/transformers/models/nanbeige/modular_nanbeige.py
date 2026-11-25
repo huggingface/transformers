@@ -83,6 +83,16 @@ class NanbeigeConfig(LlamaConfig):
     loop_loss_weights: list[float] | None = None
     skip_loop_final_norm: bool = False
 
+    @property
+    def _effective_num_loops(self) -> int:
+        loop_loss_weights = self.loop_loss_weights
+        return len(loop_loss_weights) + 1 if loop_loss_weights else self.num_loops
+
+    @property
+    def total_num_hidden_layers(self) -> int:
+        """Number of decoder layer calls per forward pass."""
+        return self._effective_num_loops * self.num_hidden_layers
+
 
 class NanbeigeAttention(LlamaAttention):
     @no_inherit_decorator
@@ -158,8 +168,7 @@ class NanbeigeModel(LlamaModel):
             cache = DynamicCache(config=self.config)
 
         num_layers = len(self.layers)
-        loop_loss_weights = self.config.loop_loss_weights
-        num_loops = len(loop_loss_weights) + 1 if loop_loss_weights else self.config.num_loops
+        num_loops = self.config._effective_num_loops
         if cache is not None and num_loops > 1 and len(cache.layers) == num_layers:
             # Each pass reuses the decoder weights and writes to its own cache slots.
             cache.layers += [deepcopy(layer) for layer in cache.layers * (num_loops - 1)]
