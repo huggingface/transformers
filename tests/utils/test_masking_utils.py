@@ -588,6 +588,37 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         # `None` (no padding) is deferred too.
         self.assertIsNone(create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, cache=None))
 
+    def test_create_masks_for_generate_hybrid_sliding(self):
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            hidden_size=32,
+            sliding_window=4,
+            attn_implementation="eager",
+            layer_types=["hybrid_sliding", "hybrid"],
+        )
+        cache = StaticCache(config=config, max_cache_len=10)
+        inputs_embeds = torch.zeros(1, 6, config.hidden_size, device=torch_device)
+        attention_mask = torch.ones(1, 6, dtype=torch.long, device=torch_device)
+        position_ids = torch.arange(6, device=torch_device)[None, :]
+
+        masks = create_masks_for_generate(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache=cache,
+            position_ids=position_ids,
+        )
+        expected_sliding = create_sliding_window_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache=cache,
+            position_ids=position_ids,
+        )
+        self.assertEqual(masks["sliding_attention"].shape, (1, 1, 6, 6))
+        self.assertEqual(masks["full_attention"].shape, (1, 1, 6, 10))
+        torch.testing.assert_close(masks["sliding_attention"], expected_sliding)
+
     def test_causal_mask_default_layer_skips_linear_layers(self):
         """A linear layer is not sliding either, so the default must not pick it over the full-attention layer."""
         config = LlamaConfig(

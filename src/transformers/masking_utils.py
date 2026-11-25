@@ -1536,7 +1536,10 @@ LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
     "linear_attention": create_recurrent_attention_mask,
     "conv": create_recurrent_attention_mask,
     "hybrid": {"full_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
-    "hybrid_sliding": {"sliding_attention": create_causal_mask, "linear_attention": create_recurrent_attention_mask},
+    "hybrid_sliding": {
+        "sliding_attention": create_sliding_window_causal_mask,
+        "linear_attention": create_recurrent_attention_mask,
+    },
 }
 
 
