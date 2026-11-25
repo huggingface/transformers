@@ -186,12 +186,6 @@ class FalconH1Mixer(BambaMixer):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
-        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
-        if cache is not None:
-            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
-        else:
-            recurrent_state = None
-
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         # Key difference 1: Additional Multipliers
@@ -249,14 +243,14 @@ class FalconH1Mixer(BambaMixer):
             dim=-1,
         )
 
-        scan_output = mamba2_scan_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
+        scan_output = mamba2_scan_forward(self, hidden_states, B, C, dt, cache, **kwargs)
+
+        # 4. Gated norm and final linear projection
         # Key difference 3: Norm based handling as optional between z and norm
         if self.mamba_rms_norm:
             scan_output = self.norm(scan_output, gate)
         else:
             scan_output = scan_output * torch.nn.functional.silu(gate)
-
-        # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
 

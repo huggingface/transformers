@@ -257,7 +257,7 @@ def causal_conv1d_forward(
         state_idx (`int`, *optional*, defaults to 0):
             Which of the layer's conv states to use.
         kwargs:
-            Passed to the convolution kernel, e.g. `seq_idx` for packed sequences.
+            Passed to the convolution kernel.
 
     Returns:
         `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.

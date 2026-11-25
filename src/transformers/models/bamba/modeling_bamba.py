@@ -340,7 +340,7 @@ def causal_conv1d_forward(
         state_idx (`int`, *optional*, defaults to 0):
             Which of the layer's conv states to use.
         kwargs:
-            Passed to the convolution kernel, e.g. `seq_idx` for packed sequences.
+            Passed to the convolution kernel.
 
     Returns:
         `torch.Tensor` of shape `(batch_size, channels, seq_len)`: The output of the convolution.
@@ -604,7 +604,6 @@ def mamba2_scan_forward(
     B: torch.Tensor,
     C: torch.Tensor,
     dt: torch.Tensor,
-    recurrent_state: torch.Tensor | None,
     cache: Cache | None,
     **kwargs,
 ) -> torch.Tensor:
@@ -615,8 +614,8 @@ def mamba2_scan_forward(
 
     Args:
         module (`nn.Module`):
-            The Bamba mixer, from which `A_log`, `D`, `dt_bias`, `time_step_limit`, `chunk_size`, `layer_idx` and the
-            layer geometry are read.
+            The mixer, from which `A_log`, `D`, `dt_bias`, `time_step_limit`, `chunk_size`, `layer_idx` and the layer
+            geometry are read.
         hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, num_heads * head_dim)`):
             The input to the scan.
         B (`torch.Tensor` of shape `(batch_size, seq_len, n_groups * ssm_state_size)`):
@@ -625,18 +624,17 @@ def mamba2_scan_forward(
             The output projection of the state space model.
         dt (`torch.Tensor` of shape `(batch_size, seq_len, num_heads)`):
             The time step, before `dt_bias` and softplus.
-        recurrent_state (`torch.Tensor`, *optional*):
-            The layer's recurrent state in `cache` from before this forward pass, or `None` if it has none.
         cache (`Cache`, *optional*):
             The cache holding the recurrent state, updated in place.
         kwargs:
-            Passed to the scan kernels, e.g. `seq_idx` for packed sequences.
+            Passed to the scan kernels.
 
     Returns:
         `torch.Tensor` of shape `(batch_size, seq_len, num_heads * head_dim)`: The output of the scan, including the
         `D` skip connection.
     """
     batch_size, seq_len, _ = hidden_states.shape
+    recurrent_state = cache.get_recurrent_state(module.layer_idx, state_idx=0) if cache is not None else None
     A = -torch.exp(module.A_log.float())
 
     if recurrent_state is not None and seq_len == 1:
@@ -795,12 +793,6 @@ class BambaMixer(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
-        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
-        if cache is not None:
-            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
-        else:
-            recurrent_state = None
-
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states)
@@ -855,11 +847,10 @@ class BambaMixer(nn.Module):
             dim=-1,
         )
 
-        scan_output = mamba2_scan_forward(self, hidden_states, B, C, dt, recurrent_state, cache, **kwargs)
+        scan_output = mamba2_scan_forward(self, hidden_states, B, C, dt, cache, **kwargs)
 
+        # 4. Gated norm and final linear projection
         scan_output = self.norm(scan_output, gate)
-
-        # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))
         return contextualized_states
 

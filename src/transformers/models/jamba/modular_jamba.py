@@ -171,12 +171,6 @@ class JambaMambaMixer(FalconMambaMixer):
         **kwargs,
     ):
         dtype = hidden_states.dtype
-        # Retrieve the recurrent state if there is a cache. It may be None if the layer is not initialized.
-        if cache is not None:
-            recurrent_state = cache.get_recurrent_state(self.layer_idx, state_idx=0)
-        else:
-            recurrent_state = None
-
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
@@ -215,7 +209,7 @@ class JambaMambaMixer(FalconMambaMixer):
         else:
             time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
         scan_output = mamba_scan_forward(
-            self, hidden_states_B_C.transpose(1, 2), time_step, B, C, gate, recurrent_state, cache, **kwargs
+            self, hidden_states_B_C.transpose(1, 2), time_step, B, C, gate, cache, **kwargs
         )
 
         # 4. Final linear projection
