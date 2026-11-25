@@ -15,7 +15,7 @@
 
 import re
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -109,23 +109,34 @@ class T5Tokenizer(TokenizersBackend):
             for i in range(extra_ids - 1, -1, -1):
                 self._vocab_scores.append((f"<extra_id_{i}>", 0.0))
 
+        unk_id = kwargs.pop("unk_id", None)
+        if unk_id is None:
+            unk_str = str(unk_token)
+            unk_id = next(
+                (i for i, (token, _) in enumerate(self._vocab_scores) if token == unk_str),
+                2,
+            )
+
         self._tokenizer = Tokenizer(
             Unigram(
                 self._vocab_scores,
-                unk_id=2,
+                unk_id=unk_id,
                 byte_fallback=False,
             )
         )
 
-        if _spm_precompiled_charsmap is not None:
-            self._tokenizer.normalizer = normalizers.Precompiled(_spm_precompiled_charsmap)
+        if _spm_precompiled_charsmap:
+            # Collapse only spaces like SentencePiece's remove_extra_whitespaces while
+            # letting Metaspace preserve non-space whitespace (e.g. \n) for models without charsmaps.
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [
+                    normalizers.Precompiled(_spm_precompiled_charsmap),
+                    normalizers.Replace(Regex(r"\A +| +\z"), ""),
+                    normalizers.Replace(Regex(" {2,}"), " "),
+                ]
+            )
 
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True),
-            ]
-        )
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always", split=True)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always", split=True)
 
         super().__init__(
