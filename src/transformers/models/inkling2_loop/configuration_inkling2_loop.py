@@ -167,8 +167,14 @@ class Inkling2LoopTextConfig(PreTrainedConfig):
     @property
     def total_num_hidden_layers(self) -> int:
         """Total number of decoder layers visited in each forward pass. This takes looped layers into account."""
-        num_loop_layers = self.loop_layer_index_end - self.loop_layer_index_start
-        return self.num_hidden_layers + (self.loop_num_passes - 1) * num_loop_layers
+        return len(self.cache_layer_map)
+
+    @property
+    def cache_layer_map(self) -> list[int]:
+        """The `layer_idx` of the layer that owns each cache layer. Passes after the first add one set of cache layers
+        for the loop layers after the model's own."""
+        loop_layers = list(range(self.loop_layer_index_start, self.loop_layer_index_end))
+        return [*range(self.num_hidden_layers), *loop_layers * (self.loop_num_passes - 1)]
 
 
 @auto_docstring(checkpoint="thinkingmachines/Inkling-2-Mini")

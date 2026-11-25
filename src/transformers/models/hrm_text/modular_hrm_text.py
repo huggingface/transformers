@@ -123,6 +123,14 @@ class HrmTextConfig(LlamaConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
     @property
+    def cache_layer_map(self) -> list[int]:
+        """The `layer_idx` of the layer that owns each cache layer. Each high cycle runs the L stack `L_cycles` times,
+        then the H stack once, and each run has its own cache layers."""
+        L_layers = list(range(self.num_layers_per_stack))
+        H_layers = [self.L_cycles * self.num_layers_per_stack + i for i in L_layers]
+        return (L_layers * self.L_cycles + H_layers) * self.H_cycles
+
+    @property
     def _attn_implementation(self):
         return self._attn_implementation_internal
 
@@ -174,7 +182,7 @@ class HrmTextAttention(LlamaAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
-        cycle_offset: int = 0,
+        cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -189,9 +197,8 @@ class HrmTextAttention(LlamaAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if cache is not None:
-            # Adjust cache slot by `cycle_offset` which is determined by it's current recurrent step through the stacks
             key_states, value_states = cache.update(
-                key_states, value_states, self.layer_idx + cycle_offset, kwargs=kwargs
+                key_states, value_states, self.layer_idx + cache_offset, kwargs=kwargs
             )
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
@@ -225,10 +232,10 @@ class HrmTextDecoderLayer(LlamaDecoderLayer):
 class HrmTextStack(nn.Module):
     """A single transformer stack — used twice inside, once as H module and once as L module"""
 
-    def __init__(self, config: HrmTextConfig):
+    def __init__(self, config: HrmTextConfig, first_layer_idx: int = 0):
         super().__init__()
         self.layers = nn.ModuleList(
-            [HrmTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_layers_per_stack)]
+            [HrmTextDecoderLayer(config, first_layer_idx + i) for i in range(config.num_layers_per_stack)]
         )
         self.final_norm = HrmTextRMSNorm(eps=config.rms_norm_eps)
 
@@ -239,7 +246,7 @@ class HrmTextStack(nn.Module):
         attention_mask: torch.Tensor | None = None,
         cache: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        cycle_offset: int = 0,
+        cache_offset: int = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         for layer in self.layers:
@@ -248,7 +255,7 @@ class HrmTextStack(nn.Module):
                 attention_mask=attention_mask,
                 cache=cache,
                 position_embeddings=position_embeddings,
-                cycle_offset=cycle_offset,
+                cache_offset=cache_offset,
                 **kwargs,
             )
         return self.final_norm(hidden_states)
@@ -291,7 +298,8 @@ class HrmTextModel(LlamaModel):
 
         # Recursive module structures
         self.L_module = HrmTextStack(config)
-        self.H_module = HrmTextStack(config)
+        # Each stack's `layer_idx`s are the cache layers of its first run, see `HrmTextConfig.cache_layer_map`
+        self.H_module = HrmTextStack(config, config.L_cycles * config.num_layers_per_stack)
         # Initial state for the low cycle module
         self.z_L_init = nn.Parameter(torch.zeros(config.hidden_size), requires_grad=False)
 
@@ -360,14 +368,8 @@ class HrmTextModel(LlamaModel):
             .contiguous()
         )
 
-        # Cache-slot layout under the recurrent forward:
-        #
-        #   slot(h, l, layer)   = (h * (L_cycles + 1) + l) * num_layers_per_stack + layer
-        #                                                       ^— L-stack invocation at (h, l)
-        #   slot(h, H, layer)   = (h * (L_cycles + 1) + L_cycles) * num_layers_per_stack + layer
-        #                                                       ^— trailing H-stack invocation
-        #
-        # That totals `num_layers_per_stack * H_cycles * (L_cycles + 1)` slots, i.e. the `config.num_hidden_layers`.
+        # Each run of a stack has its own cache layers (see `HrmTextConfig.cache_layer_map`), which it reaches through
+        # `cache_offset`. That totals `num_layers_per_stack * H_cycles * (L_cycles + 1)`, i.e. `config.num_hidden_layers`.
         num_layers_per_stack = self.config.num_layers_per_stack
         for high_cycle_idx in range(self.config.H_cycles):
             # `L_bp_cycles` k-step grad trick: only the trailing `num_grad_iterations` of the
@@ -378,7 +380,7 @@ class HrmTextModel(LlamaModel):
             )
             grad_threshold = self.config.L_cycles - num_grad_iterations
             for low_cycle_idx in range(self.config.L_cycles):
-                cycle_offset = (high_cycle_idx * (self.config.L_cycles + 1) + low_cycle_idx) * num_layers_per_stack
+                cache_offset = (high_cycle_idx * (self.config.L_cycles + 1) + low_cycle_idx) * num_layers_per_stack
                 ctx = nullcontext() if low_cycle_idx >= grad_threshold else torch.no_grad()
                 with ctx:
                     hidden_states_low_cycle = self.L_module(
@@ -387,11 +389,11 @@ class HrmTextModel(LlamaModel):
                         cache=cache,
                         position_embeddings=position_embeddings,
                         position_ids=position_ids,
-                        cycle_offset=cycle_offset,
+                        cache_offset=cache_offset,
                         **kwargs,
                     )
 
-            cycle_offset = (high_cycle_idx * (self.config.L_cycles + 1) + self.config.L_cycles) * num_layers_per_stack
+            cache_offset = high_cycle_idx * (self.config.L_cycles + 1) * num_layers_per_stack
 
             hidden_states_high_cycle = self.H_module(
                 hidden_states_high_cycle + hidden_states_low_cycle.to(hidden_states_high_cycle.device),
@@ -399,7 +401,7 @@ class HrmTextModel(LlamaModel):
                 cache=cache,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                cycle_offset=cycle_offset,
+                cache_offset=cache_offset,
                 **kwargs,
             )
 

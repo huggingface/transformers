@@ -1349,8 +1349,7 @@ class Inkling2LoopTextModel(Inkling2LoopPreTrainedModel):
 
         if cache is not None and len(cache.layers) == self.config.num_hidden_layers:
             # Append extra caches for loop layers
-            loop_cache_layers = cache.layers[loop_start:loop_end]
-            cache.layers += [copy.deepcopy(layer) for layer in loop_cache_layers * (self.config.loop_num_passes - 1)]
+            cache.layers += [copy.deepcopy(cache.layers[i]) for i in self.config.cache_layer_map[len(cache.layers) :]]
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])

@@ -140,8 +140,14 @@ class Inkling2LoopTextConfig(Inkling2TextConfig):
     @property
     def total_num_hidden_layers(self) -> int:
         """Total number of decoder layers visited in each forward pass. This takes looped layers into account."""
-        num_loop_layers = self.loop_layer_index_end - self.loop_layer_index_start
-        return self.num_hidden_layers + (self.loop_num_passes - 1) * num_loop_layers
+        return len(self.cache_layer_map)
+
+    @property
+    def cache_layer_map(self) -> list[int]:
+        """The `layer_idx` of the layer that owns each cache layer. Passes after the first add one set of cache layers
+        for the loop layers after the model's own."""
+        loop_layers = list(range(self.loop_layer_index_start, self.loop_layer_index_end))
+        return [*range(self.num_hidden_layers), *loop_layers * (self.loop_num_passes - 1)]
 
 
 @auto_docstring(checkpoint="thinkingmachines/Inkling-2-Mini")
@@ -490,8 +496,7 @@ class Inkling2LoopTextModel(Inkling2TextModel):
 
         if cache is not None and len(cache.layers) == self.config.num_hidden_layers:
             # Append extra caches for loop layers
-            loop_cache_layers = cache.layers[loop_start:loop_end]
-            cache.layers += [copy.deepcopy(layer) for layer in loop_cache_layers * (self.config.loop_num_passes - 1)]
+            cache.layers += [copy.deepcopy(cache.layers[i]) for i in self.config.cache_layer_map[len(cache.layers) :]]
 
         hidden_states = inputs_embeds
         block_states = inputs_embeds.new_zeros(*inputs_embeds.shape[:-1], 0, inputs_embeds.shape[-1])

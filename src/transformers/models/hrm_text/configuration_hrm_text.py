@@ -125,6 +125,14 @@ class HrmTextConfig(PreTrainedConfig):
             )
 
     @property
+    def cache_layer_map(self) -> list[int]:
+        """The `layer_idx` of the layer that owns each cache layer. Each high cycle runs the L stack `L_cycles` times,
+        then the H stack once, and each run has its own cache layers."""
+        L_layers = list(range(self.num_layers_per_stack))
+        H_layers = [self.L_cycles * self.num_layers_per_stack + i for i in L_layers]
+        return (L_layers * self.L_cycles + H_layers) * self.H_cycles
+
+    @property
     def _attn_implementation(self):
         return self._attn_implementation_internal
 

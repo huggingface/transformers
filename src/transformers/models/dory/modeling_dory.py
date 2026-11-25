@@ -519,11 +519,8 @@ class DoryModel(DoryPreTrainedModel):
         if cache is not None and len(cache.layers) == self.config.num_hidden_layers:
             # Extra cache layers, appended at the end: `per_loop` loops 1, 2, ... write to copies of the recurrent
             # layers, `last_loop` loops before the last read them without writing
-            recurrent_cache = cache.layers[recurrent_start:recurrent_end]
-            if last_loop_only:
-                cache.layers += [DoryPastReader(c) for c in recurrent_cache]
-            else:
-                cache.layers += [copy.deepcopy(c) for c in recurrent_cache * (n_loops - 1)]
+            extend = DoryPastReader if last_loop_only else copy.deepcopy
+            cache.layers += [extend(cache.layers[i]) for i in self.config.cache_layer_map[len(cache.layers) :]]
 
         hidden_states = inputs_embeds
         for decoder_layer in self.layers[:recurrent_start]:
