@@ -30,9 +30,9 @@ from ..granite.modeling_granite import (
     GraniteForCausalLM,
     GraniteModel,
     GranitePreTrainedModel,
-    GraniteRMSNorm,
     GraniteRotaryEmbedding,
 )
+from ..llama.modeling_llama import LlamaRMSNorm
 
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-14B")
@@ -101,7 +101,7 @@ class HyperCLOVAXConfig(GraniteConfig):
             )
 
 
-class HyperCLOVAXRMSNorm(GraniteRMSNorm):
+class HyperCLOVAXRMSNorm(LlamaRMSNorm):
     pass
 
 

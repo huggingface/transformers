@@ -719,20 +719,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
 
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the Moonshine encoder so that its parameters will
-        not be updated during training.
-        """
-        self.encoder._freeze_parameters()
-
-    def _mask_input_features(self):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://huggingface.co/papers/1904.08779).
-        """
-        raise AttributeError("Not needed for Moonshine")
-
     @can_return_tuple
     @auto_docstring
     @deprecate_kwarg("past_key_values", "5.40.0", new_name="cache")
