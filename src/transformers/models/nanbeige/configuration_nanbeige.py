@@ -18,34 +18,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ...utils.type_validators import interval
+from ...utils.type_validators import interval, positive_int_field
 
 
-@auto_docstring(checkpoint="meta-nanbeige/Nanbeige-2-7b-hf")
+@auto_docstring(checkpoint="Nanbeige/Nanbeige4.2-3B")
 @strict
 class NanbeigeConfig(PreTrainedConfig):
     r"""
-    ```python
-    >>> from transformers import NanbeigeModel, NanbeigeConfig
-
-    >>> # Initializing a Nanbeige nanbeige-7b style configuration
-    >>> configuration = NanbeigeConfig()
-
-    >>> # Initializing a model from the nanbeige-7b style configuration
-    >>> model = NanbeigeModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    num_loops (`int`, *optional*, defaults to 2):
+        Number of passes through the shared decoder layers.
+    loop_loss_weights (`list[float]`, *optional*):
+        Legacy setting. A nonempty list determines the number of passes as its length plus one.
+    skip_loop_final_norm (`bool`, *optional*, defaults to `False`):
+        Apply the output RMSNorm only after the last pass when set to `True`.
+    """
 
     model_type = "nanbeige"
-    keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `NanbeigeModel`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -62,27 +55,32 @@ class NanbeigeConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    vocab_size: int = 32000
-    hidden_size: int = 4096
-    intermediate_size: int = 11008
-    num_hidden_layers: int = 32
-    num_attention_heads: int = 32
-    num_key_value_heads: int | None = None
+    vocab_size: int = 166144
+    hidden_size: int = 3072
+    intermediate_size: int = 10752
+    num_hidden_layers: int = 22
+    num_attention_heads: int = 48
+    num_key_value_heads: int | None = 8
     hidden_act: str = "silu"
-    max_position_embeddings: int = 2048
+    max_position_embeddings: int = 262144
     initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
-    rms_norm_eps: float = 1e-6
+    rms_norm_eps: float = 1e-5
     use_cache: bool = True
-    pad_token_id: int | None = None
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = 2
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 166100
+    eos_token_id: int | list[int] | None = 166101
     pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float | None = 0.0
     mlp_bias: bool = False
-    head_dim: int | None = None
+    head_dim: int | None = 128
+
+    default_theta = 70_000_000.0
+    num_loops: int = positive_int_field(default=2)
+    loop_loss_weights: list[float] | None = None
+    skip_loop_final_norm: bool = False
 
     def __post_init__(self, **kwargs):
         if self.head_dim is None:
