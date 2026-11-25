@@ -41,7 +41,10 @@ else:
 quantize_dense(model, spec)
 compile_config = CompileConfig()
 compile_config._compile_all_devices = True  # generate only auto-compiles on cuda / xpu / ... otherwise
-compiled = {"cache_implementation": "static", "compile_config": compile_config}
+import os as _os2
+compiled = {"cache_implementation": "static"}
+if _os2.environ.get("NO_COMPILE") != "1":
+    compiled["compile_config"] = compile_config
 prompts = [
     "Write a short story about a lighthouse keeper who finds a message in a bottle.",
     "Write a Python function that parses an ISO 8601 date string without using datetime, with tests.",
@@ -81,6 +84,9 @@ def generate(prompt, n, **kwargs):
 eager_tokens, _ = generate(prompts[1], 128)
 generate(prompts[0], 32, **compiled)  # compile
 compiled_tokens, _ = generate(prompts[1], 128, **compiled)
+import json, os as _os
+if _os.environ.get("DUMP_TOKENS"):
+    json.dump({"eager": eager_tokens, "compiled": compiled_tokens}, open(_os.environ["DUMP_TOKENS"], "w"))
 same = next((i for i, (a, b) in enumerate(zip(eager_tokens, compiled_tokens)) if a != b), 128)
 print(f"correctness: compiled greedy tokens == eager for {same}/128", flush=True)
 rates = []
