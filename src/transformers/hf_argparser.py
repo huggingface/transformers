@@ -165,35 +165,41 @@ class HfArgumentParser(ArgumentParser):
         if isinstance(aliases, str):
             aliases = [aliases]
 
-        origin_type = getattr(field.type, "__origin__", field.type)
+        # Work on a local copy of the field type so that we never mutate the user's dataclass
+        # annotations. Re-assigning `field.type` below previously leaked the unwrapped type
+        # (e.g. `Optional[int]` became `int`) back into the dataclass, corrupting its typing
+        # annotations for any other consumer inspecting them after parser creation.
+        field_type = field.type
+
+        origin_type = getattr(field_type, "__origin__", field_type)
         if origin_type is Union or (hasattr(types, "UnionType") and isinstance(origin_type, types.UnionType)):
-            if str not in field.type.__args__ and (
-                len(field.type.__args__) != 2 or type(None) not in field.type.__args__
+            if str not in field_type.__args__ and (
+                len(field_type.__args__) != 2 or type(None) not in field_type.__args__
             ):
                 raise ValueError(
                     "Only `Union[X, NoneType]` (i.e., `Optional[X]`) is allowed for `Union` because"
                     " the argument parser only supports one type per argument."
                     f" Problem encountered in field '{field.name}'."
                 )
-            if type(None) not in field.type.__args__:
+            if type(None) not in field_type.__args__:
                 # filter `str` in Union
-                field.type = field.type.__args__[0] if field.type.__args__[1] is str else field.type.__args__[1]
-                origin_type = getattr(field.type, "__origin__", field.type)
-            elif bool not in field.type.__args__:
+                field_type = field_type.__args__[0] if field_type.__args__[1] is str else field_type.__args__[1]
+                origin_type = getattr(field_type, "__origin__", field_type)
+            elif bool not in field_type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
-                field.type = (
-                    field.type.__args__[0] if isinstance(None, field.type.__args__[1]) else field.type.__args__[1]
+                field_type = (
+                    field_type.__args__[0] if isinstance(None, field_type.__args__[1]) else field_type.__args__[1]
                 )
-                origin_type = getattr(field.type, "__origin__", field.type)
+                origin_type = getattr(field_type, "__origin__", field_type)
 
         # A variable to store kwargs for a boolean field, if needed
         # so that we can init a `no_*` complement argument (see below)
         bool_kwargs = {}
-        if origin_type is Literal or (isinstance(field.type, type) and issubclass(field.type, Enum)):
+        if origin_type is Literal or (isinstance(field_type, type) and issubclass(field_type, Enum)):
             if origin_type is Literal:
-                kwargs["choices"] = field.type.__args__
+                kwargs["choices"] = field_type.__args__
             else:
-                kwargs["choices"] = [x.value for x in field.type]
+                kwargs["choices"] = [x.value for x in field_type]
 
             kwargs["type"] = make_choice_type_function(kwargs["choices"])
 
@@ -201,14 +207,14 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default
             else:
                 kwargs["required"] = True
-        elif field.type is bool or field.type == bool | None:
+        elif field_type is bool or field_type == bool | None:
             # Copy the correct kwargs to use to instantiate a `no_*` complement argument below.
             # We do not initialize it here because the `no_*` alternative must be instantiated after the real argument
             bool_kwargs = copy(kwargs)
 
             # Hack because type=bool in argparse does not behave as we want.
             kwargs["type"] = string_to_bool
-            if field.type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
+            if field_type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
                 # Default value is False if we have no default when of type bool.
                 default = False if field.default is dataclasses.MISSING else field.default
                 # This is the value that will get picked if we don't include --{field.name} in any way
@@ -218,14 +224,14 @@ class HfArgumentParser(ArgumentParser):
                 # This is the value that will get picked if we do --{field.name} (without value)
                 kwargs["const"] = True
         elif isclass(origin_type) and issubclass(origin_type, list):
-            kwargs["type"] = field.type.__args__[0]
+            kwargs["type"] = field_type.__args__[0]
             kwargs["nargs"] = "+"
             if field.default_factory is not dataclasses.MISSING:
                 kwargs["default"] = field.default_factory()
             elif field.default is dataclasses.MISSING:
                 kwargs["required"] = True
         else:
-            kwargs["type"] = field.type
+            kwargs["type"] = field_type
             if field.default is not dataclasses.MISSING:
                 kwargs["default"] = field.default
             elif field.default_factory is not dataclasses.MISSING:
@@ -238,7 +244,7 @@ class HfArgumentParser(ArgumentParser):
         # Order is important for arguments with the same destination!
         # We use a copy of earlier kwargs because the original kwargs have changed a lot before reaching down
         # here and we do not need those changes/additional keys.
-        if field.default is True and (field.type is bool or field.type == bool | None):
+        if field.default is True and (field_type is bool or field_type == bool | None):
             bool_kwargs["default"] = False
             parser.add_argument(
                 f"--no_{field.name}",
