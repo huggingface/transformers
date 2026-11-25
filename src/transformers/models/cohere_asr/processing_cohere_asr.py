@@ -145,6 +145,9 @@ class CohereAsrProcessor(ProcessorMixin):
         Returns:
             A list of reassembled transcription strings, one per original input sample.
         """
+        if isinstance(texts, str):
+            texts = [texts]
+
         max_sample_idx = max(sample_idx for sample_idx, _ in audio_chunk_index)
         outputs = [""] * (max_sample_idx + 1)
         chunked = {}
@@ -160,8 +163,9 @@ class CohereAsrProcessor(ProcessorMixin):
         for sample_idx, chunk_items in chunked.items():
             chunk_items.sort(key=lambda item: item[0])
             non_empty = [t for _, t in chunk_items if t and t.strip()]
-            parts = [non_empty[0].rstrip()] + [t.strip() for t in non_empty[1:]]
-            outputs[sample_idx] = separator.join(parts)
+            if non_empty:
+                parts = [non_empty[0].rstrip()] + [t.strip() for t in non_empty[1:]]
+                outputs[sample_idx] = separator.join(parts)
 
         return outputs
 
