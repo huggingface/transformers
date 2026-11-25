@@ -400,7 +400,13 @@ class EngineClient:
 
         while True:
             method, request_id, *args = requests.get()
-            getattr(runner, method)(request_id, *args)
+            try:
+                getattr(runner, method)(request_id, *args)
+            except ValueError as error:  # the request's fault, e.g. a setting continuous batching can't take
+                send_results([], [], [(request_id, ValueError(str(error)))])
+            except Exception as error:  # fails the request, not the model's process
+                logger.exception(f"Request {request_id} failed")
+                send_results([], [], [(request_id, RuntimeError(f"{type(error).__name__}: {error}"))])
 
 
 class ModelManager:

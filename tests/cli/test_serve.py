@@ -20,12 +20,14 @@ import asyncio
 import atexit
 import json
 import multiprocessing
+import queue
 import socket
 import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from huggingface_hub.utils import httpx
@@ -43,6 +45,7 @@ from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
     _RESPONSE_TEMPLATE_FALLBACKS,
     BaseHandler,
+    CBGenerateRunner,
     EngineDeadError,
     GenerateRunner,
     GenerationState,
@@ -549,6 +552,15 @@ class TestBuildGenerationConfig(unittest.TestCase):
         result = self._make_handler()._build_generation_kwargs({"max_tokens": 50}, GenerationConfig(max_new_tokens=20))
         self.assertEqual(result["max_new_tokens"], 50)
 
+    def test_trust_remote_code_refused(self):
+        """`generation_config` can't set `trust_remote_code`: `generate` would run a repository's code with it."""
+        from transformers import GenerationConfig
+
+        body = {"generation_config": json.dumps({"trust_remote_code": True})}
+        with self.assertRaises(HTTPException) as ctx:
+            self._make_handler()._build_generation_kwargs(body, GenerationConfig())
+        self.assertEqual(ctx.exception.status_code, 422)
+
 
 @require_serve
 class TestValidation(unittest.TestCase):
@@ -699,7 +711,8 @@ class TestModelLoader(unittest.TestCase):
 @require_serve
 @require_torch_accelerator
 class TestProcessLifecycle(unittest.TestCase):
-    """What happens to a server when one of its processes stops. Each test starts a server of its own."""
+    """What happens to a server when one of its processes stops, or a request fails in it. Each test starts a server
+    of its own."""
 
     MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
 
@@ -745,6 +758,19 @@ class TestProcessLifecycle(unittest.TestCase):
         self.assertIn("crashed", received[-1] or received[-2])
         server.join(30)
         self.assertEqual(server.exitcode, 1)
+
+    def test_bad_setting_fails_only_its_request(self):
+        """A setting continuous batching can't take fails its request with a 400, not the model's process."""
+        _, base_url = self._start_serve(force_model=self.MODEL, continuous_batching=True)
+        body = {
+            "model": self.MODEL,
+            "messages": [{"role": "user", "content": "Say hi"}],
+            "max_tokens": 5,
+            "generation_config": json.dumps({"temperature": "hot"}),
+        }
+        response = httpx.post(f"{base_url}/v1/chat/completions", json=body, timeout=30)
+        self.assertEqual(response.status_code, 400)
+        self._chat(base_url)  # the server still answers
 
     def test_api_server_killed_stops_everything(self):
         server, base_url = self._start_serve(force_model=self.MODEL, api_server_count=2)
@@ -2419,6 +2445,40 @@ class TestErrorResponses(unittest.TestCase):
 
         self.assertEqual(resp.status_code, 400)
         self.assertEqual(resp.json(), {"detail": "`seed` must be a number"})
+
+    def test_runner_sends_errors_back(self):
+        """Without continuous batching, a failed request comes back as an error, and the runner goes on: a ValueError
+        (a 400) as is, any other as a RuntimeError with its text (a 500)."""
+        results = queue.Queue()
+        runner = GenerateRunner(None, None, lambda ids, tokens, finished: results.put(finished))
+
+        def fail(model, processor, error):
+            raise error
+
+        runner.submit(1, fail, (ValueError("bad value"),), False)
+        runner.submit(2, fail, (KeyError("oops"),), False)
+        runner.submit(3, lambda model, processor: "answer", (), False)
+        (bad_value,), (oops,), (answer,) = (results.get(timeout=10) for _ in range(3))
+        self.assertEqual((bad_value[0], type(bad_value[1]), str(bad_value[1])), (1, ValueError, "bad value"))
+        self.assertEqual((oops[0], type(oops[1]), str(oops[1])), (2, RuntimeError, "KeyError: 'oops'"))
+        self.assertEqual(answer, (3, "answer"))
+
+    def test_continuous_batching_fails_one_request(self):
+        """A request continuous batching fails comes back as an error, alone: the others' tokens still go out."""
+        with patch.object(CBGenerateRunner, "_start_continuous_batching"):
+            runner = CBGenerateRunner(None, None, MagicMock(), cb_config=None)
+        runner.active_requests = {7: [True, 0], 8: [True, 0]}
+        failed = SimpleNamespace(request_id="7", error="CUDA out of memory")
+        running = SimpleNamespace(request_id="8", error=None, generated_tokens=[5, 6], is_finished=lambda: False)
+        ids, tokens, finished = [], [], []
+        runner._collect_output(failed, ids, tokens, finished)
+        runner._collect_output(running, ids, tokens, finished)
+        self.assertEqual(
+            [(request_id, str(error)) for request_id, error in finished],
+            [(7, "Continuous batching failed for the request: CUDA out of memory")],
+        )
+        self.assertEqual((ids, tokens), ([8, 8], [5, 6]))
+        self.assertEqual(list(runner.active_requests), [8])
 
 
 class _TestToolCallBase:

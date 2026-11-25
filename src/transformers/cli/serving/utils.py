@@ -954,10 +954,10 @@ class CBGenerateRunner(GenerateRunner):
             set_torch_seed(seed)
         if self._fail_if_worker_died(request_id):
             return
+        batching_kwargs = self._build_continuous_batching_kwargs(generation_kwargs)
         with self.lock:
             self.active_requests[request_id] = [stream, 0]
         self.count_tokens(prompt=prompt_length(inputs))
-        batching_kwargs = self._build_continuous_batching_kwargs(generation_kwargs)
         self.manager.add_request(inputs["input_ids"], request_id=str(request_id), streaming=stream, **batching_kwargs)
 
     def cancel(self, request_id: int) -> None:
