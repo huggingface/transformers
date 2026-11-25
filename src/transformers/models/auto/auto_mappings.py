@@ -524,6 +524,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("omniasr", "OmniASRConfig"),
         ("omniasr_audio", "OmniASRAudioConfig"),
         ("omniasr_ctc", "OmniASRCTCConfig"),
+        ("omoikane", "OmoikaneConfig"),
         ("oneformer", "OneFormerConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
         ("openai_privacy_filter", "OpenAIPrivacyFilterConfig"),

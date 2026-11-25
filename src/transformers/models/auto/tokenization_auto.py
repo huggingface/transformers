@@ -271,6 +271,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("omdet-turbo", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("omniasr", "TokenizersBackend" if is_tokenizers_available() else None),
         ("omniasr_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
+        ("omoikane", "TokenizersBackend" if is_tokenizers_available() else None),
         ("oneformer", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("openai-gpt", "OpenAIGPTTokenizer" if is_tokenizers_available() else None),
         ("opt", "GPT2Tokenizer" if is_tokenizers_available() else None),

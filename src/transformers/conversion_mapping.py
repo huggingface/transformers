@@ -1319,6 +1319,18 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("ff0", "fc1"),
             WeightRenaming("ff1", "fc2"),
         ],
+        "omoikane": [
+            # The checkpoints store one depthwise convolution per projection; the model runs them as one
+            WeightConverter(
+                source_patterns=[
+                    "self_attn.q_conv1d.weight",
+                    "self_attn.k_conv1d.weight",
+                    "self_attn.v_conv1d.weight",
+                ],
+                target_patterns="self_attn.conv1d.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ],
         "olmo_hybrid": [
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
