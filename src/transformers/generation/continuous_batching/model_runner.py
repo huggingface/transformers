@@ -299,6 +299,12 @@ class ModelRunner:
         if use_block_table:
             forward_fn = self._forward_process_and_sample if self._compiled_decode is None else self._compiled_decode
             use_cuda_graph = self.use_cuda_graph_decode
+            # [scratch] With varlen block tables, a step that brings several tokens for some sequence is a varlen step:
+            # it takes a graph only if the varlen path does (not on models whose layers read lengths on the host)
+            if use_cuda_graph and self.cache.use_varlen_block_table and not self.use_cuda_graph_varlen:
+                io = self.inputs_and_outputs
+                host_io = io.io_pairs[io.current_pair].host_io if isinstance(io, ContinuousBatchingAsyncIOs) else io
+                use_cuda_graph = host_io.max_length_q == 1
         else:
             forward_fn = self._forward_process_and_sample if self._compiled_varlen is None else self._compiled_varlen
             use_cuda_graph = self.use_cuda_graph_varlen

@@ -14,6 +14,7 @@
 
 from math import gcd
 
+import numpy as np
 import torch
 
 from ....configuration_utils import PreTrainedConfig
@@ -153,10 +154,14 @@ class LinearAttentionCacheAllocator(CacheAllocator):
         return self._get_block(request_id)
 
     def fill_block_table(
-        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
+        self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor | np.ndarray
     ) -> None:
-        """Fills the request's row of the kernel block table with its single block."""
-        block_table[:1].copy_(torch.tensor(self._get_block(request_id), dtype=block_table.dtype), non_blocking=True)
+        """Fills the request's row of the kernel block table (a numpy view of it when the table is on the host) with
+        its single block."""
+        if isinstance(block_table, np.ndarray):
+            block_table[:1] = self._get_block(request_id)
+        else:
+            block_table[:1].copy_(torch.tensor(self._get_block(request_id), dtype=block_table.dtype), non_blocking=True)
 
     def _get_block(self, request_id: str) -> list[int]:
         block = self.block_table.get(request_id)

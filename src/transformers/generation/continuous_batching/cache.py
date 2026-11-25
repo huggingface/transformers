@@ -805,7 +805,12 @@ class PagedAttentionCache:
             return kwargs["write_index" if write else "read_index"][allocator.index]
         index = block_table[allocator.index][:, 0].to(torch.int64)
         trash_index = allocator.write_trash_index if write else allocator.read_trash_index
-        return torch.where(index < 0, trash_index, index)
+        index = torch.where(index < 0, trash_index, index)
+        # [scratch] With varlen block tables, prompts go through the block table too: a sequence with no past reads
+        # zeros from the read trash, not its new block, which still holds the states of the block's previous owner
+        if not write and "cache_seqlens" in kwargs:
+            index = torch.where(kwargs["cache_seqlens"] == 0, trash_index, index)
+        return index
 
     def reset(self) -> None:
         """Frees the cache of all requests and returns all sectors to the global pool."""
