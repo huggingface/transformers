@@ -1003,13 +1003,17 @@ class ContinuousBatchingManager:
         """Switch the attn implementation to one that is CB compatible. If auto_switch_to_flash is True, and the attn
         implementation is SDPA or eager, also switch to flash if it is supported and available."""
         # The self._original_attn_impl is set only if the attn implementation is changed (makes this fn idempotent)
-        original_attn_impl = model.config._attn_implementation
+        # Only the text model generates: in a multimodal model, flash may be unsupported for the whole model (e.g. image
+        # tokens attending each other both ways) but supported by its language model
+        text_config = model.config.get_text_config()
+        original_attn_impl = text_config._attn_implementation
         target_implem = original_attn_impl
+        supports_flash = model._supports_flash_attn or model.get_decoder()._supports_flash_attn
 
         # Check if flash attention is supported and available
         is_flash = is_flash_attention_requested(requested_attention_implementation=target_implem)
         is_paged = target_implem == "paged|eager"
-        if not is_flash and not is_paged and model._supports_flash_attn and auto_switch_to_flash:
+        if not is_flash and not is_paged and supports_flash and auto_switch_to_flash:
             # Try to use FA3 (Hopper), then FA4 (B200/B300: its paged KV and sinks are not on SM120 GPUs like the RTX PRO
             # 6000), then FA2, then give up. Both regular package or kernels is fine.
             # MLA models attend with 192-dim values (padded to the key dim), which FA4 does not take
@@ -1047,7 +1051,10 @@ class ContinuousBatchingManager:
 
         # If the target implementation is different from the original, set it and save the original
         if target_implem != original_attn_impl:
-            model.set_attn_implementation(target_implem)
+            if text_config is model.config:
+                model.set_attn_implementation(target_implem)
+            else:
+                model.get_decoder().set_attn_implementation(target_implem)
             self._original_attn_impl = original_attn_impl
 
     def warmup(self) -> None:
