@@ -35,11 +35,20 @@ loop_count_field = interval(min=1)
 class NanbeigeConfig(PreTrainedConfig):
     r"""
     num_loops (`int`, *optional*, defaults to 2):
-        Number of passes through the shared decoder layers.
+        Number of times the decoder layers run per forward pass, with shared weights. Each pass has its own key-value
+        cache entries when caching is enabled. By default, the output RMSNorm runs after every pass.
     loop_loss_weights (`list[float]`, *optional*):
         Legacy setting. A nonempty list determines the number of passes as its length plus one.
     skip_loop_final_norm (`bool`, *optional*, defaults to `False`):
         Apply the output RMSNorm only after the last pass when set to `True`.
+
+    ```python
+    >>> from transformers import NanbeigeConfig, NanbeigeModel
+
+    >>> configuration = NanbeigeConfig()
+    >>> model = NanbeigeModel(configuration)
+    >>> configuration = model.config
+    ```
     """
 
     model_type = "nanbeige"
