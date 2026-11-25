@@ -541,11 +541,11 @@ class TestGenerateManager(unittest.TestCase):
         processor = SimpleNamespace(tokenizer=mock_tokenizer)
         captured = {}
 
-        def fake_generate(**kwargs):
+        def mock_generate(**kwargs):
             captured.update(kwargs)
             kwargs["streamer"].end()
 
-        model = SimpleNamespace(generate=fake_generate)
+        model = SimpleNamespace(generate=mock_generate)
 
         async def _run():
             queue, _ = mgr.generate_streaming(
@@ -569,11 +569,11 @@ class TestGenerateManager(unittest.TestCase):
         processor = SimpleNamespace(tokenizer=mock_tokenizer, decode=MagicMock(return_value="world"))
         captured = {}
 
-        def fake_generate(**kwargs):
+        def mock_generate(**kwargs):
             captured.update(kwargs)
             return torch.tensor([[1, 2, 3]])
 
-        model = SimpleNamespace(generate=fake_generate)
+        model = SimpleNamespace(generate=mock_generate)
 
         text, input_len, generated_ids = asyncio.run(
             mgr.generate_non_streaming(
@@ -596,17 +596,17 @@ class TestGenerateManager(unittest.TestCase):
         captured_stream = {}
         captured_non_stream = {}
 
-        def fake_stream_generate(**kwargs):
+        def mock_stream_generate(**kwargs):
             captured_stream.update(kwargs)
             kwargs["streamer"].end()
 
-        def fake_non_stream_generate(**kwargs):
+        def mock_non_stream_generate(**kwargs):
             captured_non_stream.update(kwargs)
             return torch.tensor([[1, 2, 3]])
 
         async def _run():
             queue, _ = mgr.generate_streaming(
-                model=SimpleNamespace(generate=fake_stream_generate),
+                model=SimpleNamespace(generate=mock_stream_generate),
                 processor=plain_tokenizer,
                 inputs={"input_ids": torch.tensor([[1, 2]])},
                 gen_config=GenerationConfig(),
@@ -614,7 +614,7 @@ class TestGenerateManager(unittest.TestCase):
             )
             self.assertIsNone(await queue.get())
             await mgr.generate_non_streaming(
-                model=SimpleNamespace(generate=fake_non_stream_generate),
+                model=SimpleNamespace(generate=mock_non_stream_generate),
                 processor=plain_tokenizer,
                 inputs={"input_ids": torch.tensor([[1, 2]])},
                 gen_config=GenerationConfig(),
