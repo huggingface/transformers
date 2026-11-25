@@ -360,6 +360,7 @@ class Mxfp4GptOssExperts(nn.Module):
         self.down_proj_precision_config = None
         self.limit = getattr(config, "swiglu_limit", 7.0)
         self._proto_trtllm = None  # [scratch] TRT-LLM tensors on Blackwell, see `_proto_trtllm_mxfp4`
+        self._proto_marlin = None  # [scratch] Marlin tensors on Ampere, Ada and SM120, see `_proto_marlin_mxfp4`
 
     def forward(
         self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
@@ -468,6 +469,12 @@ class Mxfp4GptOssMLP(nn.Module):
             return trtllm_gpt_oss_experts(
                 self.experts._proto_trtllm, hidden_states, top_k_index.to(torch.int32), top_k_weights
             )
+        if self.experts._proto_marlin is not None:  # [scratch] Ampere, Ada, SM120: vLLM's Marlin MoE
+            from ._proto_marlin_mxfp4 import marlin_gpt_oss_experts
+
+            top_k_logits, top_k_index = torch.topk(router_logits, self.router.top_k, dim=-1)
+            top_k_weights = torch.softmax(top_k_logits.float(), dim=-1)
+            return marlin_gpt_oss_experts(self.experts._proto_marlin, hidden_states, top_k_index, top_k_weights)
         with on_device(router_logits.device):
             routing_data, gather_idx, scatter_idx = triton_kernels_hub.routing.routing(router_logits, self.router.top_k)
         return self.experts.forward_routed(hidden_states, routing_data, gather_idx, scatter_idx)
