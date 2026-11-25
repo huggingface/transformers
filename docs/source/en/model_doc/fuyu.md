@@ -45,8 +45,8 @@ Tips:
 git clone https://github.com/persimmon-ai-labs/adept-inference
 wget path/to/fuyu-8b-model-weights.tar
 tar -xvf fuyu-8b-model-weights.tar
-python src/transformers/models/fuyu/convert_fuyu_weights_to_hf.py  --input_dir /path/to/downloaded/fuyu/weights/ --output_dir /output/path \
-    --pt_model_path /path/to/fuyu_8b_release/iter_0001251/mp_rank_00/model_optim_rng.pt
+python src/transformers/models/fuyu/convert_fuyu_model_weights_to_hf.py  --input_dir /path/to/downloaded/fuyu/weights/ --output_dir /output/path \
+    --pt_model_path /path/to/fuyu_8b_release/iter_0001251/mp_rank_00/model_optim_rng.pt \
     --ada_lib_path /path/to/adept-inference
 ```
 
