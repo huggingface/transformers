@@ -37,8 +37,6 @@ from ...vision_utils import (
     get_vision_position_ids,
     get_vision_window_index,
 )
-from ...utils.output_capturing import select_hidden_states
-
 from ..auto import AutoConfig
 from ..cosmos3_edge.configuration_cosmos3_edge import Cosmos3EdgeVisionConfig
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_ForConditionalGeneration
@@ -658,10 +656,8 @@ class Ovis2_5Model(PerceptionLMModel):
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
             )
-        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
             mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values=pixel_values,
@@ -676,6 +672,14 @@ class Ovis2_5Model(PerceptionLMModel):
                 return_dict=True,
                 **kwargs,
             )
+
+        if inputs_embeds is not None and (
+            mm_encoder_outputs.get("video") is not None and mm_encoder_outputs.get("image") is not None
+        ):
+            raise ValueError("The model doesn't support mixed-inputs with `inputs_embeds` as the main input.")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if mm_encoder_outputs.get("image") is not None:
             inputs_embeds = self._merge_visual_features(

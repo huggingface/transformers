@@ -36,9 +36,6 @@ original repositories still use legacy processor metadata. Weight names are mapp
 ## Usage
 
 > [!WARNING]
-> If you pass `inputs_embeds` with visual inputs, also pass the `mm_token_type_ids` returned by the processor
-> when you set `return_mm_token_type_ids=True`.
->
 > The two-stage `thinking_budget` behavior implemented by the original custom remote code is not part of the native
 > Transformers generation API.
 
