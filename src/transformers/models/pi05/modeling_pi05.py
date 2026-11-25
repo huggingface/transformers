@@ -453,7 +453,7 @@ class PI05Model(PI05PreTrainedModel):
 
         inputs_embeds = self.vlm.get_input_embeddings()(input_ids.masked_fill(special_image_mask, 0))
         image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-        return torch.where(special_image_mask[..., None], image_embeds, inputs_embeds)
+        return torch.where(special_image_mask[..., None].to(inputs_embeds.device), image_embeds, inputs_embeds)
 
     @can_return_tuple
     @auto_docstring
