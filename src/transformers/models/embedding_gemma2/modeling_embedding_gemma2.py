@@ -862,6 +862,34 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
         )
 
     @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
+    def get_audio_embeddings(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | EmbeddingGemma2AudioModelOutput:
+        r"""
+        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
+            The tensors corresponding to the input audio.
+        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
+            The attention mask for the input audio.
+        """
+        if self.audio_tower is None:
+            raise ValueError(
+                "Audio features were requested, but the model was initialized without an audio_config. "
+                "Cannot process audio without an audio tower and audio embedder."
+            )
+
+        audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
+        valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
+        audio_outputs.pooler_output = audio_embeds[valid_mask]
+        audio_outputs.split_sizes = valid_mask.sum(-1)
+        return audio_outputs
+
+    @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
     def get_video_embeddings(
         self,
@@ -906,34 +934,6 @@ class EmbeddingGemma2Model(EmbeddingGemma2PreTrainedModel, MultimodalMixin):
         split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
         vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
-    def get_audio_embeddings(
-        self,
-        input_features: torch.Tensor,
-        input_features_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | EmbeddingGemma2AudioModelOutput:
-        r"""
-        input_features (`torch.Tensor` of shape `(num_images, seq_length, num_features)`):
-            The tensors corresponding to the input audio.
-        input_features_mask (`torch.Tensor` of shape `(num_images, seq_length)`):
-            The attention mask for the input audio.
-        """
-        if self.audio_tower is None:
-            raise ValueError(
-                "Audio features were requested, but the model was initialized without an audio_config. "
-                "Cannot process audio without an audio tower and audio embedder."
-            )
-
-        audio_outputs = self.audio_tower(input_features, input_features_mask, return_dict=True, **kwargs)
-        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
-        # Only the real audio soft tokens, the ones `attention_mask` is True on, as the image getter drops padding too
-        valid_mask = audio_outputs.attention_mask.to(audio_embeds.device)
-        audio_outputs.pooler_output = audio_embeds[valid_mask]
-        audio_outputs.split_sizes = valid_mask.sum(-1)
-        return audio_outputs
 
 
 __all__ = ["EmbeddingGemma2Model", "EmbeddingGemma2PreTrainedModel", "EmbeddingGemma2TextModel"]

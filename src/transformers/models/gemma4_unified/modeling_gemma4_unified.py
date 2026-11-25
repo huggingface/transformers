@@ -1191,6 +1191,41 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         )
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Projects raw audio waveform features directly into language model space (no audio tower)."
+    )
+    def get_audio_embeddings(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> Gemma4UnifiedAudioModelOutput:
+        r"""
+        input_features (`torch.Tensor` of shape `(num_audios, num_tokens, audio_embed_dim)`):
+            Raw waveform features. Each token is a frame of `audio_samples_per_token` (640)
+            raw audio samples. For unified models this replaces the mel spectrogram + conformer pipeline.
+        input_features_mask (`torch.BoolTensor` of shape `(num_audios, num_tokens)`, *optional*):
+            Mask indicating valid (non-padding) audio tokens. `True` = valid, `False` = padding.
+        """
+        if self.embed_audio is None:
+            raise ValueError(
+                "Audio features were requested, but the model was initialized without an audio_config. "
+                "Cannot process audio without an audio embedder."
+            )
+
+        audio_embeds = self.embed_audio(inputs_embeds=input_features)
+        # Only the real audio soft tokens, as the image getter drops padding too
+        if input_features_mask is not None:
+            input_features_mask = input_features_mask.to(audio_embeds.device)
+            pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
+        else:
+            split_sizes = torch.full(audio_embeds.shape[:1], audio_embeds.shape[1], device=audio_embeds.device)
+            pooler_output = audio_embeds.flatten(0, 1)
+        return Gemma4UnifiedAudioModelOutput(
+            pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
+        )
+
+    @can_return_tuple
     @auto_docstring(custom_intro="Projects video frames into language model space via the unified pipeline.")
     def get_video_embeddings(
         self,
@@ -1229,41 +1264,6 @@ class Gemma4UnifiedModel(Gemma4UnifiedPreTrainedModel, MultimodalMixin):
         split_sizes = video_ends.diff(prepend=video_ends.new_zeros(1))
         vision_outputs = BaseModelOutputWithSplitSizes(**vision_outputs, split_sizes=split_sizes)
         return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Projects raw audio waveform features directly into language model space (no audio tower)."
-    )
-    def get_audio_embeddings(
-        self,
-        input_features: torch.Tensor,
-        input_features_mask: torch.Tensor | None = None,
-        **kwargs,
-    ) -> Gemma4UnifiedAudioModelOutput:
-        r"""
-        input_features (`torch.Tensor` of shape `(num_audios, num_tokens, audio_embed_dim)`):
-            Raw waveform features. Each token is a frame of `audio_samples_per_token` (640)
-            raw audio samples. For unified models this replaces the mel spectrogram + conformer pipeline.
-        input_features_mask (`torch.BoolTensor` of shape `(num_audios, num_tokens)`, *optional*):
-            Mask indicating valid (non-padding) audio tokens. `True` = valid, `False` = padding.
-        """
-        if self.embed_audio is None:
-            raise ValueError(
-                "Audio features were requested, but the model was initialized without an audio_config. "
-                "Cannot process audio without an audio embedder."
-            )
-
-        audio_embeds = self.embed_audio(inputs_embeds=input_features)
-        # Only the real audio soft tokens, as the image getter drops padding too
-        if input_features_mask is not None:
-            input_features_mask = input_features_mask.to(audio_embeds.device)
-            pooler_output, split_sizes = audio_embeds[input_features_mask], input_features_mask.sum(-1)
-        else:
-            split_sizes = torch.full(audio_embeds.shape[:1], audio_embeds.shape[1], device=audio_embeds.device)
-            pooler_output = audio_embeds.flatten(0, 1)
-        return Gemma4UnifiedAudioModelOutput(
-            pooler_output=pooler_output, attention_mask=input_features_mask, split_sizes=split_sizes
-        )
 
 
 def create_masks_for_vision_model(

@@ -164,6 +164,10 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     test_save_pretrained_matches_hub_checkpoint = ALMModelTest.test_save_pretrained_matches_hub_checkpoint
 
+    @unittest.skip(reason="The tester's `input_ids` are random, without audio placeholder tokens matching its audio.")
+    def test_get_audio_embeddings_one_row_per_audio_token(self):
+        pass
+
     @unittest.skip(reason="VibeVoiceAsr has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass

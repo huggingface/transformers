@@ -2205,9 +2205,6 @@ class Gemma4Model(Gemma3nModel, MultimodalMixin):
             **outputs, image_outputs=mm_encoder_outputs.get("image"), audio_outputs=audio_outputs
         )
 
-    def get_audio_features(self):
-        raise AttributeError("Provided by `MultimodalMixin`, from `get_audio_embeddings`")
-
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
     def get_audio_embeddings(
