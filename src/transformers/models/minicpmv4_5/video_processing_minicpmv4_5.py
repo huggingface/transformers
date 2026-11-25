@@ -360,10 +360,11 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
         max_num_frames: int,
         max_num_packing: int,
         video_metadata: list[VideoMetadata],
-        fps: float,
+        fps: float | None = None,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
+        fps = fps if fps is not None else self.fps
         slices, temporal_ids, grids, num_groups = [], [], [], []
         for video, metadata in zip(videos, video_metadata):
             # Timestamps on the original 0.1 s grid (frames without metadata are taken as sampled at `fps`),
@@ -417,7 +418,7 @@ class MiniCPMV4_5VideoProcessor(BaseVideoProcessor):
         widths = torch.tensor([width for _, width in sizes], device=device)[:, None]
         patch_position_ids = torch.stack([patch_index // widths, patch_index % widths], dim=-1)
         max_frames = max(len(ids) for ids in temporal_ids)
-        temporal_ids = torch.tensor([ids + [-1] * (max_frames - len(ids)) for ids in temporal_ids])
+        temporal_ids = torch.tensor([ids + [-1] * (max_frames - len(ids)) for ids in temporal_ids], device=device)
         return BatchFeature(
             data={
                 "pixel_values_videos": pixel_values,

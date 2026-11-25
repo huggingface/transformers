@@ -76,7 +76,7 @@ class MiniCPMV4_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # tiny_video_320x240.mp4 has 11 frames; every frame is one slice
         return [
             {"do_sample_frames": False, "expected_dim": 0, "output_length": 11},
-            {"do_sample_frames": True, "num_frames": 3, "expected_dim": 0, "output_length": 3},
+            {"do_sample_frames": True, "num_frames": 3, "fps": None, "expected_dim": 0, "output_length": 3},
         ]
 
     @parameterized.expand([(1, "pt")])

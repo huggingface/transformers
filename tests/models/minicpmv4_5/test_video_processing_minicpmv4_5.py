@@ -97,11 +97,7 @@ class MiniCPMV4_5VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
     def test_call_numpy_4_channels(self):
         pass
 
-    @unittest.skip("Frames are sampled by `fps` and packing, see `test_sample_frames_and_temporal_ids`")
     def test_call_sample_frames(self):
-        pass
-
-    def test_sample_frames_and_temporal_ids(self):
         video_processor = self.fast_video_processing_class(do_sample_frames=True, scale_resolution=56)
         video = np.random.randint(255, size=(1000, 64, 64, 3), dtype=np.uint8)
         # 100 s at 10 fps: the original packing samples 500 frames at 5 fps and packs them 3 per group
