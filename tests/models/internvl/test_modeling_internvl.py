@@ -391,6 +391,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
                 ("cuda", 8): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
+                ("tpu", None): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -607,6 +608,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot",
                 ("cuda", 8): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
                 ("rocm", (9, 4)): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
+                ("tpu", None): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -688,7 +690,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): [-9.8828125, -0.5, 1.4423828125, -10.3359375, -10.34375],
                 ("rocm", (9, 4)): [ -9.8906,  -0.5146,   1.4600, -10.3438, -10.3516],
                 ("rocm", (9, 5)): [ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438],
-                ("tpu", None): [-9.8984,  -0.5151,   1.4463, -10.3359, -10.3438],
+                ("tpu", None): [-9.8828,  -0.4714,   1.4902, -10.3281, -10.3359],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
@@ -723,7 +725,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 ("xpu", 5): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
                 ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("rocm", (9, 4)): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
-                ("tpu", None): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",
+                ("tpu", None): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
             }
         )
         expected_output = expected_outputs.get_expectation()
