@@ -316,25 +316,25 @@ class MoonshineStreamingEncoder(MoonshineStreamingPreTrainedModel):
         """
         inputs_embeds, attention_mask = self.embedder(input_values, padding_mask=attention_mask)
 
-        if attention_mask is not None:
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-            }
-            per_layer_attention_mask = [
-                create_bidirectional_mask(
-                    and_mask_function=sliding_window_mask_function(self.config.sliding_windows[layer_idx]),
-                    **mask_kwargs,
-                )
-                for layer_idx in range(self.config.num_hidden_layers)
-            ]
+        # The sliding windows are part of the model, so the per-layer masks are needed even without padding
+        mask_kwargs = {
+            "config": self.config,
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+        }
+        per_layer_attention_mask = [
+            create_bidirectional_mask(
+                and_mask_function=sliding_window_mask_function(self.config.sliding_windows[layer_idx]),
+                **mask_kwargs,
+            )
+            for layer_idx in range(self.config.num_hidden_layers)
+        ]
 
         hidden_states = inputs_embeds
         for layer_idx, encoder_layer in enumerate(self.layers):
             hidden_states = encoder_layer(
                 hidden_states,
-                attention_mask=per_layer_attention_mask[layer_idx] if attention_mask is not None else None,
+                attention_mask=per_layer_attention_mask[layer_idx],
                 **kwargs,
             )
 
@@ -406,8 +406,76 @@ class MoonshineStreamingModel(MoonshineModel):
         self.encoder = MoonshineStreamingEncoder(config.encoder_config)
         self.decoder = MoonshineStreamingDecoder(config)
 
+    def forward(self, **super_kwargs):
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, audio_length)`):
+            Float values of the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
+            the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_values`, the [`AutoFeatureExtractor`] should be used for padding
+            and conversion into a tensor of type `torch.Tensor`.
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
 
-class MoonshineStreamingForConditionalGeneration(MoonshineForConditionalGeneration): ...
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoFeatureExtractor, MoonshineStreamingModel
+        >>> from datasets import load_dataset
+
+        >>> model = MoonshineStreamingModel.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
+        >>> input_values = inputs.input_values
+        >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
+        >>> last_hidden_state = model(input_values, decoder_input_ids=decoder_input_ids).last_hidden_state
+        >>> list(last_hidden_state.shape)
+        [1, 2, 320]
+        ```
+        """
+        return super().forward(**super_kwargs)
+
+
+class MoonshineStreamingForConditionalGeneration(MoonshineForConditionalGeneration):
+    def forward(self, **super_kwargs):
+        r"""
+        input_values (`torch.Tensor` of shape `(batch_size, audio_length)`):
+            Float values of the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
+            the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_values`, the [`AutoFeatureExtractor`] should be used for padding
+            and conversion into a tensor of type `torch.Tensor`.
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Used to calculate the position embeddings up to `config.decoder_config.max_position_embeddings`
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
+        >>> model = MoonshineStreamingForConditionalGeneration.from_pretrained("moonshine-ai/moonshine-streaming-tiny")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
+        >>> input_values = inputs.input_values
+
+        >>> generated_ids = model.generate(input_values, max_new_tokens=100)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> transcription
+        'Mr. Quilter is the apostle of the Middle Classes, and we are glad to welcome his gospel.'
+        ```"""
+        return super().forward(**super_kwargs)
 
 
 __getattr__ = deprecate_attr(__name__, rename={"MoonshineStreamingProcessorKwargs": (ProcessingKwargs, "5.29.0")})
